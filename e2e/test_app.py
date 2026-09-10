@@ -37,18 +37,21 @@ def test_queryview_e2e(page: Page) -> None:
     # `connect <name>` reopens the picker; choose a different database.
     page.get_by_test_id("prompt-input").fill("connect clickhouse")
     page.keyboard.press("Enter")
-    # The picker's filter narrows the chips; a non-match hides `default`.
+    # The picker's filter narrows the chips (a non-match hides `default`) and
+    # Enter selects the single remaining match.
     db_filter = page.get_by_test_id("db-filter")
     expect(db_filter).to_be_visible()
     db_filter.fill("sys")
     expect(page.locator('[data-db="default"]')).to_have_count(0)
-    page.locator('[data-db="system"]').click()
+    expect(page.locator('[data-db="system"]')).to_be_visible()
+    page.keyboard.press("Enter")
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - system")
 
     # opening with ?connection=<name> opens that connection
     page.goto("/?connection=clickhouse", wait_until="networkidle")
     expect(page.get_by_test_id("db-picker")).to_be_visible()
-    # Enter in the filter picks the first match.
+    # The filter is case-insensitive, so both INFORMATION_SCHEMA chips remain;
+    # click the exact one.
     page.get_by_test_id("db-filter").fill("information_schema")
-    page.keyboard.press("Enter")
+    page.locator('[data-db="information_schema"]').click()
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - information_schema")
