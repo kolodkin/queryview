@@ -28,6 +28,7 @@ import GitSyncControls from './controls/GitSyncControls'
 import { downloadText } from './yamlio'
 import { activeWorkspace } from './workspace'
 import { suggestCompletions, type Suggestion } from './promptSuggestions'
+import { filterDatabases } from './databaseFilter'
 import { postLock } from './sessionLock'
 
 type TestResult = { ok: boolean; message: string }
@@ -585,13 +586,48 @@ function DatabasePicker({
   connection: Connection
   onSelect: (database: string) => void
 }) {
+  const [filter, setFilter] = useState('')
+  const visible = useMemo(
+    () => filterDatabases(connection.databases, filter),
+    [connection.databases, filter],
+  )
   return (
-    <section data-testid="db-picker" className="glass-panel mt-6 p-6">
+    // Wider than the landing column (which stays prompt-sized) so long
+    // database names fit several per row; centred by shifting half its width.
+    <section
+      data-testid="db-picker"
+      className="glass-panel relative left-1/2 mt-6 w-[min(48rem,calc(100vw-2rem))] -translate-x-1/2 p-6"
+    >
       <h2 className="text-sm font-medium text-slate-200">
         Connected to {connection.name}. Select a database:
       </h2>
+      <form
+        className="mt-3"
+        onSubmit={(e) => {
+          // Enter picks the first match so a typed prefix is enough to connect.
+          e.preventDefault()
+          if (visible.length > 0) onSelect(visible[0])
+        }}
+      >
+        <input
+          type="search"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder={`Filter ${connection.databases.length} databases…`}
+          aria-label="Filter databases"
+          data-testid="db-filter"
+          autoFocus
+          autoComplete="off"
+          className="glass-input w-full px-3 py-2 text-sm"
+        />
+      </form>
+      {visible.length === 0 && (
+        <p className="mt-3 text-sm text-slate-400" data-testid="db-filter-empty">
+          No databases match “{filter.trim()}”.
+        </p>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
-        {connection.databases.map((db) => {
+        {visible.map((db) => {
           const selected = db === connection.database
           return (
             <button

@@ -109,7 +109,11 @@ picker. Pick a database from the picker to finish.
 
 After connecting, the prompt view shows the databases returned by
 `SHOW DATABASES`. While the picker is open the prompt reads `connect <name>`.
-Selecting a database:
+The picker panel is wider than the prompt so long database names fit several
+per row. A filter input at
+the top of the picker (focused on open) narrows the list by case-insensitive
+substring; **Enter** selects the first remaining match, and an empty result
+shows "No databases match". Selecting a database:
 
 - sets the session's selected database,
 - persists it on the saved connection (`POST /api/db/database`),
