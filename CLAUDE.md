@@ -3,6 +3,18 @@
 1. Avoid `Co-Authored-By: Claude` (and similar Claude/AI attribution) trailers in
    commit messages and PR bodies.
 
+# Data Privacy
+
+1. **Never commit tenant data.** Real customer, tenant, or environment
+   identifiers (database and table names, hostnames, account or user names,
+   query results, screenshots of live data) must not appear in code, tests,
+   fixtures, docs, or commit messages.
+2. **Always anonymize.** When an example needs realistic-looking data, invent
+   generic names (e.g. `sales_reporting`, `example.internal`). Rewrite any
+   pasted samples before using them.
+3. If tenant data slips into history, rewrite the commits to remove it and
+   force-push the branch rather than adding a follow-up commit.
+
 # Operational Guidelines
 
 1. Use `uv run` (e.g. `uv run pytest`, `uv run python ...`), not `python -m` or a
