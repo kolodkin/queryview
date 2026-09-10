@@ -417,6 +417,9 @@ jobs:
 
       # Retag the exact multi-arch manifest the smoke gate tested — no
       # rebuild, no wait-for-PyPI. Tested digests ARE the published digests.
+      # The rc tags are left in place: a GHCR package version is a digest,
+      # and vX.Y.Z / latest share the rc manifest's digest, so deleting the
+      # rc version would delete the release with it.
       - name: Promote rc manifest
         run: |
           REF="ghcr.io/kolodkin/queryview"
@@ -425,19 +428,3 @@ jobs:
             TAGS+=(-t "${REF}:latest")
           fi
           docker buildx imagetools create "${TAGS[@]}" "${REF}:${{ inputs.tag }}-rc"
-
-      # Best-effort: GITHUB_TOKEN may lack package-version delete rights;
-      # leftover -rc tags are harmless and useful for debugging.
-      - name: Clean up rc tags
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          for suffix in rc rc-amd64 rc-arm64; do
-            TAG="${{ inputs.tag }}-${suffix}"
-            VERSION_ID=$(gh api "/user/packages/container/queryview/versions" --paginate \
-              --jq ".[] | select(.metadata.container.tags[]? == \"${TAG}\") | .id" | head -n1)
-            if [ -n "$VERSION_ID" ]; then
-              gh api -X DELETE "/user/packages/container/queryview/versions/${VERSION_ID}" || true
-            fi
-          done
