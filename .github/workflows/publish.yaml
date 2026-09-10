@@ -4,7 +4,8 @@ name: Publish to PyPI
 # smoke-test the installed package, then publish via PyPI trusted publishing
 # and cut a GitHub release. Like aaiclick, a multi-arch container image is
 # built from the release wheel, pushed to GHCR as an rc tag, smoke-tested,
-# and promoted (same digests) to vX.Y.Z / latest after publish. Repeated
+# and promoted (same per-arch digests) to vX.Y.Z / latest after publish;
+# the rc tags are removed only once the promoted tags are verified. Repeated
 # steps are YAML-anchored at first use and aliased below.
 
 on:
@@ -412,32 +413,122 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
+    env:
+      IMAGE: ghcr.io/kolodkin/queryview
+      TAG: ${{ inputs.tag }}
     steps:
       - *ghcr-login
 
-      # Retag the exact multi-arch manifest the smoke gate tested — no
-      # rebuild, no wait-for-PyPI. Tested digests ARE the published digests.
+      # GHCR has no "untag" API: a package version *is* a manifest digest, and
+      # deleting a version drops every tag on it. A plain retag of the rc index
+      # reuses its bytes, so vX.Y.Z / latest would share the rc version and
+      # deleting "-rc" afterwards would delete the release too (v0.0.2-v0.0.4
+      # were lost exactly this way). So promotion writes a NEW index: the same
+      # per-arch manifests the smoke gate tested, plus OCI annotations that make
+      # its digest distinct from the rc index. No rebuild, no wait-for-PyPI.
       - name: Promote rc manifest
         run: |
-          REF="ghcr.io/kolodkin/queryview"
-          TAGS=(-t "${REF}:${{ inputs.tag }}")
+          TAGS=(-t "${IMAGE}:${TAG}")
           if [ "${{ inputs.pre-release }}" != "true" ]; then
-            TAGS+=(-t "${REF}:latest")
+            TAGS+=(-t "${IMAGE}:latest")
           fi
-          docker buildx imagetools create "${TAGS[@]}" "${REF}:${{ inputs.tag }}-rc"
+          docker buildx imagetools create "${TAGS[@]}" \
+            --annotation "index:org.opencontainers.image.version=${TAG}" \
+            --annotation "index:org.opencontainers.image.revision=${{ github.sha }}" \
+            --annotation "index:org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            "${IMAGE}:${TAG}-rc"
 
-      # Best-effort: GITHUB_TOKEN may lack package-version delete rights;
-      # leftover -rc tags are harmless and useful for debugging.
+      # Fail loudly if promotion did not produce what the README promises: each
+      # promoted tag must be a multi-arch index with its own digest whose
+      # linux/amd64 and linux/arm64 entries are the exact rc digests we tested.
+      - name: Verify promoted manifests
+        run: |
+          rc_json=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "${IMAGE}:${TAG}-rc")
+          rc_digest=$(jq -r '.digest' <<<"$rc_json")
+          echo "rc index: ${rc_digest}"
+          echo "RC_DIGEST=${rc_digest}" >> "$GITHUB_ENV"
+
+          arch_digest() {  # <manifest json> <arch>
+            jq -r --arg a "$2" \
+              '[.manifests[]? | select(.platform.os == "linux" and .platform.architecture == $a) | .digest] | first // empty' \
+              <<<"$1"
+          }
+
+          promoted="${TAG}"
+          if [ "${{ inputs.pre-release }}" != "true" ]; then
+            promoted="${promoted} latest"
+          fi
+          for tag in $promoted; do
+            ref="${IMAGE}:${tag}"
+            json=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$ref") \
+              || { echo "::error::${ref} was not published"; exit 1; }
+            digest=$(jq -r '.digest' <<<"$json")
+            echo "${ref}: ${digest}"
+            if [ "$digest" = "$rc_digest" ]; then
+              echo "::error::${ref} shares the rc index digest; promotion did not create a distinct index"
+              exit 1
+            fi
+            for arch in amd64 arm64; do
+              want=$(arch_digest "$rc_json" "$arch")
+              got=$(arch_digest "$json" "$arch")
+              if [ -z "$got" ]; then
+                echo "::error::${ref} has no linux/${arch} manifest"; exit 1
+              fi
+              if [ "$got" != "$want" ]; then
+                echo "::error::${ref} linux/${arch} is ${got}, expected the tested rc digest ${want}"; exit 1
+              fi
+              echo "  linux/${arch}: ${got} (matches rc)"
+            done
+          done
+          echo "PROMOTED_TAGS=${promoted}" >> "$GITHUB_ENV"
+
+      # Remove the rc tags now that the release is verified. The per-arch rc
+      # tags sit on manifests the promoted index still references, so they
+      # cannot be deleted as versions; instead move those tags onto the rc
+      # index (a single-source retag keeps its digest) and delete that one
+      # version, which by then carries only rc tags. Guarded so a mistake can
+      # never take the promoted tags with it, and no longer best-effort: a
+      # failure here is a real inconsistency to look at, not something to hide.
       - name: Clean up rc tags
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          for suffix in rc rc-amd64 rc-arm64; do
-            TAG="${{ inputs.tag }}-${suffix}"
-            VERSION_ID=$(gh api "/user/packages/container/queryview/versions" --paginate \
-              --jq ".[] | select(.metadata.container.tags[]? == \"${TAG}\") | .id" | head -n1)
-            if [ -n "$VERSION_ID" ]; then
-              gh api -X DELETE "/user/packages/container/queryview/versions/${VERSION_ID}" || true
-            fi
+          docker buildx imagetools create \
+            -t "${IMAGE}:${TAG}-rc-amd64" -t "${IMAGE}:${TAG}-rc-arm64" \
+            "${IMAGE}@${RC_DIGEST}"
+
+          version=$(gh api --paginate "/user/packages/container/queryview/versions" \
+            --jq ".[] | select(.name == \"${RC_DIGEST}\") | \"\\(.id) \\(.metadata.container.tags | join(\",\"))\"" \
+            | head -n1)
+          if [ -z "$version" ]; then
+            echo "::error::no GHCR package version found for rc index ${RC_DIGEST}"; exit 1
+          fi
+          version_id="${version%% *}"
+          version_tags="${version#* }"
+          echo "rc version ${version_id} carries tags: ${version_tags}"
+          for tag in $PROMOTED_TAGS; do
+            case ",${version_tags}," in
+              *",${tag},"*)
+                echo "::error::refusing to delete version ${version_id}: it still carries promoted tag ${tag}"
+                exit 1 ;;
+            esac
           done
+          gh api -X DELETE "/user/packages/container/queryview/versions/${version_id}"
+          echo "deleted rc version ${version_id}"
+
+      # What a user sees: the anonymous tag list of the public package must
+      # carry the promoted tags and none of the rc tags.
+      - name: Verify tags in the public registry
+        run: |
+          token=$(curl -fsS "https://ghcr.io/token?scope=repository:kolodkin/queryview:pull" | jq -r '.token')
+          tags=$(curl -fsS -H "Authorization: Bearer ${token}" \
+            "https://ghcr.io/v2/kolodkin/queryview/tags/list" | jq -r '.tags[]')
+          echo "public tags:"; sed 's/^/  /' <<<"$tags"
+          status=0
+          for tag in $PROMOTED_TAGS; do
+            grep -qx "$tag" <<<"$tags" || { echo "::error::${IMAGE}:${tag} is not in the public tag list"; status=1; }
+          done
+          for tag in "${TAG}-rc" "${TAG}-rc-amd64" "${TAG}-rc-arm64"; do
+            ! grep -qx "$tag" <<<"$tags" || { echo "::error::rc tag ${tag} is still in the public tag list"; status=1; }
+          done
+          exit $status
