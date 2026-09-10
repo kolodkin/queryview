@@ -4,8 +4,7 @@ name: Publish to PyPI
 # smoke-test the installed package, then publish via PyPI trusted publishing
 # and cut a GitHub release. Like aaiclick, a multi-arch container image is
 # built from the release wheel, pushed to GHCR as an rc tag, smoke-tested,
-# and promoted (same per-arch digests) to vX.Y.Z / latest after publish;
-# the rc tags are removed only once the promoted tags are verified. Repeated
+# and promoted (same digests) to vX.Y.Z / latest after publish. Repeated
 # steps are YAML-anchored at first use and aliased below.
 
 on:
@@ -413,52 +412,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
-    env:
-      IMAGE: ghcr.io/kolodkin/queryview
-      TAG: ${{ inputs.tag }}
     steps:
       - *ghcr-login
 
-      # Retag the exact per-arch manifests the smoke gate tested — no rebuild,
-      # no wait-for-PyPI. The annotations give the promoted index its own
-      # digest: a GHCR package version *is* a digest, so a byte-identical retag
-      # puts vX.Y.Z / latest on the rc version and the cleanup below deletes
-      # the release along with it (v0.0.2–v0.0.4 were lost exactly that way).
+      # Retag the exact multi-arch manifest the smoke gate tested — no
+      # rebuild, no wait-for-PyPI. Tested digests ARE the published digests.
+      # The rc tags are left in place: a GHCR package version is a digest,
+      # and vX.Y.Z / latest share the rc manifest's digest, so deleting the
+      # rc version would delete the release with it.
       - name: Promote rc manifest
         run: |
-          TAGS=(-t "${IMAGE}:${TAG}")
+          REF="ghcr.io/kolodkin/queryview"
+          TAGS=(-t "${REF}:${{ inputs.tag }}")
           if [ "${{ inputs.pre-release }}" != "true" ]; then
-            TAGS+=(-t "${IMAGE}:latest")
+            TAGS+=(-t "${REF}:latest")
           fi
-          docker buildx imagetools create "${TAGS[@]}" \
-            --annotation "index:org.opencontainers.image.version=${TAG}" \
-            --annotation "index:org.opencontainers.image.revision=${{ github.sha }}" \
-            "${IMAGE}:${TAG}-rc"
-
-      - name: Verify promoted image
-        run: |
-          inspect() { docker buildx imagetools inspect --format '{{json .Manifest}}' "${IMAGE}:$1"; }
-          rc=$(inspect "${TAG}-rc" | jq -r '.digest')
-          promoted=$(inspect "${TAG}")
-          platforms=$(jq -r '[.manifests[].platform | .os + "/" + .architecture] | sort | join(" ")' <<<"$promoted")
-          echo "rc=${rc} promoted=$(jq -r '.digest' <<<"$promoted") platforms=${platforms}"
-          [ "$(jq -r '.digest' <<<"$promoted")" != "$rc" ] \
-            || { echo "::error::${IMAGE}:${TAG} reuses the rc digest; cleanup would delete it"; exit 1; }
-          [ "$platforms" = "linux/amd64 linux/arm64" ] \
-            || { echo "::error::${IMAGE}:${TAG} is not a linux/amd64 + linux/arm64 index"; exit 1; }
-          echo "RC_DIGEST=${rc}" >> "$GITHUB_ENV"
-
-      # GHCR cannot untag, only delete versions. The per-arch rc tags sit on
-      # manifests the release now references, so move them onto the rc index
-      # (a single-source retag keeps its digest) and delete that one version.
-      # Not best-effort: a failure here is a real inconsistency and must show.
-      - name: Clean up rc tags
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          docker buildx imagetools create \
-            -t "${IMAGE}:${TAG}-rc-amd64" -t "${IMAGE}:${TAG}-rc-arm64" "${IMAGE}@${RC_DIGEST}"
-          id=$(gh api --paginate "/user/packages/container/queryview/versions" \
-            --jq ".[] | select(.name == \"${RC_DIGEST}\") | .id" | head -n1)
-          [ -n "$id" ] || { echo "::error::no package version found for ${RC_DIGEST}"; exit 1; }
-          gh api -X DELETE "/user/packages/container/queryview/versions/${id}"
+          docker buildx imagetools create "${TAGS[@]}" "${REF}:${{ inputs.tag }}-rc"
