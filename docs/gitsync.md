@@ -7,13 +7,9 @@ written to the repo (their config is encrypted credentials).
 ## Configuration
 
 Each workspace (see [workspace.md](./workspace.md)) carries its own remote URL
-and branch, managed in the UI/API and encrypted at rest. A workspace without a
-remote has git sync disabled.
-
-| Env var           | Meaning                                                            | Default              |
-| ----------------- | ------------------------------------------------------------------ | -------------------- |
-| `GIT_SYNC_REMOTE` | Seed for the default workspace's remote (read once, at migration)  | unset ⇒ none         |
-| `GIT_SYNC_BRANCH` | Seed for the default workspace's branch (read once, at migration)  | `main`               |
+and branch, managed in the UI/API and encrypted at rest. There is no
+environment-variable fallback: a workspace without a remote has git sync
+disabled until one is set. New workspaces start on branch `main`.
 
 Clones live at `{data dir}/gitsync/{workspace id}/`; the repository layout inside each
 clone is unchanged by workspaces.

@@ -72,11 +72,6 @@ def _isolated_db(tmp_path_factory: pytest.TempPathFactory):
     tmp: Path = tmp_path_factory.mktemp("qv_backend_tests")
     os.environ["DATA_DIR"] = str(tmp)
 
-    # The workspaces migration seeds the default workspace from GIT_SYNC_*;
-    # tests control that per-test (monkeypatch), never from ambient env.
-    os.environ.pop("GIT_SYNC_REMOTE", None)
-    os.environ.pop("GIT_SYNC_BRANCH", None)
-
     # Reset the lazy globals so the next DB touch picks up the new paths.
     import queryview.connect as _c
 

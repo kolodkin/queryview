@@ -1,8 +1,8 @@
 """workspaces: per-workspace git sync — workspaces table, entity workspace_id
 
-Seeds a 'default' workspace from GIT_SYNC_REMOTE/GIT_SYNC_BRANCH (read once
-here; runtime config lives in the table from now on) and backfills all
-existing predefined queries and dashboards into it. Name uniqueness becomes
+Creates the 'default' workspace (its remote is configured through the UI/API
+afterwards) and backfills all existing predefined queries and dashboards into
+it. Name uniqueness becomes
 per-workspace.
 
 Revision ID: c7d8e9f0a1b2
@@ -13,7 +13,6 @@ Create Date: 2026-07-10
 
 from __future__ import annotations
 
-import os
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -37,17 +36,12 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_workspaces_name"), "workspaces", ["name"], unique=True)
 
-    # Seed 'default' from the legacy env config. The app's key loader is
-    # imported here, mirroring the connection-config-blob migration.
-    from queryview.connect import _encrypt_str
-
-    env_remote = os.environ.get("GIT_SYNC_REMOTE")
-    remote = _encrypt_str(env_remote) if env_remote else None
-    branch = os.environ.get("GIT_SYNC_BRANCH") or "main"
+    # No remote yet: git sync stays disabled until one is set through the
+    # UI/API, which encrypts it on the way in.
     conn = op.get_bind()
     conn.execute(
-        sa.text("INSERT INTO workspaces (name, remote, branch) VALUES (:n, :r, :b)"),
-        {"n": "default", "r": remote, "b": branch},
+        sa.text("INSERT INTO workspaces (name, remote, branch) VALUES (:n, NULL, :b)"),
+        {"n": "default", "b": "main"},
     )
     default_id = conn.execute(sa.text("SELECT id FROM workspaces WHERE name = 'default'")).scalar()
 

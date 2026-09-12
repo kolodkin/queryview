@@ -3,8 +3,8 @@ description: >-
   Start a loopback `git daemon` that serves — and accepts pushes into — bare
   repos under a base path, so e2e tests exercise git sync against a real
   git:// remote with no auth. Creates an empty bare repo and exports
-  GIT_SYNC_REMOTE pointing at it; `--detach` keeps the daemon alive across
-  steps.
+  E2E_GIT_REMOTE pointing at it, which the e2e suite applies to the default
+  workspace; `--detach` keeps the daemon alive across steps.
 
 runs:
   using: composite
@@ -15,7 +15,7 @@ runs:
         GIT_DAEMON_BASE="$RUNNER_TEMP/gitsrv"
         mkdir -p "$GIT_DAEMON_BASE"
         git init --bare -b main "$GIT_DAEMON_BASE/queryview.git"
-        echo "GIT_SYNC_REMOTE=git://127.0.0.1:9418/queryview.git" >> "$GITHUB_ENV"
+        echo "E2E_GIT_REMOTE=git://127.0.0.1:9418/queryview.git" >> "$GITHUB_ENV"
         git daemon --reuseaddr --listen=127.0.0.1 --port=9418 \
           --base-path="$GIT_DAEMON_BASE" --export-all \
           --enable=receive-pack --detach

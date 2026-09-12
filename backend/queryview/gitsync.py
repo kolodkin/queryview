@@ -87,8 +87,7 @@ def dashboard_from_files(files: dict[str, str]) -> dict[str, Any]:
 
 
 # --- Configuration ---------------------------------------------------------
-# Runtime config lives on the workspace row (GIT_SYNC_REMOTE/GIT_SYNC_BRANCH
-# are read once, by the workspaces migration, to seed the default workspace).
+# All config lives on the workspace row; there is no environment fallback.
 
 
 def _require_remote(ws: WorkspaceRec) -> str:

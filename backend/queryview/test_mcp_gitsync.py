@@ -17,8 +17,7 @@ def test_git_tools_are_registered():
     assert {"git_store", "git_history", "git_restore"} <= names
 
 
-def test_git_restore_tool_reports_unconfigured(monkeypatch):
-    monkeypatch.delenv("GIT_SYNC_REMOTE", raising=False)
+def test_git_restore_tool_reports_unconfigured():
     from queryview.mcp_server import git_restore
 
     r = _run(git_restore("dashboard", "x"))
