@@ -61,30 +61,35 @@ queryview` / `docker start queryview`); the data stays in the volume. Even
 `docker rm queryview` leaves the volume in place — only `docker volume rm
 queryview-data` deletes it.
 
-### Bind mount (Linux)
+### Share state with `uvx queryview` (Linux)
 
-To keep the files in a host directory instead (easier to inspect or back up
-with your usual tools), the directory must be writable by UID 1000, because
-that is the user the container runs as:
+Locally, `uvx queryview` keeps its state in `~/.local/share/queryview/`
+(`queryview.db`, `queryview.db.key`, `queryview.db.gitsync/`). The image lays
+out `/home/queryview` the same way, so bind-mounting that directory makes the
+container and a local run share one database, key and set of clones — start
+either and you see the same connections, queries and dashboards:
 
 ```bash
-mkdir -p ./queryview-data
-sudo chown 1000:1000 ./queryview-data
+mkdir -p ~/.local/share/queryview
 docker run -d --name queryview \
   -p 127.0.0.1:8000:8000 \
-  -v "$PWD/queryview-data:/home/queryview" \
+  -v ~/.local/share/queryview:/home/queryview \
   ghcr.io/kolodkin/queryview:latest
 ```
 
-If you would rather not change ownership, add `--user "$(id -u):$(id -g)"` to
-run the container as your own user instead — `DB_PATH` is absolute, so it does
-not depend on a home directory existing for that UID.
+Create the directory first (as above) so Docker doesn't create it owned by
+root. The container runs as UID 1000, which is the first user on most Linux
+distributions; if `id -u` prints something else, add
+`--user "$(id -u):$(id -g)"` so the container writes the files as you.
+
+Don't run `uvx queryview` and the container against the directory at the same
+time: both would serve the same SQLite file.
 
 ### Git sync
 
 The image ships `git` and an SSH client, so workspace git sync (see
 [docs/gitsync.md](docs/gitsync.md)) works in the container; clones live under
-`/home/queryview/queryview.db.gitsync/`, which the volume above already covers.
+`/home/queryview/queryview.db.gitsync/`, which either mount above already covers.
 What is left is getting credentials to the remote:
 
 - **HTTPS with a token** needs nothing extra — put the token in the remote
@@ -92,8 +97,7 @@ What is left is getting credentials to the remote:
   encrypted with the rest of the workspace row.
 - **SSH** needs a key and `known_hosts` inside the container. Mount your
   `.ssh` directory read-only at the `queryview` user's home:
-  `-v ~/.ssh:/home/queryview/.ssh:ro`. The files must be readable by UID 1000
-  (or run with `--user` as above).
+  `-v ~/.ssh:/home/queryview/.ssh:ro`. The files must be readable by UID 1000.
 
 ## Layout
 
