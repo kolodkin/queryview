@@ -91,53 +91,6 @@ docker run -d --name queryview \
 On Docker Desktop (macOS/Windows) bind-mount permissions are mapped
 automatically, so the `chown` step is not needed there.
 
-### Upgrading
-
-Pull the new image and recreate the container on the same volume. Schema
-migrations run automatically at startup, so an existing database is upgraded
-in place:
-
-```bash
-docker pull ghcr.io/kolodkin/queryview:latest
-docker rm -f queryview
-docker run -d --name queryview \
-  -p 127.0.0.1:8000:8000 \
-  -v queryview-data:/home/queryview \
-  ghcr.io/kolodkin/queryview:latest
-```
-
-### Backup and restore
-
-Back up the database **together with its `.key` file**: stored connection
-passwords are encrypted with that key, and a database restored without it
-cannot decrypt them. The simplest approach is to archive the whole volume
-while the container is stopped:
-
-```bash
-docker stop queryview
-docker run --rm \
-  -v queryview-data:/data:ro \
-  -v "$PWD:/backup" \
-  alpine tar czf /backup/queryview-backup.tgz -C /data .
-docker start queryview
-```
-
-Restore into a fresh (or emptied) volume the same way:
-
-```bash
-docker run --rm \
-  -v queryview-data:/data \
-  -v "$PWD:/backup" \
-  alpine sh -c "find /data -mindepth 1 -delete && tar xzf /backup/queryview-backup.tgz -C /data"
-```
-
-To keep the encryption key out of the volume entirely (for example so a
-leaked backup is useless on its own), pass it as `DB_ENCRYPTION_KEY` instead —
-base64 of 32 random bytes, e.g. `openssl rand -base64 32` — and supply the same
-value on every run; the `.key` file is then neither read nor written. See
-[docs/connect.md](docs/connect.md) for the full list of storage-related
-environment variables.
-
 ## Layout
 
 ```
