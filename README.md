@@ -87,18 +87,36 @@ time: both would serve the same SQLite file.
 
 ### Git sync
 
-The image ships `git` and an SSH client, so workspace git sync (see
+The image ships `git`, so workspace git sync (see
 [docs/gitsync.md](docs/gitsync.md)) works in the container; clones live under
-`/var/lib/queryview/gitsync/`, which either mount above already
-covers. What is left is getting credentials to the remote:
+`/var/lib/queryview/gitsync/`, which either mount above already covers. What
+is left is authenticating to the remote.
 
-- **HTTPS with a token** needs nothing extra — put the token in the remote
-  URL, e.g. `https://<token>@github.com/<org>/<repo>.git`. The URL is stored
-  encrypted with the rest of the workspace row.
-- **SSH** needs a key and `known_hosts` inside the container. Mount your
-  `.ssh` directory read-only into the `queryview` user's home, which is
-  separate from the data mount above:
-  `-v ~/.ssh:/home/queryview/.ssh:ro`. The files must be readable by UID 1000.
+Use an HTTPS remote with a token, which needs nothing beyond the URL:
+
+```
+https://<token>@github.com/<org>/<repo>.git
+```
+
+Scope the token to the one repository and give it an expiry. QueryView stores
+the URL encrypted alongside the workspace, but git also writes it verbatim into
+each clone's config, so treat the data directory as holding a live credential
+and guard backups of it accordingly.
+
+SSH works too, but it is the harder path in a container: a passphrase cannot be
+entered, an unknown host key cannot be written into a read-only mount, and the
+key must be owned by UID 1000 as the container sees it. If you need it, mount a
+dedicated deploy key rather than your whole `.ssh` directory, which would hand
+the container every key you own:
+
+```bash
+docker run -d --name queryview \
+  -p 127.0.0.1:8000:8000 \
+  -v queryview-data:/var/lib/queryview \
+  -v ~/.ssh/queryview_deploy:/home/queryview/.ssh/id_ed25519:ro \
+  -v ~/.ssh/known_hosts:/home/queryview/.ssh/known_hosts:ro \
+  ghcr.io/kolodkin/queryview:latest
+```
 
 ## Layout
 

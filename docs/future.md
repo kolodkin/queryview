@@ -1,7 +1,33 @@
 # Future
 
-Planned work. Each entry is a proposal, not yet implemented — the spec lives
-here until it ships, then moves into the relevant doc.
+Planned work, highest priority first. Each entry is a proposal, not yet
+implemented — the spec lives here until it ships, then moves into the relevant
+doc.
+
+## Git sync: keep the credential out of the clone
+
+A workspace's remote URL is encrypted at rest, but `git clone` and
+`git remote add` write it verbatim into
+`{data dir}/gitsync/{workspace id}/.git/config`. A token embedded in an HTTPS
+remote therefore sits in plaintext next to its own encrypted copy: the
+encryption protects the SQLite file but not the data directory, and any backup
+of that directory carries a working credential. This matters more now that
+tokens are the documented way to reach a remote from the container.
+
+Either keep the credential out of the stored URL and supply it per invocation
+(a credential helper, or `http.extraHeader` set for the single command), or
+hold it in its own encrypted field and assemble the URL at call time. Decide
+before recommending tokens more widely.
+
+## Git sync: fail fast instead of prompting
+
+`_git` inherits the server's stdin, sets no timeout, and leaves git's terminal
+prompts enabled, so any operation that asks for input — an SSH key passphrase,
+an unknown host key, HTTPS credentials — can block a request indefinitely
+rather than returning an error. Pass a null stdin, set `GIT_TERMINAL_PROMPT=0`
+and SSH `BatchMode=yes`, and bound the wait so these surface as a normal
+`GitSyncError`. Small and self-contained; worth folding into the next change
+that touches git sync.
 
 ## Edit / delete predefined queries
 
