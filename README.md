@@ -76,22 +76,22 @@ The image ships `git`, so workspace git sync (see
 `/var/lib/queryview/gitsync/`, which the mount above already covers. What is
 left is authenticating to the remote.
 
-Use an HTTPS remote with a token, which needs nothing beyond the URL:
+Use an HTTPS remote with a token:
 
 ```
-https://<token>@github.com/<org>/<repo>.git
+https://x-access-token:<token>@github.com/<org>/<repo>.git
 ```
 
-Scope the token to the one repository and give it an expiry. QueryView stores
-the URL encrypted alongside the workspace, but git also writes it verbatim into
-each clone's config, so treat the data directory as holding a live credential
-and guard backups of it accordingly.
+Scope the token to the one repository and give it an expiry. QueryView keeps
+the URL encrypted and strips the credential back out before git records the
+remote, so the clone's config holds a credential-free URL.
 
-SSH works too, but it is the harder path in a container: a passphrase cannot be
-entered, an unknown host key cannot be written into a read-only mount, and the
-key must be owned by UID 1000 as the container sees it. If you need it, mount a
+SSH works too, but it is the harder path in a container. Nothing can answer a
+prompt there, so a passphrase cannot be entered and an unknown host key cannot
+be accepted; bring a `known_hosts` that already lists the host. Mount a
 dedicated deploy key rather than your whole `.ssh` directory, which would hand
-the container every key you own:
+the container every key you own, and note that both mounts are read-only and
+the key must be owned by UID 1000 as the container sees it:
 
 ```bash
 docker run -d --name queryview \

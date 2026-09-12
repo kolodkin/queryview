@@ -4,6 +4,7 @@ in later tests, store/history/restore against a local bare repo (no network)."""
 from __future__ import annotations
 
 import asyncio
+import os
 import subprocess
 
 import pytest
@@ -352,3 +353,96 @@ def test_git_missing_binary_is_gitsync_error(tmp_path, monkeypatch):
         _run(gitsync._git("--version"))
     assert e.value.status == 502
     assert "git is not installed" in str(e.value)
+
+
+# --- Credentials and non-interactive behaviour -----------------------------
+
+
+def test_split_credential_separates_http_userinfo():
+    url = "https://x-access-token:ghp_tok@github.com/acme/repo.git"
+    assert gitsync._split_credential(url) == (
+        "https://github.com/acme/repo.git",
+        ("x-access-token", "ghp_tok"),
+    )
+
+
+def test_split_credential_handles_a_bare_token_and_a_port():
+    sanitized, cred = gitsync._split_credential("https://ghp_tok@git.example.internal:8443/a/b.git")
+    assert sanitized == "https://git.example.internal:8443/a/b.git"
+    assert cred == ("ghp_tok", "")
+
+
+def test_split_credential_percent_decodes():
+    _, cred = gitsync._split_credential("https://user:p%40ss%2Fword@example.internal/r.git")
+    assert cred == ("user", "p@ss/word")
+
+
+def test_split_credential_leaves_ssh_and_plain_urls_alone():
+    """`git@host` is an SSH login, not a secret — stripping it breaks the URL."""
+    for url in (
+        "git@github.com:acme/repo.git",
+        "ssh://git@github.com/acme/repo.git",
+        "https://github.com/acme/repo.git",
+        "/srv/mirrors/repo.git",
+    ):
+        assert gitsync._split_credential(url) == (url, None)
+
+
+def test_credential_never_reaches_the_clone_config(tmp_path, monkeypatch):
+    """The URL git records must be the sanitized one, so a backup of the data
+    dir carries no working credential."""
+    calls: list[tuple[str, ...]] = []
+
+    async def fake_git(*args, cwd=None, credential=None):
+        calls.append(args)
+        if args[0] == "clone":
+            raise GitSyncError("branch not found")  # as on a not-yet-created branch
+        return ""  # ls-remote: no heads -> empty remote -> init + `remote add`
+
+    monkeypatch.setattr(gitsync, "_git", fake_git)
+    monkeypatch.setattr(gitsync, "_clone_base", lambda: tmp_path / "clones")
+    ws = gitsync.WorkspaceRec(id=99, name="w", branch="main", remote="https://tok@example.internal/a/b.git")
+
+    _run(gitsync._ensure_repo(ws))
+
+    urls = [a[-1] for a in calls if a[:3] == ("remote", "add", "origin")]
+    assert urls == ["https://example.internal/a/b.git"]
+    assert not any("tok" in part for call in calls for part in call)
+
+
+def test_credential_helper_answers_git_from_the_environment():
+    """Wiring check against real git: the helper must return what we put in the
+    child's environment, for a host it has never seen."""
+    out = subprocess.run(
+        [
+            "git",
+            "-c",
+            "credential.helper=",
+            "-c",
+            f"credential.helper={gitsync._CREDENTIAL_HELPER}",
+            "credential",
+            "fill",
+        ],
+        input="protocol=https\nhost=example.internal\n\n",
+        env={**os.environ, "QV_GIT_USERNAME": "x-access-token", "QV_GIT_PASSWORD": "s3cr3t"},
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert "username=x-access-token" in out
+    assert "password=s3cr3t" in out
+
+
+def test_git_runs_with_a_closed_stdin():
+    """Nothing git asks for can be answered, so stdin must be /dev/null rather
+    than the server's — otherwise a prompt blocks the request."""
+    empty_blob = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+    assert _run(gitsync._git("hash-object", "--stdin")).strip() == empty_blob
+
+
+def test_git_times_out_instead_of_hanging(monkeypatch):
+    monkeypatch.setattr(gitsync, "_GIT_TIMEOUT_S", 0.2)
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync._git("-c", "alias.zzz=!sleep 5", "zzz"))
+    assert "timed out" in str(e.value)
+    assert e.value.status == 502

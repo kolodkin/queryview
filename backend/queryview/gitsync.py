@@ -7,9 +7,11 @@ upserts the DB row; HEAD never moves. Docs: docs/gitsync.md, docs/workspace.md."
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 import yaml
 
@@ -130,12 +132,55 @@ def _lock(ws: WorkspaceRec) -> asyncio.Lock:
     return lock
 
 
-async def _git(*args: str, cwd: Path | None = None) -> str:
+# Seconds any single git invocation may take before it is killed. Network calls
+# are the slow ones; everything else finishes in milliseconds.
+_GIT_TIMEOUT_S = 120
+
+# Feeds the credential back to git per invocation, reading it from the child's
+# environment so it reaches neither the repo's config nor our argv. Git calls a
+# helper with "get", "store" or "erase"; answering only "get" keeps us from
+# writing the credential anywhere.
+_CREDENTIAL_HELPER = (
+    '!f() { test "$1" = get && printf "username=%s\\npassword=%s\\n" "$QV_GIT_USERNAME" "$QV_GIT_PASSWORD"; }; f'
+)
+
+
+def _split_credential(url: str) -> tuple[str, tuple[str, str] | None]:
+    """Separate an http(s) URL's embedded credential from the URL itself, so the
+    URL can be handed to git (and persisted in the clone's config) without it.
+
+    Only http(s) userinfo is a secret. `git@host:path` and `ssh://git@host` name
+    an SSH login, not a credential, so those URLs are returned untouched."""
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not (parts.username or parts.password):
+        return url, None
+    host = parts.hostname or ""
+    if parts.port:
+        host = f"{host}:{parts.port}"
+    sanitized = urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment))
+    return sanitized, (unquote(parts.username or ""), unquote(parts.password or ""))
+
+
+async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] | None = None) -> str:
+    """Run one git command. Never interactive: stdin is closed and every prompt
+    git might raise (terminal, SSH passphrase, unknown host) is turned into a
+    failure, so a request can't block on input nobody is there to give. A
+    credential, when passed, reaches git through the environment."""
+    env = dict(os.environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env.setdefault("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
+    if credential is not None:
+        env["QV_GIT_USERNAME"], env["QV_GIT_PASSWORD"] = credential
+        # The empty value first clears helpers inherited from system/global
+        # config, so ours is the only one asked.
+        args = ("-c", "credential.helper=", "-c", f"credential.helper={_CREDENTIAL_HELPER}", *args)
     try:
         proc = await asyncio.create_subprocess_exec(
             "git",
             *args,
             cwd=str(cwd) if cwd else None,
+            env=env,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -143,10 +188,16 @@ async def _git(*args: str, cwd: Path | None = None) -> str:
         # No `git` on PATH: a deployment problem, not a repo problem — say so
         # instead of surfacing a bare FileNotFoundError as a 500.
         raise GitSyncError("git is not installed on the server") from e
-    out, err = await proc.communicate()
+    verb = args[0] if credential is None else args[4]
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(), _GIT_TIMEOUT_S)
+    except TimeoutError as e:
+        proc.kill()
+        await proc.wait()
+        raise GitSyncError(f"git {verb} timed out after {_GIT_TIMEOUT_S}s") from e
     if proc.returncode != 0:
         tail = err.decode("utf-8", "replace").strip()[-500:]
-        raise GitSyncError(f"git {args[0]} failed: {tail}")
+        raise GitSyncError(f"git {verb} failed: {tail}")
     return out.decode("utf-8", "replace")
 
 
@@ -157,15 +208,18 @@ async def _ensure_repo(ws: WorkspaceRec) -> Path:
     if (wd / ".git").exists():
         return wd
     wd.parent.mkdir(parents=True, exist_ok=True)
+    # The clone records its remote in .git/config, so only the credential-free
+    # URL goes to git as an argument; the credential travels out of band.
+    remote, cred = _split_credential(remote)
     try:
-        await _git("clone", "--branch", branch, remote, str(wd))
+        await _git("clone", "--branch", branch, remote, str(wd), credential=cred)
     except GitSyncError as clone_err:
         # Clone can fail either because the branch genuinely doesn't exist yet
         # on an empty remote (the only case we should paper over with a local
         # init) or because the remote itself is unreachable/misconfigured. Ask
         # the remote directly to tell the two apart.
         try:
-            heads = await _git("ls-remote", "--heads", remote, branch)
+            heads = await _git("ls-remote", "--heads", remote, branch, credential=cred)
         except GitSyncError as probe_err:
             raise GitSyncError(f"git remote unreachable: {probe_err}") from probe_err
         if heads.strip():
@@ -183,7 +237,7 @@ async def _ensure_repo(ws: WorkspaceRec) -> Path:
 async def _origin_head(wd: Path, ws: WorkspaceRec) -> str | None:
     """Fetch, then the remote branch ref if it exists (None on an empty remote).
     Network/auth failures raise."""
-    await _git("fetch", "origin", cwd=wd)
+    await _git("fetch", "origin", cwd=wd, credential=_split_credential(_require_remote(ws))[1])
     ref = f"origin/{ws.branch}"
     try:
         await _git("rev-parse", "--verify", ref, cwd=wd)
@@ -263,7 +317,7 @@ async def store(
             return {"committed": False, "sha": None, "message": "no changes"}
         label = f"{conn_type}/{name}" if kind == "query" else name
         await _git("commit", "-m", message or f"store {kind} {label}", cwd=wd)
-        await _git("push", "origin", ws.branch, cwd=wd)
+        await _git("push", "origin", ws.branch, cwd=wd, credential=_split_credential(_require_remote(ws))[1])
         sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
         return {"committed": True, "sha": sha, "message": "stored"}
 

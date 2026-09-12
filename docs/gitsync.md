@@ -18,6 +18,22 @@ remote has git sync disabled.
 Clones live at `{data dir}/gitsync/{workspace id}/`; the repository layout inside each
 clone is unchanged by workspaces.
 
+## Credentials
+
+A remote URL may embed a credential (`https://x-access-token:<token>@host/...`).
+The row is encrypted at rest, but git would otherwise copy the URL verbatim into
+the clone's `.git/config`, leaving the credential in plaintext beside its own
+encrypted copy. So the credential is split off before any URL reaches git: the
+clone records the credential-free URL, and each network call receives the
+credential through its environment, keeping it out of the repo and out of our
+argv. Only `http(s)` userinfo is treated this way — the `git@` in
+`git@host:path` names an SSH login, not a secret, and is left alone.
+
+Git never runs interactively: stdin is closed, terminal prompts are disabled and
+SSH runs in batch mode, so a missing credential, an SSH key passphrase or an
+unknown host key fails immediately instead of blocking a request. Each
+invocation is also capped at two minutes.
+
 ## Repository layout
 
 ```
