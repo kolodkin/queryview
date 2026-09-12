@@ -23,8 +23,8 @@ RUN pip install --no-cache-dir \
 RUN useradd --create-home --uid 1000 queryview
 
 # All mutable state goes in one FHS-conventional directory rather than the
-# platform user-data dir under $HOME. Pre-creating it owned by the app user
-# means a named volume mounted there is seeded with the right ownership.
+# default `~/.queryview`. Pre-creating it owned by the app user means a named
+# volume mounted there is seeded with the right ownership.
 RUN mkdir -p /var/lib/queryview && chown queryview:queryview /var/lib/queryview
 ENV DATA_DIR=/var/lib/queryview
 

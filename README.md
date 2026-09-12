@@ -60,16 +60,14 @@ container runs as UID 1000, the first user on most Linux distributions; if
 `id -u` prints something else, add `--user "$(id -u):$(id -g)"` so the
 container writes the files as you.
 
-Two variants on that mount:
+`~/.queryview` is also where a local `uvx queryview` keeps its state, so the
+container and a local run share one database, key and set of clones with no
+extra setup. Don't run both at once: each would serve the same SQLite file.
 
-- **Let Docker own the location.** Swap the path for a named volume,
-  `-v queryview-data:/var/lib/queryview`. Docker seeds it from the image, so
-  ownership is already right and there is nothing to create up front. The
-  volume outlives `docker rm`; only `docker volume rm` deletes it.
-- **Share with a local `uvx queryview`.** Point the mount at its data
-  directory, `~/.local/share/queryview`, and the container and a local run use
-  one database, key and set of clones. Don't run both against it at once:
-  each would serve the same SQLite file.
+To let Docker own the location instead, swap the path for a named volume,
+`-v queryview-data:/var/lib/queryview`. Docker seeds it from the image, so
+ownership is already right and there is nothing to create up front, but the
+state no longer lines up with a local run.
 
 ### Git sync
 
@@ -250,9 +248,7 @@ The single-page prompt UI is described in [docs/queryview.md](docs/queryview.md)
 connecting (`new <type>` / `connect <name>`), SQLite persistence, and session
 auto-connect are specified in [docs/connect.md](docs/connect.md).
 
-All state lives in one data directory, which defaults to the platform's
-user-data directory: `~/.local/share/queryview/` on Linux,
-`~/Library/Application Support/queryview/` on macOS, and
-`%LOCALAPPDATA%\queryview\` on Windows. `DATA_DIR` moves it. Inside are the
-SQLite store `db.sqlite`, the local password-encryption key `encryption.key`,
-and the workspace git-sync clones under `gitsync/`.
+All state lives in one data directory, `~/.queryview` on every OS, relocated
+with `DATA_DIR`. Inside are the SQLite store `db.sqlite`, the local
+password-encryption key `encryption.key`, and the workspace git-sync clones
+under `gitsync/`.

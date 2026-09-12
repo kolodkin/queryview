@@ -4,27 +4,27 @@ All state sits in one data directory: the SQLite store, the password-encryption
 key, and the git-sync clones. `DATA_DIR` moves the whole directory; the names
 inside it are fixed.
 
-The default used to be package-relative (`Path(__file__).parent.parent`), which
-meant `backend/queryview.db` in a checkout but `<site-packages>/queryview.db`
-once the wheel shipped — under `uvx`, that is inside uv's *cache*, where a
-`uv cache clean` or a version bump silently takes the DB with it. The default
-is now the platform's user-data directory.
+The default is `~/.queryview` on every OS — the same path the container image
+mounts, so a local run and a container share state without extra setup. It used
+to be package-relative (`Path(__file__).parent.parent`), which meant
+`backend/queryview.db` in a checkout but `<site-packages>/queryview.db` once the
+wheel shipped — under `uvx`, that is inside uv's *cache*, where a
+`uv cache clean` or a version bump silently takes the DB with it.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-import platformdirs
-
 import queryview
 from queryview.connect import _data_dir, _db_path, _key_path
 from queryview.gitsync import _clone_base
 
 
-def test_data_dir_defaults_to_the_user_data_dir(monkeypatch):
+def test_data_dir_defaults_to_a_dotdir_in_home(monkeypatch):
+    """One path on every OS, matching the image's mount point."""
     monkeypatch.delenv("DATA_DIR", raising=False)
-    assert _data_dir() == Path(platformdirs.user_data_dir("queryview"))
+    assert _data_dir() == Path.home() / ".queryview"
 
 
 def test_data_dir_is_not_inside_the_installed_package(monkeypatch):

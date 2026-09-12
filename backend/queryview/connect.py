@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-import platformdirs
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import Field, SQLModel, col, select
@@ -41,12 +40,13 @@ class Connection(SQLModel, table=True):
 
 
 def _data_dir() -> Path:
-    """Every piece of state lives here: DATA_DIR, else the platform's user-data
-    dir (`$XDG_DATA_HOME/queryview` on Linux, `Application Support` on macOS,
-    `%LOCALAPPDATA%` on Windows). Deliberately not package-relative — that put
-    the DB in site-packages, which is uv's disposable cache under `uvx`."""
+    """Every piece of state lives here: DATA_DIR, else `~/.queryview` — the same
+    path on every OS, and the one the container image mounts, so a local run and
+    a container share state with no extra setup. Deliberately not
+    package-relative — that put the DB in site-packages, which is uv's
+    disposable cache under `uvx`."""
     env = os.environ.get("DATA_DIR")
-    return Path(env) if env else Path(platformdirs.user_data_dir("queryview"))
+    return Path(env) if env else Path.home() / ".queryview"
 
 
 def _db_path() -> Path:
