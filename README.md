@@ -33,16 +33,16 @@ workspaces are lost when the container is removed. See
 ## Run with Docker
 
 The image runs as the non-root user `queryview` (UID 1000) and sets
-`DB_PATH=/home/queryview/queryview.db`, so every piece of state lives directly
-under `/home/queryview`:
+`DB_PATH=/var/lib/queryview/queryview.db`, so every piece of state lives
+directly under `/var/lib/queryview`:
 
 | Path | Contents |
 |---|---|
-| `/home/queryview/queryview.db` | SQLite store: connections, workspaces, queries, dashboards |
-| `/home/queryview/queryview.db.key` | Key that encrypts stored connection passwords |
-| `/home/queryview/queryview.db.gitsync/` | Local clones used by workspace git sync |
+| `/var/lib/queryview/queryview.db` | SQLite store: connections, workspaces, queries, dashboards |
+| `/var/lib/queryview/queryview.db.key` | Key that encrypts stored connection passwords |
+| `/var/lib/queryview/queryview.db.gitsync/` | Local clones used by workspace git sync |
 
-Mount a volume at `/home/queryview` and all three persist across container
+Mount a volume at `/var/lib/queryview` and all three persist across container
 restarts, removals and upgrades.
 
 ### Named volume (recommended)
@@ -50,12 +50,12 @@ restarts, removals and upgrades.
 ```bash
 docker run -d --name queryview \
   -p 127.0.0.1:8000:8000 \
-  -v queryview-data:/home/queryview \
+  -v queryview-data:/var/lib/queryview \
   ghcr.io/kolodkin/queryview:latest
 ```
 
 Docker creates the `queryview-data` volume on first run and seeds it from the
-image's `/home/queryview`, so ownership is already correct for UID 1000 —
+image's `/var/lib/queryview`, so ownership is already correct for UID 1000 —
 nothing to `chown`. Stop and start the container freely (`docker stop
 queryview` / `docker start queryview`); the data stays in the volume. Even
 `docker rm queryview` leaves the volume in place — only `docker volume rm
@@ -65,15 +65,15 @@ queryview-data` deletes it.
 
 Locally, `uvx queryview` keeps its state in `~/.local/share/queryview/`
 (`queryview.db`, `queryview.db.key`, `queryview.db.gitsync/`). The image lays
-out `/home/queryview` the same way, so bind-mounting that directory makes the
-container and a local run share one database, key and set of clones — start
-either and you see the same connections, queries and dashboards:
+out `/var/lib/queryview` the same way, so bind-mounting that directory makes
+the container and a local run share one database, key and set of clones —
+start either and you see the same connections, queries and dashboards:
 
 ```bash
 mkdir -p ~/.local/share/queryview
 docker run -d --name queryview \
   -p 127.0.0.1:8000:8000 \
-  -v ~/.local/share/queryview:/home/queryview \
+  -v ~/.local/share/queryview:/var/lib/queryview \
   ghcr.io/kolodkin/queryview:latest
 ```
 
@@ -89,14 +89,15 @@ time: both would serve the same SQLite file.
 
 The image ships `git` and an SSH client, so workspace git sync (see
 [docs/gitsync.md](docs/gitsync.md)) works in the container; clones live under
-`/home/queryview/queryview.db.gitsync/`, which either mount above already covers.
-What is left is getting credentials to the remote:
+`/var/lib/queryview/queryview.db.gitsync/`, which either mount above already
+covers. What is left is getting credentials to the remote:
 
 - **HTTPS with a token** needs nothing extra — put the token in the remote
   URL, e.g. `https://<token>@github.com/<org>/<repo>.git`. The URL is stored
   encrypted with the rest of the workspace row.
 - **SSH** needs a key and `known_hosts` inside the container. Mount your
-  `.ssh` directory read-only at the `queryview` user's home:
+  `.ssh` directory read-only into the `queryview` user's home, which is
+  separate from the data mount above:
   `-v ~/.ssh:/home/queryview/.ssh:ro`. The files must be readable by UID 1000.
 
 ## Layout

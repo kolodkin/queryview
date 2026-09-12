@@ -21,14 +21,17 @@ RUN pip install --no-cache-dir \
 
 # Run as a non-root user.
 RUN useradd --create-home --uid 1000 queryview
+
+# All mutable state goes in one FHS-conventional directory rather than the
+# platform user-data dir under $HOME. Pinning DB_PATH puts the SQLite file and
+# its siblings (the .key file, the git-sync clones) there at a flat, documented
+# path; pre-creating it owned by the app user means a named volume mounted
+# there is seeded with the right ownership.
+RUN mkdir -p /var/lib/queryview && chown queryview:queryview /var/lib/queryview
+ENV DB_PATH=/var/lib/queryview/queryview.db
+
 WORKDIR /home/queryview
 USER queryview
-
-# The default is the user-data dir (/home/queryview/.local/share/queryview);
-# pin the SQLite file (and its sibling .key file and git-sync clones) to the top
-# of the home dir instead, so a volume mounted at /home/queryview persists all
-# state at a flat, documented path.
-ENV DB_PATH=/home/queryview/queryview.db
 
 EXPOSE 8000
 
