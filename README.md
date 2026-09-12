@@ -86,12 +86,9 @@ Scope the token to the one repository and give it an expiry. QueryView keeps
 the URL encrypted and strips the credential back out before git records the
 remote, so the clone's config holds a credential-free URL.
 
-SSH works too, but it is the harder path in a container. Nothing can answer a
-prompt there, so a passphrase cannot be entered and an unknown host key cannot
-be accepted; bring a `known_hosts` that already lists the host. Mount a
-dedicated deploy key rather than your whole `.ssh` directory, which would hand
-the container every key you own, and note that both mounts are read-only and
-the key must be owned by UID 1000 as the container sees it:
+SSH also works, but nothing in the container can answer a prompt: the key must
+be passphrase-free and `known_hosts` must already list the host. Mount one
+dedicated deploy key, not your whole `.ssh`, readable by UID 1000:
 
 ```bash
 docker run -d --name queryview \
