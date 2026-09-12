@@ -26,9 +26,139 @@ To serve on a different host port, remap it (the container keeps listening on
 expects to be reached from localhost only, so prefer binding the published port
 to loopback: `docker run -p 127.0.0.1:8000:8000 ...`.
 
-State (the SQLite DB and its encryption key) lives in `/home/queryview`; mount a
-volume there to persist it across containers:
-`docker run -p 8000:8000 -v queryview-data:/home/queryview ghcr.io/kolodkin/queryview:latest`.
+The command above keeps its state inside the container, so connections and
+workspaces are lost when the container is removed. See
+[Run with Docker](#run-with-docker) for a persistent setup.
+
+## Run with Docker
+
+The image runs as the non-root user `queryview` (UID 1000) and sets
+`DB_PATH=/home/queryview/queryview.db`, so every piece of state lives directly
+under `/home/queryview`:
+
+| Path | Contents |
+|---|---|
+| `/home/queryview/queryview.db` | SQLite store: connections, workspaces, queries, dashboards |
+| `/home/queryview/queryview.db.key` | Key that encrypts stored connection passwords |
+| `/home/queryview/queryview.db.gitsync/` | Local clones used by workspace git sync |
+
+Mount a volume at `/home/queryview` and all three persist across container
+restarts, removals and upgrades.
+
+### Named volume (recommended)
+
+```bash
+docker run -d --name queryview \
+  -p 127.0.0.1:8000:8000 \
+  -v queryview-data:/home/queryview \
+  ghcr.io/kolodkin/queryview:latest
+```
+
+Docker creates the `queryview-data` volume on first run and seeds it from the
+image's `/home/queryview`, so ownership is already correct for UID 1000 —
+nothing to `chown`. Stop and start the container freely (`docker stop
+queryview` / `docker start queryview`); the data stays in the volume. Even
+`docker rm queryview` leaves the volume in place — only `docker volume rm
+queryview-data` deletes it.
+
+### Bind mount
+
+To keep the files in a host directory instead (easier to inspect or back up
+with your usual tools), the directory must be writable by UID 1000, because
+that is the user the container runs as:
+
+```bash
+mkdir -p ./queryview-data
+sudo chown 1000:1000 ./queryview-data
+docker run -d --name queryview \
+  -p 127.0.0.1:8000:8000 \
+  -v "$PWD/queryview-data:/home/queryview" \
+  ghcr.io/kolodkin/queryview:latest
+```
+
+If you would rather not change ownership, run the container as your own user
+instead — `DB_PATH` is absolute, so it does not depend on the home directory
+existing for that UID:
+
+```bash
+docker run -d --name queryview \
+  --user "$(id -u):$(id -g)" \
+  -p 127.0.0.1:8000:8000 \
+  -v "$PWD/queryview-data:/home/queryview" \
+  ghcr.io/kolodkin/queryview:latest
+```
+
+On Docker Desktop (macOS/Windows) bind-mount permissions are mapped
+automatically, so the `chown` step is not needed there.
+
+### Docker Compose
+
+```yaml
+services:
+  queryview:
+    image: ghcr.io/kolodkin/queryview:latest
+    container_name: queryview
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - queryview-data:/home/queryview
+    restart: unless-stopped
+
+volumes:
+  queryview-data:
+```
+
+`docker compose up -d` starts it; `docker compose down` stops and removes the
+container but keeps the volume (`docker compose down -v` removes it too).
+
+### Upgrading
+
+Pull the new image and recreate the container on the same volume. Schema
+migrations run automatically at startup, so an existing database is upgraded
+in place:
+
+```bash
+docker pull ghcr.io/kolodkin/queryview:latest
+docker rm -f queryview
+docker run -d --name queryview \
+  -p 127.0.0.1:8000:8000 \
+  -v queryview-data:/home/queryview \
+  ghcr.io/kolodkin/queryview:latest
+```
+
+With Compose: `docker compose pull && docker compose up -d`.
+
+### Backup and restore
+
+Back up the database **together with its `.key` file**: stored connection
+passwords are encrypted with that key, and a database restored without it
+cannot decrypt them. The simplest approach is to archive the whole volume
+while the container is stopped:
+
+```bash
+docker stop queryview
+docker run --rm \
+  -v queryview-data:/data:ro \
+  -v "$PWD:/backup" \
+  alpine tar czf /backup/queryview-backup.tgz -C /data .
+docker start queryview
+```
+
+Restore into a fresh (or emptied) volume the same way:
+
+```bash
+docker run --rm \
+  -v queryview-data:/data \
+  -v "$PWD:/backup" \
+  alpine sh -c "find /data -mindepth 1 -delete && tar xzf /backup/queryview-backup.tgz -C /data"
+```
+
+To keep the encryption key out of the volume entirely (for example so a
+leaked backup is useless on its own), pass it as `DB_ENCRYPTION_KEY` instead —
+base64 of 32 random bytes, e.g. `openssl rand -base64 32` — and supply the same
+value on every run; the `.key` file is then neither read nor written. See
+[docs/connect.md](docs/connect.md) for the full list of storage-related
+environment variables.
 
 ## Layout
 
