@@ -15,7 +15,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import queryview
 from queryview.connect import _data_dir, _db_path, _key_path
 from queryview.gitsync import _clone_base
 
@@ -24,14 +23,6 @@ def test_data_dir_defaults_to_a_dotdir_in_home(monkeypatch):
     """One path on every OS, matching the image's mount point."""
     monkeypatch.delenv("DATA_DIR", raising=False)
     assert _data_dir() == Path.home() / ".queryview"
-
-
-def test_data_dir_is_not_inside_the_installed_package(monkeypatch):
-    """The regression: a package-relative default puts user data in
-    site-packages (and under uvx, in a disposable cache directory)."""
-    monkeypatch.delenv("DATA_DIR", raising=False)
-    package_root = Path(queryview.__file__).resolve().parent.parent
-    assert package_root not in _data_dir().resolve().parents
 
 
 def test_every_path_hangs_off_the_data_dir(monkeypatch, tmp_path):

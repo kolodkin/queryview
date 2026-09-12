@@ -14,13 +14,23 @@ import pytest
 
 
 @pytest.fixture
-def git_env(tmp_path, monkeypatch):
+def clone_base(tmp_path, monkeypatch) -> Path:
+    """Redirect every workspace's sync clone into this test's tmpdir, so clones
+    never land in the session data dir and can't leak between tests."""
+    from queryview import gitsync
+
+    base = tmp_path / "clones"
+    monkeypatch.setattr(gitsync, "_clone_base", lambda: base)
+    return base
+
+
+@pytest.fixture
+def git_env(tmp_path, clone_base):
     """A local bare repo as the default workspace's git-sync remote + a fresh
     per-workspace clone base dir. Resets the default workspace to 'no remote'
     on teardown so unconfigured-state tests stay valid."""
     import asyncio
 
-    from queryview import gitsync
     from queryview.workspaces import DEFAULT_WORKSPACE, update_workspace
 
     remote = tmp_path / "remote.git"
@@ -29,7 +39,6 @@ def git_env(tmp_path, monkeypatch):
         check=True,
         capture_output=True,
     )
-    monkeypatch.setattr(gitsync, "_clone_base", lambda: tmp_path / "clones")
     asyncio.run(update_workspace(DEFAULT_WORKSPACE, remote=str(remote)))
     yield remote
     asyncio.run(update_workspace(DEFAULT_WORKSPACE, remote=None))

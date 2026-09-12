@@ -81,7 +81,7 @@ def test_dashboard_from_files_rejects_malformed_meta():
         dashboard_from_files({"meta.yaml": "connection: x", "dashboard.html": "", "queries.yaml": ""})
 
 
-# The git_env fixture (bare repo + GIT_SYNC_* env vars) lives in conftest.py.
+# The git_env fixture (bare repo + redirected clone base) lives in conftest.py.
 
 
 def _default_ws_id() -> int:
@@ -187,11 +187,10 @@ def test_store_custom_message(git_env):
     assert "before migration" in _remote_log(git_env)
 
 
-def test_store_unreachable_remote_raises_without_init(tmp_path, monkeypatch):
+def test_store_unreachable_remote_raises_without_init(tmp_path, clone_base):
     from queryview.queries import save_predefined_query
     from queryview.workspaces import DEFAULT_WORKSPACE, update_workspace
 
-    monkeypatch.setattr(gitsync, "_clone_base", lambda: tmp_path / "clones")
     _run(update_workspace(DEFAULT_WORKSPACE, remote=str(tmp_path / "does-not-exist.git")))
     try:
         _run(save_predefined_query("gs unreachable", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
@@ -200,7 +199,7 @@ def test_store_unreachable_remote_raises_without_init(tmp_path, monkeypatch):
             _run(gitsync.store(ws, "query", "gs unreachable", "clickhouse"))
         assert e.value.status == 502
         # No spurious local repo in this workspace's clone dir.
-        assert not (tmp_path / "clones" / str(ws.id) / ".git").exists()
+        assert not (clone_base / str(ws.id) / ".git").exists()
     finally:
         _run(update_workspace(DEFAULT_WORKSPACE, remote=None))
 
@@ -312,13 +311,12 @@ def _bare(tmp_path, name):
     return remote
 
 
-def test_store_is_isolated_per_workspace(tmp_path, monkeypatch):
+def test_store_is_isolated_per_workspace(tmp_path, clone_base):
     """A commit in workspace A lands only in A's remote; B's stays empty; a
     workspace without a remote is 409."""
     from queryview.queries import save_predefined_query
     from queryview.workspaces import create_workspace, resolve
 
-    monkeypatch.setattr(gitsync, "_clone_base", lambda: tmp_path / "clones")
     ra, rb = _bare(tmp_path, "a.git"), _bare(tmp_path, "b.git")
     _run(create_workspace("t5-a", remote=str(ra)))
     _run(create_workspace("t5-b", remote=str(rb)))
@@ -388,7 +386,7 @@ def test_split_credential_leaves_ssh_and_plain_urls_alone():
         assert gitsync._split_credential(url) == (url, None)
 
 
-def test_credential_never_reaches_the_clone_config(tmp_path, monkeypatch):
+def test_credential_never_reaches_the_clone_config(monkeypatch, clone_base):
     """The URL git records must be the sanitized one, so a backup of the data
     dir carries no working credential."""
     calls: list[tuple[str, ...]] = []
@@ -400,7 +398,6 @@ def test_credential_never_reaches_the_clone_config(tmp_path, monkeypatch):
         return ""  # ls-remote: no heads -> empty remote -> init + `remote add`
 
     monkeypatch.setattr(gitsync, "_git", fake_git)
-    monkeypatch.setattr(gitsync, "_clone_base", lambda: tmp_path / "clones")
     ws = gitsync.WorkspaceRec(id=99, name="w", branch="main", remote="https://tok@example.internal/a/b.git")
 
     _run(gitsync._ensure_repo(ws))
@@ -414,17 +411,18 @@ def test_credential_helper_answers_git_from_the_environment():
     """Wiring check against real git: the helper must return what we put in the
     child's environment, for a host it has never seen."""
     out = subprocess.run(
-        [
-            "git",
-            "-c",
-            "credential.helper=",
-            "-c",
-            f"credential.helper={gitsync._CREDENTIAL_HELPER}",
-            "credential",
-            "fill",
-        ],
+        ["git", "credential", "fill"],
         input="protocol=https\nhost=example.internal\n\n",
-        env={**os.environ, "QV_GIT_USERNAME": "x-access-token", "QV_GIT_PASSWORD": "s3cr3t"},
+        env={
+            **os.environ,
+            "QV_GIT_USERNAME": "x-access-token",
+            "QV_GIT_PASSWORD": "s3cr3t",
+            "GIT_CONFIG_COUNT": "2",
+            "GIT_CONFIG_KEY_0": "credential.helper",
+            "GIT_CONFIG_VALUE_0": "",
+            "GIT_CONFIG_KEY_1": "credential.helper",
+            "GIT_CONFIG_VALUE_1": gitsync._CREDENTIAL_HELPER,
+        },
         capture_output=True,
         text=True,
         check=True,

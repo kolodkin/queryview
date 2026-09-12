@@ -15,6 +15,7 @@ from urllib.parse import unquote, urlsplit, urlunsplit
 
 import yaml
 
+from .connect import _data_dir
 from .workspaces import WorkspaceRec
 from .yamlio import YamlIOError, dashboard_from_data, dump_yaml, query_from_data, query_to_data, slug
 
@@ -98,8 +99,6 @@ def _require_remote(ws: WorkspaceRec) -> str:
 
 def _clone_base() -> Path:
     """Where every workspace's sync clone lives, inside the data dir."""
-    from .connect import _data_dir
-
     return _data_dir() / "gitsync"
 
 
@@ -158,18 +157,26 @@ def _split_credential(url: str) -> tuple[str, tuple[str, str] | None]:
     return sanitized, (unquote(parts.username or ""), unquote(parts.password or ""))
 
 
+def _credential(ws: WorkspaceRec) -> tuple[str, str] | None:
+    """This workspace's git credential, if its remote embeds one."""
+    return _split_credential(_require_remote(ws))[1]
+
+
 async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] | None = None) -> str:
     """Run one git command, never interactively: stdin is closed and any prompt
     (terminal, SSH passphrase, unknown host) becomes a failure rather than a
     blocked request. A credential, when passed, arrives via the environment."""
     env = dict(os.environ)
     env["GIT_TERMINAL_PROMPT"] = "0"
-    env.setdefault("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
+    env["GIT_SSH_COMMAND"] = f"{os.environ.get('GIT_SSH_COMMAND', 'ssh')} -o BatchMode=yes"
     if credential is not None:
         env["QV_GIT_USERNAME"], env["QV_GIT_PASSWORD"] = credential
-        # The empty value clears helpers inherited from system/global config,
-        # so ours is the only one asked.
-        args = ("-c", "credential.helper=", "-c", f"credential.helper={_CREDENTIAL_HELPER}", *args)
+        # Config through the environment, not `-c` flags, so argv stays exactly
+        # what the caller passed. The empty first value clears any helper
+        # inherited from system/global config, leaving ours the only one asked.
+        env["GIT_CONFIG_COUNT"] = "2"
+        env["GIT_CONFIG_KEY_0"], env["GIT_CONFIG_VALUE_0"] = "credential.helper", ""
+        env["GIT_CONFIG_KEY_1"], env["GIT_CONFIG_VALUE_1"] = "credential.helper", _CREDENTIAL_HELPER
     try:
         proc = await asyncio.create_subprocess_exec(
             "git",
@@ -184,29 +191,28 @@ async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] 
         # No `git` on PATH: a deployment problem, not a repo problem — say so
         # instead of surfacing a bare FileNotFoundError as a 500.
         raise GitSyncError("git is not installed on the server") from e
-    verb = args[0] if credential is None else args[4]
     try:
         out, err = await asyncio.wait_for(proc.communicate(), _GIT_TIMEOUT_S)
     except TimeoutError as e:
         proc.kill()
         await proc.wait()
-        raise GitSyncError(f"git {verb} timed out after {_GIT_TIMEOUT_S}s") from e
+        raise GitSyncError(f"git {args[0]} timed out after {_GIT_TIMEOUT_S}s") from e
     if proc.returncode != 0:
         tail = err.decode("utf-8", "replace").strip()[-500:]
-        raise GitSyncError(f"git {verb} failed: {tail}")
+        raise GitSyncError(f"git {args[0]} failed: {tail}")
     return out.decode("utf-8", "replace")
 
 
 async def _ensure_repo(ws: WorkspaceRec) -> Path:
     """The workspace's sync clone, cloning (or, for an empty remote, init +
     remote add) on first use. Idempotent."""
-    remote, branch, wd = _require_remote(ws), ws.branch, _workdir(ws)
+    branch, wd = ws.branch, _workdir(ws)
     if (wd / ".git").exists():
         return wd
     wd.parent.mkdir(parents=True, exist_ok=True)
     # The clone records its remote in .git/config, so only the credential-free
     # URL goes to git as an argument; the credential travels out of band.
-    remote, cred = _split_credential(remote)
+    remote, cred = _split_credential(_require_remote(ws))
     try:
         await _git("clone", "--branch", branch, remote, str(wd), credential=cred)
     except GitSyncError as clone_err:
@@ -233,7 +239,7 @@ async def _ensure_repo(ws: WorkspaceRec) -> Path:
 async def _origin_head(wd: Path, ws: WorkspaceRec) -> str | None:
     """Fetch, then the remote branch ref if it exists (None on an empty remote).
     Network/auth failures raise."""
-    await _git("fetch", "origin", cwd=wd, credential=_split_credential(_require_remote(ws))[1])
+    await _git("fetch", "origin", cwd=wd, credential=_credential(ws))
     ref = f"origin/{ws.branch}"
     try:
         await _git("rev-parse", "--verify", ref, cwd=wd)
@@ -313,7 +319,7 @@ async def store(
             return {"committed": False, "sha": None, "message": "no changes"}
         label = f"{conn_type}/{name}" if kind == "query" else name
         await _git("commit", "-m", message or f"store {kind} {label}", cwd=wd)
-        await _git("push", "origin", ws.branch, cwd=wd, credential=_split_credential(_require_remote(ws))[1])
+        await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
         sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
         return {"committed": True, "sha": sha, "message": "stored"}
 

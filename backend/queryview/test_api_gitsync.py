@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from queryview.main import app
 
-# The git_env fixture (bare repo + GIT_SYNC_* env vars) lives in conftest.py.
+# The git_env fixture (bare repo + redirected clone base) lives in conftest.py.
 
 
 def _run(coro):

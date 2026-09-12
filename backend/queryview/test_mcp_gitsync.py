@@ -24,17 +24,16 @@ def test_git_restore_tool_reports_unconfigured():
     assert r["ok"] is False
 
 
-def test_git_store_resolves_workspace_from_session(tmp_path, monkeypatch):
+def test_git_store_resolves_workspace_from_session(tmp_path, clone_base):
     """An armed session on workspace B routes git_store to B's remote; no
     session_id falls back to the default workspace."""
     import subprocess
 
-    from queryview import gitsync, remote
+    from queryview import remote
     from queryview.mcp_server import git_store
     from queryview.queries import save_predefined_query
     from queryview.workspaces import create_workspace, resolve
 
-    monkeypatch.setattr(gitsync, "_clone_base", lambda: tmp_path / "clones")
     rb = tmp_path / "b.git"
     subprocess.run(
         ["git", "init", "--bare", "-b", "main", str(rb)],
