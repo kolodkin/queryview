@@ -91,26 +91,6 @@ docker run -d --name queryview \
 On Docker Desktop (macOS/Windows) bind-mount permissions are mapped
 automatically, so the `chown` step is not needed there.
 
-### Docker Compose
-
-```yaml
-services:
-  queryview:
-    image: ghcr.io/kolodkin/queryview:latest
-    container_name: queryview
-    ports:
-      - "127.0.0.1:8000:8000"
-    volumes:
-      - queryview-data:/home/queryview
-    restart: unless-stopped
-
-volumes:
-  queryview-data:
-```
-
-`docker compose up -d` starts it; `docker compose down` stops and removes the
-container but keeps the volume (`docker compose down -v` removes it too).
-
 ### Upgrading
 
 Pull the new image and recreate the container on the same volume. Schema
@@ -125,8 +105,6 @@ docker run -d --name queryview \
   -v queryview-data:/home/queryview \
   ghcr.io/kolodkin/queryview:latest
 ```
-
-With Compose: `docker compose pull && docker compose up -d`.
 
 ### Backup and restore
 
