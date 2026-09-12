@@ -33,8 +33,8 @@ workspaces are lost when the container is removed. See
 ## Run with Docker
 
 The image runs as the non-root user `queryview` (UID 1000) and sets
-`DATA_DIR=/var/lib/queryview`, so every piece of state lives directly under
-it:
+`DATA_DIR=/var/lib/queryview`, so every piece of state lives directly under that
+one directory:
 
 | Path | Contents |
 |---|---|
@@ -45,52 +45,38 @@ it:
 Mount a volume at `/var/lib/queryview` and all three persist across container
 restarts, removals and upgrades.
 
-### Named volume (recommended)
+### Persisting it
 
 ```bash
+mkdir -p "$HOME/.queryview"
 docker run -d --name queryview \
   -p 127.0.0.1:8000:8000 \
-  -v queryview-data:/var/lib/queryview \
+  -v "$HOME/.queryview:/var/lib/queryview" \
   ghcr.io/kolodkin/queryview:latest
 ```
 
-Docker creates the `queryview-data` volume on first run and seeds it from the
-image's `/var/lib/queryview`, so ownership is already correct for UID 1000 —
-nothing to `chown`. Stop and start the container freely (`docker stop
-queryview` / `docker start queryview`); the data stays in the volume. Even
-`docker rm queryview` leaves the volume in place — only `docker volume rm
-queryview-data` deletes it.
+Create the directory first so Docker doesn't create it owned by root. The
+container runs as UID 1000, the first user on most Linux distributions; if
+`id -u` prints something else, add `--user "$(id -u):$(id -g)"` so the
+container writes the files as you.
 
-### Share state with `uvx queryview` (Linux)
+Two variants on that mount:
 
-Locally, `uvx queryview` keeps its state in `~/.local/share/queryview/`
-(`db.sqlite`, `encryption.key`, `gitsync/`). The image lays
-out `/var/lib/queryview` the same way, so bind-mounting that directory makes
-the container and a local run share one database, key and set of clones —
-start either and you see the same connections, queries and dashboards:
-
-```bash
-mkdir -p ~/.local/share/queryview
-docker run -d --name queryview \
-  -p 127.0.0.1:8000:8000 \
-  -v ~/.local/share/queryview:/var/lib/queryview \
-  ghcr.io/kolodkin/queryview:latest
-```
-
-Create the directory first (as above) so Docker doesn't create it owned by
-root. The container runs as UID 1000, which is the first user on most Linux
-distributions; if `id -u` prints something else, add
-`--user "$(id -u):$(id -g)"` so the container writes the files as you.
-
-Don't run `uvx queryview` and the container against the directory at the same
-time: both would serve the same SQLite file.
+- **Let Docker own the location.** Swap the path for a named volume,
+  `-v queryview-data:/var/lib/queryview`. Docker seeds it from the image, so
+  ownership is already right and there is nothing to create up front. The
+  volume outlives `docker rm`; only `docker volume rm` deletes it.
+- **Share with a local `uvx queryview`.** Point the mount at its data
+  directory, `~/.local/share/queryview`, and the container and a local run use
+  one database, key and set of clones. Don't run both against it at once:
+  each would serve the same SQLite file.
 
 ### Git sync
 
 The image ships `git`, so workspace git sync (see
 [docs/gitsync.md](docs/gitsync.md)) works in the container; clones live under
-`/var/lib/queryview/gitsync/`, which either mount above already covers. What
-is left is authenticating to the remote.
+`/var/lib/queryview/gitsync/`, which the mount above already covers. What is
+left is authenticating to the remote.
 
 Use an HTTPS remote with a token, which needs nothing beyond the URL:
 
@@ -112,7 +98,7 @@ the container every key you own:
 ```bash
 docker run -d --name queryview \
   -p 127.0.0.1:8000:8000 \
-  -v queryview-data:/var/lib/queryview \
+  -v "$HOME/.queryview:/var/lib/queryview" \
   -v ~/.ssh/queryview_deploy:/home/queryview/.ssh/id_ed25519:ro \
   -v ~/.ssh/known_hosts:/home/queryview/.ssh/known_hosts:ro \
   ghcr.io/kolodkin/queryview:latest
