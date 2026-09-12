@@ -48,10 +48,10 @@ restarts, removals and upgrades.
 ### Persisting it
 
 ```bash
-mkdir -p "$HOME/.queryview"
+mkdir -p ~/.queryview
 docker run -d --name queryview \
   -p 127.0.0.1:8000:8000 \
-  -v "$HOME/.queryview:/var/lib/queryview" \
+  -v ~/.queryview:/var/lib/queryview \
   ghcr.io/kolodkin/queryview:latest
 ```
 
@@ -96,7 +96,7 @@ the key must be owned by UID 1000 as the container sees it:
 ```bash
 docker run -d --name queryview \
   -p 127.0.0.1:8000:8000 \
-  -v "$HOME/.queryview:/var/lib/queryview" \
+  -v ~/.queryview:/var/lib/queryview \
   -v ~/.ssh/queryview_deploy:/home/queryview/.ssh/id_ed25519:ro \
   -v ~/.ssh/known_hosts:/home/queryview/.ssh/known_hosts:ro \
   ghcr.io/kolodkin/queryview:latest
