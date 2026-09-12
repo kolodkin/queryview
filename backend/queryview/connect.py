@@ -41,17 +41,15 @@ class Connection(SQLModel, table=True):
 
 def _data_dir() -> Path:
     """Every piece of state lives here: DATA_DIR, else `~/.queryview` — the same
-    path on every OS, and the one the container image mounts, so a local run and
-    a container share state with no extra setup. Deliberately not
-    package-relative — that put the DB in site-packages, which is uv's
-    disposable cache under `uvx`."""
+    path on every OS, and the image's mount point, so a local run and a container
+    share state. Deliberately not package-relative: that put the DB in
+    site-packages, which is uv's disposable cache under `uvx`."""
     env = os.environ.get("DATA_DIR")
     return Path(env) if env else Path.home() / ".queryview"
 
 
 def _db_path() -> Path:
-    """The SQLite store. One fixed name inside the data dir — move the
-    directory, not the file."""
+    """The SQLite store: a fixed name in the data dir — move the dir, not it."""
     return _data_dir() / "db.sqlite"
 
 

@@ -5,9 +5,9 @@ git-syncs to its own remote (see [gitsync.md](./gitsync.md)). Entity names are
 unique per workspace, so two workspaces can each have a "daily revenue"
 dashboard. Connections are global — any workspace can use any connection.
 
-A `default` workspace always exists after migration, created with no remote
-and on branch `main`. It is an ordinary row — renamable and deletable like any other;
-it is only special as the fallback for an omitted `workspace` parameter.
+A `default` workspace always exists after migration, with no remote and on
+branch `main`. It is an ordinary row — renamable and deletable like any other,
+special only as the fallback for an omitted `workspace` parameter.
 
 ## Configuration
 

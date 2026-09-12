@@ -8,27 +8,24 @@ written to the repo (their config is encrypted credentials).
 
 Each workspace (see [workspace.md](./workspace.md)) carries its own remote URL
 and branch, managed in the UI/API and encrypted at rest. There is no
-environment-variable fallback: a workspace without a remote has git sync
-disabled until one is set. New workspaces start on branch `main`.
+environment-variable fallback: without a remote, git sync is disabled. New
+workspaces start on branch `main`.
 
-Clones live at `{data dir}/gitsync/{workspace id}/`; the repository layout inside each
+Clones live at `{data dir}/gitsync/{workspace id}/`; the layout inside each
 clone is unchanged by workspaces.
 
 ## Credentials
 
 A remote URL may embed a credential (`https://x-access-token:<token>@host/...`).
-The row is encrypted at rest, but git would otherwise copy the URL verbatim into
-the clone's `.git/config`, leaving the credential in plaintext beside its own
-encrypted copy. So the credential is split off before any URL reaches git: the
-clone records the credential-free URL, and each network call receives the
-credential through its environment, keeping it out of the repo and out of our
-argv. Only `http(s)` userinfo is treated this way — the `git@` in
-`git@host:path` names an SSH login, not a secret, and is left alone.
+Git would copy it verbatim into the clone's `.git/config`, so it is split off
+before any URL reaches git: the clone records the credential-free URL, and each
+network call gets the credential through its environment — out of both the repo
+and our argv. Only `http(s)` userinfo counts; the `git@` in `git@host:path` is
+an SSH login, not a secret.
 
-Git never runs interactively: stdin is closed, terminal prompts are disabled and
-SSH runs in batch mode, so a missing credential, an SSH key passphrase or an
-unknown host key fails immediately instead of blocking a request. Each
-invocation is also capped at two minutes.
+Git never runs interactively: stdin is closed, prompts are disabled, SSH runs in
+batch mode, and each invocation is capped at two minutes. A missing credential,
+a key passphrase or an unknown host fails instead of blocking a request.
 
 ## Repository layout
 

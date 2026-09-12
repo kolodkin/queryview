@@ -131,25 +131,23 @@ def _lock(ws: WorkspaceRec) -> asyncio.Lock:
     return lock
 
 
-# Seconds any single git invocation may take before it is killed. Network calls
-# are the slow ones; everything else finishes in milliseconds.
+# Seconds before a git invocation is killed; only network calls come close.
 _GIT_TIMEOUT_S = 120
 
-# Feeds the credential back to git per invocation, reading it from the child's
-# environment so it reaches neither the repo's config nor our argv. Git calls a
-# helper with "get", "store" or "erase"; answering only "get" keeps us from
-# writing the credential anywhere.
+# Feeds the credential back per invocation from the child's environment, so it
+# reaches neither the repo's config nor our argv. Git calls a helper with "get",
+# "store" or "erase"; answering only "get" avoids writing it anywhere.
 _CREDENTIAL_HELPER = (
     '!f() { test "$1" = get && printf "username=%s\\npassword=%s\\n" "$QV_GIT_USERNAME" "$QV_GIT_PASSWORD"; }; f'
 )
 
 
 def _split_credential(url: str) -> tuple[str, tuple[str, str] | None]:
-    """Separate an http(s) URL's embedded credential from the URL itself, so the
-    URL can be handed to git (and persisted in the clone's config) without it.
+    """Split an http(s) URL's credential from the URL, so the URL can be handed
+    to git (and persisted in the clone's config) without it.
 
-    Only http(s) userinfo is a secret. `git@host:path` and `ssh://git@host` name
-    an SSH login, not a credential, so those URLs are returned untouched."""
+    Only http(s) userinfo is a secret: `git@host:path` and `ssh://git@host` name
+    an SSH login, so those are returned untouched."""
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not (parts.username or parts.password):
         return url, None
@@ -161,17 +159,16 @@ def _split_credential(url: str) -> tuple[str, tuple[str, str] | None]:
 
 
 async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] | None = None) -> str:
-    """Run one git command. Never interactive: stdin is closed and every prompt
-    git might raise (terminal, SSH passphrase, unknown host) is turned into a
-    failure, so a request can't block on input nobody is there to give. A
-    credential, when passed, reaches git through the environment."""
+    """Run one git command, never interactively: stdin is closed and any prompt
+    (terminal, SSH passphrase, unknown host) becomes a failure rather than a
+    blocked request. A credential, when passed, arrives via the environment."""
     env = dict(os.environ)
     env["GIT_TERMINAL_PROMPT"] = "0"
     env.setdefault("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
     if credential is not None:
         env["QV_GIT_USERNAME"], env["QV_GIT_PASSWORD"] = credential
-        # The empty value first clears helpers inherited from system/global
-        # config, so ours is the only one asked.
+        # The empty value clears helpers inherited from system/global config,
+        # so ours is the only one asked.
         args = ("-c", "credential.helper=", "-c", f"credential.helper={_CREDENTIAL_HELPER}", *args)
     try:
         proc = await asyncio.create_subprocess_exec(

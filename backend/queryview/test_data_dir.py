@@ -1,15 +1,14 @@
 """Where QueryView's state lives.
 
-All state sits in one data directory: the SQLite store, the password-encryption
-key, and the git-sync clones. `DATA_DIR` moves the whole directory; the names
-inside it are fixed.
+One data directory holds the SQLite store, the password-encryption key and the
+git-sync clones. `DATA_DIR` moves it; the names inside are fixed. The default,
+`~/.queryview`, is also the image's mount point, so a local run and a container
+share state.
 
-The default is `~/.queryview` on every OS — the same path the container image
-mounts, so a local run and a container share state without extra setup. It used
-to be package-relative (`Path(__file__).parent.parent`), which meant
+It used to be package-relative (`Path(__file__).parent.parent`), which meant
 `backend/queryview.db` in a checkout but `<site-packages>/queryview.db` once the
-wheel shipped — under `uvx`, that is inside uv's *cache*, where a
-`uv cache clean` or a version bump silently takes the DB with it.
+wheel shipped — under `uvx`, inside uv's *cache*, where a `uv cache clean` or a
+version bump silently takes the DB with it.
 """
 
 from __future__ import annotations

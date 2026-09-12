@@ -19,9 +19,9 @@ def base_url() -> str:
 
 @pytest.fixture(scope="session", autouse=True)
 def _git_sync_remote(base_url: str) -> None:
-    """Point the default workspace at the remote CI stood up for us, through the
-    same API a user would use — the app has no env-var path to this. Unset
-    locally, which leaves git sync disabled and its round-trip test skipped."""
+    """Point the default workspace at the remote CI stood up, through the same
+    API a user would: the app has no env-var path to it. Unset locally, leaving
+    git sync disabled and its round-trip test skipped."""
     remote = os.environ.get("E2E_GIT_REMOTE")
     if remote:
         r = httpx.patch(f"{base_url}/api/workspaces/default", json={"remote": remote})
