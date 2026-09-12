@@ -1,6 +1,7 @@
-"""Git-sync e2e. In CI a loopback git daemon (start-git-daemon action) serves
-GIT_SYNC_REMOTE, so the full UI commit/restore round trip runs; on an
-unconfigured stack that test skips and we assert the controls render disabled."""
+"""Git-sync e2e. In CI a loopback git daemon (start-git-daemon action) serves a
+remote that conftest points the default workspace at, so the full UI
+commit/restore round trip runs; on an unconfigured stack that test skips and we
+assert the controls render disabled."""
 
 import httpx
 import pytest
@@ -23,7 +24,7 @@ def test_controls_disabled_when_unconfigured(page: Page, base_url: str):
 
 def test_commit_and_restore_dashboard_round_trip(page: Page, base_url: str):
     if not _configured(base_url):
-        pytest.skip("git sync is not configured (no GIT_SYNC_REMOTE)")
+        pytest.skip("git sync is not configured for this stack")
 
     # Seed v1 via the API, then commit it from the UI.
     httpx.post(

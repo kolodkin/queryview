@@ -62,7 +62,7 @@ PGPORT="${PGPORT:-5432}" "$ROOT/scripts/setup_postgres.sh"
 log "building SPA"
 npm run build -w frontend
 log "starting backend (serving built SPA) on :$BACKEND_PORT"
-SERVE_STATIC=1 PORT="$BACKEND_PORT" DB_PATH="${DB_PATH:-$CACHE/queryview.db}" \
+SERVE_STATIC=1 PORT="$BACKEND_PORT" DATA_DIR="${DATA_DIR:-$CACHE/data}" \
   uv run --frozen queryview-backend \
   > "$CACHE/backend.log" 2>&1 &
 BACKEND_PID=$!

@@ -1,8 +1,8 @@
 """Shared fixtures for backend (non-e2e) tests.
 
-Redirects the SQLite store and encryption-key file to a per-session tempdir so
-tests don't touch the real `backend/queryview.db`, and resets the lazy
-module-level engine/schema state in `queryview.connect` before tests run."""
+Redirects the data directory to a per-session tempdir so tests don't touch the
+real one, and resets the lazy module-level engine/schema state in
+`queryview.connect` before tests run."""
 
 from __future__ import annotations
 
@@ -14,7 +14,18 @@ import pytest
 
 
 @pytest.fixture
-def git_env(tmp_path, monkeypatch):
+def clone_base(tmp_path, monkeypatch) -> Path:
+    """Redirect every workspace's sync clone into this test's tmpdir, so clones
+    never land in the session data dir and can't leak between tests."""
+    from queryview import gitsync
+
+    base = tmp_path / "clones"
+    monkeypatch.setattr(gitsync, "_clone_base", lambda: base)
+    return base
+
+
+@pytest.fixture
+def git_env(tmp_path, clone_base):
     """A local bare repo as the default workspace's git-sync remote + a fresh
     per-workspace clone base dir. Resets the default workspace to 'no remote'
     on teardown so unconfigured-state tests stay valid."""
@@ -28,7 +39,6 @@ def git_env(tmp_path, monkeypatch):
         check=True,
         capture_output=True,
     )
-    monkeypatch.setenv("GIT_SYNC_DIR", str(tmp_path / "clones"))
     asyncio.run(update_workspace(DEFAULT_WORKSPACE, remote=str(remote)))
     yield remote
     asyncio.run(update_workspace(DEFAULT_WORKSPACE, remote=None))
@@ -69,13 +79,7 @@ def default_ws_id() -> int:
 @pytest.fixture(scope="session", autouse=True)
 def _isolated_db(tmp_path_factory: pytest.TempPathFactory):
     tmp: Path = tmp_path_factory.mktemp("qv_backend_tests")
-    os.environ["DB_PATH"] = str(tmp / "test.db")
-    os.environ["DB_KEY_PATH"] = str(tmp / "test.db.key")
-
-    # The workspaces migration seeds the default workspace from GIT_SYNC_*;
-    # tests control that per-test (monkeypatch), never from ambient env.
-    os.environ.pop("GIT_SYNC_REMOTE", None)
-    os.environ.pop("GIT_SYNC_BRANCH", None)
+    os.environ["DATA_DIR"] = str(tmp)
 
     # Reset the lazy globals so the next DB touch picks up the new paths.
     import queryview.connect as _c

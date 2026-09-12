@@ -4,10 +4,9 @@ tables present and stamped in alembic_version), not built by create_all."""
 from __future__ import annotations
 
 import asyncio
-import os
 import sqlite3
 
-from queryview.connect import _ensure_schema
+from queryview.connect import _db_path, _ensure_schema
 
 
 def _run(coro):
@@ -17,7 +16,7 @@ def _run(coro):
 def test_fresh_db_is_migrated_to_head():
     _run(_ensure_schema())
 
-    con = sqlite3.connect(os.environ["DB_PATH"])
+    con = sqlite3.connect(_db_path())
     try:
         names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         # Alembic ran (not create_all): the version table exists alongside the
@@ -56,10 +55,9 @@ def test_config_blob_migration_backfills_existing_clickhouse_row(tmp_path, monke
     from alembic import command
 
     import queryview.connect as _c
-    from queryview.connect import _alembic_config, _db_path, _decrypt_str, _encrypt_str
+    from queryview.connect import _alembic_config, _decrypt_str, _encrypt_str
 
-    monkeypatch.setenv("DB_PATH", str(tmp_path / "blob.db"))
-    monkeypatch.setenv("DB_KEY_PATH", str(tmp_path / "blob.db.key"))
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setattr(_c, "_engine", None)
     monkeypatch.setattr(_c, "_schema_ready", False)
     monkeypatch.setattr(_c, "_key", None)
@@ -91,7 +89,7 @@ def test_config_blob_migration_backfills_existing_clickhouse_row(tmp_path, monke
 
 def test_predefined_queries_has_presentation_columns():
     _run(_ensure_schema())
-    con = sqlite3.connect(os.environ["DB_PATH"])
+    con = sqlite3.connect(_db_path())
     try:
         cols = {r[1] for r in con.execute("PRAGMA table_info(predefined_queries)")}
     finally:

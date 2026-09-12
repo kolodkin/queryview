@@ -26,6 +26,7 @@ backend/queryview/static/
 backend/*.db
 backend/*.db-*
 backend/*.key
+backend/db.sqlite*
 
 # Editor
 .DS_Store

@@ -8,7 +8,8 @@ when a session starts.
 
 ## Storage & migrations
 
-State lives in a single SQLite file (`queryview.db`, overridable via `DB_PATH`).
+State lives in one data directory (`DATA_DIR`, defaulting to `~/.queryview`),
+whose SQLite file is `db.sqlite`.
 The backend is **single-process** — SQLite is single-writer, so one process owns
 the file, and no cross-process migration lock is needed. The schema is owned by
 **Alembic**: on startup the FastAPI lifespan runs `alembic upgrade head` (via
@@ -18,7 +19,7 @@ package (`backend/queryview/migrations/`). To author a new revision after
 changing a model, from `backend/`:
 
 ```
-DB_PATH=/tmp/qv-dev.db uv run alembic revision --autogenerate -m "describe change"
+DATA_DIR=/tmp/qv-dev uv run alembic revision --autogenerate -m "describe change"
 ```
 
 Review the generated script (column changes use batch mode for SQLite) and
@@ -155,8 +156,8 @@ field) keeps the storage layer secret-agnostic. The key is resolved once and
 memoized on first use:
 
 - `DB_ENCRYPTION_KEY` — base64 of 32 bytes, if set (use this in CI/shared envs);
-- otherwise a key is generated and written to `<DB_PATH>.key` (gitignored,
-  mode `600`), overridable with `DB_KEY_PATH`.
+- otherwise a key is generated and written to `encryption.key` in the data dir
+  (gitignored, mode `600`).
 
 If the key changes (or a row predates encryption) the value can't be decrypted;
 auto-connect simply skips that connection and the user reconnects, which

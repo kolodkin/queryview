@@ -21,7 +21,7 @@ target_metadata = SQLModel.metadata
 
 
 def _url() -> str:
-    """Prefer the URL the app injects; fall back to DB_PATH so the dev CLI
+    """Prefer the URL the app injects; fall back to the data dir so the dev CLI
     (`alembic ...`) targets the same SQLite file the app would."""
     from queryview.connect import _db_path
 

@@ -26,9 +26,69 @@ To serve on a different host port, remap it (the container keeps listening on
 expects to be reached from localhost only, so prefer binding the published port
 to loopback: `docker run -p 127.0.0.1:8000:8000 ...`.
 
-State (the SQLite DB and its encryption key) lives in `/home/queryview`; mount a
-volume there to persist it across containers:
-`docker run -p 8000:8000 -v queryview-data:/home/queryview ghcr.io/kolodkin/queryview:latest`.
+The command above keeps its state inside the container, so connections and
+workspaces are lost when the container is removed. See
+[Run with Docker](#run-with-docker) for a persistent setup.
+
+## Run with Docker
+
+The image runs as the non-root user `queryview` (UID 1000) and sets
+`DATA_DIR=/var/lib/queryview`, so every piece of state lives directly under that
+one directory:
+
+| Path | Contents |
+|---|---|
+| `/var/lib/queryview/db.sqlite` | SQLite store: connections, workspaces, queries, dashboards |
+| `/var/lib/queryview/encryption.key` | Key that encrypts stored connection passwords |
+| `/var/lib/queryview/gitsync/` | Local clones used by workspace git sync |
+
+Mount a volume at `/var/lib/queryview` and all three persist across container
+restarts, removals and upgrades.
+
+### Persisting it
+
+```bash
+mkdir -p ~/.queryview
+docker run -d --name queryview \
+  -p 127.0.0.1:8000:8000 \
+  -v ~/.queryview:/var/lib/queryview \
+  ghcr.io/kolodkin/queryview:latest
+```
+
+Create the directory first so Docker doesn't create it owned by root. The
+container runs as UID 1000, the first user on most Linux distributions; if
+`id -u` prints something else, add `--user "$(id -u):$(id -g)"` so the
+container writes the files as you.
+
+`~/.queryview` is also where a local `uvx queryview` keeps its state, so the
+container and a local run share one database, key and set of clones with no
+extra setup. Don't run both at once: each would serve the same SQLite file.
+
+To let Docker own the location instead, swap the path for a named volume,
+`-v queryview-data:/var/lib/queryview`. Docker seeds it from the image, so
+ownership is already right and there is nothing to create up front, but the
+state no longer lines up with a local run.
+
+### Git sync
+
+The image ships `git`, so workspace git sync works in the container, and its
+clones live under `/var/lib/queryview/gitsync/`, which the mount above already
+covers. Give the workspace an HTTPS remote carrying a scoped, expiring token —
+[docs/gitsync.md](docs/gitsync.md) has the URL form and what becomes of the
+credential.
+
+SSH also works, but nothing in the container can answer a prompt: the key must
+be passphrase-free and `known_hosts` must already list the host. Mount one
+dedicated deploy key, not your whole `.ssh`, readable by UID 1000:
+
+```bash
+docker run -d --name queryview \
+  -p 127.0.0.1:8000:8000 \
+  -v ~/.queryview:/var/lib/queryview \
+  -v ~/.ssh/queryview_deploy:/home/queryview/.ssh/id_ed25519:ro \
+  -v ~/.ssh/known_hosts:/home/queryview/.ssh/known_hosts:ro \
+  ghcr.io/kolodkin/queryview:latest
+```
 
 ## Layout
 
@@ -176,10 +236,7 @@ The single-page prompt UI is described in [docs/queryview.md](docs/queryview.md)
 connecting (`new <type>` / `connect <name>`), SQLite persistence, and session
 auto-connect are specified in [docs/connect.md](docs/connect.md).
 
-Connections are stored in SQLite. The default location is the platform's
-user-data directory — `$XDG_DATA_HOME/queryview/queryview.db` (i.e.
-`~/.local/share/queryview/`) on Linux, `~/Library/Application Support/queryview/`
-on macOS, `%LOCALAPPDATA%\queryview\` on Windows — overridable with `DB_PATH`.
-Alongside it the backend writes a local password-encryption key
-(`<db>.key`, override with `DB_KEY_PATH`) and the workspace git-sync clones
-(`<db>.gitsync/`, override with `GIT_SYNC_DIR`).
+All state lives in one data directory, `~/.queryview` on every OS, relocated
+with `DATA_DIR`. Inside are the SQLite store `db.sqlite`, the local
+password-encryption key `encryption.key`, and the workspace git-sync clones
+under `gitsync/`.

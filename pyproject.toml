@@ -18,7 +18,6 @@ dependencies = [
     "asyncpg>=0.29",
     "duckdb>=1.0",
     "pyyaml>=6",
-    "platformdirs>=4",
 ]
 
 [project.urls]

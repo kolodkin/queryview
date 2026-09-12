@@ -4,10 +4,9 @@ blob, keyed by type, and never persists secrets in plaintext."""
 from __future__ import annotations
 
 import asyncio
-import os
 import sqlite3
 
-from queryview.connect import _connection_by_name, _save_active_connection
+from queryview.connect import _connection_by_name, _db_path, _save_active_connection
 from queryview.drivers.clickhouse import ChConfig
 
 
@@ -26,7 +25,7 @@ def test_save_then_load_round_trips_config_and_type():
 
 def test_password_is_not_stored_in_plaintext():
     _run(_save_active_connection("ch2", ChConfig("h", 8123, "u", "TOPSECRET"), "clickhouse"))
-    con = sqlite3.connect(os.environ["DB_PATH"])
+    con = sqlite3.connect(_db_path())
     try:
         blob = con.execute("SELECT config FROM connections WHERE name='ch2'").fetchone()[0]
     finally:

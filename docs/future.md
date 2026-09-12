@@ -1,7 +1,8 @@
 # Future
 
-Planned work. Each entry is a proposal, not yet implemented — the spec lives
-here until it ships, then moves into the relevant doc.
+Planned work, highest priority first. Each entry is a proposal, not yet
+implemented — the spec lives here until it ships, then moves into the relevant
+doc.
 
 ## Edit / delete predefined queries
 

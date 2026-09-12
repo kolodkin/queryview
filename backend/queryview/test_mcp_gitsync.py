@@ -17,15 +17,14 @@ def test_git_tools_are_registered():
     assert {"git_store", "git_history", "git_restore"} <= names
 
 
-def test_git_restore_tool_reports_unconfigured(monkeypatch):
-    monkeypatch.delenv("GIT_SYNC_REMOTE", raising=False)
+def test_git_restore_tool_reports_unconfigured():
     from queryview.mcp_server import git_restore
 
     r = _run(git_restore("dashboard", "x"))
     assert r["ok"] is False
 
 
-def test_git_store_resolves_workspace_from_session(tmp_path, monkeypatch):
+def test_git_store_resolves_workspace_from_session(tmp_path, clone_base):
     """An armed session on workspace B routes git_store to B's remote; no
     session_id falls back to the default workspace."""
     import subprocess
@@ -35,7 +34,6 @@ def test_git_store_resolves_workspace_from_session(tmp_path, monkeypatch):
     from queryview.queries import save_predefined_query
     from queryview.workspaces import create_workspace, resolve
 
-    monkeypatch.setenv("GIT_SYNC_DIR", str(tmp_path / "clones"))
     rb = tmp_path / "b.git"
     subprocess.run(
         ["git", "init", "--bare", "-b", "main", str(rb)],

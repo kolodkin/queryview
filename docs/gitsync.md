@@ -7,17 +7,27 @@ written to the repo (their config is encrypted credentials).
 ## Configuration
 
 Each workspace (see [workspace.md](./workspace.md)) carries its own remote URL
-and branch, managed in the UI/API and encrypted at rest. A workspace without a
-remote has git sync disabled.
+and branch, managed in the UI/API and encrypted at rest. There is no
+environment-variable fallback: without a remote, git sync is disabled. New
+workspaces start on branch `main`.
 
-| Env var           | Meaning                                                            | Default              |
-| ----------------- | ------------------------------------------------------------------ | -------------------- |
-| `GIT_SYNC_REMOTE` | Seed for the default workspace's remote (read once, at migration)  | unset ⇒ none         |
-| `GIT_SYNC_BRANCH` | Seed for the default workspace's branch (read once, at migration)  | `main`               |
-| `GIT_SYNC_DIR`    | Base dir for per-workspace clones                                  | `{db_path}.gitsync/` |
-
-Clones live at `{base}/{workspace id}/`; the repository layout inside each
+Clones live at `{data dir}/gitsync/{workspace id}/`; the layout inside each
 clone is unchanged by workspaces.
+
+## Credentials
+
+A remote URL may embed a credential (`https://x-access-token:<token>@host/...`).
+Git would copy it verbatim into the clone's `.git/config`, so it is split off
+before any URL reaches git: the clone records the credential-free URL, and each
+network call gets the credential through its environment — out of both the repo
+and our argv. Only `http(s)` userinfo counts; the `git@` in `git@host:path` is
+an SSH login, not a secret.
+
+Git never runs interactively: stdin is closed, prompts are disabled, SSH runs in
+batch mode, and each invocation is capped at two minutes. A missing credential,
+a key passphrase or an unknown host fails instead of blocking a request — which
+is why a container wants a token rather than a key it cannot unlock. Mounting
+for that case is in the README's [Run with Docker](../README.md#run-with-docker).
 
 ## Repository layout
 
