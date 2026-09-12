@@ -30,12 +30,12 @@ def test_git_store_resolves_workspace_from_session(tmp_path, monkeypatch):
     session_id falls back to the default workspace."""
     import subprocess
 
-    from queryview import remote
+    from queryview import gitsync, remote
     from queryview.mcp_server import git_store
     from queryview.queries import save_predefined_query
     from queryview.workspaces import create_workspace, resolve
 
-    monkeypatch.setenv("GIT_SYNC_DIR", str(tmp_path / "clones"))
+    monkeypatch.setattr(gitsync, "_clone_base", lambda: tmp_path / "clones")
     rb = tmp_path / "b.git"
     subprocess.run(
         ["git", "init", "--bare", "-b", "main", str(rb)],

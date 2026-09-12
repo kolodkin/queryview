@@ -40,15 +40,19 @@ class Connection(SQLModel, table=True):
     last_active_at: int  # unix ms; the max is the "latest active"
 
 
-def _db_path() -> Path:
-    """The SQLite store's path: DB_PATH, else the platform's user-data dir
-    (`$XDG_DATA_HOME/queryview` on Linux, `Application Support` on macOS,
+def _data_dir() -> Path:
+    """Every piece of state lives here: DATA_DIR, else the platform's user-data
+    dir (`$XDG_DATA_HOME/queryview` on Linux, `Application Support` on macOS,
     `%LOCALAPPDATA%` on Windows). Deliberately not package-relative — that put
     the DB in site-packages, which is uv's disposable cache under `uvx`."""
-    env = os.environ.get("DB_PATH")
-    if env:
-        return Path(env)
-    return Path(platformdirs.user_data_dir("queryview")) / "queryview.db"
+    env = os.environ.get("DATA_DIR")
+    return Path(env) if env else Path(platformdirs.user_data_dir("queryview"))
+
+
+def _db_path() -> Path:
+    """The SQLite store. One fixed name inside the data dir — move the
+    directory, not the file."""
+    return _data_dir() / "db.sqlite"
 
 
 _engine = None
@@ -67,7 +71,7 @@ def _engine_for_db():
 def _alembic_config() -> Config:
     """Alembic Config built in code (not a cwd alembic.ini) so migrations run from
     any directory and from the packaged wheel. Points at the package's migrations
-    dir and injects a *sync* SQLite URL for the current DB_PATH."""
+    dir and injects a *sync* SQLite URL for the current data dir."""
     from alembic.config import Config
 
     cfg = Config()
@@ -85,9 +89,9 @@ async def _ensure_schema() -> None:
         return
     from alembic import command
 
-    # SQLite won't create a missing parent, and the user-data dir doesn't exist
-    # on a fresh install; the key file and git-sync clones land here too.
-    _db_path().parent.mkdir(parents=True, exist_ok=True)
+    # SQLite won't create a missing parent, and the data dir doesn't exist on a
+    # fresh install; the key file and git-sync clones land here too.
+    _data_dir().mkdir(parents=True, exist_ok=True)
     command.upgrade(_alembic_config(), "head")
     _schema_ready = True
 
@@ -99,8 +103,7 @@ async def _ensure_schema() -> None:
 
 
 def _key_path() -> Path:
-    env = os.environ.get("DB_KEY_PATH")
-    return Path(env) if env else Path(f"{_db_path()}.key")
+    return _data_dir() / "encryption.key"
 
 
 _key: bytes | None = None

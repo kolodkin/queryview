@@ -1,8 +1,8 @@
 """Shared fixtures for backend (non-e2e) tests.
 
-Redirects the SQLite store and encryption-key file to a per-session tempdir so
-tests don't touch the real `backend/queryview.db`, and resets the lazy
-module-level engine/schema state in `queryview.connect` before tests run."""
+Redirects the data directory to a per-session tempdir so tests don't touch the
+real one, and resets the lazy module-level engine/schema state in
+`queryview.connect` before tests run."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ def git_env(tmp_path, monkeypatch):
     on teardown so unconfigured-state tests stay valid."""
     import asyncio
 
+    from queryview import gitsync
     from queryview.workspaces import DEFAULT_WORKSPACE, update_workspace
 
     remote = tmp_path / "remote.git"
@@ -28,7 +29,7 @@ def git_env(tmp_path, monkeypatch):
         check=True,
         capture_output=True,
     )
-    monkeypatch.setenv("GIT_SYNC_DIR", str(tmp_path / "clones"))
+    monkeypatch.setattr(gitsync, "_clone_base", lambda: tmp_path / "clones")
     asyncio.run(update_workspace(DEFAULT_WORKSPACE, remote=str(remote)))
     yield remote
     asyncio.run(update_workspace(DEFAULT_WORKSPACE, remote=None))
@@ -69,8 +70,7 @@ def default_ws_id() -> int:
 @pytest.fixture(scope="session", autouse=True)
 def _isolated_db(tmp_path_factory: pytest.TempPathFactory):
     tmp: Path = tmp_path_factory.mktemp("qv_backend_tests")
-    os.environ["DB_PATH"] = str(tmp / "test.db")
-    os.environ["DB_KEY_PATH"] = str(tmp / "test.db.key")
+    os.environ["DATA_DIR"] = str(tmp)
 
     # The workspaces migration seeds the default workspace from GIT_SYNC_*;
     # tests control that per-test (monkeypatch), never from ambient env.

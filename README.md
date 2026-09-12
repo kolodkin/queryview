@@ -33,14 +33,14 @@ workspaces are lost when the container is removed. See
 ## Run with Docker
 
 The image runs as the non-root user `queryview` (UID 1000) and sets
-`DB_PATH=/var/lib/queryview/queryview.db`, so every piece of state lives
-directly under `/var/lib/queryview`:
+`DATA_DIR=/var/lib/queryview`, so every piece of state lives directly under
+it:
 
 | Path | Contents |
 |---|---|
-| `/var/lib/queryview/queryview.db` | SQLite store: connections, workspaces, queries, dashboards |
-| `/var/lib/queryview/queryview.db.key` | Key that encrypts stored connection passwords |
-| `/var/lib/queryview/queryview.db.gitsync/` | Local clones used by workspace git sync |
+| `/var/lib/queryview/db.sqlite` | SQLite store: connections, workspaces, queries, dashboards |
+| `/var/lib/queryview/encryption.key` | Key that encrypts stored connection passwords |
+| `/var/lib/queryview/gitsync/` | Local clones used by workspace git sync |
 
 Mount a volume at `/var/lib/queryview` and all three persist across container
 restarts, removals and upgrades.
@@ -64,7 +64,7 @@ queryview-data` deletes it.
 ### Share state with `uvx queryview` (Linux)
 
 Locally, `uvx queryview` keeps its state in `~/.local/share/queryview/`
-(`queryview.db`, `queryview.db.key`, `queryview.db.gitsync/`). The image lays
+(`db.sqlite`, `encryption.key`, `gitsync/`). The image lays
 out `/var/lib/queryview` the same way, so bind-mounting that directory makes
 the container and a local run share one database, key and set of clones —
 start either and you see the same connections, queries and dashboards:
@@ -89,7 +89,7 @@ time: both would serve the same SQLite file.
 
 The image ships `git` and an SSH client, so workspace git sync (see
 [docs/gitsync.md](docs/gitsync.md)) works in the container; clones live under
-`/var/lib/queryview/queryview.db.gitsync/`, which either mount above already
+`/var/lib/queryview/gitsync/`, which either mount above already
 covers. What is left is getting credentials to the remote:
 
 - **HTTPS with a token** needs nothing extra — put the token in the remote
@@ -246,10 +246,9 @@ The single-page prompt UI is described in [docs/queryview.md](docs/queryview.md)
 connecting (`new <type>` / `connect <name>`), SQLite persistence, and session
 auto-connect are specified in [docs/connect.md](docs/connect.md).
 
-Connections are stored in SQLite. The default location is the platform's
-user-data directory — `$XDG_DATA_HOME/queryview/queryview.db` (i.e.
-`~/.local/share/queryview/`) on Linux, `~/Library/Application Support/queryview/`
-on macOS, `%LOCALAPPDATA%\queryview\` on Windows — overridable with `DB_PATH`.
-Alongside it the backend writes a local password-encryption key
-(`<db>.key`, override with `DB_KEY_PATH`) and the workspace git-sync clones
-(`<db>.gitsync/`, override with `GIT_SYNC_DIR`).
+All state lives in one data directory, which defaults to the platform's
+user-data directory: `~/.local/share/queryview/` on Linux,
+`~/Library/Application Support/queryview/` on macOS, and
+`%LOCALAPPDATA%\queryview\` on Windows. `DATA_DIR` moves it. Inside are the
+SQLite store `db.sqlite`, the local password-encryption key `encryption.key`,
+and the workspace git-sync clones under `gitsync/`.

@@ -190,7 +190,7 @@ def test_store_unreachable_remote_raises_without_init(tmp_path, monkeypatch):
     from queryview.queries import save_predefined_query
     from queryview.workspaces import DEFAULT_WORKSPACE, update_workspace
 
-    monkeypatch.setenv("GIT_SYNC_DIR", str(tmp_path / "clones"))
+    monkeypatch.setattr(gitsync, "_clone_base", lambda: tmp_path / "clones")
     _run(update_workspace(DEFAULT_WORKSPACE, remote=str(tmp_path / "does-not-exist.git")))
     try:
         _run(save_predefined_query("gs unreachable", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
@@ -205,9 +205,7 @@ def test_store_unreachable_remote_raises_without_init(tmp_path, monkeypatch):
 
 
 def _clone_head() -> str:
-    import os
-
-    wd = os.path.join(os.environ["GIT_SYNC_DIR"], str(_default_ws_id()))
+    wd = gitsync._clone_base() / str(_default_ws_id())
     return subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=wd,
@@ -319,7 +317,7 @@ def test_store_is_isolated_per_workspace(tmp_path, monkeypatch):
     from queryview.queries import save_predefined_query
     from queryview.workspaces import create_workspace, resolve
 
-    monkeypatch.setenv("GIT_SYNC_DIR", str(tmp_path / "clones"))
+    monkeypatch.setattr(gitsync, "_clone_base", lambda: tmp_path / "clones")
     ra, rb = _bare(tmp_path, "a.git"), _bare(tmp_path, "b.git")
     _run(create_workspace("t5-a", remote=str(ra)))
     _run(create_workspace("t5-b", remote=str(rb)))

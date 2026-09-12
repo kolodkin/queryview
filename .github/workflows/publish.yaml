@@ -221,7 +221,7 @@ jobs:
       - name: Smoke-test installed package
         working-directory: ${{ runner.temp }}
         run: |
-          DB_PATH="$PWD/queryview.db" "$GITHUB_WORKSPACE/.venv/bin/queryview" > server.log 2>&1 &
+          DATA_DIR="$PWD/qv-data" "$GITHUB_WORKSPACE/.venv/bin/queryview" > server.log 2>&1 &
           pid=$!
           for i in $(seq 1 30); do
             curl -sf http://localhost:8000/api/health > /dev/null && break

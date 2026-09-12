@@ -7,7 +7,6 @@ upserts the DB row; HEAD never moves. Docs: docs/gitsync.md, docs/workspace.md."
 from __future__ import annotations
 
 import asyncio
-import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -96,15 +95,17 @@ def _require_remote(ws: WorkspaceRec) -> str:
     return ws.remote
 
 
+def _clone_base() -> Path:
+    """Where every workspace's sync clone lives, inside the data dir."""
+    from .connect import _data_dir
+
+    return _data_dir() / "gitsync"
+
+
 def _workdir(ws: WorkspaceRec) -> Path:
     """This workspace's clone: {base}/{workspace id}. Keyed by id so renaming
-    a workspace never orphans its clone. GIT_SYNC_DIR overrides the base."""
-    env = os.environ.get("GIT_SYNC_DIR")
-    if env:
-        return Path(env) / str(ws.id)
-    from .connect import _db_path
-
-    return Path(f"{_db_path()}.gitsync") / str(ws.id)
+    a workspace never orphans its clone."""
+    return _clone_base() / str(ws.id)
 
 
 def configured(ws: WorkspaceRec) -> bool:
