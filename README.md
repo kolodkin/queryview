@@ -71,20 +71,11 @@ state no longer lines up with a local run.
 
 ### Git sync
 
-The image ships `git`, so workspace git sync (see
-[docs/gitsync.md](docs/gitsync.md)) works in the container; clones live under
-`/var/lib/queryview/gitsync/`, which the mount above already covers. What is
-left is authenticating to the remote.
-
-Use an HTTPS remote with a token:
-
-```
-https://x-access-token:<token>@github.com/<org>/<repo>.git
-```
-
-Scope the token to the one repository and give it an expiry. QueryView keeps
-the URL encrypted and strips the credential back out before git records the
-remote, so the clone's config holds a credential-free URL.
+The image ships `git`, so workspace git sync works in the container, and its
+clones live under `/var/lib/queryview/gitsync/`, which the mount above already
+covers. Give the workspace an HTTPS remote carrying a scoped, expiring token —
+[docs/gitsync.md](docs/gitsync.md) has the URL form and what becomes of the
+credential.
 
 SSH also works, but nothing in the container can answer a prompt: the key must
 be passphrase-free and `known_hosts` must already list the host. Mount one

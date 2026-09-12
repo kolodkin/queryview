@@ -25,7 +25,9 @@ an SSH login, not a secret.
 
 Git never runs interactively: stdin is closed, prompts are disabled, SSH runs in
 batch mode, and each invocation is capped at two minutes. A missing credential,
-a key passphrase or an unknown host fails instead of blocking a request.
+a key passphrase or an unknown host fails instead of blocking a request — which
+is why a container wants a token rather than a key it cannot unlock. Mounting
+for that case is in the README's [Run with Docker](../README.md#run-with-docker).
 
 ## Repository layout
 
