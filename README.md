@@ -61,7 +61,7 @@ queryview` / `docker start queryview`); the data stays in the volume. Even
 `docker rm queryview` leaves the volume in place — only `docker volume rm
 queryview-data` deletes it.
 
-### Bind mount
+### Bind mount (Linux)
 
 To keep the files in a host directory instead (easier to inspect or back up
 with your usual tools), the directory must be writable by UID 1000, because
@@ -76,20 +76,9 @@ docker run -d --name queryview \
   ghcr.io/kolodkin/queryview:latest
 ```
 
-If you would rather not change ownership, run the container as your own user
-instead — `DB_PATH` is absolute, so it does not depend on the home directory
-existing for that UID:
-
-```bash
-docker run -d --name queryview \
-  --user "$(id -u):$(id -g)" \
-  -p 127.0.0.1:8000:8000 \
-  -v "$PWD/queryview-data:/home/queryview" \
-  ghcr.io/kolodkin/queryview:latest
-```
-
-On Docker Desktop (macOS/Windows) bind-mount permissions are mapped
-automatically, so the `chown` step is not needed there.
+If you would rather not change ownership, add `--user "$(id -u):$(id -g)"` to
+run the container as your own user instead — `DB_PATH` is absolute, so it does
+not depend on a home directory existing for that UID.
 
 ## Layout
 
