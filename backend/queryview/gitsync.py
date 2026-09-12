@@ -130,13 +130,18 @@ def _lock(ws: WorkspaceRec) -> asyncio.Lock:
 
 
 async def _git(*args: str, cwd: Path | None = None) -> str:
-    proc = await asyncio.create_subprocess_exec(
-        "git",
-        *args,
-        cwd=str(cwd) if cwd else None,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git",
+            *args,
+            cwd=str(cwd) if cwd else None,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except FileNotFoundError as e:
+        # No `git` on PATH: a deployment problem, not a repo problem — say so
+        # instead of surfacing a bare FileNotFoundError as a 500.
+        raise GitSyncError("git is not installed on the server") from e
     out, err = await proc.communicate()
     if proc.returncode != 0:
         tail = err.decode("utf-8", "replace").strip()[-500:]

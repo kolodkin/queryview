@@ -9,6 +9,12 @@ ARG PIP_INDEX_URL=https://pypi.org/simple/
 LABEL org.opencontainers.image.source="https://github.com/kolodkin/queryview"
 LABEL org.opencontainers.image.description="QueryView API server + SPA"
 
+# git for workspace git sync (the backend shells out to it); openssh-client so
+# ssh:// remotes work when a key is mounted into /home/queryview/.ssh.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir \
     --index-url "${PIP_INDEX_URL}" \
     "queryview==${QUERYVIEW_VERSION}"

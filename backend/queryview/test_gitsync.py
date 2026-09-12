@@ -344,3 +344,13 @@ def test_store_is_isolated_per_workspace(tmp_path, monkeypatch):
         _run(gitsync.store(wn, "query", "iso", "clickhouse"))
     assert e.value.status == 409
     assert "no git remote" in str(e.value)
+
+
+def test_git_missing_binary_is_gitsync_error(tmp_path, monkeypatch):
+    # An empty PATH means no `git` executable: report it as a GitSyncError
+    # (502, like any other git failure) rather than leaking FileNotFoundError.
+    monkeypatch.setenv("PATH", str(tmp_path))
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync._git("--version"))
+    assert e.value.status == 502
+    assert "git is not installed" in str(e.value)

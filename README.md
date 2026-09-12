@@ -80,6 +80,21 @@ If you would rather not change ownership, add `--user "$(id -u):$(id -g)"` to
 run the container as your own user instead — `DB_PATH` is absolute, so it does
 not depend on a home directory existing for that UID.
 
+### Git sync
+
+The image ships `git` and an SSH client, so workspace git sync (see
+[docs/gitsync.md](docs/gitsync.md)) works in the container; clones live under
+`/home/queryview/queryview.db.gitsync/`, which the volume above already covers.
+What is left is getting credentials to the remote:
+
+- **HTTPS with a token** needs nothing extra — put the token in the remote
+  URL, e.g. `https://<token>@github.com/<org>/<repo>.git`. The URL is stored
+  encrypted with the rest of the workspace row.
+- **SSH** needs a key and `known_hosts` inside the container. Mount your
+  `.ssh` directory read-only at the `queryview` user's home:
+  `-v ~/.ssh:/home/queryview/.ssh:ro`. The files must be readable by UID 1000
+  (or run with `--user` as above).
+
 ## Layout
 
 ```
