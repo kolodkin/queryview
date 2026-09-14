@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BrowserRouter,
   Link,
@@ -15,6 +15,7 @@ import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
+import { useDismiss } from './controls/useDismiss'
 import { activeWorkspace, setActiveWorkspace } from './workspace'
 
 // App shell: routing, shared connection state, the connection pill + agent
@@ -32,6 +33,11 @@ function Shell() {
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   const [workspace, setWorkspace] = useState(activeWorkspace())
+  // Each popover's wrapper (trigger + panel), so an outside press dismisses it.
+  const dbRef = useRef<HTMLDivElement>(null)
+  const agentRef = useRef<HTMLDivElement>(null)
+  useDismiss(dbRef, dbOpen, () => setDbOpen(false))
+  useDismiss(agentRef, agentOpen, () => setAgentOpen(false))
 
   function switchWorkspace(name: string) {
     setActiveWorkspace(name)
@@ -176,7 +182,7 @@ function Shell() {
     <main className="relative flex min-h-screen items-center justify-center px-6 py-10 text-slate-100">
       {ready && connection && (
         <div className="absolute left-4 top-4 flex items-center gap-2">
-          <div className="relative">
+          <div ref={dbRef} className="relative">
             <button
               type="button"
               data-testid="connection-status"
@@ -218,7 +224,7 @@ function Shell() {
               </div>
             )}
           </div>
-          <div className="relative">
+          <div ref={agentRef} className="relative">
             <button
               type="button"
               data-testid="agent-toggle"

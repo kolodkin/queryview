@@ -25,6 +25,7 @@ import { isReady, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
+import { useDismiss } from './controls/useDismiss'
 import { downloadText } from './yamlio'
 import { activeWorkspace } from './workspace'
 import { suggestCompletions, type Suggestion } from './promptSuggestions'
@@ -84,6 +85,8 @@ function QueryView({
   const [acDismissed, setAcDismissed] = useState(false)
   const [connNames, setConnNames] = useState<string[]>([])
   const promptRef = useRef<HTMLInputElement>(null)
+  // Wraps the input and its suggestion list; an outside press dismisses them.
+  const promptFormRef = useRef<HTMLFormElement>(null)
   // Saved queries surfaced next to the title on the landing screen, so they're
   // reachable without first typing `query`. Scoped like the panel's dropdown.
   const [landingQueries, setLandingQueries] = useState<PredefinedQuery[]>([])
@@ -309,6 +312,7 @@ function QueryView({
     suggestions.length > 0 &&
     !(suggestions.length === 1 && suggestions[0].value === prompt)
   const acActive = Math.min(acIndex, suggestions.length - 1)
+  useDismiss(promptFormRef, showAc, () => setAcDismissed(true))
 
   function acceptSuggestion(s: Suggestion) {
     setPrompt(s.value)
@@ -341,6 +345,7 @@ function QueryView({
   // Command prompt. In query mode it joins the panel's top row to save space.
   const promptInput = (
     <form
+      ref={promptFormRef}
       onSubmit={submitPrompt}
       className={`relative ${inQueryMode ? 'min-w-0 flex-1' : ''}`}
     >

@@ -36,6 +36,9 @@ describes the prompt page.
   showing 🟢 `connected - <database>`. Next to it, an **agent icon** opens the
   remote-control popover (opt-in "Allow remote control"); see
   [remote.md](./remote.md).
+- **Popovers** — every header dropdown and panel (database, workspace, agent,
+  git revisions) and the prompt's suggestion list close on a click outside them
+  or on Escape.
 
 ## Sessions
 

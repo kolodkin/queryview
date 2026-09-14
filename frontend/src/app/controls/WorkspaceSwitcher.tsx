@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ExportImportControls from './ExportImportControls'
+import { useDismiss } from './useDismiss'
 import { invalidateGitStatus } from '../gitsync'
 import {
   createWorkspace,
@@ -26,6 +27,10 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [name, setName] = useState('')
   const [remote, setRemote] = useState('')
   const [branch, setBranch] = useState('')
+  // Wraps the trigger and both panels, so an outside press dismisses either.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useDismiss(rootRef, open, () => setOpen(false))
+  useDismiss(rootRef, manage, () => setManage(false))
 
   async function reload() {
     try {
@@ -95,7 +100,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   }
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         data-testid="workspace-switcher"
