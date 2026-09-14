@@ -253,11 +253,15 @@ function QueryView({
   }
 
   function handleConnected(name: string, type: string, databases: string[]) {
-    setConnection({ name, type, databases, database: null })
+    const opened = { name, type, databases, database: null }
+    setConnection(opened)
     setFormType(null)
     setShowQuery(false)
     setPrompt(`connect ${name}`)
     void refreshConnections()
+    // A picker-less driver (DuckDB) is ready the moment it connects, so it
+    // goes straight to the tables; the rest stay here to pick a database.
+    if (isReady(opened)) navigate('/explorer')
   }
 
   // Drop the active connection both server- and client-side, returning to the
@@ -284,8 +288,11 @@ function QueryView({
     })
     if (res.ok) {
       setConnection({ ...connection, database })
-      // Clear the prompt so the placeholder invites a query.
+      // Clear the prompt so the placeholder invites a query on the way back.
       setPrompt('')
+      // The connection is live now: browse its tables (see
+      // docs/queryview.md#landing-page).
+      navigate('/explorer')
     }
   }
 

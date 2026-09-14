@@ -1,15 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { loadViewSettings, patchViewSettings } from './viewSettings'
-
-// Mirrors workspace.test.ts: the node test environment has no localStorage.
-function stubStorage(initial?: Record<string, string>) {
-  const store = new Map<string, string>(Object.entries(initial ?? {}))
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => void store.set(k, v),
-  })
-  return store
-}
+import { stubBrokenStorage, stubStorage } from './testStorage'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -43,11 +34,7 @@ describe('loadViewSettings', () => {
   })
 
   it('is empty when storage throws', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: () => {
-        throw new Error('denied')
-      },
-    })
+    stubBrokenStorage()
     expect(loadViewSettings('explorer')).toEqual({})
   })
 })
@@ -72,12 +59,7 @@ describe('patchViewSettings', () => {
   })
 
   it('does not throw when storage throws', () => {
-    vi.stubGlobal('localStorage', {
-      getItem: () => null,
-      setItem: () => {
-        throw new Error('denied')
-      },
-    })
+    stubBrokenStorage()
     expect(() => patchViewSettings('explorer', { sidebarWidth: 412 })).not.toThrow()
   })
 })

@@ -66,9 +66,14 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
   const [dragging, setDragging] = useState(false)
   const asideRef = useRef<HTMLElement | null>(null)
-  // Pointer-to-edge offset captured on grab, so the panel tracks the cursor
+  // Captured once on grab: the panel's left edge (fixed for the drag — the
+  // aside is the row's first item, so widening it can't move it) and the
+  // pointer's offset from its right edge, so the panel tracks the cursor
   // without jumping when the handle is grabbed off-centre.
+  const dragLeft = useRef(0)
   const dragOffset = useRef(0)
+  // The width the drag has reached, committed to state on release.
+  const dragWidth = useRef(0)
 
   // The sidebar entry the URL selects, once the list has it. Row loading keys
   // off this: nothing fires until the table is confirmed present, so a stale
@@ -198,18 +203,22 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     if (selected) void runQuery(selected.query, limit, Math.max(0, nextOffset), orderBy)
   }
 
-  // Edge drag: track the pointer against the sidebar's left edge so the width
-  // follows the cursor exactly, and persist once on release rather than on
-  // every move. Listeners live on the window so a fast drag that outruns the
-  // 8px handle keeps resizing.
+  // Edge drag. Each move paints the new width straight onto the panel instead
+  // of going through state: re-rendering per pointermove would rebuild the
+  // whole results table (100+ rows by default) and the table list on every
+  // frame. State — and the write to storage — happens once, on release.
+  // Listeners live on the window so a fast drag that outruns the 8px handle
+  // keeps resizing.
   useEffect(() => {
     if (!dragging) return
     function onMove(e: PointerEvent) {
-      const left = asideRef.current?.getBoundingClientRect().left ?? 0
-      setSidebarWidth(clampSidebarWidth(e.clientX - dragOffset.current - left))
+      const next = clampSidebarWidth(e.clientX - dragOffset.current - dragLeft.current)
+      dragWidth.current = next
+      if (asideRef.current) asideRef.current.style.width = `${next}px`
     }
     function onUp() {
       setDragging(false)
+      resize(dragWidth.current)
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)
@@ -221,14 +230,12 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     }
   }, [dragging])
 
-  // Persist the settled width (not each intermediate drag position).
-  useEffect(() => {
-    if (dragging) return
-    saveSidebarWidth(sidebarWidth)
-  }, [dragging, sidebarWidth])
-
+  // The one place a settled width is adopted, so every route to a new width
+  // (drag release, arrow keys, reset, double-click) persists it.
   function resize(width: number) {
-    setSidebarWidth(clampSidebarWidth(width))
+    const next = clampSidebarWidth(width)
+    setSidebarWidth(next)
+    saveSidebarWidth(next)
   }
 
   // Arrow keys nudge the width so the handle works without a pointer.
@@ -346,8 +353,10 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
           tabIndex={0}
           onPointerDown={(e) => {
             e.preventDefault()
-            const right = asideRef.current?.getBoundingClientRect().right ?? e.clientX
-            dragOffset.current = e.clientX - right
+            const rect = asideRef.current?.getBoundingClientRect()
+            dragLeft.current = rect?.left ?? 0
+            dragOffset.current = e.clientX - (rect?.right ?? e.clientX)
+            dragWidth.current = sidebarWidth
             setDragging(true)
           }}
           onDoubleClick={() => resize(DEFAULT_SIDEBAR_WIDTH)}

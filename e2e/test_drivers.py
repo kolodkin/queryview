@@ -8,7 +8,7 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-from conftest import open_queries
+from conftest import open_queries, open_query_panel
 from playwright.sync_api import Page, expect
 
 
@@ -79,12 +79,6 @@ def _connect(page: Page, case: DriverCase, seed) -> None:
     expect(page.get_by_test_id("connection-status")).to_contain_text(case.status_text)
 
 
-def _open_query_panel(page: Page) -> None:
-    # Connecting lands on the explorer, so come back to the prompt first.
-    page.get_by_test_id("nav-queries").click()
-    page.get_by_test_id("prompt-input").fill("query")
-    page.keyboard.press("Enter")
-    expect(page.get_by_test_id("query-panel")).to_be_visible()
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
@@ -92,7 +86,7 @@ def test_connect_query_paginate_csv(case: DriverCase, request, page: Page, shot)
     seed = request.getfixturevalue(case.seed_fixture)
     _connect(page, case, seed)
     shot(f"{case.id} connected")
-    _open_query_panel(page)
+    open_query_panel(page)
 
     sql = "SELECT id, name FROM items ORDER BY id"
     page.get_by_test_id("query-input").fill(sql)
@@ -139,7 +133,7 @@ def test_connect_query_paginate_csv(case: DriverCase, request, page: Page, shot)
 def test_fields_describe(case: DriverCase, request, page: Page, shot) -> None:
     seed = request.getfixturevalue(case.seed_fixture)
     _connect(page, case, seed)
-    _open_query_panel(page)
+    open_query_panel(page)
     page.get_by_test_id("query-input").fill("SELECT id, name FROM items")
     page.get_by_test_id("query-fields").click()
     expect(page.get_by_test_id("field-pickers")).to_be_visible()

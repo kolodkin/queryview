@@ -7,15 +7,7 @@ import {
   loadSidebarWidth,
   saveSidebarWidth,
 } from './explorerSettings'
-
-function stubStorage(initial?: Record<string, string>) {
-  const store = new Map<string, string>(Object.entries(initial ?? {}))
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => void store.set(k, v),
-  })
-  return store
-}
+import { stubStorage } from './testStorage'
 
 afterEach(() => vi.unstubAllGlobals())
 

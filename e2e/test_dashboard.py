@@ -1,21 +1,13 @@
 import re
 
 import httpx
-from conftest import open_queries
+from conftest import connect_clickhouse_test_db
 from playwright.sync_api import Page, expect
 
 
 def _connect_and_select_test_db(page: Page) -> None:
-    """Connect with the form defaults (connection name "clickhouse") and select
-    the seeded `test` database."""
-    open_queries(page)
-    page.get_by_test_id("prompt-input").fill("new clickhouse")
-    page.keyboard.press("Enter")
-    expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
-    page.get_by_test_id("ch-connect").click()
-    expect(page.get_by_test_id("db-picker")).to_be_visible()
-    page.locator('[data-db="test"]').click()
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - test")
+    """Connect with the form defaults and select the seeded `test` database."""
+    connect_clickhouse_test_db(page)
 
 
 # A dashboard that reads window.queries and writes a value into the DOM, so the
