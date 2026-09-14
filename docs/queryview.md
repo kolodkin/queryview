@@ -36,6 +36,9 @@ describes the prompt page.
   showing 🟢 `connected - <database>`. Next to it, an **agent icon** opens the
   remote-control popover (opt-in "Allow remote control"); see
   [remote.md](./remote.md).
+- **Popovers** — dropdowns and their panels close on a click outside or on
+  Escape. Panels holding unsaved input are the exception — the workspace manage
+  form and the cell-view editor close through their own buttons.
 
 ## Sessions
 
@@ -51,13 +54,26 @@ On load the SPA either:
 
 If neither yields a connection it opens at the empty prompt.
 
+## Landing page
+
+A live connection lands on the **explorer**, not the prompt — there are tables
+to browse (see [explorer.md](./explorer.md)).
+
+- **Opening the app** (`/`) waits for the session probe, then picks `/explorer`
+  for a resumed ready connection and `/queries` otherwise. Only `/` chooses: a
+  deep link to a page is honored as typed.
+- **Connecting** — picking a database (or connecting a picker-less driver)
+  navigates from the connect handler itself. Nothing watches the connection, so
+  the nav gets back to Queries, a pill database switch stays put, and an
+  agent's query push is not pulled away.
+
 ## Commands
 
 | Command          | Effect                                              |
 | ---------------- | --------------------------------------------------- |
 | `new clickhouse` | Reveals the form to create a new ClickHouse connection. |
 | `connect <name>` | Opens the saved connection `<name>` and shows its database picker. |
-| `query`          | Once a database is selected, opens the query panel — run SQL with pagination, save/load predefined queries, download CSV (see [query.md](./query.md)). |
+| `query`          | Returns to the query panel from a connection form — a ready session shows it already: run SQL with pagination, save/load predefined queries, download CSV (see [query.md](./query.md)). |
 | `explorer`       | Once a database is selected, opens the table navigator (`/explorer`) — browse tables without typing SQL (see [explorer.md](./explorer.md)). |
 | `dashboard`           | Opens the dashboard page (`/dashboard`) — pick a saved dashboard from the dropdown. |
 | `dashboard <name>`    | Opens the dashboard page at that dashboard (`/dashboard?name=<name>`). See [dashboard.md](./dashboard.md). |

@@ -9,6 +9,9 @@ import pytest
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, DriverCase, _connect
 
+# Mirrors DEFAULT_SIDEBAR_WIDTH in frontend/src/app/explorerSettings.ts.
+DEFAULT_WIDTH = 256
+
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: Page, shot) -> None:
@@ -68,3 +71,132 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
     # Short values are left alone: no per-cell expand button in a normal table.
     expect(output.locator('[data-testid="cell-expand"]')).to_have_count(0)
     shot(f"{case.id} explorer short cells stay plain")
+
+
+def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: Page) -> None:
+    """Adding an order-by column and flipping its direction fire two browse runs
+    back to back, and the server answers them concurrently. The rows shown must
+    be the newest run's, not whichever response happens to land last.
+
+    The two runs are held at the network and released in reverse, so the
+    superseded ASC response always lands after the DESC one that replaced it.
+    """
+    _connect(page, CASES[0], seeded_test_db)  # ClickHouse
+
+    page.get_by_test_id("nav-explorer").click()
+    page.locator('[data-testid="explorer-table"][data-table="items"]').click()
+    output = page.get_by_test_id("explorer-output")
+    expect(output).to_contain_text("alpha")
+    expect(page.locator('[data-testid="field-toggle"]')).to_have_count(2)
+
+    # From here on, hold every browse run instead of letting it reach the server.
+    held: list = []
+    page.route("**/api/db/query", lambda route: held.append(route))
+
+    chip = page.locator('[data-testid="orderby-chip"][data-col="id"]')
+    with page.expect_request("**/api/db/query"):
+        page.locator('[data-testid="orderby-add"][data-col="id"]').click()  # id ASC
+    with page.expect_request("**/api/db/query"):
+        chip.get_by_test_id("orderby-dir").click()  # flipped to id DESC
+    asc, desc = held
+
+    # The DESC run answers first and its rows land.
+    desc.continue_()
+    expect(output.locator("tbody tr").first).to_contain_text("gamma")
+
+    # The ASC run it superseded answers last, and must not win. Waiting on the
+    # response keeps the assertion behind the app's handling of it.
+    with page.expect_response("**/api/db/query"):
+        asc.continue_()
+    expect(output.locator("tbody tr").first).to_contain_text("gamma")
+
+
+# Driver-independent, so these run once against DuckDB (a file, no service).
+DUCK = next(c for c in CASES if c.id == "duckdb")
+
+
+def test_sidebar_width_is_draggable_and_remembered(seeded_duckdb_long_names, page: Page, shot) -> None:
+    """The Tables sidebar resizes from its right edge so long names need not be
+    truncated. The width is remembered per view and survives a reload; the reset
+    control puts it back to the default."""
+    _connect(page, DUCK, seeded_duckdb_long_names)
+    page.get_by_test_id("nav-explorer").click()
+
+    aside = page.get_by_test_id("explorer-tables")
+    expect(aside).to_be_visible()
+    expect(aside).to_have_attribute("data-width", str(DEFAULT_WIDTH))
+    # No reset control while the sidebar is still at its default width.
+    expect(page.get_by_test_id("explorer-sidebar-reset")).to_have_count(0)
+
+    # The longest name doesn't fit the default width — the reason to resize.
+    longest = page.locator(
+        '[data-testid="explorer-table"][data-table="warehouse_shipment_reconciliation_log"] span'
+    ).first
+    assert longest.evaluate("e => e.scrollWidth > e.clientWidth"), "expected truncation"
+    shot("explorer sidebar default width")
+
+    # Drag the handle 120px to the right. Its centre sits on the panel's right
+    # edge, so the dragged width is the default plus the travel.
+    handle = page.get_by_test_id("explorer-sidebar-resize")
+    box = handle.bounding_box()
+    assert box is not None
+    mid_y = box["y"] + box["height"] / 2
+    centre_x = box["x"] + box["width"] / 2
+    page.mouse.move(centre_x, mid_y)
+    page.mouse.down()
+    page.mouse.move(centre_x + 120, mid_y, steps=10)
+    page.mouse.up()
+    expect(aside).to_have_attribute("data-width", str(DEFAULT_WIDTH + 120))
+    # ...and now it does fit: the whole point of the drag.
+    assert not longest.evaluate("e => e.scrollWidth > e.clientWidth"), "still truncated"
+    shot("explorer sidebar widened")
+
+    # Stored as JSON under the explorer's view key, and restored on reload.
+    stored = page.evaluate("() => localStorage.getItem('qv_view_explorer')")
+    assert stored is not None
+    assert f'"sidebarWidth":{DEFAULT_WIDTH + 120}' in stored.replace(" ", "")
+    page.reload(wait_until="networkidle")
+    aside = page.get_by_test_id("explorer-tables")
+    expect(aside).to_have_attribute("data-width", str(DEFAULT_WIDTH + 120))
+
+    # Arrow keys nudge it; the reset control restores the default and then hides.
+    page.get_by_test_id("explorer-sidebar-resize").press("ArrowRight")
+    expect(aside).to_have_attribute("data-width", str(DEFAULT_WIDTH + 136))
+    page.get_by_test_id("explorer-sidebar-reset").click()
+    expect(aside).to_have_attribute("data-width", str(DEFAULT_WIDTH))
+    expect(page.get_by_test_id("explorer-sidebar-reset")).to_have_count(0)
+
+
+def test_panels_show_loaders_until_data_arrives(seeded_duckdb, page: Page, shot) -> None:
+    """Both panels show a loader while their first payload is in flight."""
+    _connect(page, DUCK, seeded_duckdb)
+
+    # Hold both requests open long enough for the loaders to be observable.
+    # page.wait_for_timeout inside a sync route handler yields to the event
+    # loop (unlike time.sleep), so the assertions below still run.
+    def slow(route):
+        page.wait_for_timeout(1500)
+        try:
+            route.continue_()
+        except Exception:
+            # The page navigated away while the response was held; the request
+            # is gone and there is nothing left to continue.
+            pass
+
+    # Already on the explorer, so reload to refetch the list with the response
+    # held back.
+    page.route("**/api/db/tables", slow)
+    page.reload()
+    expect(page.get_by_test_id("explorer-tables-loading")).to_be_visible()
+    shot("explorer tables loading")
+    expect(page.locator('[data-testid="explorer-table"][data-table="items"]')).to_be_visible()
+    page.unroute_all(behavior="ignoreErrors")
+
+    page.route("**/api/db/query", slow)
+    page.locator('[data-testid="explorer-table"][data-table="items"]').click()
+    expect(page.get_by_test_id("explorer-rows-loading")).to_be_visible()
+    shot("explorer rows loading")
+    expect(page.get_by_test_id("explorer-output")).to_be_visible()
+    expect(page.get_by_test_id("explorer-rows-loading")).to_have_count(0)
+    # Drop any handler still holding a response, so page close doesn't race it.
+    page.unroute_all(behavior="ignoreErrors")

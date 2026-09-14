@@ -10,6 +10,38 @@ from playwright.sync_api import Page, expect
 expect.set_options(timeout=15_000)
 
 
+def open_queries(page: Page) -> None:
+    """Open the app on the Queries page.
+
+    A live connection lands on the explorer, and the backend session is shared
+    across tests, so a previous test's connection can resume here. Query flows
+    navigate to Queries explicitly rather than assuming it."""
+    page.goto("/", wait_until="networkidle")
+    page.get_by_test_id("nav-queries").click()
+    expect(page.get_by_test_id("prompt-input")).to_be_visible()
+
+
+def connect_clickhouse_test_db(page: Page) -> None:
+    """Connect with the ClickHouse form defaults and select the seeded `test`
+    database. Ends on the explorer, where picking a database lands."""
+    open_queries(page)
+    page.get_by_test_id("prompt-input").fill("new clickhouse")
+    page.keyboard.press("Enter")
+    expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
+    page.get_by_test_id("ch-connect").click()
+    expect(page.get_by_test_id("db-picker")).to_be_visible()
+    page.locator('[data-db="test"]').click()
+    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - test")
+
+
+def open_query_panel(page: Page) -> None:
+    """Open the query panel from wherever the test is, via the Queries page."""
+    page.get_by_test_id("nav-queries").click()
+    page.get_by_test_id("prompt-input").fill("query")
+    page.keyboard.press("Enter")
+    expect(page.get_by_test_id("query-panel")).to_be_visible()
+
+
 @pytest.fixture(scope="session")
 def base_url() -> str:
     # The app under test is started separately (Vite dev server, or the FastAPI
@@ -159,15 +191,32 @@ def seeded_pg_db():
 
 
 # --- DuckDB seeding for query tests ---------------------------------------
+def _seed_duckdb(path, *names: str) -> str:
+    """Create each named table with the suite's shared alpha/beta/gamma rows."""
+    import duckdb
+
+    con = duckdb.connect(str(path))
+    for name in names:
+        con.execute(f"CREATE TABLE {name} (id INTEGER, name TEXT)")
+        con.execute(f"INSERT INTO {name} VALUES (1,'alpha'),(2,'beta'),(3,'gamma')")
+    con.close()
+    return str(path)
+
+
 @pytest.fixture(scope="module")
 def seeded_duckdb(tmp_path_factory) -> str:
     """A temp DuckDB file with a small `items` table; returns its path for the
     connection form to point at."""
-    import duckdb
+    return _seed_duckdb(tmp_path_factory.mktemp("duck") / "qv.duckdb", "items")
 
-    path = tmp_path_factory.mktemp("duck") / "qv.duckdb"
-    con = duckdb.connect(str(path))
-    con.execute("CREATE TABLE items (id INTEGER, name TEXT)")
-    con.execute("INSERT INTO items VALUES (1,'alpha'),(2,'beta'),(3,'gamma')")
-    con.close()
-    return str(path)
+
+@pytest.fixture(scope="module")
+def seeded_duckdb_long_names(tmp_path_factory) -> str:
+    """As above plus invented names too long for the sidebar's default width,
+    so the resize test exercises the truncation it exists to fix."""
+    return _seed_duckdb(
+        tmp_path_factory.mktemp("duck_long") / "qv.duckdb",
+        "items",
+        "sales_reporting_monthly_rollup",
+        "warehouse_shipment_reconciliation_log",
+    )

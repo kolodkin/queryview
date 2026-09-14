@@ -25,6 +25,7 @@ import { isReady, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
+import { useDismiss } from './controls/useDismiss'
 import { downloadText } from './yamlio'
 import { activeWorkspace } from './workspace'
 import { suggestCompletions, type Suggestion } from './promptSuggestions'
@@ -78,18 +79,11 @@ function QueryView({
   const [hint, setHint] = useState<string | null>(null)
   // The driver whose connection form is open, or null when no form is shown.
   const [formType, setFormType] = useState<string | null>(null)
-  const [showQuery, setShowQuery] = useState(false)
   // Command-prompt autocomplete: highlighted row, and whether Esc dismissed it.
   const [acIndex, setAcIndex] = useState(0)
   const [acDismissed, setAcDismissed] = useState(false)
   const [connNames, setConnNames] = useState<string[]>([])
   const promptRef = useRef<HTMLInputElement>(null)
-  // Saved queries surfaced next to the title on the landing screen, so they're
-  // reachable without first typing `query`. Scoped like the panel's dropdown.
-  const [landingQueries, setLandingQueries] = useState<PredefinedQuery[]>([])
-  // A query synthesized from a landing pick, fed through the same `pushed` path
-  // the agent uses — so the panel opens and auto-runs it, no duplicate logic.
-  const [localPush, setLocalPush] = useState<QueryPush | null>(null)
 
   // Saved connection names power `connect <name>` autocomplete; refresh on mount
   // and whenever the set may have changed (new connection created).
@@ -110,60 +104,14 @@ function QueryView({
 
   const ready = isReady(connection)
 
-  // Pushed query arrives via the shell's SSE listener; mount the panel to run it.
+  // Pushed query arrives via the shell's SSE listener; the panel is already up
+  // for a ready connection, so only a connection form covering it needs closing.
   useEffect(() => {
     if (pushed && ready) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowQuery(true)
+      setFormType(null)
     }
   }, [pushed, ready])
-
-  // Load saved queries for the landing dropdown once a connection is ready.
-  // Scoped to the connection type + active workspace, mirroring the panel. The
-  // list is only shown while `ready`, so a stale set need not be cleared here.
-  useEffect(() => {
-    if (!ready || !connection) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/predefined-queries?type=${encodeURIComponent(connection.type)}` +
-            `&workspace=${encodeURIComponent(activeWorkspace())}`,
-        )
-        const data = await res.json()
-        if (!cancelled) setLandingQueries((data.queries ?? []) as PredefinedQuery[])
-      } catch {
-        /* leave the last known list in place on a failed refresh */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [ready, connection])
-
-  // Landing-dropdown pick: open the panel and run the chosen query by routing it
-  // through the same `pushed` channel used for agent pushes.
-  function pickPredefined(name: string) {
-    const q = landingQueries.find((p) => p.query_name === name)
-    if (!q) return
-    setFormType(null)
-    setHint(null)
-    setShowQuery(true)
-    setLocalPush({
-      query: q.query,
-      order_by: q.order_by ?? undefined,
-      fields: q.fields ?? undefined,
-      cell_view: q.cell_view,
-      name: q.query_name,
-    })
-  }
-
-  // Clear the local push once the panel has consumed it, then forward to the
-  // shell's handler for any agent-originated push.
-  const handlePushConsumed = () => {
-    setLocalPush(null)
-    onPushConsumed?.()
-  }
 
   async function openSaved(name: string) {
     try {
@@ -178,7 +126,6 @@ function QueryView({
         return
       }
       setFormType(null)
-      setShowQuery(false)
       setHint(null)
       setConnection({
         name: data.name,
@@ -201,7 +148,6 @@ function QueryView({
       const type = lower.slice('new '.length).trim()
       if (DRIVERS[type]) {
         setFormType(type)
-        setShowQuery(false)
         setHint(null)
       } else {
         setHint(`Unknown driver “${type}”. Try: ${Object.keys(DRIVERS).join(', ')}.`)
@@ -210,7 +156,8 @@ function QueryView({
     }
     if (lower === 'query') {
       if (ready) {
-        setShowQuery(true)
+        // Already the default view for a ready connection; this closes a
+        // connection form opened over it.
         setFormType(null)
         setHint(null)
       } else {
@@ -245,7 +192,6 @@ function QueryView({
       }
     }
     setFormType(null)
-    setShowQuery(false)
     setHint(
       `Unknown command “${raw}”. Try “new ${Object.keys(DRIVERS).join('|')}”, ` +
         `“connect <name>”, “explorer”, “dashboard <name>” or “disconnect”.`,
@@ -253,11 +199,14 @@ function QueryView({
   }
 
   function handleConnected(name: string, type: string, databases: string[]) {
-    setConnection({ name, type, databases, database: null })
+    const opened = { name, type, databases, database: null }
+    setConnection(opened)
     setFormType(null)
-    setShowQuery(false)
     setPrompt(`connect ${name}`)
     void refreshConnections()
+    // A picker-less driver (DuckDB) is ready the moment it connects, so it
+    // goes straight to the tables; the rest stay here to pick a database.
+    if (isReady(opened)) navigate('/explorer')
   }
 
   // Drop the active connection both server- and client-side, returning to the
@@ -270,7 +219,6 @@ function QueryView({
     }
     setConnection(null)
     setFormType(null)
-    setShowQuery(false)
     setHint(null)
     setPrompt('')
   }
@@ -284,12 +232,17 @@ function QueryView({
     })
     if (res.ok) {
       setConnection({ ...connection, database })
-      // Clear the prompt so the placeholder invites a query.
+      // Clear the prompt: the query panel is what shows on the way back.
       setPrompt('')
+      // The connection is live now: browse its tables (see
+      // docs/queryview.md#landing-page).
+      navigate('/explorer')
     }
   }
 
-  const inQueryMode = showQuery && ready
+  // The query panel is the view for a ready connection — reached by clicking
+  // Queries, or straight after connecting — unless a connection form covers it.
+  const inQueryMode = ready && !formType
 
   // Command-prompt autocomplete suggestions for the current input. Hidden when
   // dismissed, empty, or the lone match already equals what's typed.
@@ -309,6 +262,7 @@ function QueryView({
     suggestions.length > 0 &&
     !(suggestions.length === 1 && suggestions[0].value === prompt)
   const acActive = Math.min(acIndex, suggestions.length - 1)
+  const promptFormRef = useDismiss<HTMLFormElement>(showAc, () => setAcDismissed(true))
 
   function acceptSuggestion(s: Suggestion) {
     setPrompt(s.value)
@@ -332,15 +286,13 @@ function QueryView({
       // Accept the highlighted row rather than completing/submitting.
       e.preventDefault()
       acceptSuggestion(suggestions[acActive])
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      setAcDismissed(true)
     }
   }
 
   // Command prompt. In query mode it joins the panel's top row to save space.
   const promptInput = (
     <form
+      ref={promptFormRef}
       onSubmit={submitPrompt}
       className={`relative ${inQueryMode ? 'min-w-0 flex-1' : ''}`}
     >
@@ -403,30 +355,10 @@ function QueryView({
 
   return (
     <div className={`w-full ${inQueryMode ? 'max-w-[80vw]' : 'max-w-md'}`}>
-      <div className="mb-6 flex items-center justify-center gap-4">
+      <div className="mb-6 flex items-center justify-center">
         <h1 className="text-3xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           QueryView
         </h1>
-        {!inQueryMode && ready && landingQueries.length > 0 && (
-          <select
-            data-testid="landing-predefined-select"
-            aria-label="Predefined queries"
-            value=""
-            onChange={(e) => {
-              if (e.target.value) pickPredefined(e.target.value)
-            }}
-            className="glass-input px-3 py-2 text-sm"
-          >
-            <option value="" disabled>
-              Saved queries…
-            </option>
-            {landingQueries.map((p) => (
-              <option key={p.query_name} value={p.query_name}>
-                {p.query_name}
-              </option>
-            ))}
-          </select>
-        )}
       </div>
 
       {!inQueryMode && promptInput}
@@ -446,12 +378,12 @@ function QueryView({
           <DatabasePicker connection={connection} onSelect={selectDatabase} />
         )}
 
-      {showQuery && ready && connection && (
+      {inQueryMode && connection && (
         <QueryPanel
           connectionType={connection.type}
           promptSlot={promptInput}
-          pushed={pushed ?? localPush}
-          onPushConsumed={handlePushConsumed}
+          pushed={pushed}
+          onPushConsumed={onPushConsumed}
           remoteId={remoteId}
         />
       )}

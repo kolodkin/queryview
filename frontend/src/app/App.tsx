@@ -10,15 +10,88 @@ import {
 } from 'react-router-dom'
 
 import { isReady, type Connection } from './connection'
+import { filterDatabases } from './databaseFilter'
 import QueryView, { type QueryPush } from './QueryView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
+import { Loading } from './controls/Spinner'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
+import { useDismiss } from './controls/useDismiss'
 import { activeWorkspace, setActiveWorkspace } from './workspace'
 
+// The database list behind the connection pill. Long connections list hundreds
+// of databases, so it carries the landing picker's filter; mounted only while
+// open, so the filter starts blank on each open.
+function DatabaseMenu({
+  connection,
+  onSelect,
+  onDismiss,
+}: {
+  connection: Connection
+  onSelect: (database: string) => void
+  onDismiss: () => void
+}) {
+  const [filter, setFilter] = useState('')
+  const visible = useMemo(
+    () => filterDatabases(connection.databases, filter),
+    [connection.databases, filter],
+  )
+  return (
+    <div
+      data-testid="db-select"
+      role="listbox"
+      className="glass-popover absolute left-0 top-full z-10 mt-2 flex max-h-80 w-64 flex-col p-1 text-sm"
+    >
+      <form
+        className="p-1"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (visible.length > 0) onSelect(visible[0])
+        }}
+      >
+        <input
+          type="search"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && onDismiss()}
+          placeholder={`Filter ${connection.databases.length} databases…`}
+          aria-label="Filter databases"
+          data-testid="db-select-filter"
+          autoFocus
+          autoComplete="off"
+          className="glass-input w-full px-2 py-1.5 text-sm"
+        />
+      </form>
+      {visible.length === 0 ? (
+        <p className="px-2 py-1.5 text-slate-400" data-testid="db-select-empty">
+          No databases match “{filter.trim()}”.
+        </p>
+      ) : (
+        <div className="overflow-auto">
+          {visible.map((db) => (
+            <button
+              key={db}
+              type="button"
+              role="option"
+              aria-selected={db === connection.database}
+              onClick={() => onSelect(db)}
+              className={`block w-full truncate rounded px-2 py-1.5 text-left hover:bg-white/10 ${
+                db === connection.database ? 'text-indigo-200' : 'text-slate-200'
+              }`}
+            >
+              {db}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // App shell: routing, shared connection state, the connection pill + agent
-// popover, and the armed/SSE remote-control channel. Pages: /queries, /dashboard.
+// popover, and the armed/SSE remote-control channel. Pages: /queries,
+// /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -32,6 +105,13 @@ function Shell() {
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   const [workspace, setWorkspace] = useState(activeWorkspace())
+  // Whether the initial /api/session probe has answered. The `/` route waits on
+  // it: until the session is known it can't tell a connected visitor (who wants
+  // the explorer) from a disconnected one (who wants the prompt).
+  const [sessionChecked, setSessionChecked] = useState(false)
+
+  const dbRef = useDismiss<HTMLDivElement>(dbOpen, () => setDbOpen(false))
+  const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
 
   function switchWorkspace(name: string) {
     setActiveWorkspace(name)
@@ -54,16 +134,23 @@ function Shell() {
       })
       const data = await res.json()
       if (data.ok) {
-        setConnection({
-          name: data.name,
+        const opened = {
+          name: data.name as string,
           type: (data.type ?? 'clickhouse') as string,
           databases: (data.databases ?? []) as string[],
           database: null,
-        })
+        }
+        setConnection(opened)
+        setSessionChecked(true)
+        // Ready already (a picker-less driver) means tables to browse;
+        // otherwise the prompt is where the database gets picked.
+        navigate(isReady(opened) ? '/explorer' : '/queries')
+        return
       }
     } catch {
       /* a failed deep-link open just leaves us disconnected */
     }
+    setSessionChecked(true)
     navigate('/queries')
   }
 
@@ -78,16 +165,19 @@ function Shell() {
     fetch('/api/session')
       .then((r) => r.json())
       .then((s) => {
-        if (s.connected) {
-          setConnection({
-            name: s.name,
-            type: s.type ?? 'clickhouse',
-            databases: s.databases ?? [],
-            database: s.database ?? null,
-          })
+        if (!s.connected) return
+        const resumed = {
+          name: s.name as string,
+          type: (s.type ?? 'clickhouse') as string,
+          databases: (s.databases ?? []) as string[],
+          database: (s.database ?? null) as string | null,
         }
+        // Deliberately does not navigate: a resumed session stays on the page
+        // the URL asked for. Only `/` picks a landing page, below.
+        setConnection(resumed)
       })
       .catch(() => {})
+      .finally(() => setSessionChecked(true))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -176,7 +266,7 @@ function Shell() {
     <main className="relative flex min-h-screen items-center justify-center px-6 py-10 text-slate-100">
       {ready && connection && (
         <div className="absolute left-4 top-4 flex items-center gap-2">
-          <div className="relative">
+          <div ref={dbRef} className="relative">
             <button
               type="button"
               data-testid="connection-status"
@@ -196,29 +286,14 @@ function Shell() {
               )}
             </button>
             {dbOpen && connection.databases.length > 0 && (
-              <div
-                data-testid="db-select"
-                role="listbox"
-                className="glass-popover absolute left-0 top-full z-10 mt-2 max-h-72 w-64 overflow-auto p-1 text-sm"
-              >
-                {connection.databases.map((db) => (
-                  <button
-                    key={db}
-                    type="button"
-                    role="option"
-                    aria-selected={db === connection.database}
-                    onClick={() => void switchDatabase(db)}
-                    className={`block w-full truncate rounded px-2 py-1.5 text-left hover:bg-white/10 ${
-                      db === connection.database ? 'text-indigo-200' : 'text-slate-200'
-                    }`}
-                  >
-                    {db}
-                  </button>
-                ))}
-              </div>
+              <DatabaseMenu
+                connection={connection}
+                onSelect={(db) => void switchDatabase(db)}
+                onDismiss={() => setDbOpen(false)}
+              />
             )}
           </div>
-          <div className="relative">
+          <div ref={agentRef} className="relative">
             <button
               type="button"
               data-testid="agent-toggle"
@@ -331,6 +406,18 @@ function Shell() {
               onPushConsumed={() => setDashboardPush(null)}
               database={connection?.database ?? null}
             />
+          }
+        />
+        {/* Only `/` picks a landing page, and only once the probe has answered.
+            An unknown path is just a bad URL, not a landing question. */}
+        <Route
+          path="/"
+          element={
+            sessionChecked ? (
+              <Navigate to={ready ? '/explorer' : '/queries'} replace />
+            ) : (
+              <Loading label="Restoring session…" testid="session-loading" />
+            )
           }
         />
         <Route path="*" element={<Navigate to="/queries" replace />} />

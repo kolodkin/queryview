@@ -1,3 +1,4 @@
+from conftest import connect_clickhouse_test_db, open_query_panel
 from playwright.sync_api import Page, expect
 
 # The generic connect -> query -> paginate -> CSV -> describe flow (including
@@ -8,17 +9,8 @@ from playwright.sync_api import Page, expect
 
 def _open_query_panel(page: Page) -> None:
     """Connect with form defaults, select the seeded `test` db, open the panel."""
-    page.goto("/", wait_until="networkidle")
-    page.get_by_test_id("prompt-input").fill("new clickhouse")
-    page.keyboard.press("Enter")
-    expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
-    page.get_by_test_id("ch-connect").click()
-    expect(page.get_by_test_id("db-picker")).to_be_visible()
-    page.locator('[data-db="test"]').click()
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - test")
-    page.get_by_test_id("prompt-input").fill("query")
-    page.keyboard.press("Enter")
-    expect(page.get_by_test_id("query-panel")).to_be_visible()
+    connect_clickhouse_test_db(page)
+    open_query_panel(page)
 
 
 def test_cell_view_renders_link_and_custom_html(seeded_test_db, page: Page, shot) -> None:
@@ -404,8 +396,8 @@ def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_test_db, page: Page
 
     page.get_by_test_id("query-input").fill(
         "SELECT 'alpha' AS brief, "
-        "'{\"service\":\"billing\",\"ports\":[8080,8443],"
-        "\"meta\":{\"region\":\"eu-west\",\"labels\":{\"tier\":\"gold\"}}}' AS payload, "
+        '\'{"service":"billing","ports":[8080,8443],'
+        '"meta":{"region":"eu-west","labels":{"tier":"gold"}}}\' AS payload, '
         "repeat('long text ', 12) AS notes"
     )
     page.get_by_test_id("query-run").click()
@@ -440,9 +432,7 @@ def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_test_db, page: Page
 
     # Containers below the top level start folded; expanding one reveals it.
     expect(modal.get_by_test_id("cell-data-tree")).not_to_contain_text("gold")
-    modal.get_by_test_id("cell-data-row").filter(has_text="labels").get_by_test_id(
-        "cell-data-toggle"
-    ).click()
+    modal.get_by_test_id("cell-data-row").filter(has_text="labels").get_by_test_id("cell-data-toggle").click()
     expect(modal.get_by_test_id("cell-data-tree")).to_contain_text("gold")
     shot("cell popup - nested container expanded")
 
