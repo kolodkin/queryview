@@ -1,7 +1,7 @@
 [project]
 name = "queryview"
 dynamic = ["version"]
-description = "QueryView: FastAPI + SQLModel backend and React SPA over the ClickHouse HTTP interface"
+description = "Local SQL workbench for ClickHouse, Postgres and DuckDB, with a built-in MCP server for AI agents"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
