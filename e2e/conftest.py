@@ -10,6 +10,18 @@ from playwright.sync_api import Page, expect
 expect.set_options(timeout=15_000)
 
 
+def open_queries(page: Page) -> None:
+    """Open the app on the Queries page.
+
+    A live connection lands on the explorer — both on load (the landing
+    redirect) and the moment a database is picked — and the backend session is
+    shared across tests, so a previous test's connection can resume here. Query
+    flows therefore navigate to Queries explicitly instead of assuming it."""
+    page.goto("/", wait_until="networkidle")
+    page.get_by_test_id("nav-queries").click()
+    expect(page.get_by_test_id("prompt-input")).to_be_visible()
+
+
 @pytest.fixture(scope="session")
 def base_url() -> str:
     # The app under test is started separately (Vite dev server, or the FastAPI

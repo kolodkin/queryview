@@ -51,6 +51,19 @@ On load the SPA either:
 
 If neither yields a connection it opens at the empty prompt.
 
+## Landing page
+
+A live connection lands on the **explorer**, not the prompt: with a database
+selected there are tables to browse (see [explorer.md](./explorer.md)).
+
+- **Opening the app** (`/`) waits for the session probe, then goes to
+  `/explorer` if it resumed a ready connection and `/queries` otherwise. A deep
+  link to a page (`/queries`, `/dashboard?name=…`) is always honored as typed.
+- **Connecting during the session** — picking a database (or connecting a
+  picker-less driver) moves to `/explorer`. It fires on that transition only,
+  so the corner nav still gets back to Queries and an agent's query push is not
+  pulled away.
+
 ## Commands
 
 | Command          | Effect                                              |

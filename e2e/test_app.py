@@ -1,9 +1,12 @@
+import re
+
+from conftest import open_queries
 from playwright.sync_api import Page, expect
 
 
 def test_queryview_e2e(page: Page) -> None:
     # loads the app and shows the heading
-    page.goto("/", wait_until="networkidle")
+    open_queries(page)
     expect(page.locator("h1")).to_have_text("QueryView")
 
     # typing `new clickhouse` reveals the connection form
@@ -25,16 +28,22 @@ def test_queryview_e2e(page: Page) -> None:
     expect(page.get_by_test_id("db-picker")).to_be_visible()
     expect(page.locator('[data-db="default"]')).to_be_visible()
 
-    # selecting a database shows the connected indicator
+    # selecting a database shows the connected indicator and, because the
+    # connection is now ready, lands on the explorer
     page.locator('[data-db="default"]').click()
     expect(page.get_by_test_id("connection-indicator")).to_be_visible()
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - default")
+    expect(page).to_have_url(re.compile(r"/explorer"))
+    expect(page.get_by_test_id("explorer-tables")).to_be_visible()
 
     # reload resumes the session, then reconnect and select the system database
     page.goto("/", wait_until="networkidle")
-    # Resume: came back connected to the previously selected database.
+    # Resume: came back connected to the previously selected database, and the
+    # landing redirect picks the explorer over the prompt.
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - default")
+    expect(page).to_have_url(re.compile(r"/explorer"))
     # `connect <name>` reopens the picker; choose a different database.
+    page.get_by_test_id("nav-queries").click()
     page.get_by_test_id("prompt-input").fill("connect clickhouse")
     page.keyboard.press("Enter")
     # The picker's filter narrows the chips (a non-match hides `default`) and
@@ -47,7 +56,8 @@ def test_queryview_e2e(page: Page) -> None:
     page.keyboard.press("Enter")
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - system")
 
-    # opening with ?connection=<name> opens that connection
+    # opening with ?connection=<name> opens that connection. The database is
+    # not picked yet, so this stays on the prompt rather than the explorer.
     page.goto("/?connection=clickhouse", wait_until="networkidle")
     expect(page.get_by_test_id("db-picker")).to_be_visible()
     # The filter is case-insensitive, so both INFORMATION_SCHEMA chips remain;

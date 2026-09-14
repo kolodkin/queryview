@@ -1,13 +1,14 @@
 import re
 
 import httpx
+from conftest import open_queries
 from playwright.sync_api import Page, expect
 
 
 def _connect_and_select_test_db(page: Page) -> None:
     """Connect with the form defaults (connection name "clickhouse") and select
     the seeded `test` database."""
-    page.goto("/", wait_until="networkidle")
+    open_queries(page)
     page.get_by_test_id("prompt-input").fill("new clickhouse")
     page.keyboard.press("Enter")
     expect(page.get_by_test_id("clickhouse-form")).to_be_visible()

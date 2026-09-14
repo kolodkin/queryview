@@ -1,3 +1,4 @@
+from conftest import open_queries
 from playwright.sync_api import Page, expect
 
 # The generic connect -> query -> paginate -> CSV -> describe flow (including
@@ -8,7 +9,7 @@ from playwright.sync_api import Page, expect
 
 def _open_query_panel(page: Page) -> None:
     """Connect with form defaults, select the seeded `test` db, open the panel."""
-    page.goto("/", wait_until="networkidle")
+    open_queries(page)
     page.get_by_test_id("prompt-input").fill("new clickhouse")
     page.keyboard.press("Enter")
     expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
@@ -16,6 +17,8 @@ def _open_query_panel(page: Page) -> None:
     expect(page.get_by_test_id("db-picker")).to_be_visible()
     page.locator('[data-db="test"]').click()
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - test")
+    # Selecting a database lands on the explorer; the prompt is back on Queries.
+    page.get_by_test_id("nav-queries").click()
     page.get_by_test_id("prompt-input").fill("query")
     page.keyboard.press("Enter")
     expect(page.get_by_test_id("query-panel")).to_be_visible()

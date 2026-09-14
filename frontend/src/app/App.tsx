@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BrowserRouter,
   Link,
@@ -14,11 +14,13 @@ import QueryView, { type QueryPush } from './QueryView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
+import { Loading } from './controls/Spinner'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
 import { activeWorkspace, setActiveWorkspace } from './workspace'
 
 // App shell: routing, shared connection state, the connection pill + agent
-// popover, and the armed/SSE remote-control channel. Pages: /queries, /dashboard.
+// popover, and the armed/SSE remote-control channel. Pages: /queries,
+// /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -32,6 +34,26 @@ function Shell() {
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   const [workspace, setWorkspace] = useState(activeWorkspace())
+  // Whether the initial /api/session probe has answered. The landing redirect
+  // waits on it: until the session is known it can't tell a connected visitor
+  // (who wants the explorer) from a disconnected one (who wants the prompt).
+  const [sessionChecked, setSessionChecked] = useState(false)
+  // The connection the explorer has already been landed on, so the redirect
+  // below fires once per connect rather than on every render. Seeded from the
+  // resumed session, so a deep-linked page in an already-connected session is
+  // left where it is.
+  const landedOn = useRef<string | null>(null)
+
+  // setConnection for the pages. Connecting (a fresh connection, or one whose
+  // database isn't picked yet) and disconnecting clear the landing mark so the
+  // explorer redirect fires again; switching database on the live connection
+  // does not, leaving the current page where it is.
+  function changeConnection(next: Connection | null) {
+    if (!next || next.database === null || next.name !== connection?.name) {
+      landedOn.current = null
+    }
+    setConnection(next)
+  }
 
   function switchWorkspace(name: string) {
     setActiveWorkspace(name)
@@ -54,6 +76,7 @@ function Shell() {
       })
       const data = await res.json()
       if (data.ok) {
+        landedOn.current = null
         setConnection({
           name: data.name,
           type: (data.type ?? 'clickhouse') as string,
@@ -64,6 +87,7 @@ function Shell() {
     } catch {
       /* a failed deep-link open just leaves us disconnected */
     }
+    setSessionChecked(true)
     navigate('/queries')
   }
 
@@ -78,18 +102,33 @@ function Shell() {
     fetch('/api/session')
       .then((r) => r.json())
       .then((s) => {
-        if (s.connected) {
-          setConnection({
-            name: s.name,
-            type: s.type ?? 'clickhouse',
-            databases: s.databases ?? [],
-            database: s.database ?? null,
-          })
+        if (!s.connected) return
+        const resumed = {
+          name: s.name as string,
+          type: (s.type ?? 'clickhouse') as string,
+          databases: (s.databases ?? []) as string[],
+          database: (s.database ?? null) as string | null,
         }
+        setConnection(resumed)
+        // A resume is not a connect: seeding this stops the redirect below
+        // from pulling a deep-linked /dashboard over to /explorer.
+        landedOn.current = isReady(resumed) ? resumed.name : null
       })
       .catch(() => {})
+      .finally(() => setSessionChecked(true))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Connecting lands on the table navigator: once a connection is ready —
+  // picking a database on /queries, or connecting a picker-less driver —
+  // show /explorer. It fires once per connection, so navigating back to
+  // Queries sticks and an agent's query push isn't yanked away.
+  useEffect(() => {
+    if (!ready || !connection) return
+    if (landedOn.current === connection.name) return
+    landedOn.current = connection.name
+    navigate('/explorer')
+  }, [ready, connection, navigate])
 
   // When armed, open an SSE channel: `ready` gives the session id; `query` and
   // `dashboard` events carry payloads that navigate to the matching page.
@@ -314,7 +353,7 @@ function Shell() {
             <QueryView
               key={workspace}
               connection={connection}
-              setConnection={setConnection}
+              setConnection={changeConnection}
               pushed={queryPush}
               onPushConsumed={() => setQueryPush(null)}
               remoteId={remoteId}
@@ -333,7 +372,16 @@ function Shell() {
             />
           }
         />
-        <Route path="*" element={<Navigate to="/queries" replace />} />
+        <Route
+          path="*"
+          element={
+            sessionChecked ? (
+              <Navigate to={ready ? '/explorer' : '/queries'} replace />
+            ) : (
+              <Loading label="Restoring session…" testid="session-loading" />
+            )
+          }
+        />
       </Routes>
       <Toast message={toast} onDone={() => setToast(null)} />
     </main>

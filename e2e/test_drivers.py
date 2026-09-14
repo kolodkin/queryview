@@ -8,6 +8,7 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
+from conftest import open_queries
 from playwright.sync_api import Page, expect
 
 
@@ -57,7 +58,7 @@ CASES = [
 
 
 def _connect(page: Page, case: DriverCase, seed) -> None:
-    page.goto("/", wait_until="networkidle")
+    open_queries(page)
     page.get_by_test_id("prompt-input").fill(case.command)
     page.keyboard.press("Enter")
     expect(page.get_by_test_id(case.form_testid)).to_be_visible()
@@ -79,6 +80,8 @@ def _connect(page: Page, case: DriverCase, seed) -> None:
 
 
 def _open_query_panel(page: Page) -> None:
+    # Connecting lands on the explorer, so come back to the prompt first.
+    page.get_by_test_id("nav-queries").click()
     page.get_by_test_id("prompt-input").fill("query")
     page.keyboard.press("Enter")
     expect(page.get_by_test_id("query-panel")).to_be_visible()
