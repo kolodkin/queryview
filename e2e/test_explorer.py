@@ -66,36 +66,15 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
     shot(f"{case.id} explorer page 2")
 
 
-# The browse query run by the order-by controls, delayed in the browser for the
-# ASC direction only, so the two runs the test fires back to back are guaranteed
-# to answer out of order. `__slow_runs` counts the delayed responses, giving the
-# assertion below a condition to wait on instead of a sleep.
-_DELAY_ASC_RUNS = """
-(() => {
-  window.__slow_runs = 0
-  const orig = window.fetch
-  window.fetch = async (...args) => {
-    const url = typeof args[0] === 'string' ? args[0] : args[0].url
-    const body = args[1] && args[1].body ? String(args[1].body) : ''
-    const slow = url.includes('/api/db/query') && body.includes('"dir":"ASC"')
-    const res = await orig(...args)
-    if (slow) {
-      await new Promise((r) => setTimeout(r, 1500))
-      window.__slow_runs += 1
-    }
-    return res
-  }
-})()
-"""
-
-
 def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: Page) -> None:
-    """Order-by add and its direction flip fire two runs back to back, and the
-    server answers them concurrently. The rows shown must be the newest run's,
-    not whichever response happens to land last."""
-    case = CASES[0]  # ClickHouse
-    page.add_init_script(_DELAY_ASC_RUNS)
-    _connect(page, case, seeded_test_db)
+    """Adding an order-by column and flipping its direction fire two browse runs
+    back to back, and the server answers them concurrently. The rows shown must
+    be the newest run's, not whichever response happens to land last.
+
+    The two runs are held at the network and released in reverse, so the
+    superseded ASC response always lands after the DESC one that replaced it.
+    """
+    _connect(page, CASES[0], seeded_test_db)  # ClickHouse
 
     page.get_by_test_id("nav-explorer").click()
     page.locator('[data-testid="explorer-table"][data-table="items"]').click()
@@ -103,13 +82,23 @@ def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: 
     expect(output).to_contain_text("alpha")
     expect(page.locator('[data-testid="field-toggle"]')).to_have_count(2)
 
-    # Add `id` (ASC, delayed), then immediately flip it to DESC.
-    page.locator('[data-testid="orderby-add"][data-col="id"]').click()
+    # From here on, hold every browse run instead of letting it reach the server.
+    held: list = []
+    page.route("**/api/db/query", lambda route: held.append(route))
+
     chip = page.locator('[data-testid="orderby-chip"][data-col="id"]')
-    expect(chip).to_be_visible()
-    chip.get_by_test_id("orderby-dir").click()
+    with page.expect_request("**/api/db/query"):
+        page.locator('[data-testid="orderby-add"][data-col="id"]').click()  # id ASC
+    with page.expect_request("**/api/db/query"):
+        chip.get_by_test_id("orderby-dir").click()  # flipped to id DESC
+    asc, desc = held
+
+    # The DESC run answers first and its rows land.
+    desc.continue_()
     expect(output.locator("tbody tr").first).to_contain_text("gamma")
 
-    # Once the superseded ASC response has landed, the table still reads DESC.
-    page.wait_for_function("window.__slow_runs >= 1")
+    # The ASC run it superseded answers last, and must not win. Waiting on the
+    # response keeps the assertion behind the app's handling of it.
+    with page.expect_response("**/api/db/query"):
+        asc.continue_()
     expect(output.locator("tbody tr").first).to_contain_text("gamma")
