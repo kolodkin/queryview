@@ -122,6 +122,10 @@ shows "No databases match". Selecting a database:
 - clears the prompt and switches its placeholder to `query`, inviting a query
   (see [query.md](./query.md)).
 
+Clicking the `🟢 connected - <database>` pill reopens the same list as a
+dropdown — same filter, plus **Escape** to close — so the database can be
+switched from any page without going back to the prompt.
+
 ## Persistence (SQLite)
 
 Connection details are stored via SQLModel in the SQLite database (see
