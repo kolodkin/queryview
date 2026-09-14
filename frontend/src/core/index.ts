@@ -25,14 +25,6 @@ export {
 } from './cells/complexCells'
 export { ComplexCell } from './cells/ComplexCell'
 export { CellViewModal } from './cells/CellViewModal'
-export { CellDataModal } from './cells/CellDataModal'
-export {
-  CELL_WIDTH_CH,
-  detectStructured,
-  isOverflowing,
-  type Structured,
-} from './cells/structured'
-export { ROOT_PATH, defaultCollapsed, treeRows, type TreeRow } from './cells/structuredTree'
 export {
   applyParams,
   parseQueryParams,

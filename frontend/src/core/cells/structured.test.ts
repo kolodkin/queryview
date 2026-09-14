@@ -1,17 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { CELL_WIDTH_CH, detectStructured, isOverflowing } from './structured'
-
-describe('isOverflowing', () => {
-  it('is false at or under the cell width', () => {
-    expect(isOverflowing('')).toBe(false)
-    expect(isOverflowing('x'.repeat(CELL_WIDTH_CH))).toBe(false)
-  })
-
-  it('is true past the cell width', () => {
-    expect(isOverflowing('x'.repeat(CELL_WIDTH_CH + 1))).toBe(true)
-  })
-})
+import { MAX_DETECT_CHARS, detectFormat, detectStructured } from './structured'
 
 describe('detectStructured', () => {
   it('detects a JSON object', () => {
@@ -54,5 +43,21 @@ describe('detectStructured', () => {
     expect(detectStructured('')).toBeNull()
     expect(detectStructured('   ')).toBeNull()
     expect(detectStructured('{"unterminated": ')).toBeNull()
+  })
+})
+
+describe('detectFormat', () => {
+  it('names the format without handing back the parsed graph', () => {
+    expect(detectFormat('{"id": 1}')).toBe('json')
+    expect(detectFormat('id: 1\nname: alpha')).toBe('yaml')
+    expect(detectFormat('plain text value')).toBeNull()
+  })
+
+  // Parsing a huge value to pick a button glyph would block the grid's first
+  // paint; the popup still parses the one cell that gets opened.
+  it('gives up past the size cap rather than parsing a huge value', () => {
+    const huge = `{"a": "${'x'.repeat(MAX_DETECT_CHARS)}"}`
+    expect(detectFormat(huge)).toBeNull()
+    expect(detectStructured(huge)).not.toBeNull()
   })
 })

@@ -2,6 +2,8 @@
 // renders: one line per value, indented by depth, with containers collapsible.
 // No React here — CellDataModal.tsx draws these rows.
 
+import { isContainer } from './structured'
+
 export const ROOT_PATH = '$'
 
 // Key names can contain anything, so paths join with a character that cannot
@@ -15,10 +17,6 @@ export type TreeRow = {
   key: string | null
   summary: string
   expandable: boolean
-}
-
-function isContainer(v: unknown): v is unknown[] | Record<string, unknown> {
-  return typeof v === 'object' && v !== null
 }
 
 // A container shows its size (`{3}` / `[2]`), a scalar its text. `null` prints

@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react'
 
 import { detectStructured } from './structured'
-import { ROOT_PATH, defaultCollapsed, treeRows } from './structuredTree'
+import { defaultCollapsed, treeRows } from './structuredTree'
 
 function ParsedTree({ data }: { data: unknown }) {
   const [collapsed, setCollapsed] = useState(() => defaultCollapsed(data))
@@ -43,7 +43,7 @@ function ParsedTree({ data }: { data: unknown }) {
             <span className="w-3 shrink-0" />
           )}
           {r.key !== null && <span className="text-indigo-300">{r.key}:</span>}
-          {r.key === null && r.path === ROOT_PATH && <span className="text-slate-500">root</span>}
+          {r.key === null && <span className="text-slate-500">root</span>}
           <span className="text-slate-200">{r.summary}</span>
         </div>
       ))}
@@ -81,22 +81,22 @@ export function CellDataModal({
             {column}
           </h3>
           {structured && (
-            <span
-              data-testid="cell-data-format"
-              className="glass-chip px-2 py-0.5 text-xs uppercase"
-            >
-              {structured.format}
-            </span>
-          )}
-          {structured && (
-            <button
-              type="button"
-              onClick={() => setRaw((r) => !r)}
-              data-testid="cell-data-raw-toggle"
-              className="glass-btn px-3 py-1 text-xs"
-            >
-              {raw ? 'Parsed' : 'Raw'}
-            </button>
+            <>
+              <span
+                data-testid="cell-data-format"
+                className="glass-chip px-2 py-0.5 text-xs uppercase"
+              >
+                {structured.format}
+              </span>
+              <button
+                type="button"
+                onClick={() => setRaw((r) => !r)}
+                data-testid="cell-data-raw-toggle"
+                className="glass-btn px-3 py-1 text-xs"
+              >
+                {raw ? 'Parsed' : 'Raw'}
+              </button>
+            </>
           )}
           <button
             type="button"
