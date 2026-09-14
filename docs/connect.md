@@ -121,6 +121,10 @@ shows "No databases match". Selecting a database:
 - collapses the picker and shows the top-left indicator `🟢 connected - <database>`,
 - clears the prompt and opens the query panel (see [query.md](./query.md)).
 
+Clicking the `🟢 connected - <database>` pill reopens the same list as a
+dropdown — same filter, plus **Escape** to close — so the database can be
+switched from any page without going back to the prompt.
+
 ## Persistence (SQLite)
 
 Connection details are stored via SQLModel in the SQLite database (see

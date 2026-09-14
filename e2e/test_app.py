@@ -60,6 +60,17 @@ def test_queryview_e2e(page: Page) -> None:
     page.locator('[data-db="information_schema"]').click()
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - information_schema")
 
+    # the connection pill's database menu carries the same filter
+    page.get_by_test_id("connection-status").click()
+    menu_filter = page.get_by_test_id("db-select-filter")
+    expect(menu_filter).to_be_visible()
+    menu_filter.fill("zzz")
+    expect(page.get_by_test_id("db-select-empty")).to_be_visible()
+    menu_filter.fill("sys")
+    expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_count(1)
+    page.keyboard.press("Enter")
+    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - system")
+
 
 def test_ready_connection_lands_on_query_panel(seeded_duckdb, page: Page) -> None:
     """A ready connection puts the query panel up front — no `query` command
