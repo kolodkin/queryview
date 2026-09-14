@@ -2,6 +2,10 @@ import re
 
 from conftest import open_queries
 from playwright.sync_api import Page, expect
+from test_drivers import CASES, _connect
+
+# Driver-agnostic behaviour is exercised on DuckDB: no server to stand up.
+_DUCKDB = next(c for c in CASES if c.id == "duckdb")
 
 
 def test_queryview_e2e(page: Page) -> None:
@@ -76,3 +80,19 @@ def test_queryview_e2e(page: Page) -> None:
     expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_count(1)
     page.keyboard.press("Enter")
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - system")
+
+
+def test_ready_connection_shows_query_panel(seeded_duckdb, page: Page) -> None:
+    """A ready connection never needs the `query` command: connecting lands on
+    the explorer, and Queries puts the panel up — first visit and after a
+    detour alike."""
+    _connect(page, _DUCKDB, seeded_duckdb)
+    expect(page.get_by_test_id("explorer-tables")).to_be_visible()
+
+    page.get_by_test_id("nav-queries").click()
+    expect(page.get_by_test_id("query-panel")).to_be_visible()
+
+    page.get_by_test_id("nav-explorer").click()
+    expect(page.get_by_test_id("explorer-tables")).to_be_visible()
+    page.get_by_test_id("nav-queries").click()
+    expect(page.get_by_test_id("query-panel")).to_be_visible()

@@ -37,7 +37,7 @@ commit it; the app applies it on next start.
 | `new postgres`   | Open the form to create a new Postgres connection. |
 | `new duckdb`     | Open the form to create a new DuckDB connection (file path; no database picker). |
 | `connect <name>` | Open the saved connection `<name>` and show its database picker. |
-| `query`          | Once ready (a database is selected, or a picker-less driver like DuckDB), open the query panel (see [query.md](./query.md)). |
+| `query`          | Return to the query panel from a connection form. A ready session (a database is selected, or a picker-less driver like DuckDB) already shows it (see [query.md](./query.md)). |
 
 **Drivers.** ClickHouse and Postgres take host/port/username/password and present
 a database picker — for ClickHouse the picker lists `SHOW DATABASES`, for Postgres
@@ -119,8 +119,8 @@ shows "No databases match". Selecting a database:
 - sets the session's selected database,
 - persists it on the saved connection (`POST /api/db/database`),
 - collapses the picker and shows the top-left indicator `🟢 connected - <database>`,
-- clears the prompt and switches its placeholder to `query`, inviting a query
-  (see [query.md](./query.md)),
+- clears the prompt and opens the query panel (see [query.md](./query.md)),
+  which is then waiting on Queries whenever you go back,
 - and lands on the explorer (see
   [queryview.md](./queryview.md#landing-page)).
 

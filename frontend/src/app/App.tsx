@@ -17,6 +17,7 @@ import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
+import { useDismiss } from './controls/useDismiss'
 import { activeWorkspace, setActiveWorkspace } from './workspace'
 
 // The database list behind the connection pill. Long connections list hundreds
@@ -108,6 +109,10 @@ function Shell() {
   // it: until the session is known it can't tell a connected visitor (who wants
   // the explorer) from a disconnected one (who wants the prompt).
   const [sessionChecked, setSessionChecked] = useState(false)
+
+  const dbRef = useDismiss<HTMLDivElement>(dbOpen, () => setDbOpen(false))
+  const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
+
   function switchWorkspace(name: string) {
     setActiveWorkspace(name)
     setWorkspace(name)
@@ -261,7 +266,7 @@ function Shell() {
     <main className="relative flex min-h-screen items-center justify-center px-6 py-10 text-slate-100">
       {ready && connection && (
         <div className="absolute left-4 top-4 flex items-center gap-2">
-          <div className="relative">
+          <div ref={dbRef} className="relative">
             <button
               type="button"
               data-testid="connection-status"
@@ -288,7 +293,7 @@ function Shell() {
               />
             )}
           </div>
-          <div className="relative">
+          <div ref={agentRef} className="relative">
             <button
               type="button"
               data-testid="agent-toggle"

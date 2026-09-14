@@ -1,9 +1,12 @@
 # Querying
 
-Typing `query` (after a database is selected) opens the **query panel**: run SQL
-against the session's selected database, page through results, save/load reusable
-queries, and export the current page as CSV. Before a database is selected,
-`query` shows the hint `Select a database first.`
+The **query panel** is what a ready session shows on **Queries** — a database is
+selected, or the driver has no picker — on the first visit and on every return.
+(Connecting itself lands on the explorer; see
+[queryview.md](./queryview.md#landing-page).) It runs SQL against the session's selected database, pages
+through results, saves/loads reusable queries, and exports the current page as
+CSV. Typing `query` returns to it from a connection form; before a database is
+selected it shows the hint `Select a database first.`
 
 ## Panel
 

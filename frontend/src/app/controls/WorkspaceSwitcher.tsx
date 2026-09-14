@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import ExportImportControls from './ExportImportControls'
+import { useDismiss } from './useDismiss'
 import { invalidateGitStatus } from '../gitsync'
 import {
   createWorkspace,
@@ -26,6 +27,9 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [name, setName] = useState('')
   const [remote, setRemote] = useState('')
   const [branch, setBranch] = useState('')
+  // Only the menu light-dismisses: the manage panel holds unsaved form input
+  // (including a write-only remote URL), so it closes through its own Close.
+  const rootRef = useDismiss<HTMLDivElement>(open, () => setOpen(false))
 
   async function reload() {
     try {
@@ -95,7 +99,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   }
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         data-testid="workspace-switcher"
