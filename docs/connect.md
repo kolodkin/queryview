@@ -122,6 +122,15 @@ shows "No databases match". Selecting a database:
 - clears the prompt and switches its placeholder to `query`, inviting a query
   (see [query.md](./query.md)).
 
+### Switching from the status pill
+
+Clicking the top-left `🟢 connected - <database>` pill opens the same list of
+databases as a dropdown, so the active database can be changed from any page
+without going back to the prompt. The dropdown carries the same filter input
+(focused on open, case-insensitive substring, **Enter** picks the first
+remaining match, "No databases match" when nothing does); **Escape** closes it.
+Picking a database calls `POST /api/db/database` just like the picker does.
+
 ## Persistence (SQLite)
 
 Connection details are stored via SQLModel in the SQLite database (see
