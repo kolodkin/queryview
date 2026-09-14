@@ -19,9 +19,8 @@ import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
 import { activeWorkspace, setActiveWorkspace } from './workspace'
 
 // The database list behind the connection pill. Long connections list hundreds
-// of databases, so the menu carries the same filter as the landing picker:
-// substring match, Enter picks the first match, Escape closes. Mounted only
-// while open, so the filter starts blank on each open.
+// of databases, so it carries the landing picker's filter; mounted only while
+// open, so the filter starts blank on each open.
 function DatabaseMenu({
   connection,
   onSelect,

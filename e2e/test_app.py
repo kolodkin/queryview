@@ -56,8 +56,7 @@ def test_queryview_e2e(page: Page) -> None:
     page.locator('[data-db="information_schema"]').click()
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - information_schema")
 
-    # the connection pill's database menu carries the same filter: a non-match
-    # shows the empty note, and Enter picks the single remaining match
+    # the connection pill's database menu carries the same filter
     page.get_by_test_id("connection-status").click()
     menu_filter = page.get_by_test_id("db-select-filter")
     expect(menu_filter).to_be_visible()
