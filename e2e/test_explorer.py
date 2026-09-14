@@ -69,6 +69,44 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
     shot(f"{case.id} explorer page 2")
 
 
+def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: Page) -> None:
+    """Adding an order-by column and flipping its direction fire two browse runs
+    back to back, and the server answers them concurrently. The rows shown must
+    be the newest run's, not whichever response happens to land last.
+
+    The two runs are held at the network and released in reverse, so the
+    superseded ASC response always lands after the DESC one that replaced it.
+    """
+    _connect(page, CASES[0], seeded_test_db)  # ClickHouse
+
+    page.get_by_test_id("nav-explorer").click()
+    page.locator('[data-testid="explorer-table"][data-table="items"]').click()
+    output = page.get_by_test_id("explorer-output")
+    expect(output).to_contain_text("alpha")
+    expect(page.locator('[data-testid="field-toggle"]')).to_have_count(2)
+
+    # From here on, hold every browse run instead of letting it reach the server.
+    held: list = []
+    page.route("**/api/db/query", lambda route: held.append(route))
+
+    chip = page.locator('[data-testid="orderby-chip"][data-col="id"]')
+    with page.expect_request("**/api/db/query"):
+        page.locator('[data-testid="orderby-add"][data-col="id"]').click()  # id ASC
+    with page.expect_request("**/api/db/query"):
+        chip.get_by_test_id("orderby-dir").click()  # flipped to id DESC
+    asc, desc = held
+
+    # The DESC run answers first and its rows land.
+    desc.continue_()
+    expect(output.locator("tbody tr").first).to_contain_text("gamma")
+
+    # The ASC run it superseded answers last, and must not win. Waiting on the
+    # response keeps the assertion behind the app's handling of it.
+    with page.expect_response("**/api/db/query"):
+        asc.continue_()
+    expect(output.locator("tbody tr").first).to_contain_text("gamma")
+
+
 # Driver-independent, so these run once against DuckDB (a file, no service).
 DUCK = next(c for c in CASES if c.id == "duckdb")
 
