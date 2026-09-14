@@ -73,11 +73,13 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
 DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
-def test_sidebar_width_is_draggable_and_remembered(seeded_duckdb, page: Page, shot) -> None:
+def test_sidebar_width_is_draggable_and_remembered(
+    seeded_duckdb_long_names, page: Page, shot
+) -> None:
     """The Tables sidebar resizes from its right edge, so long table names need
     not be truncated. The width is remembered under the explorer's own view key
     and survives a reload; the reset control puts it back to the default."""
-    _connect(page, DUCK, seeded_duckdb)
+    _connect(page, DUCK, seeded_duckdb_long_names)
     page.get_by_test_id("nav-explorer").click()
 
     aside = page.get_by_test_id("explorer-tables")
@@ -85,6 +87,14 @@ def test_sidebar_width_is_draggable_and_remembered(seeded_duckdb, page: Page, sh
     expect(aside).to_have_attribute("data-width", str(DEFAULT_WIDTH))
     # No reset control while the sidebar is still at its default width.
     expect(page.get_by_test_id("explorer-sidebar-reset")).to_have_count(0)
+
+    # The longest name doesn't fit the default width — the reason to resize.
+    longest = page.locator(
+        '[data-testid="explorer-table"]'
+        '[data-table="warehouse_shipment_reconciliation_log"] span'
+    ).first
+    assert longest.evaluate("e => e.scrollWidth > e.clientWidth"), "expected truncation"
+    shot("explorer sidebar default width")
 
     # Drag the handle 120px to the right. Its centre sits on the panel's right
     # edge, so the dragged width is the default plus the travel.
@@ -98,6 +108,8 @@ def test_sidebar_width_is_draggable_and_remembered(seeded_duckdb, page: Page, sh
     page.mouse.move(centre_x + 120, mid_y, steps=10)
     page.mouse.up()
     expect(aside).to_have_attribute("data-width", str(DEFAULT_WIDTH + 120))
+    # ...and now it does fit: the whole point of the drag.
+    assert not longest.evaluate("e => e.scrollWidth > e.clientWidth"), "still truncated"
     shot("explorer sidebar widened")
 
     # Stored as JSON under the explorer's view key, and restored on reload.

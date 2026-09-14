@@ -170,6 +170,26 @@ def seeded_pg_db():
     _in_thread(_teardown)
 
 
+@pytest.fixture(scope="module")
+def seeded_duckdb_long_names(tmp_path_factory) -> str:
+    """A temp DuckDB file whose table names are too long for the sidebar's
+    default width, so the resize tests exercise the truncation they exist to
+    fix. Names are invented and generic."""
+    import duckdb
+
+    path = tmp_path_factory.mktemp("duck_long") / "qv.duckdb"
+    con = duckdb.connect(str(path))
+    for name in (
+        "items",
+        "sales_reporting_monthly_rollup",
+        "warehouse_shipment_reconciliation_log",
+    ):
+        con.execute(f"CREATE TABLE {name} (id INTEGER, name TEXT)")
+        con.execute(f"INSERT INTO {name} VALUES (1,'alpha'),(2,'beta'),(3,'gamma')")
+    con.close()
+    return str(path)
+
+
 # --- DuckDB seeding for query tests ---------------------------------------
 @pytest.fixture(scope="module")
 def seeded_duckdb(tmp_path_factory) -> str:
