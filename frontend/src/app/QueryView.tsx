@@ -85,7 +85,6 @@ function QueryView({
   const [acDismissed, setAcDismissed] = useState(false)
   const [connNames, setConnNames] = useState<string[]>([])
   const promptRef = useRef<HTMLInputElement>(null)
-  const promptFormRef = useRef<HTMLFormElement>(null)
   // Saved queries surfaced next to the title on the landing screen, so they're
   // reachable without first typing `query`. Scoped like the panel's dropdown.
   const [landingQueries, setLandingQueries] = useState<PredefinedQuery[]>([])
@@ -311,7 +310,7 @@ function QueryView({
     suggestions.length > 0 &&
     !(suggestions.length === 1 && suggestions[0].value === prompt)
   const acActive = Math.min(acIndex, suggestions.length - 1)
-  useDismiss(promptFormRef, showAc, () => setAcDismissed(true))
+  const promptFormRef = useDismiss<HTMLFormElement>(showAc, () => setAcDismissed(true))
 
   function acceptSuggestion(s: Suggestion) {
     setPrompt(s.value)

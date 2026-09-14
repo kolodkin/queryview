@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import ExportImportControls from './ExportImportControls'
 import { useDismiss } from './useDismiss'
 import { invalidateGitStatus } from '../gitsync'
@@ -27,11 +27,9 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [name, setName] = useState('')
   const [remote, setRemote] = useState('')
   const [branch, setBranch] = useState('')
-  const rootRef = useRef<HTMLDivElement>(null)
-  useDismiss(rootRef, open || manage, () => {
-    setOpen(false)
-    setManage(false)
-  })
+  // Only the menu light-dismisses: the manage panel holds unsaved form input
+  // (including a write-only remote URL), so it closes through its own Close.
+  const rootRef = useDismiss<HTMLDivElement>(open, () => setOpen(false))
 
   async function reload() {
     try {

@@ -1,14 +1,11 @@
-import { useEffect, type RefObject } from 'react'
+import { useEffect, useRef } from 'react'
 
-/** Close an open popover the way people expect: a pointer press anywhere
- * outside `ref`, or Escape. Point `ref` at the wrapper that holds *both* the
- * trigger and the panel, so pressing the trigger while open doesn't close here
- * and immediately reopen in the trigger's own click handler. */
-export function useDismiss(
-  ref: RefObject<HTMLElement | null>,
-  open: boolean,
-  close: () => void,
-) {
+// Close an open popover on a pointer press outside the returned ref, or on
+// Escape. Put that ref on the wrapper holding *both* the trigger and the panel,
+// so pressing the trigger while open doesn't close here and immediately reopen
+// in the trigger's own click handler.
+export function useDismiss<T extends HTMLElement>(open: boolean, close: () => void) {
+  const ref = useRef<T>(null)
   useEffect(() => {
     if (!open) return
     // pointerdown, not click: it fires before focus moves or the click lands,
@@ -26,5 +23,6 @@ export function useDismiss(
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [ref, open, close])
+  }, [open, close])
+  return ref
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   BrowserRouter,
   Link,
@@ -33,10 +33,8 @@ function Shell() {
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   const [workspace, setWorkspace] = useState(activeWorkspace())
-  const dbRef = useRef<HTMLDivElement>(null)
-  const agentRef = useRef<HTMLDivElement>(null)
-  useDismiss(dbRef, dbOpen, () => setDbOpen(false))
-  useDismiss(agentRef, agentOpen, () => setAgentOpen(false))
+  const dbRef = useDismiss<HTMLDivElement>(dbOpen, () => setDbOpen(false))
+  const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
 
   function switchWorkspace(name: string) {
     setActiveWorkspace(name)
