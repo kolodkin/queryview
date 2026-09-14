@@ -68,13 +68,12 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
     expect(output).not_to_contain_text("gamma")
     shot(f"{case.id} explorer page 2")
 
+
 # Driver-independent, so these run once against DuckDB (a file, no service).
 DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
-def test_sidebar_width_is_draggable_and_remembered(
-    seeded_duckdb_long_names, page: Page, shot
-) -> None:
+def test_sidebar_width_is_draggable_and_remembered(seeded_duckdb_long_names, page: Page, shot) -> None:
     """The Tables sidebar resizes from its right edge so long names need not be
     truncated. The width is remembered per view and survives a reload; the reset
     control puts it back to the default."""
@@ -89,8 +88,7 @@ def test_sidebar_width_is_draggable_and_remembered(
 
     # The longest name doesn't fit the default width — the reason to resize.
     longest = page.locator(
-        '[data-testid="explorer-table"]'
-        '[data-table="warehouse_shipment_reconciliation_log"] span'
+        '[data-testid="explorer-table"][data-table="warehouse_shipment_reconciliation_log"] span'
     ).first
     assert longest.evaluate("e => e.scrollWidth > e.clientWidth"), "expected truncation"
     shot("explorer sidebar default width")

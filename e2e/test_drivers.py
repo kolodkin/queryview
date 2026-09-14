@@ -79,8 +79,6 @@ def _connect(page: Page, case: DriverCase, seed) -> None:
     expect(page.get_by_test_id("connection-status")).to_contain_text(case.status_text)
 
 
-
-
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_connect_query_paginate_csv(case: DriverCase, request, page: Page, shot) -> None:
     seed = request.getfixturevalue(case.seed_fixture)
