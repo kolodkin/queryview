@@ -50,12 +50,9 @@ semantics:
   feedback, so unlike the query panel there is no separate Run button).
 - **Pagination** — Limit (applies on blur) plus Previous/Next, mapping to the
   query API's `limit`/`offset`.
-
-- **Long values** — columns are a fixed 50 characters wide; anything longer
-  scrolls inside its own cell and gets a button opening it in the cell popup,
-  which parses JSON/YAML into a collapsible tree. The grid is shared with the
-  query panel, so the behavior is identical — see
-  [Long values](./query.md#long-values).
+- **Long values** — columns are a fixed 50 characters wide; longer values scroll
+  inside their cell and get a button opening the parsed/raw
+  [cell popup](./query.md#long-values).
 
 The browse SELECT always selects `*` and comes from the server: each
 `/api/db/tables` entry carries its ready-to-run `query`, quoted with the

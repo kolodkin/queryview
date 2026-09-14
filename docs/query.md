@@ -189,32 +189,27 @@ value.
 
 ## Long values
 
-Result columns are a **fixed 50 characters wide**, so one long-text column can no
-longer stretch the grid and push the others off-screen. A value that doesn't fit
-**scrolls horizontally inside its own cell**; every other column stays where it
-is. Values that fit are untouched — no scrollbar, no extra controls.
+Result columns are a **fixed 50 characters wide**, so one long-text column can't
+stretch the grid and push the others off-screen. A longer value **scrolls inside
+its own cell**; values that fit are untouched.
 
-An overflowing cell also gets a small button at its **left edge**, which stays
-put while the text scrolls past it. The button opens the **cell popup**, showing
-the whole value. Its glyph says what the value looks like:
+An overflowing cell gets a button at its **left edge**, outside the scroller so
+it stays put as the text moves. It opens the **cell popup** on the whole value,
+and its glyph says what that value looks like:
 
-- **`{ }`** — the text parses as JSON or YAML. The popup opens on a
-  **collapsible tree** of the parsed document, labelled with the detected
-  format, with a **Raw** toggle for the original text. Containers below the top
-  level start folded, so a large document opens readable.
-- **`⤢`** — long text that isn't JSON or YAML. The popup shows it as wrapped raw
-  text.
+- **`{ }`** — parses as JSON or YAML: the popup opens on a **collapsible tree**
+  of the parsed document with a **Raw** toggle. Containers below the top level
+  start folded, so a large document opens readable.
+- **`⤢`** — long text that is neither: the popup shows it as wrapped raw text.
 
-Detection is deliberately conservative, because almost any string is technically
-valid YAML. JSON is accepted whenever the text parses to an **object or array**
-(a bare `123` or `"quoted"` is not worth a popup). YAML is tried **only on text
-that already spans lines**, and again only when it yields an object or array —
-so `status: healthy` on one line, a Windows path, or a sentence of prose stay
-plain text.
+Detection is deliberately conservative, because almost any string is valid YAML.
+JSON is accepted whenever it parses to an **object or array**; YAML only for text
+that **already spans lines** and also yields one — so `status: healthy`, a
+Windows path, or a line of prose stay plain text.
 
-This applies to the [explorer](./explorer.md) too: both pages render the same
-results grid. An explicit `cell_view` still decides how the cell *renders*; the
-popup always shows the underlying value.
+The [explorer](./explorer.md) shares this grid, so it behaves identically. An
+explicit `cell_view` still decides how a cell *renders*; the popup always shows
+the underlying value.
 
 ## Query parameters
 

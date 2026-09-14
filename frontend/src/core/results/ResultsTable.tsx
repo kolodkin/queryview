@@ -3,8 +3,8 @@
 // shownColumnIndices in presentation.ts).
 //
 // Columns are a fixed CELL_WIDTH_CH wide so one long-text column can't stretch
-// the grid: a value that doesn't fit scrolls inside its own cell and gets a
-// button, at the cell's left edge, opening the full value in CellDataModal.
+// the grid: a longer value scrolls inside its own cell and gets a button, at the
+// cell's left edge, opening it in CellDataModal.
 
 import { useMemo, useState } from 'react'
 
@@ -35,8 +35,8 @@ function BodyCell({
   onOpen: (column: string, text: string) => void
 }) {
   const text = cellText(value)
-  // Detection only decides the button's glyph, so it is skipped entirely for
-  // values that fit — and memoised so scrolling/re-rendering doesn't re-parse.
+  // Detection only decides the glyph, so it is skipped for values that fit and
+  // memoised so re-rendering doesn't re-parse.
   const overflowing = isOverflowing(text)
   const structured = useMemo(
     () => (overflowing ? detectStructured(text) : null),
@@ -62,8 +62,7 @@ function BodyCell({
             {structured ? '{ }' : '⤢'}
           </button>
         )}
-        {/* The cell's own scroller: long values scroll here instead of widening
-            the column, so every row stays aligned. */}
+        {/* The cell's own scroller, so long values never widen the column. */}
         <div className="cell-scroll min-w-0 flex-1 overflow-x-auto whitespace-pre">{children}</div>
       </div>
     </td>

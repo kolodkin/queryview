@@ -21,9 +21,9 @@ function isContainer(v: unknown): v is unknown[] | Record<string, unknown> {
   return typeof v === 'object' && v !== null
 }
 
-// One line's right-hand side: a container shows its size (`{3}` / `[2]`), a
-// scalar its text. `null` prints as `null` — in a parsed document the absence
-// is the information, unlike a table cell where empty reads better.
+// A container shows its size (`{3}` / `[2]`), a scalar its text. `null` prints
+// as `null`: in a parsed document the absence is the information, unlike a
+// table cell where empty reads better.
 function summarize(v: unknown): string {
   if (Array.isArray(v)) return `[${v.length}]`
   if (isContainer(v)) return `{${Object.keys(v).length}}`
@@ -35,8 +35,7 @@ function entries(v: unknown[] | Record<string, unknown>): [string, unknown][] {
   return Array.isArray(v) ? v.map((x, i) => [String(i), x]) : Object.entries(v)
 }
 
-// Depth-first rows for `data`, skipping the children of any container whose
-// path is in `collapsed`.
+// Depth-first rows, skipping the children of any container in `collapsed`.
 export function treeRows(data: unknown, collapsed: ReadonlySet<string>): TreeRow[] {
   const out: TreeRow[] = []
   const walk = (value: unknown, path: string, depth: number, key: string | null) => {

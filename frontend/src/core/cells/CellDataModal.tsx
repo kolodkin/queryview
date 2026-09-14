@@ -1,7 +1,7 @@
 // The cell popup: the full value of a result cell too long to read in the grid
-// (see ResultsTable). Text that parses as JSON or YAML opens on a collapsible
-// parsed tree with a Raw toggle; anything else is just the wrapped raw text.
-// Distinct from CellViewModal, which edits a query's cell_view config.
+// (see ResultsTable). JSON/YAML opens on a collapsible parsed tree with a Raw
+// toggle; anything else is wrapped raw text. Distinct from CellViewModal, which
+// edits a query's cell_view config.
 
 import { useMemo, useState } from 'react'
 
