@@ -64,3 +64,7 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
     expect(output).to_contain_text("alpha")
     expect(output).not_to_contain_text("gamma")
     shot(f"{case.id} explorer page 2")
+
+    # Short values are left alone: no per-cell expand button in a normal table.
+    expect(output.locator('[data-testid="cell-expand"]')).to_have_count(0)
+    shot(f"{case.id} explorer short cells stay plain")

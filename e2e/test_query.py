@@ -392,3 +392,69 @@ def test_query_param_options_sql_error_blocks_run(seeded_test_db, page: Page, sh
     expect(error).to_contain_text('options for "sel"')
     expect(page.get_by_test_id("query-run")).to_be_disabled()
     shot("options_sql error -> blocked")
+
+
+def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_test_db, page: Page, shot) -> None:
+    """Result columns are a fixed width: a value longer than that scrolls inside
+    its own cell and gains a button at the cell's left edge that opens the full
+    value. The button's glyph reflects autodetection — `{ }` for text that
+    parses as JSON/YAML, otherwise a plain expand arrow — and a detected value
+    opens on a collapsible parsed tree with a Raw toggle."""
+    _open_query_panel(page)
+
+    page.get_by_test_id("query-input").fill(
+        "SELECT 'alpha' AS brief, "
+        "'{\"service\":\"billing\",\"ports\":[8080,8443],"
+        "\"meta\":{\"region\":\"eu-west\",\"labels\":{\"tier\":\"gold\"}}}' AS payload, "
+        "repeat('long text ', 12) AS notes"
+    )
+    page.get_by_test_id("query-run").click()
+    output = page.get_by_test_id("query-output")
+    expect(output).to_be_visible()
+
+    # A value that fits stays plain: no button, no scrollbar, no noise.
+    expect(output.locator('[data-testid="cell-expand"][data-col="brief"]')).to_have_count(0)
+
+    # Long values get the button, glyphed by what autodetection found.
+    expect(output.locator('[data-testid="cell-expand"][data-col="payload"]')).to_have_text("{ }")
+    expect(output.locator('[data-testid="cell-expand"][data-col="notes"]')).to_have_text("⤢")
+
+    # Every column keeps the same fixed width, so one long column can no longer
+    # stretch the grid and push the others off-screen.
+    widths = {
+        col: output.locator(f'thead th:has-text("{col}")').bounding_box()["width"]
+        for col in ("brief", "payload", "notes")
+    }
+    # Sub-pixel rounding differs by a hundredth of a pixel between columns.
+    assert max(widths.values()) - min(widths.values()) < 1, widths
+    shot("long cells - fixed width with expand buttons")
+
+    # The JSON cell opens on the parsed tree, labelled with the format.
+    output.locator('[data-testid="cell-expand"][data-col="payload"]').click()
+    modal = page.get_by_test_id("cell-data-modal")
+    expect(modal).to_be_visible()
+    expect(modal.get_by_test_id("cell-data-format")).to_have_text("json")
+    expect(modal.get_by_test_id("cell-data-tree")).to_contain_text("service")
+    expect(modal.get_by_test_id("cell-data-tree")).to_contain_text("billing")
+    shot("cell popup - parsed json tree")
+
+    # Containers below the top level start folded; expanding one reveals it.
+    expect(modal.get_by_test_id("cell-data-tree")).not_to_contain_text("gold")
+    modal.get_by_test_id("cell-data-row").filter(has_text="labels").get_by_test_id(
+        "cell-data-toggle"
+    ).click()
+    expect(modal.get_by_test_id("cell-data-tree")).to_contain_text("gold")
+    shot("cell popup - nested container expanded")
+
+    # Raw shows the value exactly as the database returned it.
+    modal.get_by_test_id("cell-data-raw-toggle").click()
+    expect(modal.get_by_test_id("cell-data-raw")).to_contain_text('"service":"billing"')
+    modal.get_by_test_id("cell-data-close").click()
+    expect(modal).not_to_be_visible()
+
+    # Long text that isn't JSON or YAML opens as raw text, with no format chip.
+    output.locator('[data-testid="cell-expand"][data-col="notes"]').click()
+    expect(modal).to_be_visible()
+    expect(modal.get_by_test_id("cell-data-format")).to_have_count(0)
+    expect(modal.get_by_test_id("cell-data-raw")).to_contain_text("long text")
+    shot("cell popup - raw long text")
