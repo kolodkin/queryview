@@ -16,6 +16,7 @@ import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
+import { useDismiss } from './controls/useDismiss'
 import { activeWorkspace, setActiveWorkspace } from './workspace'
 
 // The database list behind the connection pill. Long connections list hundreds
@@ -102,6 +103,8 @@ function Shell() {
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   const [workspace, setWorkspace] = useState(activeWorkspace())
+  const dbRef = useDismiss<HTMLDivElement>(dbOpen, () => setDbOpen(false))
+  const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
 
   function switchWorkspace(name: string) {
     setActiveWorkspace(name)
@@ -246,7 +249,7 @@ function Shell() {
     <main className="relative flex min-h-screen items-center justify-center px-6 py-10 text-slate-100">
       {ready && connection && (
         <div className="absolute left-4 top-4 flex items-center gap-2">
-          <div className="relative">
+          <div ref={dbRef} className="relative">
             <button
               type="button"
               data-testid="connection-status"
@@ -273,7 +276,7 @@ function Shell() {
               />
             )}
           </div>
-          <div className="relative">
+          <div ref={agentRef} className="relative">
             <button
               type="button"
               data-testid="agent-toggle"

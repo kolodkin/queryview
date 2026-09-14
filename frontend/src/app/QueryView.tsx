@@ -25,6 +25,7 @@ import { isReady, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
+import { useDismiss } from './controls/useDismiss'
 import { downloadText } from './yamlio'
 import { activeWorkspace } from './workspace'
 import { suggestCompletions, type Suggestion } from './promptSuggestions'
@@ -254,6 +255,7 @@ function QueryView({
     suggestions.length > 0 &&
     !(suggestions.length === 1 && suggestions[0].value === prompt)
   const acActive = Math.min(acIndex, suggestions.length - 1)
+  const promptFormRef = useDismiss<HTMLFormElement>(showAc, () => setAcDismissed(true))
 
   function acceptSuggestion(s: Suggestion) {
     setPrompt(s.value)
@@ -277,15 +279,13 @@ function QueryView({
       // Accept the highlighted row rather than completing/submitting.
       e.preventDefault()
       acceptSuggestion(suggestions[acActive])
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      setAcDismissed(true)
     }
   }
 
   // Command prompt. In query mode it joins the panel's top row to save space.
   const promptInput = (
     <form
+      ref={promptFormRef}
       onSubmit={submitPrompt}
       className={`relative ${inQueryMode ? 'min-w-0 flex-1' : ''}`}
     >
