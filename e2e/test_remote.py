@@ -1,20 +1,12 @@
 import httpx
+from conftest import connect_clickhouse_test_db, open_query_panel
 from playwright.sync_api import Page, expect
 
 
 def _open_query_panel(page: Page) -> None:
     """Connect with form defaults, select the seeded `test` db, open the panel."""
-    page.goto("/", wait_until="networkidle")
-    page.get_by_test_id("prompt-input").fill("new clickhouse")
-    page.keyboard.press("Enter")
-    expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
-    page.get_by_test_id("ch-connect").click()
-    expect(page.get_by_test_id("db-picker")).to_be_visible()
-    page.locator('[data-db="test"]').click()
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - test")
-    page.get_by_test_id("prompt-input").fill("query")
-    page.keyboard.press("Enter")
-    expect(page.get_by_test_id("query-panel")).to_be_visible()
+    connect_clickhouse_test_db(page)
+    open_query_panel(page)
 
 
 def test_mcp_push_to_live_session(seeded_test_db, page: Page, base_url: str) -> None:

@@ -15,6 +15,7 @@ import QueryView, { type QueryPush } from './QueryView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
+import { Loading } from './controls/Spinner'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
 import { useDismiss } from './controls/useDismiss'
 import { activeWorkspace, setActiveWorkspace } from './workspace'
@@ -89,7 +90,8 @@ function DatabaseMenu({
 }
 
 // App shell: routing, shared connection state, the connection pill + agent
-// popover, and the armed/SSE remote-control channel. Pages: /queries, /dashboard.
+// popover, and the armed/SSE remote-control channel. Pages: /queries,
+// /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -103,6 +105,11 @@ function Shell() {
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   const [workspace, setWorkspace] = useState(activeWorkspace())
+  // Whether the initial /api/session probe has answered. The `/` route waits on
+  // it: until the session is known it can't tell a connected visitor (who wants
+  // the explorer) from a disconnected one (who wants the prompt).
+  const [sessionChecked, setSessionChecked] = useState(false)
+
   const dbRef = useDismiss<HTMLDivElement>(dbOpen, () => setDbOpen(false))
   const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
 
@@ -127,16 +134,23 @@ function Shell() {
       })
       const data = await res.json()
       if (data.ok) {
-        setConnection({
-          name: data.name,
+        const opened = {
+          name: data.name as string,
           type: (data.type ?? 'clickhouse') as string,
           databases: (data.databases ?? []) as string[],
           database: null,
-        })
+        }
+        setConnection(opened)
+        setSessionChecked(true)
+        // Ready already (a picker-less driver) means tables to browse;
+        // otherwise the prompt is where the database gets picked.
+        navigate(isReady(opened) ? '/explorer' : '/queries')
+        return
       }
     } catch {
       /* a failed deep-link open just leaves us disconnected */
     }
+    setSessionChecked(true)
     navigate('/queries')
   }
 
@@ -151,16 +165,19 @@ function Shell() {
     fetch('/api/session')
       .then((r) => r.json())
       .then((s) => {
-        if (s.connected) {
-          setConnection({
-            name: s.name,
-            type: s.type ?? 'clickhouse',
-            databases: s.databases ?? [],
-            database: s.database ?? null,
-          })
+        if (!s.connected) return
+        const resumed = {
+          name: s.name as string,
+          type: (s.type ?? 'clickhouse') as string,
+          databases: (s.databases ?? []) as string[],
+          database: (s.database ?? null) as string | null,
         }
+        // Deliberately does not navigate: a resumed session stays on the page
+        // the URL asked for. Only `/` picks a landing page, below.
+        setConnection(resumed)
       })
       .catch(() => {})
+      .finally(() => setSessionChecked(true))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -389,6 +406,18 @@ function Shell() {
               onPushConsumed={() => setDashboardPush(null)}
               database={connection?.database ?? null}
             />
+          }
+        />
+        {/* Only `/` picks a landing page, and only once the probe has answered.
+            An unknown path is just a bad URL, not a landing question. */}
+        <Route
+          path="/"
+          element={
+            sessionChecked ? (
+              <Navigate to={ready ? '/explorer' : '/queries'} replace />
+            ) : (
+              <Loading label="Restoring session…" testid="session-loading" />
+            )
           }
         />
         <Route path="*" element={<Navigate to="/queries" replace />} />

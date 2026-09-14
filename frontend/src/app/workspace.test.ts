@@ -1,13 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { activeWorkspace, setActiveWorkspace } from './workspace'
-
-function stubStorage() {
-  const store = new Map<string, string>()
-  vi.stubGlobal('localStorage', {
-    getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => void store.set(k, v),
-  })
-}
+import { stubStorage } from './testStorage'
 
 afterEach(() => vi.unstubAllGlobals())
 

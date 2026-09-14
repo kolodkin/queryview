@@ -1,8 +1,9 @@
 # Explorer — the classical table navigator
 
-The third top-level page (`/explorer`, next to [queries](./queryview.md) and
-[dashboards](./dashboard.md)): a sidebar lists the active database's tables;
-clicking one browses its rows. No SQL is typed — the page generates
+The landing page for a live connection (`/explorer`, next to
+[queries](./queryview.md) and [dashboards](./dashboard.md) in the corner nav —
+see [queryview.md](./queryview.md#landing-page)): a sidebar lists the active
+database's tables; clicking one browses its rows. No SQL is typed — the page generates
 `SELECT * FROM "<table>"` and drives it with the same field select and
 order-by select the query panel uses.
 
@@ -26,14 +27,23 @@ order-by select the query panel uses.
 
 - **Sidebar** — the tables of the session's selected database, from
   `GET /api/db/tables`. Each entry shows the engine's row-count and size
-  estimates on the name row (e.g. `1.2K rows · 3.4MB`): row counts abbreviate
-  with K/M/G/T/P at each power of 1000, byte sizes with KB/MB/GB/TB/PB at each
-  power of 1024; an estimate the engine doesn't track (views, a never-analyzed
-  Postgres table) is simply omitted. The list
-  refreshes when the active database changes (via the connection pill); a
-  selected table that no longer exists is deselected.
+  estimates under the name (e.g. `1.2K rows · 3.4MB`), leaving the name the
+  panel's full width: row counts abbreviate with K/M/G/T/P at each power of
+  1000, byte sizes with KB/MB/GB/TB/PB at each power of 1024; an estimate the
+  engine doesn't track (views, a never-analyzed Postgres table) is simply
+  omitted. The list refreshes when the active database changes (via the
+  connection pill); a selected table that no longer exists is deselected.
+- **Sidebar width** — drag the panel's right edge for names too long to fit the
+  256px default (200–600px); ←/→ nudge it, Home or a double-click resets, as
+  does a **Reset width** button beside the *Tables* heading. A name that still
+  overflows truncates, with the full name as a tooltip. The width persists
+  under the `qv_view_explorer` key (see `frontend/src/app/viewSettings.ts`:
+  one key per view, settings as JSON, so a new option costs no new key).
 - **Rows panel** — the selected table's rows. The selection lives in the URL
   (`/explorer?table=<name>`), so reloads and links land on the same table.
+- **Loading** — panels show *Loading tables…* / *Loading rows…* rather than
+  sitting empty. Re-running a loaded table (paging, a new order-by) keeps its
+  rows on screen, dimmed, with a spinner by the table name.
 - Without a ready connection the page shows a hint to connect on the Queries
   page first; connection state is shared app-wide (see
   [queryview.md](./queryview.md)).

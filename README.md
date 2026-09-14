@@ -48,7 +48,7 @@ Open http://localhost:8000 and type into the prompt:
 | Command | What happens |
 |---|---|
 | `new clickhouse` / `new postgres` / `new duckdb` | Create a connection — host, port and credentials, or a file path for DuckDB. Passwords are encrypted at rest. |
-| `connect <name>` | Open a saved connection and pick a database. The last one reconnects automatically next time. |
+| `connect <name>` | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
 | `query` | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
 | `explorer` | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
 | `dashboard [name]` | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |

@@ -12,6 +12,15 @@ import {
 } from '../core'
 import { isReady, type Connection } from './connection'
 import { formatBytes, formatCompact } from './compactNumber'
+import { Loading, Spinner } from './controls/Spinner'
+import {
+  DEFAULT_SIDEBAR_WIDTH,
+  MAX_SIDEBAR_WIDTH,
+  MIN_SIDEBAR_WIDTH,
+  clampSidebarWidth,
+  loadSidebarWidth,
+  saveSidebarWidth,
+} from './explorerSettings'
 
 // Sidebar entry from /api/db/tables. rows/bytes are engine estimates — null
 // when the engine doesn't track them (views, never-analyzed Postgres tables);
@@ -40,6 +49,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
 
   const [tables, setTables] = useState<TableInfo[]>([])
   const [tablesError, setTablesError] = useState<string | null>(null)
+  const [tablesLoading, setTablesLoading] = useState(false)
   const [fields, setFields] = useState<Field[]>([])
   const [visibleCols, setVisibleCols] = useState<string[]>([])
   const [orderBy, setOrderBy] = useState<OrderCol[]>([])
@@ -51,6 +61,18 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   // The limit the current output was fetched with, so a no-op blur of the
   // Limit input doesn't refetch the page.
   const appliedLimit = useRef(100)
+  // Sidebar width, dragged on its right edge and remembered across reloads so
+  // long table names stay readable.
+  const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
+  const [dragging, setDragging] = useState(false)
+  const asideRef = useRef<HTMLElement | null>(null)
+  // Captured on grab: the panel's left edge (fixed — widening the row's first
+  // item can't move it) and the pointer's offset from its right edge, so the
+  // panel doesn't jump when the handle is grabbed off-centre. dragWidth is
+  // where the drag has got to, committed to state on release.
+  const dragLeft = useRef(0)
+  const dragOffset = useRef(0)
+  const dragWidth = useRef(0)
   // Browse runs overlap — adding an order-by column and flipping its direction
   // fire back to back, and paging follows a limit change — and the server
   // answers them concurrently. Each run takes a ticket so only the newest may
@@ -68,6 +90,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   useEffect(() => {
     if (!ready) return
     let cancelled = false
+    setTablesLoading(true) // eslint-disable-line react-hooks/set-state-in-effect
     void (async () => {
       try {
         const res = await fetch('/api/db/tables')
@@ -89,6 +112,8 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
           setTables([])
           setTablesError(err instanceof Error ? err.message : 'request failed')
         }
+      } finally {
+        if (!cancelled) setTablesLoading(false)
       }
     })()
     return () => {
@@ -186,6 +211,55 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     if (selected) void runQuery(selected.query, limit, Math.max(0, nextOffset), orderBy)
   }
 
+  // Edge drag. Each move paints the width straight onto the panel rather than
+  // going through state, which would rebuild the results table (100+ rows) and
+  // the table list every frame; state and the storage write happen once, on
+  // release. Listeners are on the window so a drag outrunning the handle keeps
+  // resizing.
+  useEffect(() => {
+    if (!dragging) return
+    function onMove(e: PointerEvent) {
+      const next = clampSidebarWidth(e.clientX - dragOffset.current - dragLeft.current)
+      dragWidth.current = next
+      if (asideRef.current) asideRef.current.style.width = `${next}px`
+    }
+    function onUp() {
+      setDragging(false)
+      resize(dragWidth.current)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+  }, [dragging])
+
+  // Every route to a new width (drag release, arrow keys, reset) lands here, so
+  // all of them persist.
+  function resize(width: number) {
+    const next = clampSidebarWidth(width)
+    setSidebarWidth(next)
+    saveSidebarWidth(next)
+  }
+
+  // So the handle works without a pointer.
+  function onHandleKeyDown(e: React.KeyboardEvent) {
+    const step = e.shiftKey ? 48 : 16
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      resize(sidebarWidth - step)
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      resize(sidebarWidth + step)
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      resize(DEFAULT_SIDEBAR_WIDTH)
+    }
+  }
+
   const { columns, rows } = useMemo(
     () => (result ? { columns: columnNames(result), rows: result.data } : { columns: [], rows: [] }),
     [result],
@@ -212,45 +286,93 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     // mt-10 keeps the panels clear of the absolutely-positioned connection
     // pill (top-left) and nav (top-right) when the content is viewport-tall.
     <div className="mt-10 flex w-full max-w-[85vw] items-start gap-4">
-      <aside data-testid="explorer-tables" className="glass-panel w-64 shrink-0 p-4">
-        <h2 className="text-sm font-semibold text-slate-200">Tables</h2>
+      <aside
+        ref={asideRef}
+        data-testid="explorer-tables"
+        data-width={sidebarWidth}
+        style={{ width: sidebarWidth }}
+        className="glass-panel relative shrink-0 p-4"
+      >
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-slate-200">Tables</h2>
+          {sidebarWidth !== DEFAULT_SIDEBAR_WIDTH && (
+            <button
+              type="button"
+              data-testid="explorer-sidebar-reset"
+              onClick={() => resize(DEFAULT_SIDEBAR_WIDTH)}
+              title="Reset the sidebar width"
+              className="glass-btn ml-auto px-1.5 py-0.5 text-xs text-slate-300"
+            >
+              Reset width
+            </button>
+          )}
+        </div>
         {tablesError && (
           <p data-testid="explorer-tables-error" className="mt-2 text-sm text-red-300">
             {tablesError}
           </p>
         )}
-        <div className="mt-2 max-h-[70vh] space-y-1 overflow-auto">
-          {tables.map((t) => {
-            const meta = tableMeta(t)
-            return (
-              <button
-                key={t.name}
-                type="button"
-                data-testid="explorer-table"
-                data-table={t.name}
-                onClick={() => setSearchParams({ table: t.name })}
-                className={`flex w-full items-baseline gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-white/10 ${
-                  t.name === table
-                    ? 'bg-white/10 font-medium text-indigo-200'
-                    : 'text-slate-200'
-                }`}
-              >
-                <span className="min-w-0 flex-1 truncate">{t.name}</span>
-                {meta && (
-                  <span
-                    data-testid="explorer-table-meta"
-                    className="shrink-0 whitespace-nowrap text-xs font-normal text-slate-400"
-                  >
-                    {meta}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-          {tables.length === 0 && !tablesError && (
-            <p className="text-sm text-slate-400">No tables.</p>
-          )}
-        </div>
+        {tablesLoading ? (
+          <Loading label="Loading tables…" testid="explorer-tables-loading" />
+        ) : (
+          <div className="mt-2 max-h-[70vh] space-y-1 overflow-auto">
+            {tables.map((t) => {
+              const meta = tableMeta(t)
+              return (
+                <button
+                  key={t.name}
+                  type="button"
+                  data-testid="explorer-table"
+                  data-table={t.name}
+                  title={t.name}
+                  onClick={() => setSearchParams({ table: t.name })}
+                  className={`block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-white/10 ${
+                    t.name === table
+                      ? 'bg-white/10 font-medium text-indigo-200'
+                      : 'text-slate-200'
+                  }`}
+                >
+                  <span className="block truncate">{t.name}</span>
+                  {meta && (
+                    <span
+                      data-testid="explorer-table-meta"
+                      className="block truncate text-xs font-normal text-slate-400"
+                    >
+                      {meta}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+            {tables.length === 0 && !tablesError && (
+              <p className="text-sm text-slate-400">No tables.</p>
+            )}
+          </div>
+        )}
+        <div
+          data-testid="explorer-sidebar-resize"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the tables sidebar"
+          aria-valuenow={sidebarWidth}
+          aria-valuemin={MIN_SIDEBAR_WIDTH}
+          aria-valuemax={MAX_SIDEBAR_WIDTH}
+          tabIndex={0}
+          onPointerDown={(e) => {
+            e.preventDefault()
+            const rect = asideRef.current?.getBoundingClientRect()
+            dragLeft.current = rect?.left ?? 0
+            dragOffset.current = e.clientX - (rect?.right ?? e.clientX)
+            dragWidth.current = sidebarWidth
+            setDragging(true)
+          }}
+          onDoubleClick={() => resize(DEFAULT_SIDEBAR_WIDTH)}
+          onKeyDown={onHandleKeyDown}
+          title="Drag to resize · double-click to reset"
+          className={`absolute -right-1 top-0 h-full w-2 cursor-col-resize rounded-full transition ${
+            dragging ? 'bg-indigo-400/70' : 'bg-transparent hover:bg-indigo-400/40'
+          } focus:outline-none focus-visible:bg-indigo-400/70`}
+        />
       </aside>
 
       <section data-testid="explorer-panel" className="glass-panel min-w-0 flex-1 space-y-3 p-6">
@@ -261,12 +383,20 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
+              {/* flex-1 + min-w-0 truncates a long name rather than wrapping
+                  the pagination controls onto a second row. */}
               <h2
                 data-testid="explorer-table-name"
-                className="mr-auto truncate text-lg font-semibold text-white"
+                title={table}
+                className="min-w-0 flex-1 truncate text-lg font-semibold text-white"
               >
                 {table}
               </h2>
+              {busy && result !== null && (
+                <span data-testid="explorer-busy" role="status" aria-label="Loading rows">
+                  <Spinner />
+                </span>
+              )}
               <label className="text-sm text-slate-300">
                 Limit
                 <input
@@ -318,13 +448,18 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               />
             )}
 
+            {result === null && busy && (
+              <Loading label="Loading rows…" testid="explorer-rows-loading" />
+            )}
             {result !== null && (
-              <ResultsTable
-                columns={columns}
-                rows={rows}
-                shownIdx={shownIdx}
-                testid="explorer-output"
-              />
+              <div className={busy ? 'opacity-50 transition-opacity' : undefined}>
+                <ResultsTable
+                  columns={columns}
+                  rows={rows}
+                  shownIdx={shownIdx}
+                  testid="explorer-output"
+                />
+              </div>
             )}
             {error && (
               <p data-testid="explorer-error" className="text-sm text-red-300">
