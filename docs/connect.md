@@ -120,7 +120,10 @@ shows "No databases match". Selecting a database:
 - persists it on the saved connection (`POST /api/db/database`),
 - collapses the picker and shows the top-left indicator `🟢 connected - <database>`,
 - clears the prompt and switches its placeholder to `query`, inviting a query
-  (see [query.md](./query.md)).
+  (see [query.md](./query.md)),
+- and lands on the explorer, the page for a live connection (see
+  [queryview.md](./queryview.md#landing-page)); the corner nav returns to the
+  prompt.
 
 Clicking the `🟢 connected - <database>` pill reopens the same list as a
 dropdown — same filter, plus **Escape** to close — so the database can be
@@ -179,8 +182,10 @@ When a session starts (a cookie the backend hasn't seen), `GET /api/session`
 lazily reconnects the **latest active** connection from SQLite, so a fresh
 session resumes where the last one left off:
 
-- On success the SPA loads already connected — prompt + database picker, with
-  the previously selected database pre-selected and the indicator shown.
+- On success the SPA loads already connected, with the previously selected
+  database pre-selected and the indicator shown; a resumed connection that is
+  ready opens on the explorer rather than the prompt (see
+  [queryview.md](./queryview.md#landing-page)).
 - On failure (server down, bad credentials) the SPA falls back to the empty
   prompt; the saved connection is left in place to retry.
 
