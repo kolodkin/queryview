@@ -1,6 +1,17 @@
 # QueryView
 
-Project skeleton: **Python** backend (**FastAPI + SQLModel**) + **Vite + React + TypeScript** SPA frontend with **Tailwind CSS**, plus **[Playwright](https://playwright.dev)** end-to-end tests.
+A local SQL workbench for **ClickHouse**, **Postgres** and **DuckDB** — and a
+place to let an AI agent do the querying for you.
+
+Everything happens at one prompt: type `connect prod` to open a database,
+`query` to run SQL, `explorer` to click through tables, `dashboard` to open a
+saved dashboard. Saved queries and dashboards live in workspaces that can back
+themselves up to a git remote. A built-in MCP server lets an agent run
+read-only queries, push a query or a whole dashboard into your open browser tab,
+and snapshot your work to git.
+
+QueryView is a **single-user tool that runs on your own machine**. It has no
+login and assumes it is reachable only from localhost — don't expose its port.
 
 ## Quick start
 
@@ -29,6 +40,29 @@ to loopback: `docker run -p 127.0.0.1:8000:8000 ...`.
 The command above keeps its state inside the container, so connections and
 workspaces are lost when the container is removed. See
 [Run with Docker](#run-with-docker) for a persistent setup.
+
+## What you can do
+
+Open http://localhost:8000 and type into the prompt:
+
+| Command | What happens |
+|---|---|
+| `new clickhouse` / `new postgres` / `new duckdb` | Create a connection — host, port and credentials, or a file path for DuckDB. Passwords are encrypted at rest. |
+| `connect <name>` | Open a saved connection and pick a database. The last one reconnects automatically next time. |
+| `query` | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
+| `explorer` | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
+| `dashboard [name]` | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |
+
+Beyond the prompt:
+
+- **Workspaces** group your saved queries and dashboards, and each can sync to
+  its own git remote for backup, history and restore —
+  [workspace.md](docs/workspace.md), [gitsync.md](docs/gitsync.md).
+- **YAML export/import** moves a single query, a dashboard, or a whole
+  workspace between instances with no git involved —
+  [export-import.md](docs/export-import.md).
+- **MCP** lets an agent query your databases and author dashboards — see
+  [below](#mcp-server).
 
 ## Run with Docker
 
@@ -90,105 +124,6 @@ docker run -d --name queryview \
   ghcr.io/kolodkin/queryview:latest
 ```
 
-## Layout
-
-```
-.
-├── backend/         # Python FastAPI + SQLModel app exposing /api/* (queryview package)
-├── frontend/        # Vite + React + TS + Tailwind v4 SPA (npm workspace)
-├── e2e/             # Playwright (pytest) browser tests
-├── pyproject.toml   # Backend deps + console script + e2e `test` group (uv)
-└── package.json     # npm workspace root: dev orchestration + frontend build
-```
-
-## Prerequisites
-
-- [uv](https://docs.astral.sh/uv/) — runs the Python backend and the Playwright
-  (pytest) e2e suite (it manages the Python toolchain and dependencies for you).
-- [Node.js](https://nodejs.org) 20+ (with npm) — runs the root tasks and the
-  Vite frontend.
-
-npm runs the frontend and the root task scripts; uv handles the backend's and
-e2e suite's Python virtualenv and dependencies.
-
-## Install
-
-Install the backend's Python dependencies (uv reads the root `pyproject.toml`;
-the package lives in `backend/queryview`):
-
-```bash
-uv sync
-```
-
-Install the JavaScript dependencies for the frontend workspace:
-
-```bash
-npm install
-```
-
-Install the e2e tooling (the `test` dependency group) and fetch the Playwright
-browser:
-
-```bash
-uv sync --group test
-uv run --group test playwright install chromium
-```
-
-## Run dev servers
-
-Run backend and frontend together:
-
-```bash
-npm run dev
-```
-
-Or individually:
-
-```bash
-npm run backend    # uvicorn --reload on http://localhost:8000
-npm run frontend   # http://localhost:5173
-```
-
-The Vite dev server proxies `/api/*` to the FastAPI backend, so the SPA can call the API on the same origin.
-
-## Build & preview production
-
-```bash
-npm run build      # produces frontend/dist/
-npm run start      # SERVE_STATIC=1, FastAPI serves dist/ + /api on :8000
-npm run preview    # build && start in one shot
-```
-
-In production there is no Vite — the FastAPI backend serves the bundled SPA from `frontend/dist/` and falls back to `index.html` for any unknown non-`/api` path so client-side routing works. Override the dist location with `STATIC_ROOT=/path/to/dist`.
-
-## End-to-end tests
-
-The e2e suite is [pytest-playwright](https://playwright.dev/python/docs/test-runners),
-installed via the `test` dependency group and run through `uv`.
-
-Start the dev servers (`npm run dev`) in one terminal, then in another:
-
-```bash
-uv run --group test pytest
-```
-
-Override the target URL with `BASE_URL=http://localhost:4173 uv run --group test pytest` (e.g. to test a built preview). To run the full suite against a real ClickHouse the way CI does, use `scripts/setup.sh`.
-
-## Release to PyPI
-
-The **Publish to PyPI** workflow (`.github/workflows/publish.yaml`, manual
-dispatch with a `vX.Y.Z` tag input) builds the SPA into the wheel
-(`queryview/static/`), then gates the release on the installed wheel: an HTTP
-smoke test, the packaged backend test suite (`pytest --pyargs queryview`), and
-the Playwright e2e suite driving the packaged server (skippable via the
-`skip-e2e` input for emergencies). It then publishes
-[`queryview`](https://pypi.org/project/queryview/) via PyPI trusted publishing,
-pushes the tag, and creates the GitHub release. The package version comes
-from the tag (no version bump in `pyproject.toml`).
-
-An installed wheel serves the bundled UI by default — see
-[Quick start](#quick-start).
-
 ## MCP server
 
 The backend mounts a FastMCP server (Streamable HTTP) at
@@ -228,15 +163,32 @@ git backups). The push tools target an **armed** browser session: enable
 the session id it shows. See [docs/remote.md](docs/remote.md) for the full
 protocol.
 
-## API
-
-See [docs/api.md](docs/api.md) for the full endpoint reference.
-
-The single-page prompt UI is described in [docs/queryview.md](docs/queryview.md);
-connecting (`new <type>` / `connect <name>`), SQLite persistence, and session
-auto-connect are specified in [docs/connect.md](docs/connect.md).
+## Where your data lives
 
 All state lives in one data directory, `~/.queryview` on every OS, relocated
 with `DATA_DIR`. Inside are the SQLite store `db.sqlite`, the local
 password-encryption key `encryption.key`, and the workspace git-sync clones
-under `gitsync/`.
+under `gitsync/`. Back that directory up — or give each workspace a git remote
+and let [git sync](docs/gitsync.md) do it.
+
+## Documentation
+
+- [queryview.md](docs/queryview.md) — the single-prompt page.
+- [connect.md](docs/connect.md) — connections, drivers, sessions, storage.
+- [query.md](docs/query.md) — the query panel: pagination, predefined queries, CSV.
+- [explorer.md](docs/explorer.md) — the table navigator.
+- [dashboard.md](docs/dashboard.md) — dashboards and how agents author them.
+- [workspace.md](docs/workspace.md) — workspaces.
+- [gitsync.md](docs/gitsync.md) — git backup, history and restore.
+- [export-import.md](docs/export-import.md) — YAML export and import.
+- [remote.md](docs/remote.md) — the remote-control protocol behind the MCP push tools.
+- [api.md](docs/api.md) — the full HTTP endpoint reference.
+
+## Contributing
+
+Development setup, tests and the release process are in
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE).
