@@ -413,10 +413,12 @@ def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_test_db, page: Page
 
     # Every column keeps the same fixed width, so one long column can no longer
     # stretch the grid and push the others off-screen.
-    widths = {
-        col: output.locator(f'thead th:has-text("{col}")').bounding_box()["width"]
-        for col in ("brief", "payload", "notes")
-    }
+    def header_width(col: str) -> float:
+        box = output.locator(f'thead th:has-text("{col}")').bounding_box()
+        assert box is not None, f"no {col} header on screen"
+        return box["width"]
+
+    widths = {col: header_width(col) for col in ("brief", "payload", "notes")}
     # Sub-pixel rounding differs by a hundredth of a pixel between columns.
     assert max(widths.values()) - min(widths.values()) < 1, widths
     shot("long cells - fixed width with expand buttons")
