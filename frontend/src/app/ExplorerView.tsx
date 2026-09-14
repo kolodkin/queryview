@@ -51,6 +51,12 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   // The limit the current output was fetched with, so a no-op blur of the
   // Limit input doesn't refetch the page.
   const appliedLimit = useRef(100)
+  // Browse runs overlap — adding an order-by column and flipping its direction
+  // fire back to back, and paging follows a limit change — and the server
+  // answers them concurrently. Each run takes a ticket so only the newest may
+  // write the output; otherwise a slower earlier query's rows land last and the
+  // table contradicts the controls until something else re-runs it.
+  const runSeq = useRef(0)
 
   // The sidebar entry the URL selects, once the list has it. Row loading keys
   // off this: nothing fires until the table is confirmed present, so a stale
@@ -93,6 +99,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
 
   const runQuery = useCallback(
     async (sql: string, lim: number, off: number, ord: OrderCol[]) => {
+      const ticket = ++runSeq.current
       setBusy(true)
       setError(null)
       try {
@@ -107,6 +114,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
           }),
         })
         const data = await res.json()
+        if (ticket !== runSeq.current) return
         if (data.ok) {
           setResult({ meta: data.meta ?? [], data: data.data ?? [] })
           setOffset(off)
@@ -115,9 +123,10 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
           setError((data.message as string) ?? 'query failed')
         }
       } catch (err) {
+        if (ticket !== runSeq.current) return
         setError(err instanceof Error ? err.message : 'request failed')
       } finally {
-        setBusy(false)
+        if (ticket === runSeq.current) setBusy(false)
       }
     },
     [],
