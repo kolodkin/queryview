@@ -13,10 +13,9 @@ expect.set_options(timeout=15_000)
 def open_queries(page: Page) -> None:
     """Open the app on the Queries page.
 
-    A live connection lands on the explorer — both on load (the landing
-    redirect) and the moment a database is picked — and the backend session is
-    shared across tests, so a previous test's connection can resume here. Query
-    flows therefore navigate to Queries explicitly instead of assuming it."""
+    A live connection lands on the explorer, and the backend session is shared
+    across tests, so a previous test's connection can resume here. Query flows
+    navigate to Queries explicitly rather than assuming it."""
     page.goto("/", wait_until="networkidle")
     page.get_by_test_id("nav-queries").click()
     expect(page.get_by_test_id("prompt-input")).to_be_visible()
@@ -24,7 +23,7 @@ def open_queries(page: Page) -> None:
 
 def connect_clickhouse_test_db(page: Page) -> None:
     """Connect with the ClickHouse form defaults and select the seeded `test`
-    database. Ends on the explorer — picking a database lands there."""
+    database. Ends on the explorer, where picking a database lands."""
     open_queries(page)
     page.get_by_test_id("prompt-input").fill("new clickhouse")
     page.keyboard.press("Enter")
@@ -213,9 +212,8 @@ def seeded_duckdb(tmp_path_factory) -> str:
 
 @pytest.fixture(scope="module")
 def seeded_duckdb_long_names(tmp_path_factory) -> str:
-    """As above plus table names too long for the sidebar's default width, so
-    the resize test exercises the truncation it exists to fix. Names are
-    invented and generic."""
+    """As above plus invented names too long for the sidebar's default width,
+    so the resize test exercises the truncation it exists to fix."""
     return _seed_duckdb(
         tmp_path_factory.mktemp("duck_long") / "qv.duckdb",
         "items",

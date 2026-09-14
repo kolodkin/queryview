@@ -27,26 +27,23 @@ order-by select the query panel uses.
 
 - **Sidebar** — the tables of the session's selected database, from
   `GET /api/db/tables`. Each entry shows the engine's row-count and size
-  estimates under the name (e.g. `1.2K rows · 3.4MB`), so the name gets the
+  estimates under the name (e.g. `1.2K rows · 3.4MB`), leaving the name the
   panel's full width: row counts abbreviate with K/M/G/T/P at each power of
   1000, byte sizes with KB/MB/GB/TB/PB at each power of 1024; an estimate the
   engine doesn't track (views, a never-analyzed Postgres table) is simply
   omitted. The list refreshes when the active database changes (via the
   connection pill); a selected table that no longer exists is deselected.
 - **Sidebar width** — drag the panel's right edge for names too long to fit the
-  256px default (200–600px). The handle takes the keyboard too (←/→ nudge,
-  Shift for a bigger step, Home resets), a double-click resets it, and a
-  **Reset width** button sits beside the *Tables* heading while the width is
-  non-default. A name that still overflows is truncated, with the full name as
-  a tooltip. The width persists in localStorage under `qv_view_explorer` — one
-  key per view holding that view's settings as JSON (`{"sidebarWidth": 376}`),
-  so a view can remember a new option without claiming another key.
+  256px default (200–600px); ←/→ nudge it, Home or a double-click resets, as
+  does a **Reset width** button beside the *Tables* heading. A name that still
+  overflows truncates, with the full name as a tooltip. The width persists
+  under the `qv_view_explorer` key (see `frontend/src/app/viewSettings.ts`:
+  one key per view, settings as JSON, so a new option costs no new key).
 - **Rows panel** — the selected table's rows. The selection lives in the URL
   (`/explorer?table=<name>`), so reloads and links land on the same table.
-- **Loading** — panels say they are working rather than sitting empty: *Loading
-  tables…* in the sidebar, *Loading rows…* while a newly selected table's first
-  page is in flight. Re-running an already-loaded table (paging, a new
-  order-by) keeps its rows on screen, dimmed, with a spinner by the table name.
+- **Loading** — panels show *Loading tables…* / *Loading rows…* rather than
+  sitting empty. Re-running a loaded table (paging, a new order-by) keeps its
+  rows on screen, dimmed, with a spinner by the table name.
 - Without a ready connection the page shows a hint to connect on the Queries
   page first; connection state is shared app-wide (see
   [queryview.md](./queryview.md)).

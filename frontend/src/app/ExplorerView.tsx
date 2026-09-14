@@ -62,17 +62,16 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   // Limit input doesn't refetch the page.
   const appliedLimit = useRef(100)
   // Sidebar width, dragged on its right edge and remembered across reloads so
-  // long table names stay readable without re-dragging every visit.
+  // long table names stay readable.
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
   const [dragging, setDragging] = useState(false)
   const asideRef = useRef<HTMLElement | null>(null)
-  // Captured once on grab: the panel's left edge (fixed for the drag — the
-  // aside is the row's first item, so widening it can't move it) and the
-  // pointer's offset from its right edge, so the panel tracks the cursor
-  // without jumping when the handle is grabbed off-centre.
+  // Captured on grab: the panel's left edge (fixed — widening the row's first
+  // item can't move it) and the pointer's offset from its right edge, so the
+  // panel doesn't jump when the handle is grabbed off-centre. dragWidth is
+  // where the drag has got to, committed to state on release.
   const dragLeft = useRef(0)
   const dragOffset = useRef(0)
-  // The width the drag has reached, committed to state on release.
   const dragWidth = useRef(0)
 
   // The sidebar entry the URL selects, once the list has it. Row loading keys
@@ -203,12 +202,11 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     if (selected) void runQuery(selected.query, limit, Math.max(0, nextOffset), orderBy)
   }
 
-  // Edge drag. Each move paints the new width straight onto the panel instead
-  // of going through state: re-rendering per pointermove would rebuild the
-  // whole results table (100+ rows by default) and the table list on every
-  // frame. State — and the write to storage — happens once, on release.
-  // Listeners live on the window so a fast drag that outruns the 8px handle
-  // keeps resizing.
+  // Edge drag. Each move paints the width straight onto the panel rather than
+  // going through state, which would rebuild the results table (100+ rows) and
+  // the table list every frame; state and the storage write happen once, on
+  // release. Listeners are on the window so a drag outrunning the handle keeps
+  // resizing.
   useEffect(() => {
     if (!dragging) return
     function onMove(e: PointerEvent) {
@@ -230,15 +228,15 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     }
   }, [dragging])
 
-  // The one place a settled width is adopted, so every route to a new width
-  // (drag release, arrow keys, reset, double-click) persists it.
+  // Every route to a new width (drag release, arrow keys, reset) lands here, so
+  // all of them persist.
   function resize(width: number) {
     const next = clampSidebarWidth(width)
     setSidebarWidth(next)
     saveSidebarWidth(next)
   }
 
-  // Arrow keys nudge the width so the handle works without a pointer.
+  // So the handle works without a pointer.
   function onHandleKeyDown(e: React.KeyboardEvent) {
     const step = e.shiftKey ? 48 : 16
     if (e.key === 'ArrowLeft') {
@@ -376,8 +374,8 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              {/* flex-1 + min-w-0 lets a long table name truncate rather than
-                  wrap the pagination controls onto a second row. */}
+              {/* flex-1 + min-w-0 truncates a long name rather than wrapping
+                  the pagination controls onto a second row. */}
               <h2
                 data-testid="explorer-table-name"
                 title={table}

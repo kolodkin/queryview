@@ -1,6 +1,5 @@
-// Busy indicators. Spinner is the bare glyph (for inline use next to a label
-// that is already on screen); Loading is the labelled block a panel shows
-// while its first payload is still in flight.
+// Busy indicators: Spinner is the bare glyph, Loading the labelled block a
+// panel shows while its first payload is in flight.
 
 export function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
   return (

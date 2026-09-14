@@ -1,8 +1,7 @@
 // Per-view UI settings in localStorage: one key per view (`qv_view_<name>`)
-// holding that view's settings as a single JSON object, so a view can remember
-// a new option without claiming another key. Reads are defensive — a missing,
-// unparseable or hand-edited value reads as "nothing remembered" rather than
-// breaking the page.
+// holding that view's settings as a JSON object, so a view can remember a new
+// option without claiming another key. A missing, unparseable or hand-edited
+// value reads as "nothing remembered" rather than breaking the page.
 
 const PREFIX = 'qv_view_'
 
@@ -20,8 +19,8 @@ export function loadViewSettings(view: string): ViewSettings {
   }
 }
 
-// Merge changes into the view's stored object, leaving settings this build
-// doesn't know about (an older or newer one's) intact.
+// Merge into the view's stored object, leaving settings this build doesn't know
+// about intact.
 export function patchViewSettings(view: string, changes: ViewSettings): void {
   try {
     const next = { ...loadViewSettings(view), ...changes }

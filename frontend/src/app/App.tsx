@@ -104,9 +104,9 @@ function Shell() {
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   const [workspace, setWorkspace] = useState(activeWorkspace())
-  // Whether the initial /api/session probe has answered. The landing redirect
-  // waits on it: until the session is known it can't tell a connected visitor
-  // (who wants the explorer) from a disconnected one (who wants the prompt).
+  // Whether the initial /api/session probe has answered. The `/` route waits on
+  // it: until the session is known it can't tell a connected visitor (who wants
+  // the explorer) from a disconnected one (who wants the prompt).
   const [sessionChecked, setSessionChecked] = useState(false)
   function switchWorkspace(name: string) {
     setActiveWorkspace(name)
@@ -137,8 +137,8 @@ function Shell() {
         }
         setConnection(opened)
         setSessionChecked(true)
-        // Ready already (a picker-less driver) means there are tables to
-        // browse; otherwise the prompt is where the database gets picked.
+        // Ready already (a picker-less driver) means tables to browse;
+        // otherwise the prompt is where the database gets picked.
         navigate(isReady(opened) ? '/explorer' : '/queries')
         return
       }
@@ -167,8 +167,8 @@ function Shell() {
           databases: (s.databases ?? []) as string[],
           database: (s.database ?? null) as string | null,
         }
-        // Note this does not navigate: a resumed session stays on whatever
-        // page the URL asked for. Only `/` picks a landing page, below.
+        // Deliberately does not navigate: a resumed session stays on the page
+        // the URL asked for. Only `/` picks a landing page, below.
         setConnection(resumed)
       })
       .catch(() => {})
@@ -403,9 +403,8 @@ function Shell() {
             />
           }
         />
-        {/* Only `/` picks a landing page, and only once the session probe has
-            answered: a live connection has tables to browse, a cold start has
-            a prompt to type into. An unknown path is just a bad URL. */}
+        {/* Only `/` picks a landing page, and only once the probe has answered.
+            An unknown path is just a bad URL, not a landing question. */}
         <Route
           path="/"
           element={

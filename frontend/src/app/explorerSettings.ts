@@ -1,6 +1,6 @@
-// The explorer view's remembered settings (see viewSettings.ts for the
-// storage shape). Today that is the Tables sidebar width, so a sidebar dragged
-// wide enough for long table names stays that way across reloads.
+// The explorer's remembered settings (viewSettings.ts holds the storage shape).
+// Today just the Tables sidebar width, so a sidebar dragged wide enough for
+// long table names stays that way.
 
 import { loadViewSettings, patchViewSettings } from './viewSettings'
 
@@ -10,8 +10,8 @@ export const MIN_SIDEBAR_WIDTH = 200
 export const MAX_SIDEBAR_WIDTH = 600
 export const DEFAULT_SIDEBAR_WIDTH = 256
 
-// A drag position turned into a usable pixel width. A non-finite drag falls
-// back to the default rather than collapsing the panel.
+// A drag position as a usable pixel width; a non-finite drag falls back to the
+// default rather than collapsing the panel.
 export function clampSidebarWidth(width: number): number {
   if (!Number.isFinite(width)) return DEFAULT_SIDEBAR_WIDTH
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, Math.round(width)))

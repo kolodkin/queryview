@@ -53,18 +53,16 @@ If neither yields a connection it opens at the empty prompt.
 
 ## Landing page
 
-A live connection lands on the **explorer**, not the prompt: with a database
-selected there are tables to browse (see [explorer.md](./explorer.md)).
+A live connection lands on the **explorer**, not the prompt — there are tables
+to browse (see [explorer.md](./explorer.md)).
 
-- **Opening the app** (`/`) waits for the session probe, then goes to
-  `/explorer` if it resumed a ready connection and `/queries` otherwise. A deep
-  link to a page (`/queries`, `/dashboard?name=…`) is always honored as typed;
-  only `/` chooses.
-- **Connecting** — picking a database, or connecting a picker-less driver,
-  navigates to `/explorer` from the connect handler itself. Nothing watches the
-  connection for changes, so the corner nav gets back to Queries, switching
-  database from the pill leaves the page alone, and an agent's query push is
-  not pulled away.
+- **Opening the app** (`/`) waits for the session probe, then picks `/explorer`
+  for a resumed ready connection and `/queries` otherwise. Only `/` chooses: a
+  deep link to a page is honored as typed.
+- **Connecting** — picking a database (or connecting a picker-less driver)
+  navigates from the connect handler itself. Nothing watches the connection, so
+  the nav gets back to Queries, a pill database switch stays put, and an
+  agent's query push is not pulled away.
 
 ## Commands
 

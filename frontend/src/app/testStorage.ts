@@ -3,9 +3,9 @@
 
 import { vi } from 'vitest'
 
-// Stub localStorage, optionally pre-loaded with keys. Pair with
+// Optionally pre-loaded with keys. Pair with
 // `afterEach(() => vi.unstubAllGlobals())`; the returned map lets a test assert
-// on what was written.
+// what was written.
 export function stubStorage(initial?: Record<string, string>): Map<string, string> {
   const store = new Map<string, string>(Object.entries(initial ?? {}))
   vi.stubGlobal('localStorage', {
@@ -16,8 +16,7 @@ export function stubStorage(initial?: Record<string, string>): Map<string, strin
   return store
 }
 
-// Stub a localStorage whose every access throws, as a private window or
-// blocked site data does.
+// A localStorage whose every access throws, as a private window does.
 export function stubBrokenStorage(): void {
   const boom = () => {
     throw new Error('denied')

@@ -68,17 +68,16 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
     expect(output).not_to_contain_text("gamma")
     shot(f"{case.id} explorer page 2")
 
-# The sidebar and loading behaviour are driver-independent, so they run once
-# against DuckDB (a file, so no service is needed) rather than per driver.
+# Driver-independent, so these run once against DuckDB (a file, no service).
 DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
 def test_sidebar_width_is_draggable_and_remembered(
     seeded_duckdb_long_names, page: Page, shot
 ) -> None:
-    """The Tables sidebar resizes from its right edge, so long table names need
-    not be truncated. The width is remembered under the explorer's own view key
-    and survives a reload; the reset control puts it back to the default."""
+    """The Tables sidebar resizes from its right edge so long names need not be
+    truncated. The width is remembered per view and survives a reload; the reset
+    control puts it back to the default."""
     _connect(page, DUCK, seeded_duckdb_long_names)
     page.get_by_test_id("nav-explorer").click()
 
@@ -129,8 +128,7 @@ def test_sidebar_width_is_draggable_and_remembered(
 
 
 def test_panels_show_loaders_until_data_arrives(seeded_duckdb, page: Page, shot) -> None:
-    """The sidebar and the rows panel each show a loader while their first
-    payload is in flight, instead of a blank panel."""
+    """Both panels show a loader while their first payload is in flight."""
     _connect(page, DUCK, seeded_duckdb)
 
     # Hold both requests open long enough for the loaders to be observable.
@@ -145,8 +143,8 @@ def test_panels_show_loaders_until_data_arrives(seeded_duckdb, page: Page, shot)
             # is gone and there is nothing left to continue.
             pass
 
-    # Connecting already landed on the explorer, so reload to refetch the list
-    # with the response held back.
+    # Already on the explorer, so reload to refetch the list with the response
+    # held back.
     page.route("**/api/db/tables", slow)
     page.reload()
     expect(page.get_by_test_id("explorer-tables-loading")).to_be_visible()
