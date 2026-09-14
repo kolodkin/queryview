@@ -85,7 +85,6 @@ function QueryView({
   const [acDismissed, setAcDismissed] = useState(false)
   const [connNames, setConnNames] = useState<string[]>([])
   const promptRef = useRef<HTMLInputElement>(null)
-  // Wraps the input and its suggestion list; an outside press dismisses them.
   const promptFormRef = useRef<HTMLFormElement>(null)
   // Saved queries surfaced next to the title on the landing screen, so they're
   // reachable without first typing `query`. Scoped like the panel's dropdown.
@@ -336,9 +335,6 @@ function QueryView({
       // Accept the highlighted row rather than completing/submitting.
       e.preventDefault()
       acceptSuggestion(suggestions[acActive])
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      setAcDismissed(true)
     }
   }
 

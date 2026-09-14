@@ -33,7 +33,6 @@ function Shell() {
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   const [workspace, setWorkspace] = useState(activeWorkspace())
-  // Each popover's wrapper (trigger + panel), so an outside press dismisses it.
   const dbRef = useRef<HTMLDivElement>(null)
   const agentRef = useRef<HTMLDivElement>(null)
   useDismiss(dbRef, dbOpen, () => setDbOpen(false))

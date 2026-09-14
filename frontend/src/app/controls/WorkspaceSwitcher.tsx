@@ -27,10 +27,11 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [name, setName] = useState('')
   const [remote, setRemote] = useState('')
   const [branch, setBranch] = useState('')
-  // Wraps the trigger and both panels, so an outside press dismisses either.
   const rootRef = useRef<HTMLDivElement>(null)
-  useDismiss(rootRef, open, () => setOpen(false))
-  useDismiss(rootRef, manage, () => setManage(false))
+  useDismiss(rootRef, open || manage, () => {
+    setOpen(false)
+    setManage(false)
+  })
 
   async function reload() {
     try {
