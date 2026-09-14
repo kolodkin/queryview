@@ -68,6 +68,10 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
     expect(output).not_to_contain_text("gamma")
     shot(f"{case.id} explorer page 2")
 
+    # Short values are left alone: no per-cell expand button in a normal table.
+    expect(output.locator('[data-testid="cell-expand"]')).to_have_count(0)
+    shot(f"{case.id} explorer short cells stay plain")
+
 
 def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: Page) -> None:
     """Adding an order-by column and flipping its direction fire two browse runs

@@ -190,6 +190,30 @@ its default view (and is the way to opt out). Default views apply to the
 on-screen table only — **Download CSV** keeps the database's own serialized
 value.
 
+## Long values
+
+Result columns are a **fixed 50 characters wide**, so one long-text column can't
+stretch the grid and push the others off-screen. A longer value **scrolls inside
+its own cell**; values that fit are untouched.
+
+An overflowing cell gets a button at its **left edge**, outside the scroller so
+it stays put as the text moves. It opens the **cell popup** on the whole value,
+and its glyph says what that value looks like:
+
+- **`{ }`** — parses as JSON or YAML: the popup opens on a **collapsible tree**
+  of the parsed document with a **Raw** toggle. Containers below the top level
+  start folded, so a large document opens readable.
+- **`⤢`** — long text that is neither: the popup shows it as wrapped raw text.
+
+Detection is deliberately conservative, because almost any string is valid YAML.
+JSON is accepted whenever it parses to an **object or array**; YAML only for text
+that **already spans lines** and also yields one — so `status: healthy`, a
+Windows path, or a line of prose stay plain text.
+
+The [explorer](./explorer.md) shares this grid, so it behaves identically. An
+explicit `cell_view` still decides how a cell *renders*; the popup always shows
+the underlying value.
+
 ## Query parameters
 
 A predefined query can declare **dropdown selectors** whose chosen value is
