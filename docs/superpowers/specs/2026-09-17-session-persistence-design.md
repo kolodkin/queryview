@@ -86,6 +86,51 @@ wraps both keys in try/catch with an in-memory fallback: the tab works normally
 for its lifetime, it just cannot re-attach after a refresh. This replaces the
 `stubBrokenStorage` handling being deleted.
 
+## What this puts on the backend
+
+Worth stating outright: after this change the backend owns **almost all UI
+state**. Route and URL, connection, database, workspace, SQL text, pagination,
+column visibility, sort and the explorer sidebar width all live in SQLite and
+round-trip through the API. Only transient render state stays in the browser.
+
+This is not an incidental outcome — it follows from two decisions compounding.
+Per-session connections forced the server to key state by session id, and
+removing the `localStorage` duplication moved everything else across for
+consistency. It buys a single source of truth that survives a backend restart,
+gives each tab real isolation, makes the dropdown a plain `GET`, and lets the
+agent read the session directly instead of the UI mirroring state to it.
+
+What it costs, honestly:
+
+- **Presentational state is now server-owned.** A sidebar width is a browser
+  concern, and it now has a home in the server's schema. The `ui` JSON blob
+  keeps it out of migrations, but not out of the backend.
+- **Every remembered change is a network write.** Patches are debounced,
+  fire-and-forget and last-write-wins; the UI must render correctly when they
+  fail and must never block on them. A failed patch loses a remembered
+  preference, never the user's work in the live tab.
+- **First paint waits on `attach`.** The existing `sessionChecked` gate already
+  does this for the connection probe, but it now gates more of the page.
+- **Frontend tests fake the network, not storage.** `testStorage.ts` goes; the
+  equivalent fixture is a fake session client.
+- **The backend takes on a second role.** It was a data API; it is now also a
+  UI state store.
+
+**The bound on it:** `ui` holds only what a reload must restore. Transient state
+— whether a popover is open, filter text, a drag in progress, fetched result
+rows — stays in React and is never patched. New entries in `ui` need that
+justification.
+
+**The alternative not taken** was to partition by ownership rather than move
+everything: the server keeps session-defining state (URL, connection, database,
+workspace, SQL), the browser keeps pure view chrome (sidebar width, column
+visibility) globally rather than per session. That is not duplication — no key
+would live in two stores — and it keeps presentational concerns out of the
+schema. It was rejected because restoring a session would then restore only part
+of the picture, and "a session *is* the UI state" stops being true. If that
+trade is judged wrong later, this is the seam to cut along, and `ui` is where
+the cut lands.
+
 ## Claim protocol
 
 Two `sessionStorage` keys: `qv_tab`, a token minted per tab, and `qv_session`,
@@ -244,5 +289,8 @@ and `workspace.test.ts` loses its localStorage-fallback case.
 - The cookie→header switch touches every existing backend test's request setup.
 - Lifting `QueryView.tsx` state into a patched store is the largest single edit
   (1289 lines today).
+- Server-owned UI state means a patch path that is easy to make chatty or
+  blocking by accident. Keeping patches debounced, fire-and-forget and off the
+  render path is a standing constraint, not a one-time task.
 
 Neither changes the design; both are where the time goes.
