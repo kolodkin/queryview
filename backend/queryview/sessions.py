@@ -305,3 +305,40 @@ async def touch_for_test(
             row.last_active_at = last_active_at
         s.add(row)
         await s.commit()
+
+
+async def set_connection(sid: str, connection_name: str | None, database: str | None = None) -> None:
+    """Record which connection a session is on. A None name is the durable
+    disconnected state — there is no separate 'disconnected' set."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = await s.get(Session, sid)
+        if row is None:
+            return
+        row.connection_name = connection_name
+        row.database = database
+        row.last_active_at = _now_ms()
+        s.add(row)
+        await s.commit()
+
+
+async def set_database(sid: str, database: str | None) -> None:
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = await s.get(Session, sid)
+        if row is None:
+            return
+        row.database = database
+        row.last_active_at = _now_ms()
+        s.add(row)
+        await s.commit()
+
+
+async def database_of(sid: str) -> str | None:
+    rec = await get_session_rec(sid)
+    return rec.database if rec else None
+
+
+async def workspace_of(sid: str) -> str | None:
+    rec = await get_session_rec(sid)
+    return rec.workspace if rec else None
