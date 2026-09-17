@@ -30,9 +30,10 @@ export type SessionPatch = { url?: string; label?: string; workspace?: string }
 // Matches the backend's claim TTL of 30s: a heartbeat every 10s leaves room for
 // two missed beats before another tab may take the session.
 const HEARTBEAT_MS = 10_000
-// Long enough that typing SQL coalesces into one write, short enough that a
-// refresh a moment later still finds it.
-const DEBOUNCE_MS = 400
+// A backstop, not the main mechanism: views flush when the user leaves them
+// (see the focus-out effect in QueryView), and `pagehide` beacons whatever is
+// still pending. This only bounds what a tab that dies mid-edit can lose.
+const DEBOUNCE_MS = 5_000
 
 type PendingPatch = SessionPatch & { ui?: Record<string, Record<string, unknown>> }
 
@@ -143,7 +144,9 @@ export function viewState(view: string): Record<string, unknown> {
   return state?.ui?.[view] ?? {}
 }
 
-// Debounced: this is the one that coalesces, because it carries typing.
+// Queues a view's change and lets the backstop timer carry it. Views that know
+// when the user is done — the query panel, on focus-out — call flushPatches()
+// themselves rather than waiting it out.
 export function patchView(view: string, changes: Record<string, unknown>): void {
   if (!state) return
   state.ui = { ...state.ui, [view]: { ...(state.ui[view] ?? {}), ...changes } }

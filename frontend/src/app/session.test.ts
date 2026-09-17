@@ -91,7 +91,7 @@ describe('apiFetch', () => {
 })
 
 describe('patchView', () => {
-  it('coalesces rapid changes into one request', async () => {
+  it('coalesces queued changes into one backstop write', async () => {
     vi.useFakeTimers()
     stubTabStorage({ [TAB_KEY]: 'tab-1', [SESSION_KEY]: 's1' })
     const fetchMock = vi
@@ -105,7 +105,11 @@ describe('patchView', () => {
     patchView('query', { sql: 'S' })
     patchView('query', { sql: 'SE' })
     patchView('query', { sql: 'SEL' })
-    await vi.advanceTimersByTimeAsync(500)
+    // Nothing goes out while the user is still in the panel...
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(fetchMock).not.toHaveBeenCalled()
+    // ...and the backstop eventually sends one write, not three.
+    await vi.advanceTimersByTimeAsync(5_000)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
@@ -142,7 +146,7 @@ describe('patchView', () => {
     fetchMock.mockRejectedValue(new Error('offline'))
 
     patchView('query', { sql: 'SELECT 1' })
-    await vi.advanceTimersByTimeAsync(500)
+    await vi.advanceTimersByTimeAsync(6_000)
 
     await expect(flushPatches()).resolves.toBeUndefined()
     vi.useRealTimers()

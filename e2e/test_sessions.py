@@ -23,8 +23,8 @@ def test_refresh_keeps_the_query_and_the_connection(seeded_duckdb, page: Page) -
     _connect_duckdb(page, seeded_duckdb)
     open_query_panel(page)
     page.get_by_test_id("query-input").fill("SELECT 1 -- remembered")
-    # The write-back is debounced; give it room to land before reloading.
-    page.wait_for_timeout(900)
+    # No focus-out here, so the reload's pagehide beacon is what carries it.
+    page.wait_for_timeout(300)
 
     page.reload(wait_until="networkidle")
 
@@ -49,7 +49,7 @@ def test_a_second_tab_gets_its_own_session(seeded_duckdb, page: Page, context) -
     _connect_duckdb(page, seeded_duckdb)
     open_query_panel(page)
     page.get_by_test_id("query-input").fill("SELECT 1 -- first tab")
-    page.wait_for_timeout(900)
+    page.wait_for_timeout(300)
     first = page.evaluate("() => sessionStorage.getItem('qv_session')")
 
     second = context.new_page()
@@ -98,7 +98,7 @@ def test_a_restored_panel_does_not_page_a_new_query_into_nothing(seeded_duckdb, 
     expect(page.get_by_test_id("query-output")).to_contain_text("alpha")
     page.get_by_test_id("query-next").click()
     expect(page.get_by_test_id("query-output")).to_contain_text("beta")
-    page.wait_for_timeout(900)
+    page.wait_for_timeout(300)
 
     page.reload(wait_until="networkidle")
     open_query_panel(page)

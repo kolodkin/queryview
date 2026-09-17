@@ -111,8 +111,19 @@ in, which is what lets two tabs sit on two different databases. The one
 exception is the remote-control SSE stream, which takes `?session=` because
 `EventSource` cannot send headers.
 
-Writes are debounced (400ms) and fire-and-forget: the page never waits on one,
-and a lost patch costs a remembered preference, never your work in the live tab.
+**Nothing is written while you are still typing.** Leaving the query panel is
+what "done editing" means, so that is when its state is written — the same
+focus-out signal the [edit lock](./remote.md) uses, so both agree on when you
+have finished. Discrete acts (a navigation, a workspace switch, a rename) write
+at once.
+
+Everything else rides two backstops: `pagehide` beacons whatever is still
+pending, covering a reload, a close or a navigation away, and a 5s timer bounds
+what a tab that dies mid-edit can lose. The explorer's sidebar width has no
+focus to leave, so it is written by those alone.
+
+Writes are fire-and-forget — the page never waits on one, and a lost patch costs
+a remembered preference, never your work in the live tab.
 
 The `/api/sessions/*` shapes are in [api.md](./api.md). Connection and database
 are not among them — `/api/db/connect`, `/open` and `/database` write those

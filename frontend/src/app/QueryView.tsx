@@ -31,7 +31,7 @@ import { suggestCompletions, type Suggestion } from './promptSuggestions'
 import { filterDatabases } from './databaseFilter'
 import { postLock } from './sessionLock'
 import { apiFetch } from './api'
-import { activeWorkspace, patchView, viewState } from './session'
+import { activeWorkspace, flushPatches, patchView, viewState } from './session'
 
 type TestResult = { ok: boolean; message: string }
 
@@ -625,9 +625,9 @@ function QueryPanel({
   const [orderBy, setOrderBy] = useState<OrderCol[]>(() =>
     Array.isArray(saved.orderBy) ? (saved.orderBy as OrderCol[]) : [],
   )
-  // Write-back is debounced inside session.ts, so this coalesces while typing.
-  // The first run is skipped: these are seeded from the session, so it would
-  // patch the row with what it just read.
+  // Queue the panel's state; the write itself lands on focus-out, below. The
+  // first run is skipped: these are seeded from the session, so it would patch
+  // the row with what it just read.
   const restored = useRef(true)
   useEffect(() => {
     if (restored.current) {
@@ -640,9 +640,31 @@ function QueryPanel({
   const [cellViewModalOpen, setCellViewModalOpen] = useState(false)
   // Transient "Copied" feedback for the copy-name button.
   const [copiedName, setCopiedName] = useState(false)
-  // Panel root, for the edit-lock focus tracker.
+  // Panel root, for the focus trackers below.
   const panelRef = useRef<HTMLElement>(null)
   const blurTimer = useRef<number | undefined>(undefined)
+  const flushTimer = useRef<number | undefined>(undefined)
+
+  // Leaving the panel is what "done editing" means, so that is when the
+  // session write lands — not on a timer while you are still typing. The same
+  // signal the edit lock uses, so both agree on when you have finished.
+  useEffect(() => {
+    const el = panelRef.current
+    if (!el) return
+    const onFocusOut = () => {
+      // Moving between inputs fires focusout then focusin; only a real exit
+      // counts.
+      window.clearTimeout(flushTimer.current)
+      flushTimer.current = window.setTimeout(() => {
+        if (!el.contains(document.activeElement)) void flushPatches()
+      }, 150)
+    }
+    el.addEventListener('focusout', onFocusOut)
+    return () => {
+      el.removeEventListener('focusout', onFocusOut)
+      window.clearTimeout(flushTimer.current)
+    }
+  }, [])
 
   // Edit lock: acquire on panel focus (+ ~10s heartbeat to refresh the 30s TTL),
   // release on blur out of the panel. Advisory — postLock swallows errors.
