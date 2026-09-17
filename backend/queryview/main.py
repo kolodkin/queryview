@@ -4,7 +4,6 @@ SERVE_STATIC=1) serving the built SPA with an index.html fallback."""
 from __future__ import annotations
 
 import os
-import uuid
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -19,7 +18,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 
-from . import gitsync, remote, workspaces, yamlio
+from . import gitsync, remote, sessions, workspaces, yamlio
 from .connect import (
     _ensure_schema,
     connect_new,
@@ -116,16 +115,12 @@ async def mcp_slash_redirect() -> RedirectResponse:
 
 
 @app.middleware("http")
-async def session_cookie(request: Request, call_next):
-    sid = request.cookies.get("qv_session")
-    new_session = sid is None
-    if not sid:
-        sid = str(uuid.uuid4())
-    request.state.sid = sid
-    response = await call_next(request)
-    if new_session:
-        response.set_cookie("qv_session", sid, path="/", httponly=True, samesite="lax")
-    return response
+async def session_header(request: Request, call_next):
+    """Identify the session from the header the SPA sends. The `qv_session`
+    cookie is still honored as a fallback while the frontend is migrated; it is
+    removed once nothing depends on it."""
+    request.state.sid = request.headers.get("X-QV-Session") or request.cookies.get("qv_session") or ""
+    return await call_next(request)
 
 
 @app.get("/api/health")
@@ -136,6 +131,87 @@ async def health() -> dict[str, str]:
 @app.get("/api/session")
 async def session(request: Request) -> dict[str, Any]:
     return await get_session(request.state.sid)
+
+
+def _session_payload(rec: sessions.SessionRec) -> dict[str, Any]:
+    return {
+        "id": rec.id,
+        "label": sessions.display_label(rec),
+        "pinned": rec.label is not None,
+        "connection": rec.connection_name,
+        "database": rec.database,
+        "workspace": rec.workspace,
+        "url": rec.url,
+        "ui": rec.ui,
+    }
+
+
+# Resolve this tab's session: a refresh re-claims its own, a new tab resumes the
+# last unheld session or gets a fresh one. Also serves as the claim heartbeat.
+@app.post("/api/sessions/attach")
+async def sessions_attach(request: Request):
+    b = await _read_json(request) or {}
+    tab = _clean_str(b.get("tab"))
+    if not tab:
+        return JSONResponse({"ok": False, "message": "tab is required"}, status_code=400)
+    raw_id = _clean_str(b.get("session_id"))
+    rec, created = await sessions.attach(tab, raw_id or None)
+    return {"ok": True, "created": created, "session": _session_payload(rec)}
+
+
+# Switch this tab to a specific session, or (id omitted/null) to a new one.
+@app.post("/api/sessions/select")
+async def sessions_select(request: Request):
+    b = await _read_json(request) or {}
+    tab = _clean_str(b.get("tab"))
+    if not tab:
+        return JSONResponse({"ok": False, "message": "tab is required"}, status_code=400)
+    raw_id = _clean_str(b.get("id"))
+    rec, message = await sessions.select_session(tab, raw_id or None)
+    if rec is None:
+        return JSONResponse({"ok": False, "message": message}, status_code=409)
+    return {"ok": True, "session": _session_payload(rec)}
+
+
+@app.get("/api/sessions")
+async def sessions_list() -> dict[str, Any]:
+    return {"sessions": await sessions.list_sessions()}
+
+
+@app.patch("/api/sessions/{sid}")
+async def sessions_patch(sid: str, request: Request):
+    b = await _read_json(request) or {}
+    ui = b.get("ui")
+    ok = await sessions.patch_session(
+        sid,
+        url=b.get("url") if isinstance(b.get("url"), str) else None,
+        ui=ui if isinstance(ui, dict) else None,
+        label=b.get("label") if isinstance(b.get("label"), str) else None,
+        workspace=b.get("workspace") if isinstance(b.get("workspace"), str) else None,
+    )
+    if not ok:
+        return JSONResponse({"ok": False, "message": "unknown session"}, status_code=404)
+    return {"ok": True}
+
+
+@app.delete("/api/sessions/{sid}")
+async def sessions_delete(sid: str):
+    ok, message = await sessions.delete_session(sid)
+    if not ok:
+        status = 404 if message == "unknown session" else 409
+        return JSONResponse({"ok": False, "message": message}, status_code=status)
+    return {"ok": True}
+
+
+# Sent by the pagehide beacon so a closed tab frees its session immediately
+# rather than waiting out the claim TTL.
+@app.post("/api/sessions/release")
+async def sessions_release(request: Request):
+    b = await _read_json(request) or {}
+    tab = _clean_str(b.get("tab"))
+    if tab:
+        await sessions.release(tab)
+    return {"ok": True}
 
 
 # Drop this session's active connection (disconnect command).
