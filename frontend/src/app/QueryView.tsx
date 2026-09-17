@@ -32,6 +32,7 @@ import { suggestCompletions, type Suggestion } from './promptSuggestions'
 import { filterDatabases } from './databaseFilter'
 import { postLock } from './sessionLock'
 import { apiFetch } from './api'
+import { patchView, viewState } from './session'
 
 type TestResult = { ok: boolean; message: string }
 
@@ -599,9 +600,13 @@ function QueryPanel({
   onPushConsumed?: () => void
   remoteId?: string | null
 }) {
-  const [sql, setSql] = useState('')
-  const [limit, setLimit] = useState(100)
-  const [offset, setOffset] = useState(0)
+  // Restored from the session so a refresh keeps the query you were writing.
+  // Deliberately inputs only: results are not restored, so a reload can never
+  // re-fire an expensive query. The explorer, being URL-driven, still refetches.
+  const saved = viewState('query')
+  const [sql, setSql] = useState(() => (typeof saved.sql === 'string' ? saved.sql : ''))
+  const [limit, setLimit] = useState(() => (typeof saved.limit === 'number' ? saved.limit : 100))
+  const [offset, setOffset] = useState(() => (typeof saved.offset === 'number' ? saved.offset : 0))
   const [rows, setRows] = useState(4)
   const [result, setResult] = useState<QueryRows | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -609,12 +614,21 @@ function QueryPanel({
   const [predefined, setPredefined] = useState<PredefinedQuery[]>([])
   const [selectedName, setSelectedName] = useState('')
   const [fields, setFields] = useState<Field[]>([])
-  const [visibleCols, setVisibleCols] = useState<string[]>([])
+  const [visibleCols, setVisibleCols] = useState<string[]>(() =>
+    Array.isArray(saved.visibleCols) ? (saved.visibleCols as string[]) : [],
+  )
   // Column → type from the result's own metadata. Drives the built-in default
   // views; independent of the Fields picker so it never resets the user's
   // column selection.
   const colTypes = useMemo(() => (result ? columnTypes(result) : {}), [result])
-  const [orderBy, setOrderBy] = useState<OrderCol[]>([])
+  const [orderBy, setOrderBy] = useState<OrderCol[]>(() =>
+    Array.isArray(saved.orderBy) ? (saved.orderBy as OrderCol[]) : [],
+  )
+  // Write-back is debounced inside session.ts, so this coalesces while typing.
+  useEffect(() => {
+    patchView('query', { sql, limit, offset, visibleCols, orderBy })
+  }, [sql, limit, offset, visibleCols, orderBy])
+
   const [cellViewModalOpen, setCellViewModalOpen] = useState(false)
   // Transient "Copied" feedback for the copy-name button.
   const [copiedName, setCopiedName] = useState(false)
