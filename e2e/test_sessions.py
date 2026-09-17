@@ -102,6 +102,9 @@ def test_a_restored_panel_does_not_page_a_new_query_into_nothing(seeded_duckdb, 
 
     page.reload(wait_until="networkidle")
     open_query_panel(page)
+    # Wait for the restore before running: the assertion is about which page the
+    # restored panel runs, so the SQL has to be back first.
+    expect(page.get_by_test_id("query-input")).to_have_value("SELECT name FROM items ORDER BY id")
     page.get_by_test_id("query-run").click()
 
     # Back at the first page, not stranded past the end of a fresh result set.
