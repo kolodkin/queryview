@@ -92,15 +92,15 @@ its panel name (e.g. `churn: Unknown table …`) so it's clear which one to fix.
 
 The HTML renders in `<iframe sandbox="allow-scripts" srcdoc=…>` **without**
 `allow-same-origin`, giving it an opaque origin: it can run JS and load CDN
-assets but cannot read the app's cookies, `localStorage`, or call `/api/*` with
-credentials. All data reaches it only through the injected `window.queries`,
+assets but cannot read the app's storage or call `/api/*` as the session (it
+has neither the session id nor any credential). All data reaches it only through the injected `window.queries`,
 whose JSON has `<` escaped so result data containing `</script>` can't break out
 of the prologue.
 
 Like the rest of the app (and [predefined queries](./query.md)), persisted
 dashboards are **global**, shared via SQLite, and keyed by name. The agent HTML
 is untrusted and confined to the sandbox; it never sees connection secrets or
-the session cookie.
+the session id.
 
 ## Related docs
 

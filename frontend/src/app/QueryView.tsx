@@ -27,10 +27,11 @@ import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { useDismiss } from './controls/useDismiss'
 import { downloadText } from './yamlio'
-import { activeWorkspace } from './workspace'
 import { suggestCompletions, type Suggestion } from './promptSuggestions'
 import { filterDatabases } from './databaseFilter'
 import { postLock } from './sessionLock'
+import { apiFetch } from './api'
+import { activeWorkspace, flushPatches, patchView, viewState } from './session'
 
 type TestResult = { ok: boolean; message: string }
 
@@ -89,7 +90,7 @@ function QueryView({
   // and whenever the set may have changed (new connection created).
   const refreshConnections = useCallback(async () => {
     try {
-      const res = await fetch('/api/db/connections')
+      const res = await apiFetch('/api/db/connections')
       const data = await res.json()
       setConnNames(Array.isArray(data.names) ? (data.names as string[]) : [])
     } catch {
@@ -115,7 +116,7 @@ function QueryView({
 
   async function openSaved(name: string) {
     try {
-      const res = await fetch('/api/db/open', {
+      const res = await apiFetch('/api/db/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -213,7 +214,7 @@ function QueryView({
   // bare command prompt. Saved connections survive — `connect <name>` reopens.
   async function disconnect() {
     try {
-      await fetch('/api/db/disconnect', { method: 'POST' })
+      await apiFetch('/api/db/disconnect', { method: 'POST' })
     } catch {
       /* a failed disconnect still clears the UI; the session is best-effort */
     }
@@ -225,7 +226,7 @@ function QueryView({
 
   async function selectDatabase(database: string) {
     if (!connection) return
-    const res = await fetch('/api/db/database', {
+    const res = await apiFetch('/api/db/database', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ database }),
@@ -412,7 +413,7 @@ function ConnectionForm({
     setBusy(true)
     setResult(null)
     try {
-      const res = await fetch('/api/db/test', {
+      const res = await apiFetch('/api/db/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: body(),
@@ -429,7 +430,7 @@ function ConnectionForm({
     setBusy(true)
     setResult(null)
     try {
-      const res = await fetch('/api/db/connect', {
+      const res = await apiFetch('/api/db/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: body(),
@@ -598,8 +599,14 @@ function QueryPanel({
   onPushConsumed?: () => void
   remoteId?: string | null
 }) {
-  const [sql, setSql] = useState('')
-  const [limit, setLimit] = useState(100)
+  // Restored from the session, inputs only: results are deliberately not, so a
+  // reload can never re-fire an expensive query.
+  const saved = viewState('query')
+  const [sql, setSql] = useState(() => (typeof saved.sql === 'string' ? saved.sql : ''))
+  const [limit, setLimit] = useState(() => (typeof saved.limit === 'number' ? saved.limit : 100))
+  // Not restored: an offset is a cursor into a result set, and results are
+  // deliberately not restored. Bringing one back points a fresh query at a page
+  // of rows that no longer exists, which returns nothing.
   const [offset, setOffset] = useState(0)
   const [rows, setRows] = useState(4)
   const [result, setResult] = useState<QueryRows | null>(null)
@@ -608,18 +615,56 @@ function QueryPanel({
   const [predefined, setPredefined] = useState<PredefinedQuery[]>([])
   const [selectedName, setSelectedName] = useState('')
   const [fields, setFields] = useState<Field[]>([])
-  const [visibleCols, setVisibleCols] = useState<string[]>([])
+  const [visibleCols, setVisibleCols] = useState<string[]>(() =>
+    Array.isArray(saved.visibleCols) ? (saved.visibleCols as string[]) : [],
+  )
   // Column → type from the result's own metadata. Drives the built-in default
   // views; independent of the Fields picker so it never resets the user's
   // column selection.
   const colTypes = useMemo(() => (result ? columnTypes(result) : {}), [result])
-  const [orderBy, setOrderBy] = useState<OrderCol[]>([])
+  const [orderBy, setOrderBy] = useState<OrderCol[]>(() =>
+    Array.isArray(saved.orderBy) ? (saved.orderBy as OrderCol[]) : [],
+  )
+  // Queue the panel's state; the write itself lands on focus-out, below. The
+  // first run is skipped: these are seeded from the session, so it would patch
+  // the row with what it just read.
+  const restored = useRef(true)
+  useEffect(() => {
+    if (restored.current) {
+      restored.current = false
+      return
+    }
+    patchView('query', { sql, limit, visibleCols, orderBy })
+  }, [sql, limit, visibleCols, orderBy])
+
   const [cellViewModalOpen, setCellViewModalOpen] = useState(false)
   // Transient "Copied" feedback for the copy-name button.
   const [copiedName, setCopiedName] = useState(false)
-  // Panel root, for the edit-lock focus tracker.
+  // Panel root, for the focus trackers below.
   const panelRef = useRef<HTMLElement>(null)
   const blurTimer = useRef<number | undefined>(undefined)
+  const flushTimer = useRef<number | undefined>(undefined)
+
+  // Leaving the panel is what "done editing" means, so that is when the
+  // session write lands — not on a timer while you are still typing. The same
+  // signal the edit lock uses, so both agree on when you have finished.
+  useEffect(() => {
+    const el = panelRef.current
+    if (!el) return
+    const onFocusOut = () => {
+      // Moving between inputs fires focusout then focusin; only a real exit
+      // counts.
+      window.clearTimeout(flushTimer.current)
+      flushTimer.current = window.setTimeout(() => {
+        if (!el.contains(document.activeElement)) void flushPatches()
+      }, 150)
+    }
+    el.addEventListener('focusout', onFocusOut)
+    return () => {
+      el.removeEventListener('focusout', onFocusOut)
+      window.clearTimeout(flushTimer.current)
+    }
+  }, [])
 
   // Edit lock: acquire on panel focus (+ ~10s heartbeat to refresh the 30s TTL),
   // release on blur out of the panel. Advisory — postLock swallows errors.
@@ -703,7 +748,7 @@ function QueryPanel({
       const outcomes = await Promise.all(
         sqlSpecs.map(async (s) => {
           try {
-            const res = await fetch('/api/db/query', {
+            const res = await apiFetch('/api/db/query', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ query: s.optionsSql }),
@@ -825,7 +870,7 @@ function QueryPanel({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/db/describe', {
+      const res = await apiFetch('/api/db/describe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: applyParams(sql, paramDefs, paramValues) }),
@@ -861,7 +906,7 @@ function QueryPanel({
       // Substitute {name} placeholders from the param dropdowns. An override is
       // passed when a dropdown change triggers the run (its setState hasn't committed).
       const query = applyParams(q, paramDefs, paramOverride ?? paramValues)
-      const res = await fetch('/api/db/query', {
+      const res = await apiFetch('/api/db/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, limit: lim, offset: off, order_by: ord }),
@@ -901,7 +946,7 @@ function QueryPanel({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/db/query', {
+      const res = await apiFetch('/api/db/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -978,7 +1023,7 @@ function QueryPanel({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/predefined-queries', {
+      const res = await apiFetch('/api/predefined-queries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -3,8 +3,7 @@
 Connections have two halves: a **type** (the driver, e.g. `clickhouse`) and a
 **name** (your label, e.g. `clickhouse`, `prod-ch`). You create a connection
 once with `new <type>`, then open it by name with `connect <name>`. Connections
-are persisted in SQLite and the latest active one is re-connected automatically
-when a session starts.
+are persisted in SQLite, and a session reconnects whichever one it was last on.
 
 ## Storage & migrations
 
@@ -56,8 +55,8 @@ an unknown name reports `no connection named "<name>"`.
   pass/fail and nothing else: it does **not** save the connection, does not open
   a steady connection, and does not change what the session is connected to.
 - **Connect** — opens a *steady* connection: it validates, lists the databases,
-  **saves** the connection to SQLite, marks it the latest active, and makes it
-  the session's active connection. The UI then returns to the single prompt with
+  **saves** the connection to SQLite and makes it the session's active
+  connection. The UI then returns to the single prompt with
   a database picker.
 - **Active connection** — held at the **session** level (see
   [queryview.md](./queryview.md)). One per session.
@@ -140,13 +139,13 @@ CREATE TABLE connections (
   type           TEXT NOT NULL,   -- selects the driver (clickhouse | postgres | duckdb)
   config         TEXT NOT NULL,   -- base64(AES-GCM(json.dumps(driver config)))
   database       TEXT,            -- last selected database (nullable)
-  last_active_at INTEGER NOT NULL -- unix ms; the max is the "latest active"
+  last_active_at INTEGER NOT NULL -- unix ms; when it was last opened
 );
 ```
 
 - **Connect** upserts the row by `name` and bumps `last_active_at`.
 - **Selecting a database** updates `database` for that row.
-- **Latest active** = the row with the greatest `last_active_at`.
+- `last_active_at` orders the `connect` autocomplete, most recent first.
 
 Driver-specific fields (host/port/user/pass for ClickHouse and Postgres, a file
 path for DuckDB) are not columns — each driver serializes its own config to a
@@ -166,33 +165,40 @@ memoized on first use:
   (gitignored, mode `600`).
 
 If the key changes (or a row predates encryption) the value can't be decrypted;
-auto-connect simply skips that connection and the user reconnects, which
-re-encrypts it with the current key.
+a session on that connection reads as disconnected and the user reconnects,
+which re-encrypts it with the current key.
 
-## Sessions, cookies & auto-connect
+## Sessions & reconnecting
 
-Each browser session has **one active connection**, held server-side and keyed
-by a session **cookie** (`qv_session`, HttpOnly, set on first request). Different
-sessions (browsers / profiles) connect independently — one session switching
-connections doesn't affect another. Saved connections themselves are shared
-(stored once in SQLite); the *active* one is per session.
+Each **session** has one active connection, recorded on the session's own row in
+SQLite and keyed by the `X-QV-Session` header the SPA sends with every request.
+There is no session cookie: sessions are named by id, not by browser, so two
+tabs can sit on two different connections and databases at once. Saved
+connections themselves are shared (stored once in SQLite); the *active* one is
+per session. See [session.md](./session.md).
 
-When a session starts (a cookie the backend hasn't seen), `GET /api/session`
-lazily reconnects the **latest active** connection from SQLite, so a fresh
-session resumes where the last one left off:
+Opening the app attaches a session and reconnects whatever connection that
+session was on:
 
 - On success the SPA loads already connected, with the previously selected
-  database pre-selected and the indicator shown; opening `/` then lands on the
-  explorer (see [queryview.md](./queryview.md#landing-page)).
-- On failure (server down, bad credentials) the SPA falls back to the empty
-  prompt; the saved connection is left in place to retry.
+  database pre-selected and the indicator shown, on the page the session was
+  last on (see [queryview.md](./queryview.md#landing-page)).
+- On failure (server down, bad credentials) the SPA falls back to the prompt;
+  the saved connection is left in place to retry.
+- If the connection was since deleted, or its config no longer decrypts, the
+  session simply reads as disconnected. It is not repaired or repointed — you
+  reconnect.
 
-To open a **specific** connection on load instead, pass `…/?connection=<name>`
+A session with no connection (`connection_name IS NULL`) is disconnected, and
+stays that way across restarts: that is what `disconnect` records.
+
+To open a **specific** connection on load, pass `…/?connection=<name>`
 (equivalent to `connect <name>`); the SPA then cleans the URL so a later reload
 resumes normally.
 
-Per-session state lives in memory, so a backend restart drops it; the next
-request gets a new session that auto-connects the latest active connection.
+Only the live driver state — the decrypted config and the database list — is
+held in memory, as a cache. A backend restart costs one reconnect, not the
+session.
 
 ## API
 
@@ -205,7 +211,7 @@ request gets a new session that auto-connects the latest active connection.
 | POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |
 | GET    | `/api/predefined-queries`     | `?type=<connType>`                     | `{queries:[{query_name, query}]}`; global predefined queries by connection type |
 | POST   | `/api/predefined-queries`     | `{query_name, type, query}`            | `{ok}`; upserts a global predefined query |
-| GET    | `/api/session`                | —                                      | `{connected, name?, type?, databases?, database?}`; auto-connects latest active |
+| GET    | `/api/session`                | —                                      | `{connected, name?, type?, databases?, database?}` for the calling session |
 
 `test`/`connect` resolve the driver from `type` and validate per driver
 (ClickHouse/Postgres require `host` + `port` `1..65535`; DuckDB requires a

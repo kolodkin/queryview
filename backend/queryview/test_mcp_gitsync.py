@@ -44,9 +44,12 @@ def test_git_store_resolves_workspace_from_session(tmp_path, clone_base):
     wid = _run(resolve("t7-b")).id
     _run(save_predefined_query("sess q", "clickhouse", "SELECT 1", workspace_id=wid))
 
-    rid = remote.register()
+    from queryview import sessions
+
+    rec = _run(sessions.create_session())
+    _run(sessions.patch_session(rec.id, workspace="t7-b"))
+    rid = remote.register(rec.id)
     try:
-        remote.set_session_workspace(rid, "t7-b")
         r = _run(git_store("query", "sess q", "clickhouse", session_id=rid))
         assert r["ok"] is True and r["committed"] is True
         log = subprocess.run(

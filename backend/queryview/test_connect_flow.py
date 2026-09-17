@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 
 import queryview.connect as connect
+from queryview import sessions
 from queryview.drivers import DRIVERS
 from queryview.drivers.base import Column, QueryResult, QueryRows, TextResult
 
@@ -134,3 +135,46 @@ def test_list_tables_requires_database_when_picker_present(monkeypatch):
     assert out["ok"] and out["tables"] == [
         {"name": "t-of-a", "rows": 1, "bytes": None, "query": 'SELECT * FROM "t-of-a"'},
     ]
+
+
+def test_connect_writes_through_to_the_session_row(monkeypatch):
+    """The session row, not the in-memory map, is what survives a restart."""
+    monkeypatch.setitem(DRIVERS, "fake", _FakeDriver())
+    rec = _run(sessions.create_session())
+    _run(connect.connect_new(rec.id, "reporting", {"v": 1}, "fake"))
+    again = _run(sessions.get_session_rec(rec.id))
+    assert again is not None
+    assert again.connection_name == "reporting"
+
+
+def test_session_state_rebuilds_from_the_row_after_the_cache_is_dropped(monkeypatch):
+    monkeypatch.setitem(DRIVERS, "fake", _FakeDriver())
+    rec = _run(sessions.create_session())
+    _run(connect.connect_new(rec.id, "reporting", {"v": 1}, "fake"))
+    connect._sessions.clear()  # as a backend restart would
+    out = _run(connect.get_session(rec.id))
+    assert out["connected"] is True
+    assert out["name"] == "reporting"
+
+
+def test_disconnect_clears_the_connection_durably(monkeypatch):
+    monkeypatch.setitem(DRIVERS, "fake", _FakeDriver())
+    rec = _run(sessions.create_session())
+    _run(connect.connect_new(rec.id, "reporting", {"v": 1}, "fake"))
+    _run(connect.disconnect(rec.id))
+    connect._sessions.clear()
+    assert _run(connect.get_session(rec.id)) == {"connected": False}
+
+
+def test_two_sessions_keep_their_own_connections(monkeypatch):
+    """The old store reconnected whichever connection was globally latest, so
+    two sessions could not differ. Each session now resolves its own row."""
+    monkeypatch.setitem(DRIVERS, "fake", _FakeDriver())
+    a = _run(sessions.create_session())
+    b = _run(sessions.create_session())
+    _run(connect.connect_new(a.id, "reporting", {"v": 1}, "fake"))
+    _run(connect.connect_new(b.id, "warehouse", {"v": 1}, "fake"))
+    connect._sessions.clear()
+
+    assert _run(connect.get_session(a.id))["name"] == "reporting"
+    assert _run(connect.get_session(b.id))["name"] == "warehouse"

@@ -1,11 +1,10 @@
 """In-memory push hub for remote control: one message queue per armed browser
-channel, keyed by a random public id. SSE framing and disconnect handling live
+channel, keyed by the session id the channel belongs to. SSE framing and disconnect handling live
 in main.py."""
 
 from __future__ import annotations
 
 import asyncio
-import secrets
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -23,15 +22,9 @@ class _Channel:
     # treated as released (heartbeat lapsed / tab froze).
     lock_owner: str | None = None
     lock_touched: float = 0.0
-    # The database this browser session currently targets, reported by the UI so
-    # push_query/push_dashboard can echo it back to the agent.
-    database: str | None = None
-    # The workspace this browser session is on, reported by the UI like
-    # `database`, so session-scoped MCP tools resolve against it.
-    workspace: str | None = None
 
 
-# remote_id -> channel. Module-level, like connect.py's _sessions.
+# session id -> channel. Module-level, like connect.py's _sessions.
 _channels: dict[str, _Channel] = {}
 
 
@@ -66,50 +59,17 @@ def release(remote_id: str, owner: str) -> tuple[bool, str]:
     return True, "released"
 
 
-def register() -> str:
-    """Create a channel for a newly-armed browser session; return its public id.
-    The id is random and unrelated to the qv_session cookie, so the session secret
-    is never exposed to the agent."""
-    remote_id = secrets.token_hex(8)
-    _channels[remote_id] = _Channel()
-    return remote_id
+def register(session_id: str) -> str:
+    """Open a channel for a newly-armed session, keyed by the session's own id.
+    Arming is the gate: `unregister` on disarm makes every later push fail, so a
+    shared id grants nothing once the session is disarmed."""
+    _channels[session_id] = _Channel()
+    return session_id
 
 
 def unregister(remote_id: str) -> None:
     """Drop a channel (idempotent)."""
     _channels.pop(remote_id, None)
-
-
-def set_session_database(remote_id: str, database: str | None) -> bool:
-    """Record the database a live session targets (reported by the UI). Returns
-    False for an unknown/inactive session."""
-    channel = _channels.get(remote_id)
-    if channel is None:
-        return False
-    channel.database = database
-    return True
-
-
-def session_database(remote_id: str) -> str | None:
-    """The database a live session targets, or None if unknown/unreported."""
-    channel = _channels.get(remote_id)
-    return channel.database if channel else None
-
-
-def set_session_workspace(remote_id: str, workspace: str | None) -> bool:
-    """Record the workspace a live session is on (reported by the UI). Returns
-    False for an unknown/inactive session."""
-    channel = _channels.get(remote_id)
-    if channel is None:
-        return False
-    channel.workspace = workspace
-    return True
-
-
-def session_workspace(remote_id: str) -> str | None:
-    """The workspace a live session is on, or None if unknown/unreported."""
-    channel = _channels.get(remote_id)
-    return channel.workspace if channel else None
 
 
 def push(remote_id: str, payload: dict[str, Any]) -> tuple[bool, str]:

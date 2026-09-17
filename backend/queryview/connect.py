@@ -192,13 +192,6 @@ def _row_to_stored(row: Connection | None) -> StoredConnection | None:
     )
 
 
-async def _latest_active_connection() -> StoredConnection | None:
-    await _ensure_schema()
-    async with AsyncSession(_engine_for_db()) as s:
-        row = (await s.exec(select(Connection).order_by(col(Connection.last_active_at).desc()).limit(1))).first()
-        return _row_to_stored(row)
-
-
 async def list_connection_names() -> list[str]:
     """All saved connection names, most-recently-active first (for `connect`
     autocomplete)."""
@@ -248,18 +241,6 @@ _sessions: OrderedDict[str, _SessionState] = OrderedDict()
 MAX_SESSIONS = int(os.environ.get("MAX_SESSIONS", "1000"))
 
 
-# Cookies that explicitly disconnected. Kept distinct from "never seen" so
-# _ensure_session can suppress auto-reconnect for them; bounded like _sessions.
-_disconnected: OrderedDict[str, None] = OrderedDict()
-
-
-def _mark_disconnected(sid: str) -> None:
-    _disconnected[sid] = None
-    _disconnected.move_to_end(sid)
-    while len(_disconnected) > MAX_SESSIONS:
-        _disconnected.popitem(last=False)
-
-
 def _get_session_entry(sid: str) -> _SessionState | None:
     s = _sessions.get(sid)
     if s is not None:
@@ -295,22 +276,26 @@ async def _build_session(
 
 
 async def _ensure_session(sid: str) -> None:
-    """At session start (a cookie we haven't seen), reconnect the latest active
-    connection so a fresh session resumes where the last one left off."""
-    if _get_session_entry(sid):
+    """Rebuild this session's live driver state from its row. The row is the
+    durable truth; `_sessions` is only a cache of the decrypted config and the
+    database list, so a backend restart costs one reconnect, not the session."""
+    if not sid or _get_session_entry(sid):
         return
-    if sid in _disconnected:
+    rec = await sessions.get_session_rec(sid)
+    if rec is None or rec.connection_name is None:
         return
-    stored = await _latest_active_connection()
+    stored = await _connection_by_name(rec.connection_name)
     if stored is None:
+        # The connection was deleted, or its config no longer decrypts. The
+        # session stays as it is and reads as disconnected; the user reconnects.
         return
-    state, _ = await _build_session(stored.name, stored.config, stored.database, stored.type)
+    state, _ = await _build_session(stored.name, stored.config, rec.database, stored.type)
     if state is not None:
         _set_session_entry(sid, state)
 
 
 async def get_session(sid: str) -> dict[str, Any]:
-    """This session's state; auto-connects the latest active for an unseen cookie."""
+    """This session's connection state, rebuilt from its row if not cached."""
     await _ensure_session(sid)
     s = _get_session_entry(sid)
     if s is None:
@@ -329,9 +314,9 @@ async def connect_new(sid: str, name: str, config: DriverConfig, conn_type: str)
     state, message = await _build_session(name, config, None, conn_type)
     if state is None:
         return {"ok": False, "message": message}
-    _disconnected.pop(sid, None)
     _set_session_entry(sid, state)
     await _save_active_connection(name, config, conn_type)
+    await sessions.set_connection(sid, name)
     return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
 
 
@@ -348,18 +333,17 @@ async def open_saved(sid: str, name: str) -> dict[str, Any]:
     state, message = await _build_session(stored.name, stored.config, None, stored.type)
     if state is None:
         return {"ok": False, "message": message}
-    _disconnected.pop(sid, None)
     _set_session_entry(sid, state)
     await _touch_connection(name)
+    await sessions.set_connection(sid, name)
     return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
 
 
 async def disconnect(sid: str) -> dict[str, Any]:
-    """Drop this session's active connection and suppress auto-reconnect until
-    it connects again. Saved connections are left intact — `connect <name>`
-    still reopens them."""
+    """Drop this session's active connection. Saved connections are left intact
+    — `connect <name>` still reopens them."""
     _sessions.pop(sid, None)
-    _mark_disconnected(sid)
+    await sessions.set_connection(sid, None)
     return {"ok": True}
 
 
@@ -372,6 +356,7 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
         return {"ok": False, "message": "unknown database", "reason": "unknown"}
     s.database = database
     await _save_selected_database(s.name, database)
+    await sessions.set_database(sid, database)
     return {"ok": True}
 
 
@@ -452,3 +437,9 @@ async def export_csv(
     if not r.ok:
         return {"ok": False, "message": r.value}
     return {"ok": True, "output": r.value}
+
+
+# Imported last, not at the top: sessions.py builds on this module's engine and
+# schema helpers, so a top-level import here would be a cycle. connect.py calls
+# into it only to write a session's connection through.
+from . import sessions  # noqa: E402

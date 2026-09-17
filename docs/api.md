@@ -5,15 +5,17 @@ run over the HTTP interface with HTTP Basic auth and a 5s timeout. All
 connection-config bodies validate `host` (non-empty) and `port` (integer
 `1..65535`); validation errors return `400`.
 
-**Sessions:** the active connection is per session, keyed by an `HttpOnly`
-`qv_session` cookie (set on the first request). `/session`, `/connect`, `/open`,
-and `/database` act on the cookie's session, so different browsers connect
-independently. Saved connections are shared (SQLite).
+**Sessions:** every `/api/*` request names its session with an `X-QV-Session`
+header; there is no session cookie. A session is a persisted row holding one
+tab's UI state — route, connection, database, workspace, view settings — so two
+tabs can be on two different connections at once. `/session`, `/connect`,
+`/open` and `/database` act on the header's session. Saved connections are
+shared (SQLite). See [session.md](./session.md).
 
 | Method | Path                        | Body                                   | Description |
 | ------ | --------------------------- | -------------------------------------- | ----------- |
 | GET    | `/api/health`               | —                                      | Service health check. |
-| GET    | `/api/session`              | —                                      | This session's state `{connected, name?, type?, databases?, database?}`. For an unseen cookie, auto-connects the latest active connection. |
+| GET    | `/api/session`              | —                                      | This session's connection state `{connected, name?, type?, databases?, database?}`, reconnecting the connection the session is on. |
 | POST   | `/api/db/test`      | `{host,port,username,password}`        | Test a connection (test only — no save, no activation). `{ok, message}`. |
 | POST   | `/api/db/connect`   | `{name,host,port,username,password}`   | Create: open + save + activate for this session; lists databases (`new <type>` form). `{ok, name, databases}` \| `{ok:false, message}`. |
 | POST   | `/api/db/open`      | `{name}`                               | Open a saved connection by name for this session; lists databases (`connect <name>`). `{ok, name, databases}` \| `{ok:false, message}`. |
@@ -23,8 +25,14 @@ independently. Saved connections are shared (SQLite).
 | GET    | `/api/db/tables`    | —                                      | Tables of this session's selected database (the Explorer sidebar). `{ok, tables:[{name, rows, bytes, query}]}` — rows/bytes are engine estimates (null when untracked); `query` is the browse SELECT quoted with the driver's identifier quote — \| `{ok:false, message}`. No session / no database → `409`. |
 | GET    | `/api/predefined-queries`   | `?type=<connType>&workspace=`          | A workspace's predefined queries for a connection type (`workspace` defaults to `default`). `{queries:[{query_name, query, cell_view}]}`. `cell_view` is raw YAML text (or `null`) — see [query.md](./query.md#cell-views). |
 | POST   | `/api/predefined-queries`   | `{query_name, type, query, cell_view?, workspace?}` | Upsert a predefined query in a workspace. `cell_view` is optional raw YAML text, validated against the contract in [query.md](./query.md#cell-views); empty/missing clears it. `{ok}`; missing required fields or malformed `cell_view` → `400`. |
-| GET    | `/api/remote/events`        | —                                      | SSE stream a browser opens when "remote control" is armed. Emits a `ready` event (`{id}`) then `query` and `dashboard` events with pushed payloads (each emitted under the SSE event named by the payload's `type`). |
-| POST   | `/api/remote/push`          | `{session_id, query, limit?, offset?, order_by?, fields?}` | Push a query to a live session (the surface `push_query` and the e2e suite use). `{ok}` \| `{ok:false, message}` (unknown session). Empty `query`/`session_id` → `400`. |
+| POST   | `/api/sessions/attach`      | `{tab, session_id?}`                   | Resolve and claim this tab's session: its own id if free, else the most recent unheld session, else a new one. Doubles as the 30s-TTL claim heartbeat. `{ok, created, session}`. Missing `tab` → `400`. |
+| POST   | `/api/sessions/select`      | `{tab, id?}`                           | Switch this tab to session `id`, or to a brand-new session when `id` is omitted. `{ok, session}`; a session another live tab holds → `409`. |
+| GET    | `/api/sessions`             | —                                      | Every session, most recently active first: `{sessions:[{id, label, pinned, connection, database, held, last_active_at}]}`. |
+| PATCH  | `/api/sessions/{id}`        | `{url?, ui?, label?, workspace?}`      | Update a session. `ui` merges per view namespace; the rest replace. An empty `label` unpins. `{ok}`; unknown id → `404`. |
+| DELETE | `/api/sessions/{id}`        | —                                      | Delete a session. `{ok}`; held by a live tab → `409`, unknown → `404`. |
+| POST   | `/api/sessions/release`     | `{tab}`                                | Free whatever this tab holds — the `pagehide` beacon. `{ok}`. |
+| GET    | `/api/remote/events`        | `?session=<id>`                        | SSE stream a browser opens when "remote control" is armed; the channel is keyed by that session id (`EventSource` cannot send the header). Emits a `ready` event (`{id}`) then `query` and `dashboard` events with pushed payloads (each emitted under the SSE event named by the payload's `type`). |
+| POST   | `/api/remote/push`          | `{session_id, query, limit?, offset?, order_by?, fields?}` | Push a query to a live armed session (`session_id` is the session's id) (the surface `push_query` and the e2e suite use). `{ok}` \| `{ok:false, message}` (unknown session). Empty `query`/`session_id` → `400`. |
 | POST   | `/api/runqueries`           | `{connection, queries:{name:SQL}}`     | Run a dashboard's named queries against a saved connection (by name), using its stored database. Fail-fast: `{ok, results:{name:{col:[…]}}, meta:{name:[{name, type}]}}` (column-oriented, values typed as the driver returns them) on full success; on any failure an HTTP error with `{ok:false, message}` — `404` unknown connection, `400` bad body / no selected database / a failing query (message prefixed with the panel name). See [dashboard.md](./dashboard.md). |
 | POST   | `/api/dashboards`           | `{name, connection, html, queries, session_id?, workspace?}` | Upsert a dashboard by name within a workspace; with `session_id`, also pushes it to that live session. `{ok, persisted, pushed, message}`. Missing `name`/`connection`/`html` → `400`. |
 | GET    | `/api/dashboards`           | `?workspace=`                          | List a workspace's dashboards (no payload): `{dashboards:[{name, connection, updated_at}]}`, ordered by name. |
@@ -40,7 +48,7 @@ hubs the matching REST endpoints call. See [remote.md](./remote.md) and
 ## Persistence
 
 Connections are stored in SQLite via SQLModel. See [connect.md](./connect.md)
-for the schema and the session / auto-connect model.
+for the schema, and [session.md](./session.md) for the session model.
 
 ## Workspaces
 

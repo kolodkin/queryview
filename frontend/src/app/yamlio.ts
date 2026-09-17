@@ -2,6 +2,8 @@
 // docs/export-import.md). Export downloads a self-describing YAML document;
 // import posts one back — the document's `kind` decides what gets written.
 
+import { apiFetch } from './api'
+
 export type ExportKind = 'query' | 'dashboard' | 'workspace'
 
 export type ImportResult = {
@@ -52,7 +54,7 @@ export async function fetchExport(
 
 export async function importYaml(text: string, workspace?: string): Promise<ImportResult> {
   const params = workspace ? `?workspace=${encodeURIComponent(workspace)}` : ''
-  const res = await fetch(`/api/import${params}`, {
+  const res = await apiFetch(`/api/import${params}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-yaml' },
     body: text,
