@@ -1,11 +1,10 @@
-// The app's only browser-storage touchpoint. `sessionStorage` survives a
-// refresh but never crosses to a new tab, which is exactly the distinction the
-// session claim needs: a tab that already has an id is refreshing, a tab
-// without one is new. It holds identity only — the server holds state.
+// The app's only browser-storage touchpoint, and it holds identity only — the
+// server holds state. `sessionStorage` survives a refresh but never crosses to a
+// new tab, which is exactly the distinction the session claim needs.
 //
-// Access can throw (private windows, blocked site data), so every read and
-// write falls back to a module-level map: the tab works normally for its
-// lifetime, it just cannot re-attach after a refresh.
+// Access can throw (private windows, blocked site data), so reads and writes
+// fall back to a module-level map: the tab works for its lifetime, it just
+// cannot re-attach after a refresh.
 
 export const TAB_KEY = 'qv_tab'
 export const SESSION_KEY = 'qv_session'

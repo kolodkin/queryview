@@ -599,9 +599,8 @@ function QueryPanel({
   onPushConsumed?: () => void
   remoteId?: string | null
 }) {
-  // Restored from the session so a refresh keeps the query you were writing.
-  // Deliberately inputs only: results are not restored, so a reload can never
-  // re-fire an expensive query. The explorer, being URL-driven, still refetches.
+  // Restored from the session, inputs only: results are deliberately not, so a
+  // reload can never re-fire an expensive query.
   const saved = viewState('query')
   const [sql, setSql] = useState(() => (typeof saved.sql === 'string' ? saved.sql : ''))
   const [limit, setLimit] = useState(() => (typeof saved.limit === 'number' ? saved.limit : 100))

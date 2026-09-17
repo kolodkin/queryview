@@ -146,8 +146,8 @@ def _session_payload(rec: sessions.SessionRec) -> dict[str, Any]:
     }
 
 
-# Resolve this tab's session: a refresh re-claims its own, a new tab resumes the
-# last unheld session or gets a fresh one. Also serves as the claim heartbeat.
+# Resolve and claim this tab's session (see sessions.attach); doubles as the
+# claim heartbeat.
 @app.post("/api/sessions/attach")
 async def sessions_attach(request: Request):
     b = await _read_json(request) or {}

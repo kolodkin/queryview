@@ -210,18 +210,12 @@ async def _claim(s: AsyncSession, row: Session, tab: str, now: int) -> None:
 
 
 async def attach(tab: str, session_id: str | None) -> tuple[SessionRec, bool]:
-    """Resolve the session this tab should show, and claim it. The whole
-    new-tab-vs-refresh rule lives here, decided server-side in one pass so
-    concurrent tabs can't race:
+    """Resolve and claim the session this tab should show: the id it already has,
+    else the most recently active unheld session, else a fresh one.
 
-    1. the id the tab already has, if free or already its own — a refresh, or
-       the 10s heartbeat;
-    2. otherwise the most recently active unheld session — "restore the last
-       session if none is active";
-    3. otherwise a fresh one — "otherwise open a new session".
-
-    Step 1 falls through when another live tab holds that id: a duplicated tab
-    carries a copy of sessionStorage, and must not hijack the original.
+    Decided in one server-side pass so concurrent tabs can't race. The first
+    case falls through when another live tab holds that id — a duplicated tab
+    carries a copy of sessionStorage and must not hijack the original.
     """
     await _ensure_schema()
     now = _now_ms()

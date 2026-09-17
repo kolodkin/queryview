@@ -184,11 +184,9 @@ function Shell() {
     }
   }
 
-  // Attach before anything renders: the session decides which page we land on,
-  // which connection is live and what the query panel holds. A refresh
-  // re-attaches to the very same session; a new tab resumes the last unheld one
-  // or is given a fresh session. The server makes that call — see attach() in
-  // backend/queryview/sessions.py.
+  // The session decides the landing page, the live connection and what the
+  // query panel holds, so nothing renders until this resolves. Which session a
+  // tab gets is the server's call — see attach() in backend/queryview/sessions.py.
   useEffect(() => {
     let stopHeartbeat = () => {}
     void (async () => {
@@ -424,9 +422,8 @@ function Shell() {
         </Link>
       </nav>
 
-      {/* Nothing renders until the session has attached: every view
-          hydrates from it — the explorer's sidebar width, the query
-          panel's SQL — and would otherwise mount against an empty one. */}
+      {/* Every view hydrates from the session, so none may mount before the
+          attach has answered. */}
       {sessionChecked ? (
         <Routes>
           <Route

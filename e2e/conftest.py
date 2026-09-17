@@ -47,14 +47,13 @@ def open_query_panel(page: Page) -> None:
 def context(context, base_url: str):
     """Give every test its own session.
 
-    Session state lives on the server now, so a fresh browser context is no
-    longer fresh state: without this the next test's tab would resume the
-    previous test's session and inherit its remembered SQL, sidebar width and
-    workspace — the isolation the old per-context localStorage gave for free.
+    Session state lives on the server, so a fresh browser context is no longer
+    fresh state: without this a test would resume the previous one's session and
+    inherit its remembered SQL, sidebar width and workspace.
 
-    Only `qv_session` is seeded, never `qv_tab`: each page still mints its own
-    tab token, so a second tab opened inside one test finds the session held and
-    correctly starts its own, which is what the session tests assert.
+    Seeds `qv_session` but never `qv_tab`, so each page still mints its own tab
+    token and a second tab opened inside a test correctly starts its own
+    session.
     """
     tab = f"e2e-{uuid.uuid4().hex}"
     created = httpx.post(f"{base_url}/api/sessions/attach", json={"tab": tab})
