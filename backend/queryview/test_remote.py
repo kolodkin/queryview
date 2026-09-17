@@ -1,22 +1,21 @@
 import asyncio
 import time
+import uuid
 
 from fastapi.testclient import TestClient
 
-from queryview import remote
+from queryview import remote, sessions
 from queryview.main import app
 
 
-def test_register_returns_distinct_ids():
-    a = remote.register()
-    b = remote.register()
-    assert a and b and a != b
-    remote.unregister(a)
-    remote.unregister(b)
+def test_register_returns_the_session_id_it_was_given():
+    rid = uuid.uuid4().hex
+    assert remote.register(rid) == rid
+    remote.unregister(rid)
 
 
 def test_push_to_registered_session_delivers():
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         ok, msg = remote.push(rid, {"type": "query", "query": "SELECT 1"})
         assert ok is True
@@ -33,14 +32,14 @@ def test_push_to_unknown_session_fails():
 
 
 def test_unregister_makes_push_fail():
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     remote.unregister(rid)
     ok, _ = remote.push(rid, {"type": "query", "query": "SELECT 1"})
     assert ok is False
 
 
 def test_next_message_times_out_to_none():
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         assert asyncio.run(remote.next_message(rid, 0.05)) is None
     finally:
@@ -65,7 +64,7 @@ def test_push_endpoint_unknown_session_returns_not_delivered():
 
 def test_push_endpoint_delivers_to_registered_session():
 
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         client = TestClient(app)
         r = client.post(
@@ -92,7 +91,7 @@ def test_push_endpoint_delivers_to_registered_session():
 
 def test_push_endpoint_forwards_cell_view():
 
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         client = TestClient(app)
         yaml = "source:\n  type: custom\n  value: <span>{cell}</span>\n"
@@ -110,7 +109,7 @@ def test_push_endpoint_forwards_cell_view():
 
 def test_lock_endpoint_acquire_blocks_push():
 
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         client = TestClient(app)
         r = client.post("/api/remote/lock", json={"session_id": rid, "action": "acquire"})
@@ -127,7 +126,7 @@ def test_lock_endpoint_acquire_blocks_push():
 
 def test_lock_endpoint_bad_action_400():
 
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         client = TestClient(app)
         r = client.post("/api/remote/lock", json={"session_id": rid, "action": "nope"})
@@ -137,7 +136,7 @@ def test_lock_endpoint_bad_action_400():
 
 
 def test_acquire_blocks_push_then_release_allows():
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         ok, _ = remote.acquire(rid, "human")
         assert ok is True
@@ -151,7 +150,7 @@ def test_acquire_blocks_push_then_release_allows():
 
 
 def test_lock_ttl_expiry_allows_push():
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         remote.acquire(rid, "human")
         # Simulate the heartbeat lapsing: age the lock past its TTL.
@@ -163,7 +162,7 @@ def test_lock_ttl_expiry_allows_push():
 
 
 def test_push_rejects_invalid_order_by():
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         ok, msg = remote.push(rid, {"type": "query", "query": "SELECT 1", "order_by": [{"name": "id", "dir": "X"}]})
         assert ok is False and "invalid order_by" in msg
@@ -172,7 +171,7 @@ def test_push_rejects_invalid_order_by():
 
 
 def test_push_rejects_malformed_cell_view():
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         ok, msg = remote.push(rid, {"type": "query", "query": "SELECT 1", "cell_view": "col: [unclosed"})
         assert ok is False and "invalid cell_view" in msg
@@ -181,7 +180,7 @@ def test_push_rejects_malformed_cell_view():
 
 
 def test_release_by_nonowner_is_noop():
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         remote.acquire(rid, "human")
         remote.release(rid, "agent")  # wrong owner: must not clear
@@ -193,7 +192,7 @@ def test_release_by_nonowner_is_noop():
 
 def test_push_endpoint_blank_cell_view_is_none():
 
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         client = TestClient(app)
         r = client.post(
@@ -208,53 +207,39 @@ def test_push_endpoint_blank_cell_view_is_none():
         remote.unregister(rid)
 
 
-def test_session_database_set_and_read():
-    rid = remote.register()
+# --- the channel is the session ------------------------------------------
+
+
+def test_register_keys_the_channel_by_the_session_id():
+    rec = asyncio.run(sessions.create_session())
+    remote.register(rec.id)
     try:
-        assert remote.session_database(rid) is None
-        assert remote.set_session_database(rid, "acme_db") is True
-        assert remote.session_database(rid) == "acme_db"
+        ok, message = remote.push(rec.id, {"type": "query", "query": "SELECT 1"})
+        assert ok, message
     finally:
-        remote.unregister(rid)
+        remote.unregister(rec.id)
 
 
-def test_set_session_database_unknown_session():
-    assert remote.set_session_database("deadbeef", "x") is False
+def test_push_to_an_unarmed_session_is_refused():
+    """Disarming still revokes: the id alone is not access."""
+    rec = asyncio.run(sessions.create_session())
+    remote.unregister(rec.id)
+    ok, message = remote.push(rec.id, {"type": "query", "query": "SELECT 1"})
+    assert ok is False
+    assert message == "unknown or inactive session"
 
 
-def test_remote_db_endpoint_sets_channel_database():
-
-    rid = remote.register()
-    try:
-        client = TestClient(app)
-        r = client.post("/api/remote/db", json={"session_id": rid, "database": "d1"})
-        assert r.json()["ok"] is True
-        assert remote.session_database(rid) == "d1"
-    finally:
-        remote.unregister(rid)
-
-
-def test_push_query_return_includes_database():
-
+def test_push_query_reads_the_database_from_the_session_row():
+    """The browser no longer mirrors its database into the channel; the agent
+    reads the session the channel is named after."""
     from queryview.mcp_server import push_query as mcp_push_query
 
-    rid = remote.register()
+    rec = asyncio.run(sessions.create_session())
+    asyncio.run(sessions.set_connection(rec.id, "reporting", "sales_reporting"))
+    remote.register(rec.id)
     try:
-        remote.set_session_database(rid, "acme_db")
-        out = asyncio.run(mcp_push_query(rid, "SELECT 1"))
-        assert out["ok"] is True and out["database"] == "acme_db"
+        out = asyncio.run(mcp_push_query(rec.id, "SELECT 1"))
+        assert out["ok"] is True
+        assert out["database"] == "sales_reporting"
     finally:
-        remote.unregister(rid)
-
-
-def test_session_workspace_report_and_read():
-
-    rid = remote.register()
-    try:
-        assert remote.session_workspace(rid) is None
-        assert remote.set_session_workspace(rid, "team-a") is True
-        assert remote.session_workspace(rid) == "team-a"
-        assert remote.set_session_workspace("nope", "x") is False
-        assert remote.session_workspace("nope") is None
-    finally:
-        remote.unregister(rid)
+        remote.unregister(rec.id)

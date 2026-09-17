@@ -451,7 +451,7 @@ async def _event_stream(remote_id: str, request: Request):
 # arms "remote control". Closing the EventSource unregisters the channel.
 @app.get("/api/remote/events")
 async def remote_events(request: Request):
-    remote_id = remote.register()
+    remote_id = remote.register(request.state.sid)
     return StreamingResponse(
         _event_stream(remote_id, request),
         media_type="text/event-stream",
@@ -493,26 +493,6 @@ async def remote_push(request: Request):
     }
     ok, message = remote.push(session_id, payload)
     return {"ok": ok, "message": message}
-
-
-@app.post("/api/remote/db")
-async def remote_db(request: Request):
-    """Browser reports the database its live session targets, so the agent's
-    push_query/push_dashboard responses can echo it. Called on arm and whenever
-    the active database changes."""
-    body = await _read_json(request)
-    b = body if isinstance(body, dict) else {}
-    raw_sid = b.get("session_id")
-    session_id = raw_sid.strip() if isinstance(raw_sid, str) else ""
-    raw_db = b.get("database")
-    database = raw_db if isinstance(raw_db, str) and raw_db else None
-    if not session_id:
-        return JSONResponse({"ok": False, "message": "session_id required"}, status_code=400)
-    ok = remote.set_session_database(session_id, database)
-    if "workspace" in b:
-        raw_ws = b.get("workspace")
-        remote.set_session_workspace(session_id, raw_ws if isinstance(raw_ws, str) and raw_ws else None)
-    return {"ok": ok}
 
 
 @app.post("/api/remote/lock")
