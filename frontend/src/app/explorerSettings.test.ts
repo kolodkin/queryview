@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
@@ -7,8 +7,30 @@ import {
   loadSidebarWidth,
   saveSidebarWidth,
 } from './explorerSettings'
-import { stubStorage } from './testStorage'
 
+// The width lives in the session's `ui` blob now, so the test fakes the
+// session mirror rather than a storage backend.
+vi.mock('./session', () => {
+  let ui: Record<string, unknown> = {}
+  return {
+    viewState: () => ui,
+    patchView: (_view: string, changes: Record<string, unknown>) => {
+      ui = { ...ui, ...changes }
+    },
+    __setUi: (next: Record<string, unknown>) => {
+      ui = next
+    },
+  }
+})
+
+const setStoredUi = async (ui: Record<string, unknown>) => {
+  const mod = (await import('./session')) as unknown as {
+    __setUi: (u: Record<string, unknown>) => void
+  }
+  mod.__setUi(ui)
+}
+
+beforeEach(() => void setStoredUi({}))
 afterEach(() => vi.unstubAllGlobals())
 
 describe('clampSidebarWidth', () => {
@@ -29,33 +51,29 @@ describe('clampSidebarWidth', () => {
 })
 
 describe('the remembered sidebar width', () => {
-  it('defaults with nothing stored', () => {
-    stubStorage()
+  it('defaults with nothing remembered', () => {
     expect(loadSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH)
   })
 
-  it('round-trips through the explorer view key', () => {
-    const store = stubStorage()
+  it('round-trips through the explorer view', () => {
     saveSidebarWidth(412)
-    expect(store.get('qv_view_explorer')).toBe('{"sidebarWidth":412}')
     expect(loadSidebarWidth()).toBe(412)
   })
 
-  it('clamps on the way in and on the way out', () => {
-    stubStorage()
+  it('clamps on the way in and on the way out', async () => {
     saveSidebarWidth(MAX_SIDEBAR_WIDTH + 400)
     expect(loadSidebarWidth()).toBe(MAX_SIDEBAR_WIDTH)
-    stubStorage({ 'qv_view_explorer': '{"sidebarWidth":10}' })
+    await setStoredUi({ sidebarWidth: 10 })
     expect(loadSidebarWidth()).toBe(MIN_SIDEBAR_WIDTH)
   })
 
-  it('defaults when the stored width is not a number', () => {
-    stubStorage({ 'qv_view_explorer': '{"sidebarWidth":"wide"}' })
+  it('defaults when the remembered width is not a number', async () => {
+    await setStoredUi({ sidebarWidth: 'wide' })
     expect(loadSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH)
   })
 
-  it('defaults when the view has other settings but no width', () => {
-    stubStorage({ 'qv_view_explorer': '{"future":"keep me"}' })
+  it('defaults when the view has other settings but no width', async () => {
+    await setStoredUi({ future: 'keep me' })
     expect(loadSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH)
   })
 })

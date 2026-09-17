@@ -58,6 +58,13 @@ export function sessionId(): string | null {
   return state?.id ?? null
 }
 
+// The workspace the attached session is on. Call sites that only need the name
+// — scoping predefined queries, dashboards, export/import — read it here rather
+// than threading it through props.
+export function activeWorkspace(): string {
+  return state?.workspace ?? 'default'
+}
+
 function adopt(next: SessionState): SessionState {
   state = { ...next, ui: next.ui ?? {} }
   tabWrite(SESSION_KEY, state.id)

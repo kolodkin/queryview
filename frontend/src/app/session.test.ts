@@ -148,3 +148,27 @@ describe('patchView', () => {
     vi.useRealTimers()
   })
 })
+
+describe('activeWorkspace', () => {
+  it('defaults to "default" before a session is attached', async () => {
+    stubTabStorage()
+    const { activeWorkspace } = await import('./session')
+    expect(activeWorkspace()).toBe('default')
+  })
+
+  it("reports the attached session's workspace", async () => {
+    stubTabStorage()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true, session: { ...SESSION, workspace: 'team-a' } }),
+      }),
+    )
+    const { attachSession, activeWorkspace } = await import('./session')
+
+    await attachSession()
+
+    expect(activeWorkspace()).toBe('team-a')
+  })
+})

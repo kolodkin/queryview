@@ -1,8 +1,9 @@
-// The explorer's remembered settings (viewSettings.ts holds the storage shape).
+// The explorer's remembered settings, kept in the session's `ui` blob under
+// the 'explorer' view (session.ts holds the storage shape).
 // Today just the Tables sidebar width, so a sidebar dragged wide enough for
 // long table names stays that way.
 
-import { loadViewSettings, patchViewSettings } from './viewSettings'
+import { patchView, viewState } from './session'
 
 const VIEW = 'explorer'
 
@@ -18,10 +19,10 @@ export function clampSidebarWidth(width: number): number {
 }
 
 export function loadSidebarWidth(): number {
-  const stored = loadViewSettings(VIEW).sidebarWidth
+  const stored = viewState(VIEW).sidebarWidth
   return typeof stored === 'number' ? clampSidebarWidth(stored) : DEFAULT_SIDEBAR_WIDTH
 }
 
 export function saveSidebarWidth(width: number): void {
-  patchViewSettings(VIEW, { sidebarWidth: clampSidebarWidth(width) })
+  patchView(VIEW, { sidebarWidth: clampSidebarWidth(width) })
 }

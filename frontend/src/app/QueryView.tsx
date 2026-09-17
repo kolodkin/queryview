@@ -27,12 +27,11 @@ import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { useDismiss } from './controls/useDismiss'
 import { downloadText } from './yamlio'
-import { activeWorkspace } from './workspace'
 import { suggestCompletions, type Suggestion } from './promptSuggestions'
 import { filterDatabases } from './databaseFilter'
 import { postLock } from './sessionLock'
 import { apiFetch } from './api'
-import { patchView, viewState } from './session'
+import { activeWorkspace, patchView, viewState } from './session'
 
 type TestResult = { ok: boolean; message: string }
 

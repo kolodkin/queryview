@@ -4,8 +4,8 @@ import { useSearchParams } from 'react-router-dom'
 import { DashboardFrame, type DashboardResults } from '../core'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
-import { activeWorkspace } from './workspace'
 import { apiFetch } from './api'
+import { activeWorkspace } from './session'
 
 export type DashboardPush = {
   name: string
