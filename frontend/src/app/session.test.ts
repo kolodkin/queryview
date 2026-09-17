@@ -172,3 +172,46 @@ describe('activeWorkspace', () => {
     expect(activeWorkspace()).toBe('team-a')
   })
 })
+
+describe('releaseSession', () => {
+  it('beacons whatever the debounce has not flushed yet', async () => {
+    // A reload fires pagehide inside the 400ms window, so an unflushed setting
+    // (a dragged sidebar width) must still reach the server.
+    vi.useFakeTimers()
+    stubTabStorage({ [TAB_KEY]: 'tab-1', [SESSION_KEY]: 's1' })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, session: SESSION }) }),
+    )
+    const sent: string[] = []
+    vi.stubGlobal('navigator', {
+      sendBeacon: (_url: string, body: Blob) => {
+        // Blob.text() is async; the payload is captured via the constructor arg
+        // in the stub below instead.
+        sent.push((body as unknown as { __text: string }).__text)
+        return true
+      },
+    })
+    vi.stubGlobal(
+      'Blob',
+      class {
+        __text: string
+        constructor(parts: string[]) {
+          this.__text = parts.join('')
+        }
+      },
+    )
+    const { attachSession, patchView, releaseSession } = await import('./session')
+    await attachSession()
+
+    patchView('explorer', { sidebarWidth: 376 })
+    releaseSession() // the page goes away before the debounce fires
+
+    expect(sent).toHaveLength(1)
+    const body = JSON.parse(sent[0])
+    expect(body.tab).toBe('tab-1')
+    expect(body.session_id).toBe('s1')
+    expect(body.ui.explorer.sidebarWidth).toBe(376)
+    vi.useRealTimers()
+  })
+})

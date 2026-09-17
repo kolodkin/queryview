@@ -92,15 +92,23 @@ export function startHeartbeat(): () => void {
   return () => clearInterval(handle)
 }
 
+// The closing tab's last word. It carries whatever the debounce has not flushed
+// yet, because `pagehide` also fires on a reload: a sidebar dragged or a query
+// typed a moment ago must survive it. A beacon survives the page going away;
+// the in-flight fetch a normal patch uses would be cancelled.
 export function releaseSession(): void {
   const tab = tabRead(TAB_KEY)
   if (!tab) return
-  const payload = JSON.stringify({ tab })
+  clearTimeout(timer)
+  const payload: Record<string, unknown> = { tab, ...pendingFields }
+  if (state?.id) payload.session_id = state.id
+  if (Object.keys(pendingUi).length > 0) payload.ui = pendingUi
+  pendingUi = {}
+  pendingFields = {}
   try {
-    // A beacon survives the page going away; a fetch would be cancelled.
     navigator.sendBeacon?.(
       '/api/sessions/release',
-      new Blob([payload], { type: 'application/json' }),
+      new Blob([JSON.stringify(payload)], { type: 'application/json' }),
     )
   } catch {
     /* the claim TTL frees the session anyway */

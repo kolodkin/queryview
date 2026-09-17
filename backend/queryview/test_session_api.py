@@ -46,3 +46,19 @@ def test_release_frees_the_claim_so_the_next_tab_resumes_it():
     again = client.post("/api/sessions/attach", json={"tab": "tab-http-5"}).json()
     assert again["created"] is False
     assert again["session"]["id"] == sid
+
+
+def test_release_applies_the_state_the_tab_had_not_flushed():
+    """A reload fires pagehide inside the client's debounce window, so the
+    beacon carries the pending patch and it must not be lost."""
+    client = TestClient(app)
+    sid = client.post("/api/sessions/attach", json={"tab": "tab-http-6"}).json()["session"]["id"]
+
+    client.post(
+        "/api/sessions/release",
+        json={"tab": "tab-http-6", "session_id": sid, "ui": {"explorer": {"sidebarWidth": 376}}},
+    )
+
+    resumed = client.post("/api/sessions/attach", json={"tab": "tab-http-7"}).json()["session"]
+    assert resumed["id"] == sid
+    assert resumed["ui"]["explorer"]["sidebarWidth"] == 376

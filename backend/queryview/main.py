@@ -203,14 +203,26 @@ async def sessions_delete(sid: str):
     return {"ok": True}
 
 
-# Sent by the pagehide beacon so a closed tab frees its session immediately
-# rather than waiting out the claim TTL.
+# The pagehide beacon: apply whatever the tab had not flushed yet, then free its
+# claim rather than waiting out the TTL. A reload fires pagehide, so this is what
+# keeps a change made inside the client's debounce window.
 @app.post("/api/sessions/release")
 async def sessions_release(request: Request):
     b = await _read_json(request) or {}
     tab = _clean_str(b.get("tab"))
-    if tab:
-        await sessions.release(tab)
+    if not tab:
+        return {"ok": True}
+    sid = _clean_str(b.get("session_id"))
+    if sid:
+        ui = b.get("ui")
+        await sessions.patch_session(
+            sid,
+            url=b.get("url") if isinstance(b.get("url"), str) else None,
+            ui=ui if isinstance(ui, dict) else None,
+            label=b.get("label") if isinstance(b.get("label"), str) else None,
+            workspace=b.get("workspace") if isinstance(b.get("workspace"), str) else None,
+        )
+    await sessions.release(tab)
     return {"ok": True}
 
 
