@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 
 from queryview import sessions
+from queryview.connect import _now_ms as _now_ms_for_test
 
 
 def _run(coro):
@@ -86,3 +87,139 @@ def test_list_returns_display_label_and_held_flag():
     row = next(r for r in rows if r["id"] == rec.id)
     assert row["label"] == f"Session {rec.seq}"
     assert row["held"] is False
+
+
+# --- claim protocol ---------------------------------------------------------
+
+
+def _free_everything():
+    """Delete every session so a test starts from a known, unheld world."""
+
+    async def go():
+        from sqlmodel import select as _select
+        from sqlmodel.ext.asyncio.session import AsyncSession as _S
+
+        from queryview.connect import _engine_for_db, _ensure_schema
+
+        await _ensure_schema()
+        async with _S(_engine_for_db()) as s:
+            for row in (await s.exec(_select(sessions.Session))).all():
+                await s.delete(row)
+            await s.commit()
+
+    _run(go())
+
+
+def test_attach_without_an_id_creates_when_there_is_nothing():
+    _free_everything()
+    rec, created = _run(sessions.attach("tab-a", None))
+    assert created is True
+    assert rec.held is True
+
+
+def test_attach_with_own_id_reclaims_the_same_session():
+    _free_everything()
+    first, _ = _run(sessions.attach("tab-a", None))
+    again, created = _run(sessions.attach("tab-a", first.id))
+    assert created is False
+    assert again.id == first.id
+
+
+def test_a_released_session_is_resumed_by_the_next_tab():
+    """Close the tab, open a new one: the session comes back."""
+    _free_everything()
+    first, _ = _run(sessions.attach("tab-a", None))
+    _run(sessions.release("tab-a"))
+    resumed, created = _run(sessions.attach("tab-b", None))
+    assert created is False
+    assert resumed.id == first.id
+
+
+def test_attach_resumes_the_most_recent_unheld_session():
+    _free_everything()
+    older = _run(sessions.create_session())
+    newer = _run(sessions.create_session())
+    now = _now_ms_for_test()
+    # Two creates can land in the same millisecond, so order them explicitly.
+    _run(sessions.touch_for_test(older.id, last_active_at=now - 60_000))
+    _run(sessions.touch_for_test(newer.id, last_active_at=now))
+
+    resumed, created = _run(sessions.attach("tab-c", None))
+
+    assert created is False
+    assert resumed.id == newer.id
+    assert resumed.id != older.id
+
+
+def test_attach_creates_a_new_session_when_the_last_one_is_held():
+    _free_everything()
+    held, _ = _run(sessions.attach("tab-a", None))
+    fresh, created = _run(sessions.attach("tab-b", None))
+    assert created is True
+    assert fresh.id != held.id
+
+
+def test_attach_with_an_id_held_by_another_tab_does_not_hijack():
+    """A duplicated tab copies sessionStorage, so it arrives with someone
+    else's id; it must get its own session instead of stealing one."""
+    _free_everything()
+    held, _ = _run(sessions.attach("tab-a", None))
+    dup, created = _run(sessions.attach("tab-b", held.id))
+    assert created is True
+    assert dup.id != held.id
+
+
+def test_a_stale_claim_is_reclaimable():
+    _free_everything()
+    stale, _ = _run(sessions.attach("tab-a", None))
+    _run(sessions.touch_for_test(stale.id, claim_seen_at=_now_ms_for_test() - sessions.SESSION_CLAIM_TTL_MS - 1))
+    taken, created = _run(sessions.attach("tab-b", None))
+    assert created is False
+    assert taken.id == stale.id
+
+
+def test_release_frees_the_tab_claim():
+    _free_everything()
+    rec, _ = _run(sessions.attach("tab-a", None))
+    _run(sessions.release("tab-a"))
+    after = _run(sessions.get_session_rec(rec.id))
+    assert after is not None
+    assert after.held is False
+
+
+def test_select_switches_and_frees_the_previous_one():
+    _free_everything()
+    first, _ = _run(sessions.attach("tab-a", None))
+    second = _run(sessions.create_session())
+    got, _ = _run(sessions.select_session("tab-a", second.id))
+    assert got is not None
+    assert got.id == second.id
+    previous = _run(sessions.get_session_rec(first.id))
+    assert previous is not None
+    assert previous.held is False
+
+
+def test_select_none_creates_a_new_session():
+    _free_everything()
+    first, _ = _run(sessions.attach("tab-a", None))
+    got, _ = _run(sessions.select_session("tab-a", None))
+    assert got is not None
+    assert got.id != first.id
+    assert got.held is True
+
+
+def test_select_refuses_a_session_held_by_another_tab():
+    _free_everything()
+    held, _ = _run(sessions.attach("tab-a", None))
+    _run(sessions.attach("tab-b", None))
+    got, message = _run(sessions.select_session("tab-b", held.id))
+    assert got is None
+    assert "another tab" in message
+
+
+def test_delete_refuses_while_held():
+    _free_everything()
+    held, _ = _run(sessions.attach("tab-a", None))
+    ok, message = _run(sessions.delete_session(held.id))
+    assert ok is False
+    assert "another tab" in message

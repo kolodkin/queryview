@@ -191,3 +191,117 @@ async def delete_session(sid: str) -> tuple[bool, str]:
         await s.delete(row)
         await s.commit()
         return True, "deleted"
+
+
+# --- Claims (one tab holds a session at a time) ---------------------------
+
+
+async def _claim(s: AsyncSession, row: Session, tab: str, now: int) -> None:
+    """Take the session for `tab` and free whatever else that tab held."""
+    for other in (await s.exec(select(Session).where(Session.claimed_by == tab))).all():
+        if other.id != row.id:
+            other.claimed_by = None
+            other.claim_seen_at = None
+            s.add(other)
+    row.claimed_by = tab
+    row.claim_seen_at = now
+    row.last_active_at = now
+    s.add(row)
+
+
+async def attach(tab: str, session_id: str | None) -> tuple[SessionRec, bool]:
+    """Resolve the session this tab should show, and claim it. The whole
+    new-tab-vs-refresh rule lives here, decided server-side in one pass so
+    concurrent tabs can't race:
+
+    1. the id the tab already has, if free or already its own — a refresh, or
+       the 10s heartbeat;
+    2. otherwise the most recently active unheld session — "restore the last
+       session if none is active";
+    3. otherwise a fresh one — "otherwise open a new session".
+
+    Step 1 falls through when another live tab holds that id: a duplicated tab
+    carries a copy of sessionStorage, and must not hijack the original.
+    """
+    await _ensure_schema()
+    now = _now_ms()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = await s.get(Session, session_id) if session_id else None
+        if row is not None and (not _is_held(row, now) or row.claimed_by == tab):
+            await _claim(s, row, tab, now)
+            await s.commit()
+            await s.refresh(row)
+            return _to_rec(row, now), False
+
+        candidates = (await s.exec(select(Session).order_by(col(Session.last_active_at).desc()))).all()
+        free = next((r for r in candidates if not _is_held(r, now)), None)
+        if free is not None:
+            await _claim(s, free, tab, now)
+            await s.commit()
+            await s.refresh(free)
+            return _to_rec(free, now), False
+
+    created = await create_session()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = await s.get(Session, created.id)
+        if row is None:
+            return created, True
+        await _claim(s, row, tab, now)
+        await s.commit()
+        await s.refresh(row)
+        return _to_rec(row, now), True
+
+
+async def select_session(tab: str, sid: str | None) -> tuple[SessionRec | None, str]:
+    """Switch this tab to a specific session, or to a brand-new one when `sid`
+    is None. Refuses a session another live tab holds — two tabs on one session
+    would overwrite each other's state."""
+    if sid is None:
+        rec, _ = await attach(tab, (await create_session()).id)
+        return rec, "created"
+    await _ensure_schema()
+    now = _now_ms()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = await s.get(Session, sid)
+        if row is None:
+            return None, "unknown session"
+        if _is_held(row, now) and row.claimed_by != tab:
+            return None, "session is open in another tab"
+        await _claim(s, row, tab, now)
+        await s.commit()
+        await s.refresh(row)
+        return _to_rec(row, now), "attached"
+
+
+async def release(tab: str) -> None:
+    """Drop whatever this tab holds (the pagehide beacon). Idempotent; the TTL
+    covers the tab that never got to send it."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        for row in (await s.exec(select(Session).where(Session.claimed_by == tab))).all():
+            row.claimed_by = None
+            row.claim_seen_at = None
+            s.add(row)
+        await s.commit()
+
+
+async def touch_for_test(
+    sid: str,
+    *,
+    claim_seen_at: int | None = None,
+    last_active_at: int | None = None,
+) -> None:
+    """Move a session's timestamps from a test. The claim-TTL and most-recent
+    branches are otherwise only reachable by waiting, or by hoping two rows
+    land in different milliseconds."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = await s.get(Session, sid)
+        if row is None:
+            return
+        if claim_seen_at is not None:
+            row.claim_seen_at = claim_seen_at
+        if last_active_at is not None:
+            row.last_active_at = last_active_at
+        s.add(row)
+        await s.commit()
