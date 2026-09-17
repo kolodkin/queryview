@@ -31,6 +31,7 @@ import { activeWorkspace } from './workspace'
 import { suggestCompletions, type Suggestion } from './promptSuggestions'
 import { filterDatabases } from './databaseFilter'
 import { postLock } from './sessionLock'
+import { apiFetch } from './api'
 
 type TestResult = { ok: boolean; message: string }
 
@@ -89,7 +90,7 @@ function QueryView({
   // and whenever the set may have changed (new connection created).
   const refreshConnections = useCallback(async () => {
     try {
-      const res = await fetch('/api/db/connections')
+      const res = await apiFetch('/api/db/connections')
       const data = await res.json()
       setConnNames(Array.isArray(data.names) ? (data.names as string[]) : [])
     } catch {
@@ -115,7 +116,7 @@ function QueryView({
 
   async function openSaved(name: string) {
     try {
-      const res = await fetch('/api/db/open', {
+      const res = await apiFetch('/api/db/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -213,7 +214,7 @@ function QueryView({
   // bare command prompt. Saved connections survive — `connect <name>` reopens.
   async function disconnect() {
     try {
-      await fetch('/api/db/disconnect', { method: 'POST' })
+      await apiFetch('/api/db/disconnect', { method: 'POST' })
     } catch {
       /* a failed disconnect still clears the UI; the session is best-effort */
     }
@@ -225,7 +226,7 @@ function QueryView({
 
   async function selectDatabase(database: string) {
     if (!connection) return
-    const res = await fetch('/api/db/database', {
+    const res = await apiFetch('/api/db/database', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ database }),
@@ -412,7 +413,7 @@ function ConnectionForm({
     setBusy(true)
     setResult(null)
     try {
-      const res = await fetch('/api/db/test', {
+      const res = await apiFetch('/api/db/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: body(),
@@ -429,7 +430,7 @@ function ConnectionForm({
     setBusy(true)
     setResult(null)
     try {
-      const res = await fetch('/api/db/connect', {
+      const res = await apiFetch('/api/db/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: body(),
@@ -703,7 +704,7 @@ function QueryPanel({
       const outcomes = await Promise.all(
         sqlSpecs.map(async (s) => {
           try {
-            const res = await fetch('/api/db/query', {
+            const res = await apiFetch('/api/db/query', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ query: s.optionsSql }),
@@ -825,7 +826,7 @@ function QueryPanel({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/db/describe', {
+      const res = await apiFetch('/api/db/describe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: applyParams(sql, paramDefs, paramValues) }),
@@ -861,7 +862,7 @@ function QueryPanel({
       // Substitute {name} placeholders from the param dropdowns. An override is
       // passed when a dropdown change triggers the run (its setState hasn't committed).
       const query = applyParams(q, paramDefs, paramOverride ?? paramValues)
-      const res = await fetch('/api/db/query', {
+      const res = await apiFetch('/api/db/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, limit: lim, offset: off, order_by: ord }),
@@ -901,7 +902,7 @@ function QueryPanel({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/db/query', {
+      const res = await apiFetch('/api/db/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -978,7 +979,7 @@ function QueryPanel({
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/predefined-queries', {
+      const res = await apiFetch('/api/predefined-queries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

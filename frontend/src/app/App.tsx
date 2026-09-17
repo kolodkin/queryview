@@ -18,7 +18,15 @@ import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
 import { useDismiss } from './controls/useDismiss'
-import { activeWorkspace, setActiveWorkspace } from './workspace'
+import SessionSwitcher from './controls/SessionSwitcher'
+import {
+  attachSession,
+  patchSession,
+  releaseSession,
+  sessionId,
+  startHeartbeat,
+} from './session'
+import { apiFetch } from './api'
 
 // The database list behind the connection pill. Long connections list hundreds
 // of databases, so it carries the landing picker's filter; mounted only while
@@ -104,7 +112,9 @@ function Shell() {
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
-  const [workspace, setWorkspace] = useState(activeWorkspace())
+  // Seeded from the session once it attaches; 'default' matches the backend.
+  const [workspace, setWorkspace] = useState('default')
+  const [sessionLabel, setSessionLabel] = useState('Session')
   // Whether the initial /api/session probe has answered. The `/` route waits on
   // it: until the session is known it can't tell a connected visitor (who wants
   // the explorer) from a disconnected one (who wants the prompt).
@@ -114,7 +124,7 @@ function Shell() {
   const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
 
   function switchWorkspace(name: string) {
-    setActiveWorkspace(name)
+    patchSession({ workspace: name }, true)
     setWorkspace(name)
   }
 
@@ -127,7 +137,7 @@ function Shell() {
 
   async function openConnection(name: string) {
     try {
-      const res = await fetch('/api/db/open', {
+      const res = await apiFetch('/api/db/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -154,45 +164,79 @@ function Shell() {
     navigate('/queries')
   }
 
-  // On load: open ?connection=<name> if given, else resume the session's last connection.
-  useEffect(() => {
-    if (initialConnection) {
-      // Async: state is set after the open round-trips.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void openConnection(initialConnection)
-      return
-    }
-    fetch('/api/session')
-      .then((r) => r.json())
-      .then((s) => {
-        if (!s.connected) return
-        const resumed = {
-          name: s.name as string,
-          type: (s.type ?? 'clickhouse') as string,
-          databases: (s.databases ?? []) as string[],
-          database: (s.database ?? null) as string | null,
-        }
-        // Deliberately does not navigate: a resumed session stays on the page
-        // the URL asked for. Only `/` picks a landing page, below.
-        setConnection(resumed)
+  // The live connection for the attached session. `/api/session` reads that
+  // session's own row now, so this is a per-session question.
+  async function refreshConnection() {
+    try {
+      const probe = await (await apiFetch('/api/session')).json()
+      if (!probe.connected) {
+        setConnection(null)
+        return
+      }
+      setConnection({
+        name: probe.name as string,
+        type: (probe.type ?? 'clickhouse') as string,
+        databases: (probe.databases ?? []) as string[],
+        database: (probe.database ?? null) as string | null,
       })
-      .catch(() => {})
-      .finally(() => setSessionChecked(true))
+    } catch {
+      /* leave the connection as-is */
+    }
+  }
+
+  // Attach before anything renders: the session decides which page we land on,
+  // which connection is live and what the query panel holds. A refresh
+  // re-attaches to the very same session; a new tab resumes the last unheld one
+  // or is given a fresh session. The server makes that call — see attach() in
+  // backend/queryview/sessions.py.
+  useEffect(() => {
+    let stopHeartbeat = () => {}
+    void (async () => {
+      try {
+        const restored = await attachSession()
+        setWorkspace(restored.workspace)
+        setSessionLabel(restored.label)
+        // Only `/` restores the remembered URL. A deep link is what the user
+        // asked for, so it wins and is written into the session instead.
+        if (window.location.pathname === '/' && restored.url) {
+          navigate(restored.url, { replace: true })
+        }
+        if (initialConnection) {
+          await openConnection(initialConnection)
+        } else if (restored.connection) {
+          await refreshConnection()
+        }
+        stopHeartbeat = startHeartbeat()
+      } catch {
+        /* no session: the app still runs, it just remembers nothing */
+      }
+      setSessionChecked(true)
+    })()
+    window.addEventListener('pagehide', releaseSession)
+    return () => {
+      stopHeartbeat()
+      window.removeEventListener('pagehide', releaseSession)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The URL is session state: it is what a refresh and a session switch
+  // restore. Immediate rather than debounced — navigation is a discrete act,
+  // and a refresh right after it must land on the new page.
+  useEffect(() => {
+    if (!sessionChecked) return
+    patchSession({ url: `${location.pathname}${location.search}` }, true)
+  }, [sessionChecked, location.pathname, location.search])
+
 
   // When armed, open an SSE channel: `ready` gives the session id; `query` and
   // `dashboard` events carry payloads that navigate to the matching page.
   useEffect(() => {
     if (!armed) return
     const es = new EventSource('/api/remote/events')
-    es.addEventListener('ready', (e) => {
-      try {
-        setRemoteId(JSON.parse((e as MessageEvent).data).id as string)
-      } catch {
-        /* ignore malformed event */
-      }
-    })
+    // The channel is keyed by this session, so the id it reports back is the
+    // session's own — no separate agent id to track.
+    es.addEventListener('ready', () => setRemoteId(sessionId()))
     es.addEventListener('query', (e) => {
       try {
         setQueryPush(JSON.parse((e as MessageEvent).data) as QueryPush)
@@ -223,28 +267,12 @@ function Shell() {
     setArmed(e.target.checked)
   }
 
-  // Report the active database and workspace to the live session so the
-  // agent's session-scoped tools resolve against them. Fires on arm and on
-  // each change.
-  useEffect(() => {
-    if (!armed || !remoteId) return
-    void fetch('/api/remote/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: remoteId,
-        database: connection?.database ?? null,
-        workspace,
-      }),
-    }).catch(() => {})
-  }, [armed, remoteId, connection?.database, workspace])
-
   // Switch the active database for the current connection (via the pill dropdown).
   async function switchDatabase(database: string) {
     setDbOpen(false)
     if (!connection || database === connection.database) return
     try {
-      const res = await fetch('/api/db/database', {
+      const res = await apiFetch('/api/db/database', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ database }),
@@ -362,6 +390,15 @@ function Shell() {
       )}
 
       <nav className="absolute right-4 top-4 flex gap-2" data-testid="nav">
+        <SessionSwitcher
+          label={sessionLabel}
+          onSwitch={(next) => {
+            setWorkspace(next.workspace)
+            setSessionLabel(next.label)
+            navigate(next.url || '/queries')
+            void refreshConnection()
+          }}
+        />
         <WorkspaceSwitcher workspace={workspace} onSwitch={switchWorkspace} />
         <Link to="/queries" data-testid="nav-queries" className={navLinkClass('/queries')}>
           Queries
