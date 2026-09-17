@@ -235,7 +235,8 @@ def test_push_query_reads_the_database_from_the_session_row():
     from queryview.mcp_server import push_query as mcp_push_query
 
     rec = asyncio.run(sessions.create_session())
-    asyncio.run(sessions.set_connection(rec.id, "reporting", "sales_reporting"))
+    asyncio.run(sessions.set_connection(rec.id, "reporting"))
+    asyncio.run(sessions.set_database(rec.id, "sales_reporting"))
     remote.register(rec.id)
     try:
         out = asyncio.run(mcp_push_query(rec.id, "SELECT 1"))

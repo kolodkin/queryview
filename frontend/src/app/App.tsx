@@ -21,6 +21,7 @@ import { useDismiss } from './controls/useDismiss'
 import SessionSwitcher from './controls/SessionSwitcher'
 import {
   attachSession,
+  currentSession,
   patchSession,
   releaseSession,
   sessionId,
@@ -106,7 +107,7 @@ function Shell() {
   const [connection, setConnection] = useState<Connection | null>(null)
   const ready = isReady(connection)
   const [armed, setArmed] = useState(false)
-  const [remoteId, setRemoteId] = useState<string | null>(null)
+  const [channelOpen, setChannelOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
   const [queryPush, setQueryPush] = useState<QueryPush | null>(null)
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
@@ -115,6 +116,9 @@ function Shell() {
   // Seeded from the session once it attaches; 'default' matches the backend.
   const [workspace, setWorkspace] = useState('default')
   const [sessionLabel, setSessionLabel] = useState('Session')
+  // Panels hydrate from the session at mount, so they must remount when the
+  // session changes — not only when the workspace does.
+  const [sessionKey, setSessionKey] = useState('')
   // Whether the initial /api/session probe has answered. The `/` route waits on
   // it: until the session is known it can't tell a connected visitor (who wants
   // the explorer) from a disconnected one (who wants the prompt).
@@ -124,7 +128,7 @@ function Shell() {
   const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
 
   function switchWorkspace(name: string) {
-    patchSession({ workspace: name }, true)
+    void patchSession({ workspace: name })
     setWorkspace(name)
   }
 
@@ -151,7 +155,6 @@ function Shell() {
           database: null,
         }
         setConnection(opened)
-        setSessionChecked(true)
         // Ready already (a picker-less driver) means tables to browse;
         // otherwise the prompt is where the database gets picked.
         navigate(isReady(opened) ? '/explorer' : '/queries')
@@ -160,7 +163,6 @@ function Shell() {
     } catch {
       /* a failed deep-link open just leaves us disconnected */
     }
-    setSessionChecked(true)
     navigate('/queries')
   }
 
@@ -194,6 +196,7 @@ function Shell() {
         const restored = await attachSession()
         setWorkspace(restored.workspace)
         setSessionLabel(restored.label)
+        setSessionKey(restored.id)
         // Only `/` restores the remembered URL. A deep link is what the user
         // asked for, so it wins and is written into the session instead.
         if (window.location.pathname === '/' && restored.url) {
@@ -223,7 +226,11 @@ function Shell() {
   // and a refresh right after it must land on the new page.
   useEffect(() => {
     if (!sessionChecked) return
-    patchSession({ url: `${location.pathname}${location.search}` }, true)
+    const url = `${location.pathname}${location.search}`
+    // Skip the no-op write on load, where this fires with the URL attach just
+    // restored.
+    if (url === currentSession()?.url) return
+    void patchSession({ url })
   }, [sessionChecked, location.pathname, location.search])
 
 
@@ -236,9 +243,7 @@ function Shell() {
     const es = new EventSource(
       `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}`,
     )
-    // The channel is keyed by this session, so the id it reports back is the
-    // session's own — no separate agent id to track.
-    es.addEventListener('ready', () => setRemoteId(sessionId()))
+    es.addEventListener('ready', () => setChannelOpen(true))
     es.addEventListener('query', (e) => {
       try {
         setQueryPush(JSON.parse((e as MessageEvent).data) as QueryPush)
@@ -260,7 +265,7 @@ function Shell() {
     })
     return () => {
       es.close()
-      setRemoteId(null)
+      setChannelOpen(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [armed])
@@ -285,6 +290,8 @@ function Shell() {
     }
   }
 
+  // The channel is keyed by this session, so the agent's id is the session's own.
+  const remoteId = channelOpen ? sessionId() : null
   const agentCommand = `Use the queryview mcp to connect to session "${remoteId ?? ''}"`
 
   const navLinkClass = (path: string) =>
@@ -398,6 +405,7 @@ function Shell() {
           onSwitch={(next) => {
             setWorkspace(next.workspace)
             setSessionLabel(next.label)
+            setSessionKey(next.id)
             navigate(next.url || '/queries')
             void refreshConnection()
           }}
@@ -430,7 +438,7 @@ function Shell() {
             path="/queries"
             element={
               <QueryView
-                key={workspace}
+                key={`${sessionKey}:${workspace}`}
                 connection={connection}
                 setConnection={setConnection}
                 pushed={queryPush}
@@ -444,7 +452,7 @@ function Shell() {
             path="/dashboard"
             element={
               <DashboardView
-                key={workspace}
+                key={`${sessionKey}:${workspace}`}
                 pushed={dashboardPush}
                 onPushConsumed={() => setDashboardPush(null)}
                 database={connection?.database ?? null}

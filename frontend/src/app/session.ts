@@ -20,11 +20,9 @@ export type SessionState = {
 export type SessionSummary = {
   id: string
   label: string
-  pinned: boolean
   connection: string | null
   database: string | null
   held: boolean
-  last_active_at: number
 }
 
 export type SessionPatch = { url?: string; label?: string; workspace?: string }
@@ -36,11 +34,11 @@ const HEARTBEAT_MS = 10_000
 // refresh a moment later still finds it.
 const DEBOUNCE_MS = 400
 
+type PendingPatch = SessionPatch & { ui?: Record<string, Record<string, unknown>> }
+
 let state: SessionState | null = null
-let pendingUi: Record<string, Record<string, unknown>> = {}
-let pendingFields: SessionPatch = {}
+let pending: PendingPatch = {}
 let timer: ReturnType<typeof setTimeout> | undefined
-let inFlight: Promise<void> = Promise.resolve()
 
 function tabToken(): string {
   const existing = tabRead(TAB_KEY)
@@ -100,11 +98,9 @@ export function releaseSession(): void {
   const tab = tabRead(TAB_KEY)
   if (!tab) return
   clearTimeout(timer)
-  const payload: Record<string, unknown> = { tab, ...pendingFields }
+  const payload: Record<string, unknown> = { tab, ...pending }
   if (state?.id) payload.session_id = state.id
-  if (Object.keys(pendingUi).length > 0) payload.ui = pendingUi
-  pendingUi = {}
-  pendingFields = {}
+  pending = {}
   try {
     navigator.sendBeacon?.(
       '/api/sessions/release',
@@ -121,42 +117,47 @@ function schedule(): void {
 }
 
 // Patches are fire-and-forget and last-write-wins: a failed one loses a
-// remembered preference, never the user's work in the live tab.
+// remembered preference, never the user's work in the live tab. The response
+// carries the updated session, so server-derived values (a label an empty name
+// unpinned) land back in the mirror.
 export async function flushPatches(): Promise<void> {
   clearTimeout(timer)
   const sid = state?.id
-  const ui = pendingUi
-  const fields = pendingFields
-  pendingUi = {}
-  pendingFields = {}
-  if (!sid || (Object.keys(ui).length === 0 && Object.keys(fields).length === 0)) return
-  inFlight = apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...fields, ...(Object.keys(ui).length ? { ui } : {}) }),
-  })
-    .then(() => undefined)
-    .catch(() => undefined)
-  return inFlight
+  const body = pending
+  pending = {}
+  if (!sid || Object.keys(body).length === 0) return
+  try {
+    const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json()
+    if (data?.session) adopt(data.session as SessionState)
+  } catch {
+    /* a lost patch costs a remembered preference, never live work */
+  }
 }
 
 export function viewState(view: string): Record<string, unknown> {
   return state?.ui?.[view] ?? {}
 }
 
+// Debounced: this is the one that coalesces, because it carries typing.
 export function patchView(view: string, changes: Record<string, unknown>): void {
   if (!state) return
   state.ui = { ...state.ui, [view]: { ...(state.ui[view] ?? {}), ...changes } }
-  pendingUi = { ...pendingUi, [view]: { ...(pendingUi[view] ?? {}), ...changes } }
+  pending.ui = { ...pending.ui, [view]: { ...(pending.ui?.[view] ?? {}), ...changes } }
   schedule()
 }
 
-export function patchSession(changes: SessionPatch, immediate = false): void {
-  if (!state) return
+// Row fields are discrete acts — a navigation, a workspace switch, a rename —
+// so they flush at once rather than waiting out the debounce.
+export function patchSession(changes: SessionPatch): Promise<void> {
+  if (!state) return Promise.resolve()
   state = { ...state, ...changes } as SessionState
-  pendingFields = { ...pendingFields, ...changes }
-  if (immediate) void flushPatches()
-  else schedule()
+  pending = { ...pending, ...changes }
+  return flushPatches()
 }
 
 export async function listSessions(): Promise<SessionSummary[]> {
@@ -183,7 +184,9 @@ export async function removeSession(id: string): Promise<{ ok: boolean; message?
   return res.json()
 }
 
-export async function renameSession(label: string): Promise<void> {
-  patchSession({ label }, true)
-  await inFlight
+// Returns the label the server settled on: clearing the name unpins, and the
+// derived label comes back on the patch response.
+export async function renameSession(label: string): Promise<string> {
+  await patchSession({ label })
+  return state?.label ?? label
 }

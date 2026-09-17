@@ -40,8 +40,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_sessions_last_active_at"), "sessions", ["last_active_at"], unique=False)
+    # Claims are released by tab token on every heartbeat.
+    op.create_index(op.f("ix_sessions_claimed_by"), "sessions", ["claimed_by"], unique=False)
 
 
 def downgrade() -> None:
+    op.drop_index(op.f("ix_sessions_claimed_by"), table_name="sessions")
     op.drop_index(op.f("ix_sessions_last_active_at"), table_name="sessions")
     op.drop_table("sessions")

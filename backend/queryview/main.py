@@ -133,6 +133,26 @@ async def session(request: Request) -> dict[str, Any]:
     return await get_session(request.state.sid)
 
 
+_SESSION_ERRORS = {
+    "unknown": (404, "unknown session"),
+    "held": (409, "session is open in another tab"),
+}
+
+
+def _session_error(reason: str) -> JSONResponse:
+    """A session store reason code as a response. The store returns codes, not
+    prose, so rewording a message cannot silently change an HTTP status."""
+    status, message = _SESSION_ERRORS.get(reason, (409, reason or "cannot do that"))
+    return JSONResponse({"ok": False, "message": message}, status_code=status)
+
+
+def _str_or_none(body: dict[str, Any], key: str) -> str | None:
+    """A string field of a patch body, or None when absent. Unlike `_clean_str`
+    an empty string is kept: that is how a label unpins."""
+    value = body.get(key)
+    return value if isinstance(value, str) else None
+
+
 def _session_payload(rec: sessions.SessionRec) -> dict[str, Any]:
     return {
         "id": rec.id,
@@ -167,9 +187,9 @@ async def sessions_select(request: Request):
     if not tab:
         return JSONResponse({"ok": False, "message": "tab is required"}, status_code=400)
     raw_id = _clean_str(b.get("id"))
-    rec, message = await sessions.select_session(tab, raw_id or None)
+    rec, reason = await sessions.select_session(tab, raw_id or None)
     if rec is None:
-        return JSONResponse({"ok": False, "message": message}, status_code=409)
+        return _session_error(reason)
     return {"ok": True, "session": _session_payload(rec)}
 
 
@@ -182,24 +202,23 @@ async def sessions_list() -> dict[str, Any]:
 async def sessions_patch(sid: str, request: Request):
     b = await _read_json(request) or {}
     ui = b.get("ui")
-    ok = await sessions.patch_session(
+    rec = await sessions.patch_session(
         sid,
-        url=b.get("url") if isinstance(b.get("url"), str) else None,
+        url=_str_or_none(b, "url"),
         ui=ui if isinstance(ui, dict) else None,
-        label=b.get("label") if isinstance(b.get("label"), str) else None,
-        workspace=b.get("workspace") if isinstance(b.get("workspace"), str) else None,
+        label=_str_or_none(b, "label"),
+        workspace=_str_or_none(b, "workspace"),
     )
-    if not ok:
+    if rec is None:
         return JSONResponse({"ok": False, "message": "unknown session"}, status_code=404)
-    return {"ok": True}
+    return {"ok": True, "session": _session_payload(rec)}
 
 
 @app.delete("/api/sessions/{sid}")
 async def sessions_delete(sid: str):
-    ok, message = await sessions.delete_session(sid)
+    ok, reason = await sessions.delete_session(sid)
     if not ok:
-        status = 404 if message == "unknown session" else 409
-        return JSONResponse({"ok": False, "message": message}, status_code=status)
+        return _session_error(reason)
     return {"ok": True}
 
 
@@ -217,10 +236,10 @@ async def sessions_release(request: Request):
         ui = b.get("ui")
         await sessions.patch_session(
             sid,
-            url=b.get("url") if isinstance(b.get("url"), str) else None,
+            url=_str_or_none(b, "url"),
             ui=ui if isinstance(ui, dict) else None,
-            label=b.get("label") if isinstance(b.get("label"), str) else None,
-            workspace=b.get("workspace") if isinstance(b.get("workspace"), str) else None,
+            label=_str_or_none(b, "label"),
+            workspace=_str_or_none(b, "workspace"),
         )
     await sessions.release(tab)
     return {"ok": True}

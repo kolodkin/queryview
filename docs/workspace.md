@@ -33,8 +33,9 @@ optional `workspace` name, defaulting to `default`.
 ## UI
 
 The header shows a workspace switcher (dropdown + manage panel for
-create/rename/remote/branch/delete). The active workspace is remembered in
-localStorage; switching reloads the query and dashboard lists.
+create/rename/remote/branch/delete). The active workspace is session state
+(see [session.md](./session.md)); switching reloads the query and dashboard
+lists.
 
 ## MCP
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 
+from conftest import open_query_panel
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -14,20 +15,13 @@ DUCKDB = next(c for c in CASES if c.id == "duckdb")
 
 
 def _connect_duckdb(page: Page, seeded_duckdb: str) -> None:
+    # _connect already asserts the status text for the case.
     _connect(page, DUCKDB, seeded_duckdb)
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - duckdb")
-
-
-def _open_query_panel(page: Page) -> None:
-    page.get_by_test_id("nav-queries").click()
-    page.get_by_test_id("prompt-input").fill("query")
-    page.keyboard.press("Enter")
-    expect(page.get_by_test_id("query-panel")).to_be_visible()
 
 
 def test_refresh_keeps_the_query_and_the_connection(seeded_duckdb, page: Page) -> None:
     _connect_duckdb(page, seeded_duckdb)
-    _open_query_panel(page)
+    open_query_panel(page)
     page.get_by_test_id("query-input").fill("SELECT 1 -- remembered")
     # The write-back is debounced; give it room to land before reloading.
     page.wait_for_timeout(900)
@@ -53,7 +47,7 @@ def test_a_second_tab_gets_its_own_session(seeded_duckdb, page: Page, context) -
     """The first tab holds its session, so a new tab starts a fresh one rather
     than showing the same state twice."""
     _connect_duckdb(page, seeded_duckdb)
-    _open_query_panel(page)
+    open_query_panel(page)
     page.get_by_test_id("query-input").fill("SELECT 1 -- first tab")
     page.wait_for_timeout(900)
     first = page.evaluate("() => sessionStorage.getItem('qv_session')")

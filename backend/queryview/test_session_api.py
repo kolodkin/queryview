@@ -27,7 +27,8 @@ def test_patch_and_read_back_through_the_header():
     client = TestClient(app)
     sid = client.post("/api/sessions/attach", json={"tab": "tab-http-2"}).json()["session"]["id"]
     r = client.patch(f"/api/sessions/{sid}", json={"url": "/explorer?table=events"})
-    assert r.json() == {"ok": True}
+    # The updated session comes back, so the client's mirror cannot drift.
+    assert r.json()["session"]["url"] == "/explorer?table=events"
     listed = client.get("/api/sessions").json()["sessions"]
     assert any(row["id"] == sid for row in listed)
 

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
@@ -8,30 +8,19 @@ import {
   saveSidebarWidth,
 } from './explorerSettings'
 
-// The width lives in the session's `ui` blob now, so the test fakes the
-// session mirror rather than a storage backend.
-vi.mock('./session', () => {
-  let ui: Record<string, unknown> = {}
-  return {
-    viewState: () => ui,
-    patchView: (_view: string, changes: Record<string, unknown>) => {
-      ui = { ...ui, ...changes }
-    },
-    __setUi: (next: Record<string, unknown>) => {
-      ui = next
-    },
-  }
+// The width lives in the session's `ui` blob now, so the test fakes the session
+// mirror rather than a storage backend.
+const { ui } = vi.hoisted(() => ({ ui: { view: {} as Record<string, unknown> } }))
+vi.mock('./session', () => ({
+  viewState: () => ui.view,
+  patchView: (_view: string, changes: Record<string, unknown>) => {
+    ui.view = { ...ui.view, ...changes }
+  },
+}))
+
+beforeEach(() => {
+  ui.view = {}
 })
-
-const setStoredUi = async (ui: Record<string, unknown>) => {
-  const mod = (await import('./session')) as unknown as {
-    __setUi: (u: Record<string, unknown>) => void
-  }
-  mod.__setUi(ui)
-}
-
-beforeEach(() => void setStoredUi({}))
-afterEach(() => vi.unstubAllGlobals())
 
 describe('clampSidebarWidth', () => {
   it('keeps a width inside the drag range', () => {
@@ -60,20 +49,20 @@ describe('the remembered sidebar width', () => {
     expect(loadSidebarWidth()).toBe(412)
   })
 
-  it('clamps on the way in and on the way out', async () => {
+  it('clamps on the way in and on the way out', () => {
     saveSidebarWidth(MAX_SIDEBAR_WIDTH + 400)
     expect(loadSidebarWidth()).toBe(MAX_SIDEBAR_WIDTH)
-    await setStoredUi({ sidebarWidth: 10 })
+    ui.view = { sidebarWidth: 10 }
     expect(loadSidebarWidth()).toBe(MIN_SIDEBAR_WIDTH)
   })
 
-  it('defaults when the remembered width is not a number', async () => {
-    await setStoredUi({ sidebarWidth: 'wide' })
+  it('defaults when the remembered width is not a number', () => {
+    ui.view = { sidebarWidth: 'wide' }
     expect(loadSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH)
   })
 
-  it('defaults when the view has other settings but no width', async () => {
-    await setStoredUi({ future: 'keep me' })
+  it('defaults when the view has other settings but no width', () => {
+    ui.view = { future: 'keep me' }
     expect(loadSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH)
   })
 })

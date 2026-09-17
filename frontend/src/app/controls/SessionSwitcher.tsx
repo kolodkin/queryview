@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 
 import { useDismiss } from './useDismiss'
 import {
-  currentSession,
   listSessions,
   removeSession,
   renameSession,
@@ -67,18 +66,12 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
   }
 
   async function saveName() {
-    const name = draft.trim()
-    await renameSession(name)
-    onRenamed(name || (await currentLabel()))
+    // renameSession answers with the label the server settled on, so clearing
+    // the name (which unpins) needs no read-back.
+    onRenamed(await renameSession(draft.trim()))
     setRenaming(false)
     setOpen(false)
     await reload()
-  }
-
-  // Clearing the name unpins it, so the server's derived label is the truth.
-  async function currentLabel(): Promise<string> {
-    const rows = await listSessions()
-    return rows.find((r) => r.id === currentSession()?.id)?.label ?? label
   }
 
   return (

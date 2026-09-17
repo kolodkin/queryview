@@ -623,7 +623,14 @@ function QueryPanel({
     Array.isArray(saved.orderBy) ? (saved.orderBy as OrderCol[]) : [],
   )
   // Write-back is debounced inside session.ts, so this coalesces while typing.
+  // The first run is skipped: these are seeded from the session, so it would
+  // patch the row with what it just read.
+  const restored = useRef(true)
   useEffect(() => {
+    if (restored.current) {
+      restored.current = false
+      return
+    }
     patchView('query', { sql, limit, offset, visibleCols, orderBy })
   }, [sql, limit, offset, visibleCols, orderBy])
 

@@ -32,7 +32,7 @@ def test_new_session_defaults():
 
 def test_patch_round_trips_url_and_workspace():
     rec = _run(sessions.create_session())
-    assert _run(sessions.patch_session(rec.id, url="/explorer?table=events", workspace="reporting"))
+    assert _run(sessions.patch_session(rec.id, url="/explorer?table=events", workspace="reporting")) is not None
     again = _run(sessions.get_session_rec(rec.id))
     assert again is not None
     assert again.url == "/explorer?table=events"
@@ -50,8 +50,24 @@ def test_patch_ui_merges_per_view_and_keeps_unknown_keys():
     assert again.ui["explorer"] == {"sidebarWidth": 412}
 
 
-def test_patch_unknown_session_returns_false():
-    assert _run(sessions.patch_session("nope", url="/queries")) is False
+def test_patch_unknown_session_returns_none():
+    assert _run(sessions.patch_session("nope", url="/queries")) is None
+
+
+def test_patch_returns_the_updated_record():
+    """Callers read server-derived values off the result — an empty label unpins,
+    and the derived label is what the switcher then shows."""
+    rec = _run(sessions.create_session())
+    _run(sessions.set_connection(rec.id, "reporting"))
+    _run(sessions.set_database(rec.id, "events"))
+    pinned = _run(sessions.patch_session(rec.id, label="nightly audit"))
+    assert pinned is not None
+    assert sessions.display_label(pinned) == "nightly audit"
+
+    unpinned = _run(sessions.patch_session(rec.id, label=""))
+    assert unpinned is not None
+    assert unpinned.label is None
+    assert sessions.display_label(unpinned) == "reporting · events"
 
 
 def test_delete_removes_the_row():
@@ -212,14 +228,14 @@ def test_select_refuses_a_session_held_by_another_tab():
     _free_everything()
     held, _ = _run(sessions.attach("tab-a", None))
     _run(sessions.attach("tab-b", None))
-    got, message = _run(sessions.select_session("tab-b", held.id))
+    got, reason = _run(sessions.select_session("tab-b", held.id))
     assert got is None
-    assert "another tab" in message
+    assert reason == "held"
 
 
 def test_delete_refuses_while_held():
     _free_everything()
     held, _ = _run(sessions.attach("tab-a", None))
-    ok, message = _run(sessions.delete_session(held.id))
+    ok, reason = _run(sessions.delete_session(held.id))
     assert ok is False
-    assert "another tab" in message
+    assert reason == "held"
