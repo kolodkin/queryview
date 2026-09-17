@@ -174,7 +174,9 @@ and let [git sync](docs/gitsync.md) do it.
 ## Documentation
 
 - [queryview.md](docs/queryview.md) — the single-prompt page.
-- [connect.md](docs/connect.md) — connections, drivers, sessions, storage.
+- [connect.md](docs/connect.md) — connections, drivers, storage.
+- [session.md](docs/session.md) — sessions: what a tab remembers, refresh and
+  new-tab behaviour, the session switcher.
 - [query.md](docs/query.md) — the query panel: pagination, predefined queries, CSV.
 - [explorer.md](docs/explorer.md) — the table navigator.
 - [dashboard.md](docs/dashboard.md) — dashboards and how agents author them.

@@ -59,17 +59,21 @@ to ClickHouse directly.
 
 ## How it works
 
-When armed, the browser opens an SSE stream (`GET /api/remote/events`); the
-backend registers an in-memory channel keyed by a random public id (never the
-`qv_session` cookie). `push_query` (and the test-only `POST /api/remote/push`)
-enqueue onto that channel; the SSE stream delivers the payload and the panel
-fills `query` / `limit` / `offset` / `order_by` / selected `fields` and runs.
+When armed, the browser opens an SSE stream
+(`GET /api/remote/events?session=<id>`); the backend registers an in-memory
+channel **keyed by that session's id** (see [session.md](./session.md)).
+`push_query` (and the test-only `POST /api/remote/push`) enqueue onto that
+channel; the SSE stream delivers the payload and the panel fills `query` /
+`limit` / `offset` / `order_by` / selected `fields` and runs.
 
-While armed, the browser also reports its selected database and active
-workspace (`POST /api/remote/db` with `{session_id, database, workspace}`,
-re-sent on every change), so push responses can echo the database and
-session-scoped MCP tools resolve the workspace (see
-[workspace.md](./workspace.md)).
+Because the channel is named after a session, the agent's session-scoped tools
+read that session's database and workspace straight from its row — the browser
+reports nothing (see [workspace.md](./workspace.md)).
+
+**Arming is the gate, not the id.** Disarming closes the channel, and any later
+push fails with `unknown or inactive session`. The id is stable across refreshes
+and re-arms, so the command you copy stops changing under you; equally, an id
+you have shared stays usable whenever that session is armed.
 
 State is in-memory and per-process (like the active-connection session map): a
 backend restart drops channels; the browser reconnects while armed and gets a
