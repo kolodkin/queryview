@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { useDismiss } from './useDismiss'
 import {
+  currentSession,
   listSessions,
   removeSession,
   renameSession,
@@ -13,12 +14,14 @@ import {
 type Props = {
   label: string
   onSwitch: (session: SessionState) => void
+  // The shell owns the displayed label, so a rename has to tell it.
+  onRenamed: (label: string) => void
 }
 
 // Header dropdown listing every session. A session held by another live tab is
 // shown but not selectable: two tabs on one session would overwrite each
 // other's state, which is the whole point of the per-tab claim.
-export default function SessionSwitcher({ label, onSwitch }: Props) {
+export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
   const [open, setOpen] = useState(false)
   const [list, setList] = useState<SessionSummary[]>([])
   const [renaming, setRenaming] = useState(false)
@@ -64,10 +67,18 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
   }
 
   async function saveName() {
-    await renameSession(draft.trim())
+    const name = draft.trim()
+    await renameSession(name)
+    onRenamed(name || (await currentLabel()))
     setRenaming(false)
     setOpen(false)
     await reload()
+  }
+
+  // Clearing the name unpins it, so the server's derived label is the truth.
+  async function currentLabel(): Promise<string> {
+    const rows = await listSessions()
+    return rows.find((r) => r.id === currentSession()?.id)?.label ?? label
   }
 
   return (

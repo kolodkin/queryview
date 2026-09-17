@@ -37,8 +37,11 @@ def test_switcher_isolates_dashboards(page: Page, base_url: str):
         page.goto(f"{base_url}/dashboard?name={quote(dash)}")
         expect(page.locator("body")).not_to_contain_text("not found")
     finally:
-        # Reset the browser's persisted choice; workspace deletion is
+        # Reset this session's workspace — it is session state now, and the
+        # next test's tab resumes this session. Workspace deletion is
         # best-effort (it still owns the dashboard, so the API returns 409 —
         # there is no dashboard-delete endpoint yet; see docs/future.md).
-        page.evaluate("localStorage.setItem('qv_workspace', 'default')")
+        sid = page.evaluate("() => sessionStorage.getItem('qv_session')")
+        if sid:
+            httpx.patch(f"{base_url}/api/sessions/{sid}", json={"workspace": "default"})
         httpx.request("DELETE", f"{base_url}/api/workspaces/{ws}")

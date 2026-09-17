@@ -1,5 +1,6 @@
-"""FastAPI app: the JSON API under /api/*, the per-session cookie, and (when
-SERVE_STATIC=1) serving the built SPA with an index.html fallback."""
+"""FastAPI app: the JSON API under /api/*, the X-QV-Session header that names
+the caller's session, and (when SERVE_STATIC=1) serving the built SPA with an
+index.html fallback."""
 
 from __future__ import annotations
 
@@ -116,10 +117,9 @@ async def mcp_slash_redirect() -> RedirectResponse:
 
 @app.middleware("http")
 async def session_header(request: Request, call_next):
-    """Identify the session from the header the SPA sends. The `qv_session`
-    cookie is still honored as a fallback while the frontend is migrated; it is
-    removed once nothing depends on it."""
-    request.state.sid = request.headers.get("X-QV-Session") or request.cookies.get("qv_session") or ""
+    """Identify the session from the header the SPA sends on every /api call.
+    There is no cookie: a session is named by its id, not by the browser."""
+    request.state.sid = request.headers.get("X-QV-Session") or ""
     return await call_next(request)
 
 
@@ -451,7 +451,9 @@ async def _event_stream(remote_id: str, request: Request):
 # arms "remote control". Closing the EventSource unregisters the channel.
 @app.get("/api/remote/events")
 async def remote_events(request: Request):
-    remote_id = remote.register(request.state.sid)
+    # EventSource cannot send headers, so the browser passes its session id in
+    # the query string; other callers still identify by header.
+    remote_id = remote.register(request.query_params.get("session") or request.state.sid)
     return StreamingResponse(
         _event_stream(remote_id, request),
         media_type="text/event-stream",

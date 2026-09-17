@@ -233,7 +233,11 @@ function Shell() {
   // `dashboard` events carry payloads that navigate to the matching page.
   useEffect(() => {
     if (!armed) return
-    const es = new EventSource('/api/remote/events')
+    // EventSource cannot send headers, so the session id travels in the query
+    // string; the backend falls back to X-QV-Session for other callers.
+    const es = new EventSource(
+      `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}`,
+    )
     // The channel is keyed by this session, so the id it reports back is the
     // session's own — no separate agent id to track.
     es.addEventListener('ready', () => setRemoteId(sessionId()))
@@ -392,6 +396,7 @@ function Shell() {
       <nav className="absolute right-4 top-4 flex gap-2" data-testid="nav">
         <SessionSwitcher
           label={sessionLabel}
+          onRenamed={setSessionLabel}
           onSwitch={(next) => {
             setWorkspace(next.workspace)
             setSessionLabel(next.label)
@@ -419,46 +424,44 @@ function Shell() {
         </Link>
       </nav>
 
-      <Routes>
-        <Route
-          path="/queries"
-          element={
-            <QueryView
-              key={workspace}
-              connection={connection}
-              setConnection={setConnection}
-              pushed={queryPush}
-              onPushConsumed={() => setQueryPush(null)}
-              remoteId={remoteId}
-            />
-          }
-        />
-        <Route path="/explorer" element={<ExplorerView connection={connection} />} />
-        <Route
-          path="/dashboard"
-          element={
-            <DashboardView
-              key={workspace}
-              pushed={dashboardPush}
-              onPushConsumed={() => setDashboardPush(null)}
-              database={connection?.database ?? null}
-            />
-          }
-        />
-        {/* Only `/` picks a landing page, and only once the probe has answered.
-            An unknown path is just a bad URL, not a landing question. */}
-        <Route
-          path="/"
-          element={
-            sessionChecked ? (
-              <Navigate to={ready ? '/explorer' : '/queries'} replace />
-            ) : (
-              <Loading label="Restoring session…" testid="session-loading" />
-            )
-          }
-        />
-        <Route path="*" element={<Navigate to="/queries" replace />} />
-      </Routes>
+      {/* Nothing renders until the session has attached: every view
+          hydrates from it — the explorer's sidebar width, the query
+          panel's SQL — and would otherwise mount against an empty one. */}
+      {sessionChecked ? (
+        <Routes>
+          <Route
+            path="/queries"
+            element={
+              <QueryView
+                key={workspace}
+                connection={connection}
+                setConnection={setConnection}
+                pushed={queryPush}
+                onPushConsumed={() => setQueryPush(null)}
+                remoteId={remoteId}
+              />
+            }
+          />
+          <Route path="/explorer" element={<ExplorerView connection={connection} />} />
+          <Route
+            path="/dashboard"
+            element={
+              <DashboardView
+                key={workspace}
+                pushed={dashboardPush}
+                onPushConsumed={() => setDashboardPush(null)}
+                database={connection?.database ?? null}
+              />
+            }
+          />
+          {/* Only `/` picks a landing page. An unknown path is just a bad URL,
+              not a landing question. */}
+          <Route path="/" element={<Navigate to={ready ? '/explorer' : '/queries'} replace />} />
+          <Route path="*" element={<Navigate to="/queries" replace />} />
+        </Routes>
+      ) : (
+        <Loading label="Restoring session…" testid="session-loading" />
+      )}
       <Toast message={toast} onDone={() => setToast(null)} />
     </main>
   )
