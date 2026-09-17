@@ -604,7 +604,10 @@ function QueryPanel({
   const saved = viewState('query')
   const [sql, setSql] = useState(() => (typeof saved.sql === 'string' ? saved.sql : ''))
   const [limit, setLimit] = useState(() => (typeof saved.limit === 'number' ? saved.limit : 100))
-  const [offset, setOffset] = useState(() => (typeof saved.offset === 'number' ? saved.offset : 0))
+  // Not restored: an offset is a cursor into a result set, and results are
+  // deliberately not restored. Bringing one back points a fresh query at a page
+  // of rows that no longer exists, which returns nothing.
+  const [offset, setOffset] = useState(0)
   const [rows, setRows] = useState(4)
   const [result, setResult] = useState<QueryRows | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -631,8 +634,8 @@ function QueryPanel({
       restored.current = false
       return
     }
-    patchView('query', { sql, limit, offset, visibleCols, orderBy })
-  }, [sql, limit, offset, visibleCols, orderBy])
+    patchView('query', { sql, limit, visibleCols, orderBy })
+  }, [sql, limit, visibleCols, orderBy])
 
   const [cellViewModalOpen, setCellViewModalOpen] = useState(false)
   // Transient "Copied" feedback for the copy-name button.

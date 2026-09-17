@@ -84,3 +84,25 @@ def test_a_renamed_session_keeps_its_name(seeded_duckdb, page: Page) -> None:
     page.reload(wait_until="networkidle")
 
     expect(page.get_by_test_id("session-switcher")).to_contain_text("nightly audit")
+
+
+def test_a_restored_panel_does_not_page_a_new_query_into_nothing(seeded_duckdb, page: Page) -> None:
+    """Pagination is not restored. An offset is a cursor into a result set, and
+    results are deliberately not restored, so bringing one back would run the
+    next query against a page of rows that no longer exists — and return none."""
+    _connect_duckdb(page, seeded_duckdb)
+    open_query_panel(page)
+    page.get_by_test_id("query-input").fill("SELECT name FROM items ORDER BY id")
+    page.get_by_test_id("query-limit").fill("1")
+    page.get_by_test_id("query-run").click()
+    expect(page.get_by_test_id("query-output")).to_contain_text("alpha")
+    page.get_by_test_id("query-next").click()
+    expect(page.get_by_test_id("query-output")).to_contain_text("beta")
+    page.wait_for_timeout(900)
+
+    page.reload(wait_until="networkidle")
+    open_query_panel(page)
+    page.get_by_test_id("query-run").click()
+
+    # Back at the first page, not stranded past the end of a fresh result set.
+    expect(page.get_by_test_id("query-output")).to_contain_text("alpha")

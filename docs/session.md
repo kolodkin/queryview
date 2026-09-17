@@ -18,13 +18,15 @@ close a tab and the next one you open picks its session back up.
 | Route and URL | `/explorer?table=events`, `/dashboard?name=sales` |
 | Connection | the connection this session is on, and its selected database |
 | Workspace | which workspace scopes its queries, dashboards and git sync |
-| Query panel | SQL text, limit/offset, visible columns, sort |
+| Query panel | SQL text, page size, visible columns, sort |
 | Explorer | the Tables sidebar width |
 
-**Results are not remembered** — a reload restores the SQL you were writing and
-how it was paginated, never the rows, so reopening a tab cannot re-fire an
-expensive query. The explorer is the exception only because it is URL-driven: a
-restored `?table=` re-loads that table exactly as following the link would.
+**Results are not remembered** — a reload restores the SQL you were writing,
+never the rows, so reopening a tab cannot re-fire an expensive query. Neither is
+the page you were on: an offset is a cursor into a result set that no longer
+exists, and restoring one would point a fresh query at nothing. The explorer is
+the exception only because it is URL-driven — a restored `?table=` re-loads that
+table exactly as following the link would.
 
 Transient state is never written: open popovers, filter text, a drag in
 progress, fetched rows.
@@ -99,7 +101,7 @@ last_active_at  INTEGER           -- unix ms
 a view can remember a new setting without a migration.
 
 ```json
-{"query": {"sql": "…", "limit": 100, "offset": 0, "visibleCols": [], "orderBy": []},
+{"query": {"sql": "…", "limit": 100, "visibleCols": [], "orderBy": []},
  "explorer": {"sidebarWidth": 256}}
 ```
 
