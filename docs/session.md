@@ -118,9 +118,10 @@ have finished. Discrete acts (a navigation, a workspace switch, a rename) write
 at once.
 
 Everything else rides two backstops: `pagehide` beacons whatever is still
-pending, covering a reload, a close or a navigation away, and a 5s timer bounds
-what a tab that dies mid-edit can lose. The explorer's sidebar width has no
-focus to leave, so it is written by those alone.
+pending, covering a reload, a close or a navigation away, and a 5s idle timer,
+so a tab that dies mid-edit loses at most what was typed since its last pause.
+The explorer's sidebar width has no focus to leave, so it is written by those
+alone.
 
 Writes are fire-and-forget — the page never waits on one, and a lost patch costs
 a remembered preference, never your work in the live tab.

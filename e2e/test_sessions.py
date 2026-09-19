@@ -23,9 +23,8 @@ def test_refresh_keeps_the_query_and_the_connection(seeded_duckdb, page: Page) -
     _connect_duckdb(page, seeded_duckdb)
     open_query_panel(page)
     page.get_by_test_id("query-input").fill("SELECT 1 -- remembered")
-    # No focus-out here, so the reload's pagehide beacon is what carries it.
-    page.wait_for_timeout(300)
 
+    # No focus-out happened, so the reload's pagehide beacon is what carries it.
     page.reload(wait_until="networkidle")
 
     expect(page.get_by_test_id("query-input")).to_have_value("SELECT 1 -- remembered")
@@ -47,9 +46,6 @@ def test_a_second_tab_gets_its_own_session(seeded_duckdb, page: Page, context) -
     """The first tab holds its session, so a new tab starts a fresh one rather
     than showing the same state twice."""
     _connect_duckdb(page, seeded_duckdb)
-    open_query_panel(page)
-    page.get_by_test_id("query-input").fill("SELECT 1 -- first tab")
-    page.wait_for_timeout(300)
     first = page.evaluate("() => sessionStorage.getItem('qv_session')")
 
     second = context.new_page()
@@ -87,9 +83,8 @@ def test_a_renamed_session_keeps_its_name(seeded_duckdb, page: Page) -> None:
 
 
 def test_a_restored_panel_does_not_page_a_new_query_into_nothing(seeded_duckdb, page: Page) -> None:
-    """Pagination is not restored. An offset is a cursor into a result set, and
-    results are deliberately not restored, so bringing one back would run the
-    next query against a page of rows that no longer exists — and return none."""
+    """The page you were on is not restored: an offset is a cursor into a result
+    set, and results are not restored either (docs/session.md)."""
     _connect_duckdb(page, seeded_duckdb)
     open_query_panel(page)
     page.get_by_test_id("query-input").fill("SELECT name FROM items ORDER BY id")
@@ -98,14 +93,13 @@ def test_a_restored_panel_does_not_page_a_new_query_into_nothing(seeded_duckdb, 
     expect(page.get_by_test_id("query-output")).to_contain_text("alpha")
     page.get_by_test_id("query-next").click()
     expect(page.get_by_test_id("query-output")).to_contain_text("beta")
-    page.wait_for_timeout(300)
 
     page.reload(wait_until="networkidle")
-    open_query_panel(page)
-    # Wait for the restore before running: the assertion is about which page the
-    # restored panel runs, so the SQL has to be back first.
-    expect(page.get_by_test_id("query-input")).to_have_value("SELECT name FROM items ORDER BY id")
-    page.get_by_test_id("query-run").click()
 
-    # Back at the first page, not stranded past the end of a fresh result set.
+    # The SQL comes back; the cursor does not...
+    expect(page.get_by_test_id("query-input")).to_have_value("SELECT name FROM items ORDER BY id")
+    expect(page.get_by_test_id("query-offset")).to_have_value("0")
+    # ...so a re-run starts at the first page rather than past the end of a
+    # fresh result set.
+    page.get_by_test_id("query-run").click()
     expect(page.get_by_test_id("query-output")).to_contain_text("alpha")

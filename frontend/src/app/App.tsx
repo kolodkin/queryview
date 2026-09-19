@@ -222,7 +222,7 @@ function Shell() {
   }, [])
 
   // The URL is session state: it is what a refresh and a session switch
-  // restore. Immediate rather than debounced — navigation is a discrete act,
+  // restore. Immediate rather than queued — navigation is a discrete act,
   // and a refresh right after it must land on the new page.
   useEffect(() => {
     if (!sessionChecked) return

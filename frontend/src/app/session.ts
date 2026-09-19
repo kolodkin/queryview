@@ -1,5 +1,5 @@
 // The session client: attach/heartbeat/release, the in-memory mirror every view
-// reads, and debounced write-back. The server owns the state; this module keeps
+// reads, and queued write-back. The server owns the state; this module keeps
 // a local copy so the UI renders from it synchronously and a patch in flight is
 // never something the user waits on. See docs/session.md.
 
@@ -30,10 +30,11 @@ export type SessionPatch = { url?: string; label?: string; workspace?: string }
 // Matches the backend's claim TTL of 30s: a heartbeat every 10s leaves room for
 // two missed beats before another tab may take the session.
 const HEARTBEAT_MS = 10_000
-// A backstop, not the main mechanism: views flush when the user leaves them
-// (see the focus-out effect in QueryView), and `pagehide` beacons whatever is
-// still pending. This only bounds what a tab that dies mid-edit can lose.
-const DEBOUNCE_MS = 5_000
+// Flushes queued view state after a pause in editing. A backstop, not the main
+// mechanism — the query panel flushes on focus-out and `pagehide` beacons what
+// is still pending — so a tab that dies mid-edit loses at most what was typed
+// since its last pause.
+const IDLE_MS = 5_000
 
 type PendingPatch = SessionPatch & { ui?: Record<string, Record<string, unknown>> }
 
@@ -91,8 +92,8 @@ export function startHeartbeat(): () => void {
   return () => clearInterval(handle)
 }
 
-// The closing tab's last word. It carries whatever the debounce has not flushed
-// yet, because `pagehide` also fires on a reload: a sidebar dragged or a query
+// The closing tab's last word. It carries whatever is still queued, because
+// `pagehide` also fires on a reload: a sidebar dragged or a query
 // typed a moment ago must survive it. A beacon survives the page going away;
 // the in-flight fetch a normal patch uses would be cancelled.
 export function releaseSession(): void {
@@ -114,7 +115,7 @@ export function releaseSession(): void {
 
 function schedule(): void {
   clearTimeout(timer)
-  timer = setTimeout(() => void flushPatches(), DEBOUNCE_MS)
+  timer = setTimeout(() => void flushPatches(), IDLE_MS)
 }
 
 // Patches are fire-and-forget and last-write-wins: a failed one loses a
@@ -144,9 +145,8 @@ export function viewState(view: string): Record<string, unknown> {
   return state?.ui?.[view] ?? {}
 }
 
-// Queues a view's change and lets the backstop timer carry it. Views that know
-// when the user is done — the query panel, on focus-out — call flushPatches()
-// themselves rather than waiting it out.
+// Queues a view's change for the idle backstop, or for an earlier flushPatches()
+// from a view that knows when the user is done.
 export function patchView(view: string, changes: Record<string, unknown>): void {
   if (!state) return
   state.ui = { ...state.ui, [view]: { ...(state.ui[view] ?? {}), ...changes } }
@@ -155,7 +155,7 @@ export function patchView(view: string, changes: Record<string, unknown>): void 
 }
 
 // Row fields are discrete acts — a navigation, a workspace switch, a rename —
-// so they flush at once rather than waiting out the debounce.
+// so they flush at once rather than queueing.
 export function patchSession(changes: SessionPatch): Promise<void> {
   if (!state) return Promise.resolve()
   state = { ...state, ...changes } as SessionState

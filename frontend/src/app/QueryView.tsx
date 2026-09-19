@@ -604,12 +604,10 @@ function QueryPanel({
   const saved = viewState('query')
   const [sql, setSql] = useState(() => (typeof saved.sql === 'string' ? saved.sql : ''))
   const [limit, setLimit] = useState(() => (typeof saved.limit === 'number' ? saved.limit : 100))
-  // Not restored: an offset is a cursor into a result set, and results are
-  // deliberately not restored. Bringing one back points a fresh query at a page
-  // of rows that no longer exists, which returns nothing.
-  const [offset, setOffset] = useState(0)
   const [rows, setRows] = useState(4)
   const [result, setResult] = useState<QueryRows | null>(null)
+  // The cursor into `result`, so not restored either (docs/session.md).
+  const [offset, setOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [predefined, setPredefined] = useState<PredefinedQuery[]>([])
@@ -640,59 +638,47 @@ function QueryPanel({
   const [cellViewModalOpen, setCellViewModalOpen] = useState(false)
   // Transient "Copied" feedback for the copy-name button.
   const [copiedName, setCopiedName] = useState(false)
-  // Panel root, for the focus trackers below.
+  // Panel root, for the focus tracker below.
   const panelRef = useRef<HTMLElement>(null)
-  const blurTimer = useRef<number | undefined>(undefined)
-  const flushTimer = useRef<number | undefined>(undefined)
 
-  // Leaving the panel is what "done editing" means, so that is when the
-  // session write lands — not on a timer while you are still typing. The same
-  // signal the edit lock uses, so both agree on when you have finished.
+  // Leaving the panel is what "done editing" means. One exit detector serves
+  // both consumers of that signal, so they cannot disagree: the session write
+  // lands then (not on a timer while you are still typing), and the edit lock,
+  // when armed, is released. The lock is acquired on focus and refreshed every
+  // ~10s against its 30s TTL. Advisory — postLock swallows errors.
   useEffect(() => {
     const el = panelRef.current
     if (!el) return
-    const onFocusOut = () => {
-      // Moving between inputs fires focusout then focusin; only a real exit
-      // counts.
-      window.clearTimeout(flushTimer.current)
-      flushTimer.current = window.setTimeout(() => {
-        if (!el.contains(document.activeElement)) void flushPatches()
-      }, 150)
+    let exitTimer: number | undefined
+    const acquire = () => {
+      if (remoteId) void postLock(remoteId, 'acquire')
     }
-    el.addEventListener('focusout', onFocusOut)
-    return () => {
-      el.removeEventListener('focusout', onFocusOut)
-      window.clearTimeout(flushTimer.current)
-    }
-  }, [])
-
-  // Edit lock: acquire on panel focus (+ ~10s heartbeat to refresh the 30s TTL),
-  // release on blur out of the panel. Advisory — postLock swallows errors.
-  useEffect(() => {
-    const el = panelRef.current
-    if (!el || !remoteId) return
-    const acquire = () => void postLock(remoteId, 'acquire')
     const onFocusIn = () => {
-      window.clearTimeout(blurTimer.current)
+      window.clearTimeout(exitTimer)
       acquire()
     }
     const onFocusOut = () => {
-      // Debounce: moving between inputs fires focusout then focusin.
-      window.clearTimeout(blurTimer.current)
-      blurTimer.current = window.setTimeout(() => {
-        if (!el.contains(document.activeElement)) void postLock(remoteId, 'release')
+      // Moving between inputs fires focusout then focusin; only a real exit
+      // counts.
+      window.clearTimeout(exitTimer)
+      exitTimer = window.setTimeout(() => {
+        if (el.contains(document.activeElement)) return
+        void flushPatches()
+        if (remoteId) void postLock(remoteId, 'release')
       }, 150)
     }
     el.addEventListener('focusin', onFocusIn)
     el.addEventListener('focusout', onFocusOut)
-    const beat = window.setInterval(() => {
-      if (el.contains(document.activeElement)) acquire()
-    }, 10000)
+    const beat = remoteId
+      ? window.setInterval(() => {
+          if (el.contains(document.activeElement)) acquire()
+        }, 10000)
+      : undefined
     return () => {
       el.removeEventListener('focusin', onFocusIn)
       el.removeEventListener('focusout', onFocusOut)
       window.clearInterval(beat)
-      window.clearTimeout(blurTimer.current)
+      window.clearTimeout(exitTimer)
     }
   }, [remoteId])
   // Cell-view YAML carried by a push, loaded as an unsaved draft: it renders

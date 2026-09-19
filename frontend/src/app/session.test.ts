@@ -105,10 +105,10 @@ describe('patchView', () => {
     patchView('query', { sql: 'S' })
     patchView('query', { sql: 'SE' })
     patchView('query', { sql: 'SEL' })
-    // Nothing goes out while the user is still in the panel...
+    // Nothing goes out inside the idle window...
     await vi.advanceTimersByTimeAsync(1_000)
     expect(fetchMock).not.toHaveBeenCalled()
-    // ...and the backstop eventually sends one write, not three.
+    // ...and one write, not three, once it lapses.
     await vi.advanceTimersByTimeAsync(5_000)
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
