@@ -5,6 +5,7 @@ the persist/push path (the runner's happy/bad ClickHouse paths live in e2e)."""
 from __future__ import annotations
 
 import asyncio
+import uuid
 
 from fastapi.testclient import TestClient
 
@@ -68,7 +69,7 @@ def test_upsert_and_push_persists_without_session(default_ws_id):
 
 
 def test_upsert_and_push_delivers_to_registered_session(default_ws_id):
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         persisted, pushed, _ = _run(
             _upsert_and_push("pushed", "c", "<p>x</p>", {"q": "SELECT 1"}, rid, workspace_id=default_ws_id)
@@ -141,7 +142,7 @@ def test_dashboards_get_missing_returns_404():
 
 
 def test_dashboards_upsert_pushes_to_registered_session():
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         client = TestClient(app)
         r = client.post(
@@ -165,7 +166,7 @@ def test_dashboards_upsert_pushes_to_registered_session():
 def test_mcp_upsert_dashboard_pushes_draft_without_persisting(default_ws_id):
     from queryview.mcp_server import push_dashboard as mcp_push
 
-    rid = remote.register()
+    rid = remote.register(uuid.uuid4().hex)
     try:
         out = _run(mcp_push(rid, "draftdash", "c", "<p>d</p>", {"q": "SELECT 1"}))
         assert out["pushed"] is True
@@ -206,11 +207,15 @@ def test_mcp_list_dashboards_scopes_by_session_workspace(default_ws_id):
     names = [d["name"] for d in _run(mcp_list())["dashboards"]]
     assert "mcp ld" not in names
 
-    # A session reporting the other workspace sees it.
-    rid = remote.register()
+    # A session on the other workspace sees it. The workspace comes from the
+    # session row now, not from the browser reporting it into the channel.
+    from queryview import sessions
+
+    rec = _run(sessions.create_session())
+    _run(sessions.patch_session(rec.id, workspace="t-mcp-ld"))
+    remote.register(rec.id)
     try:
-        remote.set_session_workspace(rid, "t-mcp-ld")
-        names = [d["name"] for d in _run(mcp_list(session_id=rid))["dashboards"]]
+        names = [d["name"] for d in _run(mcp_list(session_id=rec.id))["dashboards"]]
         assert names == ["mcp ld"]
     finally:
-        remote.unregister(rid)
+        remote.unregister(rec.id)

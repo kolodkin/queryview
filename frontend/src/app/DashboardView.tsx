@@ -4,7 +4,8 @@ import { useSearchParams } from 'react-router-dom'
 import { DashboardFrame, type DashboardResults } from '../core'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
-import { activeWorkspace } from './workspace'
+import { apiFetch } from './api'
+import { activeWorkspace } from './session'
 
 export type DashboardPush = {
   name: string
@@ -47,7 +48,7 @@ function DashboardView({
   // Refetch the dropdown list (also used after a Save to surface a new name).
   async function loadDashboards() {
     try {
-      const d = await (await fetch(`/api/dashboards?workspace=${encodeURIComponent(activeWorkspace())}`)).json()
+      const d = await (await apiFetch(`/api/dashboards?workspace=${encodeURIComponent(activeWorkspace())}`)).json()
       setDashboards((d.dashboards ?? []) as DashboardSummary[])
     } catch {
       /* non-fatal; keep the last list */
@@ -61,7 +62,7 @@ function DashboardView({
     setSaving(true)
     setError(null)
     try {
-      const res = await fetch('/api/dashboards', {
+      const res = await apiFetch('/api/dashboards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -88,7 +89,7 @@ function DashboardView({
   // Load the dropdown list; refresh on each push so a new dashboard appears.
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/dashboards?workspace=${encodeURIComponent(activeWorkspace())}`)
+    apiFetch(`/api/dashboards?workspace=${encodeURIComponent(activeWorkspace())}`)
       .then((r) => r.json())
       .then((d) => {
         if (!cancelled) setDashboards((d.dashboards ?? []) as DashboardSummary[])
@@ -145,7 +146,7 @@ function DashboardView({
 
       setLoading(true)
       try {
-        const res = await fetch('/api/runqueries', {
+        const res = await apiFetch('/api/runqueries', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ connection: dash.connection, queries: dash.queries }),

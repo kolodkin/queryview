@@ -1,10 +1,10 @@
-"""FastAPI app: the JSON API under /api/*, the per-session cookie, and (when
-SERVE_STATIC=1) serving the built SPA with an index.html fallback."""
+"""FastAPI app: the JSON API under /api/*, the X-QV-Session header that names
+the caller's session, and (when SERVE_STATIC=1) serving the built SPA with an
+index.html fallback."""
 
 from __future__ import annotations
 
 import os
-import uuid
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -19,7 +19,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 
-from . import gitsync, remote, workspaces, yamlio
+from . import gitsync, remote, sessions, workspaces, yamlio
 from .connect import (
     _ensure_schema,
     connect_new,
@@ -116,16 +116,11 @@ async def mcp_slash_redirect() -> RedirectResponse:
 
 
 @app.middleware("http")
-async def session_cookie(request: Request, call_next):
-    sid = request.cookies.get("qv_session")
-    new_session = sid is None
-    if not sid:
-        sid = str(uuid.uuid4())
-    request.state.sid = sid
-    response = await call_next(request)
-    if new_session:
-        response.set_cookie("qv_session", sid, path="/", httponly=True, samesite="lax")
-    return response
+async def session_header(request: Request, call_next):
+    """Identify the session from the header the SPA sends on every /api call.
+    There is no cookie: a session is named by its id, not by the browser."""
+    request.state.sid = request.headers.get("X-QV-Session") or ""
+    return await call_next(request)
 
 
 @app.get("/api/health")
@@ -136,6 +131,118 @@ async def health() -> dict[str, str]:
 @app.get("/api/session")
 async def session(request: Request) -> dict[str, Any]:
     return await get_session(request.state.sid)
+
+
+_SESSION_ERRORS = {
+    "unknown": (404, "unknown session"),
+    "held": (409, "session is open in another tab"),
+}
+
+
+def _session_error(reason: str) -> JSONResponse:
+    """A session store reason code as a response. The store returns codes, not
+    prose, so rewording a message cannot silently change an HTTP status."""
+    status, message = _SESSION_ERRORS.get(reason, (409, reason or "cannot do that"))
+    return JSONResponse({"ok": False, "message": message}, status_code=status)
+
+
+def _str_or_none(body: dict[str, Any], key: str) -> str | None:
+    """A string field of a patch body, or None when absent. Unlike `_clean_str`
+    an empty string is kept: that is how a label unpins."""
+    value = body.get(key)
+    return value if isinstance(value, str) else None
+
+
+def _session_payload(rec: sessions.SessionRec) -> dict[str, Any]:
+    return {
+        "id": rec.id,
+        "label": sessions.display_label(rec),
+        "pinned": rec.label is not None,
+        "connection": rec.connection_name,
+        "database": rec.database,
+        "workspace": rec.workspace,
+        "url": rec.url,
+        "ui": rec.ui,
+    }
+
+
+# Resolve and claim this tab's session (see sessions.attach); doubles as the
+# claim heartbeat.
+@app.post("/api/sessions/attach")
+async def sessions_attach(request: Request):
+    b = await _read_json(request) or {}
+    tab = _clean_str(b.get("tab"))
+    if not tab:
+        return JSONResponse({"ok": False, "message": "tab is required"}, status_code=400)
+    raw_id = _clean_str(b.get("session_id"))
+    rec, created = await sessions.attach(tab, raw_id or None)
+    return {"ok": True, "created": created, "session": _session_payload(rec)}
+
+
+# Switch this tab to a specific session, or (id omitted/null) to a new one.
+@app.post("/api/sessions/select")
+async def sessions_select(request: Request):
+    b = await _read_json(request) or {}
+    tab = _clean_str(b.get("tab"))
+    if not tab:
+        return JSONResponse({"ok": False, "message": "tab is required"}, status_code=400)
+    raw_id = _clean_str(b.get("id"))
+    rec, reason = await sessions.select_session(tab, raw_id or None)
+    if rec is None:
+        return _session_error(reason)
+    return {"ok": True, "session": _session_payload(rec)}
+
+
+@app.get("/api/sessions")
+async def sessions_list() -> dict[str, Any]:
+    return {"sessions": await sessions.list_sessions()}
+
+
+@app.patch("/api/sessions/{sid}")
+async def sessions_patch(sid: str, request: Request):
+    b = await _read_json(request) or {}
+    ui = b.get("ui")
+    rec = await sessions.patch_session(
+        sid,
+        url=_str_or_none(b, "url"),
+        ui=ui if isinstance(ui, dict) else None,
+        label=_str_or_none(b, "label"),
+        workspace=_str_or_none(b, "workspace"),
+    )
+    if rec is None:
+        return JSONResponse({"ok": False, "message": "unknown session"}, status_code=404)
+    return {"ok": True, "session": _session_payload(rec)}
+
+
+@app.delete("/api/sessions/{sid}")
+async def sessions_delete(sid: str):
+    ok, reason = await sessions.delete_session(sid)
+    if not ok:
+        return _session_error(reason)
+    return {"ok": True}
+
+
+# The pagehide beacon: apply whatever the tab had not flushed yet, then free its
+# claim rather than waiting out the TTL. A reload fires pagehide, so this is what
+# keeps a change made inside the client's debounce window.
+@app.post("/api/sessions/release")
+async def sessions_release(request: Request):
+    b = await _read_json(request) or {}
+    tab = _clean_str(b.get("tab"))
+    if not tab:
+        return {"ok": True}
+    sid = _clean_str(b.get("session_id"))
+    if sid:
+        ui = b.get("ui")
+        await sessions.patch_session(
+            sid,
+            url=_str_or_none(b, "url"),
+            ui=ui if isinstance(ui, dict) else None,
+            label=_str_or_none(b, "label"),
+            workspace=_str_or_none(b, "workspace"),
+        )
+    await sessions.release(tab)
+    return {"ok": True}
 
 
 # Drop this session's active connection (disconnect command).
@@ -375,7 +482,9 @@ async def _event_stream(remote_id: str, request: Request):
 # arms "remote control". Closing the EventSource unregisters the channel.
 @app.get("/api/remote/events")
 async def remote_events(request: Request):
-    remote_id = remote.register()
+    # EventSource cannot send headers, so the browser passes its session id in
+    # the query string; other callers still identify by header.
+    remote_id = remote.register(request.query_params.get("session") or request.state.sid)
     return StreamingResponse(
         _event_stream(remote_id, request),
         media_type="text/event-stream",
@@ -417,26 +526,6 @@ async def remote_push(request: Request):
     }
     ok, message = remote.push(session_id, payload)
     return {"ok": ok, "message": message}
-
-
-@app.post("/api/remote/db")
-async def remote_db(request: Request):
-    """Browser reports the database its live session targets, so the agent's
-    push_query/push_dashboard responses can echo it. Called on arm and whenever
-    the active database changes."""
-    body = await _read_json(request)
-    b = body if isinstance(body, dict) else {}
-    raw_sid = b.get("session_id")
-    session_id = raw_sid.strip() if isinstance(raw_sid, str) else ""
-    raw_db = b.get("database")
-    database = raw_db if isinstance(raw_db, str) and raw_db else None
-    if not session_id:
-        return JSONResponse({"ok": False, "message": "session_id required"}, status_code=400)
-    ok = remote.set_session_database(session_id, database)
-    if "workspace" in b:
-        raw_ws = b.get("workspace")
-        remote.set_session_workspace(session_id, raw_ws if isinstance(raw_ws, str) and raw_ws else None)
-    return {"ok": ok}
 
 
 @app.post("/api/remote/lock")

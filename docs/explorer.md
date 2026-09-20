@@ -37,7 +37,7 @@ order-by select the query panel uses.
   256px default (200–600px); ←/→ nudge it, Home or a double-click resets, as
   does a **Reset width** button beside the *Tables* heading. A name that still
   overflows truncates, with the full name as a tooltip. The width persists
-  under the `qv_view_explorer` key (see `frontend/src/app/viewSettings.ts`:
+  under the the session's `ui` blob key (see `frontend/src/app/session.ts`:
   one key per view, settings as JSON, so a new option costs no new key).
 - **Rows panel** — the selected table's rows. The selection lives in the URL
   (`/explorer?table=<name>`), so reloads and links land on the same table.

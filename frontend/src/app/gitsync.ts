@@ -1,6 +1,8 @@
 // Client for the /api/git backup/restore endpoints (see docs/gitsync.md).
 // Every operation is scoped to a workspace (see docs/workspace.md).
 
+import { apiFetch } from './api'
+
 export type GitKind = 'query' | 'dashboard'
 
 export type GitRevision = { sha: string; date: number; message: string }
@@ -29,7 +31,7 @@ export function gitStatus(workspace: string): Promise<boolean> {
     cached = (async () => {
       try {
         const r = await (
-          await fetch(`/api/git/status?workspace=${encodeURIComponent(workspace)}`)
+          await apiFetch(`/api/git/status?workspace=${encodeURIComponent(workspace)}`)
         ).json()
         return Boolean(r.configured)
       } catch {
@@ -51,7 +53,7 @@ export async function gitStore(
   connType?: string,
   workspace?: string,
 ): Promise<GitStoreResult> {
-  const res = await fetch('/api/git/store', {
+  const res = await apiFetch('/api/git/store', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ kind, name, conn_type: connType, workspace }),
@@ -69,7 +71,7 @@ export async function gitHistory(
   if (opts.before) params.set('before', opts.before)
   if (opts.limit) params.set('limit', String(opts.limit))
   if (opts.workspace) params.set('workspace', opts.workspace)
-  const res = await fetch(`/api/git/history?${params.toString()}`)
+  const res = await apiFetch(`/api/git/history?${params.toString()}`)
   return res.json()
 }
 
@@ -80,7 +82,7 @@ export async function gitRestore(
   connType?: string,
   workspace?: string,
 ): Promise<{ ok: boolean; message?: string }> {
-  const res = await fetch('/api/git/restore', {
+  const res = await apiFetch('/api/git/restore', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ kind, name, conn_type: connType, ref, workspace }),

@@ -151,10 +151,7 @@ def test_sidebar_width_is_draggable_and_remembered(seeded_duckdb_long_names, pag
     assert not longest.evaluate("e => e.scrollWidth > e.clientWidth"), "still truncated"
     shot("explorer sidebar widened")
 
-    # Stored as JSON under the explorer's view key, and restored on reload.
-    stored = page.evaluate("() => localStorage.getItem('qv_view_explorer')")
-    assert stored is not None
-    assert f'"sidebarWidth":{DEFAULT_WIDTH + 120}' in stored.replace(" ", "")
+    # Remembered in the session, so it survives a reload.
     page.reload(wait_until="networkidle")
     aside = page.get_by_test_id("explorer-tables")
     expect(aside).to_have_attribute("data-width", str(DEFAULT_WIDTH + 120))

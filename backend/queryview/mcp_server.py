@@ -8,7 +8,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import gitsync, remote
+from . import gitsync, remote, sessions
 from .dashboards import _push_dashboard
 from .queries import list_predefined_queries_view
 
@@ -61,7 +61,7 @@ async def push_query(
         "name": name,
     }
     ok, message = remote.push(session_id, payload)
-    return {"ok": ok, "message": message, "database": remote.session_database(session_id)}
+    return {"ok": ok, "message": message, "database": await sessions.database_of(session_id)}
 
 
 def _columns_to_rows(cols: dict[str, list]) -> dict[str, Any]:
@@ -113,12 +113,12 @@ async def run_query(
 
 
 async def _session_workspace_rec(session_id: str | None):
-    """The workspace the given armed session is on (reported by the browser),
-    else the default workspace. MCP is deliberately workspace-unaware: the
-    human picks the workspace in the UI; the agent works in session scope."""
+    """The workspace the given session is on, read from its row, else the
+    default workspace. MCP is deliberately workspace-unaware: the human picks
+    the workspace in the UI; the agent works in session scope."""
     from . import workspaces
 
-    name = remote.session_workspace(session_id) if session_id else None
+    name = await sessions.workspace_of(session_id) if session_id else None
     return await workspaces.resolve(name or workspaces.DEFAULT_WORKSPACE)
 
 
@@ -198,7 +198,7 @@ async def push_dashboard(
         "ok": pushed,
         "pushed": pushed,
         "message": message,
-        "database": remote.session_database(session_id),
+        "database": await sessions.database_of(session_id),
     }
 
 

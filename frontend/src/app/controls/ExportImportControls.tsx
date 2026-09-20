@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { downloadText, fetchExport, importYaml, type ExportKind } from '../yamlio'
-import { activeWorkspace } from '../workspace'
+import { activeWorkspace } from '../session'
 
 type Props = {
   kind: ExportKind

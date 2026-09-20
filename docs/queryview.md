@@ -42,26 +42,21 @@ describes the prompt page.
 
 ## Sessions
 
-The active connection is **session state**, not global UI state: each browser
-session has its own active connection, held at the backend and keyed by a
-cookie; saved connections are shared (SQLite). See [connect.md](./connect.md).
-
-On load the SPA either:
-
-- **resumes the latest active connection** (`GET /api/session`) — opening already
-  connected, with the previously selected database pre-selected; or
-- **opens a specific connection** when the URL has `?connection=<name>`.
-
-If neither yields a connection it opens at the empty prompt.
+A **session** is one tab's working state — the page and URL, the connection and
+database, the workspace, the query panel — persisted in SQLite and restored on
+refresh. One tab holds a session at a time: a new tab resumes your last one, or
+starts its own if another tab is already using it. A dropdown in the top-right
+nav switches between them. See [session.md](./session.md).
 
 ## Landing page
 
 A live connection lands on the **explorer**, not the prompt — there are tables
 to browse (see [explorer.md](./explorer.md)).
 
-- **Opening the app** (`/`) waits for the session probe, then picks `/explorer`
-  for a resumed ready connection and `/queries` otherwise. Only `/` chooses: a
-  deep link to a page is honored as typed.
+- **Opening the app** (`/`) waits for the session to attach, then goes where
+  that session left off. A session with no remembered URL lands on `/explorer`
+  for a ready connection and `/queries` otherwise. Only `/` chooses: a deep link
+  to a page is honored as typed, and becomes the session's URL.
 - **Connecting** — picking a database (or connecting a picker-less driver)
   navigates from the connect handler itself. Nothing watches the connection, so
   the nav gets back to Queries, a pill database switch stays put, and an
@@ -90,5 +85,5 @@ Command matching is case-insensitive and trims surrounding whitespace. See
 - **No dead ends.** Unknown input is guided, never punished.
 - **State is visible.** Once a database is selected, the top-left indicator
   makes the active connection and database obvious from anywhere.
-- **Resumable.** Sessions reconnect to the last active connection on start, so
-  the common case needs no typing at all.
+- **Resumable.** A session restores where you left off — page, connection and
+  query — so a refresh costs nothing and the common case needs no typing at all.

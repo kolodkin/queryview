@@ -18,7 +18,16 @@ import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
 import { useDismiss } from './controls/useDismiss'
-import { activeWorkspace, setActiveWorkspace } from './workspace'
+import SessionSwitcher from './controls/SessionSwitcher'
+import {
+  attachSession,
+  currentSession,
+  patchSession,
+  releaseSession,
+  sessionId,
+  startHeartbeat,
+} from './session'
+import { apiFetch } from './api'
 
 // The database list behind the connection pill. Long connections list hundreds
 // of databases, so it carries the landing picker's filter; mounted only while
@@ -98,13 +107,18 @@ function Shell() {
   const [connection, setConnection] = useState<Connection | null>(null)
   const ready = isReady(connection)
   const [armed, setArmed] = useState(false)
-  const [remoteId, setRemoteId] = useState<string | null>(null)
+  const [channelOpen, setChannelOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
   const [queryPush, setQueryPush] = useState<QueryPush | null>(null)
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
-  const [workspace, setWorkspace] = useState(activeWorkspace())
+  // Seeded from the session once it attaches; 'default' matches the backend.
+  const [workspace, setWorkspace] = useState('default')
+  const [sessionLabel, setSessionLabel] = useState('Session')
+  // Panels hydrate from the session at mount, so they must remount when the
+  // session changes — not only when the workspace does.
+  const [sessionKey, setSessionKey] = useState('')
   // Whether the initial /api/session probe has answered. The `/` route waits on
   // it: until the session is known it can't tell a connected visitor (who wants
   // the explorer) from a disconnected one (who wants the prompt).
@@ -114,7 +128,7 @@ function Shell() {
   const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
 
   function switchWorkspace(name: string) {
-    setActiveWorkspace(name)
+    void patchSession({ workspace: name })
     setWorkspace(name)
   }
 
@@ -127,7 +141,7 @@ function Shell() {
 
   async function openConnection(name: string) {
     try {
-      const res = await fetch('/api/db/open', {
+      const res = await apiFetch('/api/db/open', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -141,7 +155,6 @@ function Shell() {
           database: null,
         }
         setConnection(opened)
-        setSessionChecked(true)
         // Ready already (a picker-less driver) means tables to browse;
         // otherwise the prompt is where the database gets picked.
         navigate(isReady(opened) ? '/explorer' : '/queries')
@@ -150,49 +163,87 @@ function Shell() {
     } catch {
       /* a failed deep-link open just leaves us disconnected */
     }
-    setSessionChecked(true)
     navigate('/queries')
   }
 
-  // On load: open ?connection=<name> if given, else resume the session's last connection.
-  useEffect(() => {
-    if (initialConnection) {
-      // Async: state is set after the open round-trips.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void openConnection(initialConnection)
-      return
-    }
-    fetch('/api/session')
-      .then((r) => r.json())
-      .then((s) => {
-        if (!s.connected) return
-        const resumed = {
-          name: s.name as string,
-          type: (s.type ?? 'clickhouse') as string,
-          databases: (s.databases ?? []) as string[],
-          database: (s.database ?? null) as string | null,
-        }
-        // Deliberately does not navigate: a resumed session stays on the page
-        // the URL asked for. Only `/` picks a landing page, below.
-        setConnection(resumed)
+  // The live connection for the attached session. `/api/session` reads that
+  // session's own row now, so this is a per-session question.
+  async function refreshConnection() {
+    try {
+      const probe = await (await apiFetch('/api/session')).json()
+      if (!probe.connected) {
+        setConnection(null)
+        return
+      }
+      setConnection({
+        name: probe.name as string,
+        type: (probe.type ?? 'clickhouse') as string,
+        databases: (probe.databases ?? []) as string[],
+        database: (probe.database ?? null) as string | null,
       })
-      .catch(() => {})
-      .finally(() => setSessionChecked(true))
+    } catch {
+      /* leave the connection as-is */
+    }
+  }
+
+  // The session decides the landing page, the live connection and what the
+  // query panel holds, so nothing renders until this resolves. Which session a
+  // tab gets is the server's call — see attach() in backend/queryview/sessions.py.
+  useEffect(() => {
+    let stopHeartbeat = () => {}
+    void (async () => {
+      try {
+        const restored = await attachSession()
+        setWorkspace(restored.workspace)
+        setSessionLabel(restored.label)
+        setSessionKey(restored.id)
+        // Only `/` restores the remembered URL. A deep link is what the user
+        // asked for, so it wins and is written into the session instead.
+        if (window.location.pathname === '/' && restored.url) {
+          navigate(restored.url, { replace: true })
+        }
+        if (initialConnection) {
+          await openConnection(initialConnection)
+        } else if (restored.connection) {
+          await refreshConnection()
+        }
+        stopHeartbeat = startHeartbeat()
+      } catch {
+        /* no session: the app still runs, it just remembers nothing */
+      }
+      setSessionChecked(true)
+    })()
+    window.addEventListener('pagehide', releaseSession)
+    return () => {
+      stopHeartbeat()
+      window.removeEventListener('pagehide', releaseSession)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The URL is session state: it is what a refresh and a session switch
+  // restore. Immediate rather than queued — navigation is a discrete act,
+  // and a refresh right after it must land on the new page.
+  useEffect(() => {
+    if (!sessionChecked) return
+    const url = `${location.pathname}${location.search}`
+    // Skip the no-op write on load, where this fires with the URL attach just
+    // restored.
+    if (url === currentSession()?.url) return
+    void patchSession({ url })
+  }, [sessionChecked, location.pathname, location.search])
+
 
   // When armed, open an SSE channel: `ready` gives the session id; `query` and
   // `dashboard` events carry payloads that navigate to the matching page.
   useEffect(() => {
     if (!armed) return
-    const es = new EventSource('/api/remote/events')
-    es.addEventListener('ready', (e) => {
-      try {
-        setRemoteId(JSON.parse((e as MessageEvent).data).id as string)
-      } catch {
-        /* ignore malformed event */
-      }
-    })
+    // EventSource cannot send headers, so the session id travels in the query
+    // string; the backend falls back to X-QV-Session for other callers.
+    const es = new EventSource(
+      `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}`,
+    )
+    es.addEventListener('ready', () => setChannelOpen(true))
     es.addEventListener('query', (e) => {
       try {
         setQueryPush(JSON.parse((e as MessageEvent).data) as QueryPush)
@@ -214,7 +265,7 @@ function Shell() {
     })
     return () => {
       es.close()
-      setRemoteId(null)
+      setChannelOpen(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [armed])
@@ -223,28 +274,12 @@ function Shell() {
     setArmed(e.target.checked)
   }
 
-  // Report the active database and workspace to the live session so the
-  // agent's session-scoped tools resolve against them. Fires on arm and on
-  // each change.
-  useEffect(() => {
-    if (!armed || !remoteId) return
-    void fetch('/api/remote/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: remoteId,
-        database: connection?.database ?? null,
-        workspace,
-      }),
-    }).catch(() => {})
-  }, [armed, remoteId, connection?.database, workspace])
-
   // Switch the active database for the current connection (via the pill dropdown).
   async function switchDatabase(database: string) {
     setDbOpen(false)
     if (!connection || database === connection.database) return
     try {
-      const res = await fetch('/api/db/database', {
+      const res = await apiFetch('/api/db/database', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ database }),
@@ -255,6 +290,8 @@ function Shell() {
     }
   }
 
+  // The channel is keyed by this session, so the agent's id is the session's own.
+  const remoteId = channelOpen ? sessionId() : null
   const agentCommand = `Use the queryview mcp to connect to session "${remoteId ?? ''}"`
 
   const navLinkClass = (path: string) =>
@@ -362,6 +399,17 @@ function Shell() {
       )}
 
       <nav className="absolute right-4 top-4 flex gap-2" data-testid="nav">
+        <SessionSwitcher
+          label={sessionLabel}
+          onRenamed={setSessionLabel}
+          onSwitch={(next) => {
+            setWorkspace(next.workspace)
+            setSessionLabel(next.label)
+            setSessionKey(next.id)
+            navigate(next.url || '/queries')
+            void refreshConnection()
+          }}
+        />
         <WorkspaceSwitcher workspace={workspace} onSwitch={switchWorkspace} />
         <Link to="/queries" data-testid="nav-queries" className={navLinkClass('/queries')}>
           Queries
@@ -382,46 +430,43 @@ function Shell() {
         </Link>
       </nav>
 
-      <Routes>
-        <Route
-          path="/queries"
-          element={
-            <QueryView
-              key={workspace}
-              connection={connection}
-              setConnection={setConnection}
-              pushed={queryPush}
-              onPushConsumed={() => setQueryPush(null)}
-              remoteId={remoteId}
-            />
-          }
-        />
-        <Route path="/explorer" element={<ExplorerView connection={connection} />} />
-        <Route
-          path="/dashboard"
-          element={
-            <DashboardView
-              key={workspace}
-              pushed={dashboardPush}
-              onPushConsumed={() => setDashboardPush(null)}
-              database={connection?.database ?? null}
-            />
-          }
-        />
-        {/* Only `/` picks a landing page, and only once the probe has answered.
-            An unknown path is just a bad URL, not a landing question. */}
-        <Route
-          path="/"
-          element={
-            sessionChecked ? (
-              <Navigate to={ready ? '/explorer' : '/queries'} replace />
-            ) : (
-              <Loading label="Restoring session…" testid="session-loading" />
-            )
-          }
-        />
-        <Route path="*" element={<Navigate to="/queries" replace />} />
-      </Routes>
+      {/* Every view hydrates from the session, so none may mount before the
+          attach has answered. */}
+      {sessionChecked ? (
+        <Routes>
+          <Route
+            path="/queries"
+            element={
+              <QueryView
+                key={`${sessionKey}:${workspace}`}
+                connection={connection}
+                setConnection={setConnection}
+                pushed={queryPush}
+                onPushConsumed={() => setQueryPush(null)}
+                remoteId={remoteId}
+              />
+            }
+          />
+          <Route path="/explorer" element={<ExplorerView connection={connection} />} />
+          <Route
+            path="/dashboard"
+            element={
+              <DashboardView
+                key={`${sessionKey}:${workspace}`}
+                pushed={dashboardPush}
+                onPushConsumed={() => setDashboardPush(null)}
+                database={connection?.database ?? null}
+              />
+            }
+          />
+          {/* Only `/` picks a landing page. An unknown path is just a bad URL,
+              not a landing question. */}
+          <Route path="/" element={<Navigate to={ready ? '/explorer' : '/queries'} replace />} />
+          <Route path="*" element={<Navigate to="/queries" replace />} />
+        </Routes>
+      ) : (
+        <Loading label="Restoring session…" testid="session-loading" />
+      )}
       <Toast message={toast} onDone={() => setToast(null)} />
     </main>
   )

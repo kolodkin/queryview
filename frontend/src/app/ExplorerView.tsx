@@ -21,6 +21,7 @@ import {
   loadSidebarWidth,
   saveSidebarWidth,
 } from './explorerSettings'
+import { apiFetch } from './api'
 
 // Sidebar entry from /api/db/tables. rows/bytes are engine estimates — null
 // when the engine doesn't track them (views, never-analyzed Postgres tables);
@@ -93,7 +94,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     setTablesLoading(true) // eslint-disable-line react-hooks/set-state-in-effect
     void (async () => {
       try {
-        const res = await fetch('/api/db/tables')
+        const res = await apiFetch('/api/db/tables')
         const data = await res.json()
         if (cancelled) return
         if (data.ok) {
@@ -128,7 +129,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
       setBusy(true)
       setError(null)
       try {
-        const res = await fetch('/api/db/query', {
+        const res = await apiFetch('/api/db/query', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -174,7 +175,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     /* eslint-enable react-hooks/set-state-in-effect */
     void (async () => {
       try {
-        const res = await fetch('/api/db/describe', {
+        const res = await apiFetch('/api/db/describe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: sql }),

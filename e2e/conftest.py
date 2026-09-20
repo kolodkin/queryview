@@ -1,5 +1,6 @@
 import os
 import re
+import uuid
 from pathlib import Path
 
 import httpx
@@ -40,6 +41,27 @@ def open_query_panel(page: Page) -> None:
     page.get_by_test_id("prompt-input").fill("query")
     page.keyboard.press("Enter")
     expect(page.get_by_test_id("query-panel")).to_be_visible()
+
+
+@pytest.fixture
+def context(context, base_url: str):
+    """Give every test its own session.
+
+    Session state lives on the server, so a fresh browser context is no longer
+    fresh state: without this a test would resume the previous one's session and
+    inherit its remembered SQL, sidebar width and workspace.
+
+    Seeds `qv_session` but never `qv_tab`, so each page still mints its own tab
+    token and a second tab opened inside a test correctly starts its own
+    session.
+    """
+    tab = f"e2e-{uuid.uuid4().hex}"
+    created = httpx.post(f"{base_url}/api/sessions/attach", json={"tab": tab})
+    sid = created.json()["session"]["id"]
+    # Release it so the page's own tab token can claim it on load.
+    httpx.post(f"{base_url}/api/sessions/release", json={"tab": tab})
+    context.add_init_script(f"sessionStorage.setItem('qv_session', {sid!r});")
+    return context
 
 
 @pytest.fixture(scope="session")
