@@ -91,19 +91,15 @@ def _to_rec(row: Session, now: int | None = None) -> SessionRec:
     )
 
 
-def _label(label: str | None, connection: str | None, database: str | None, seq: int) -> str:
-    """A pinned name, else the connection state, else the stable ordinal."""
-    if label:
-        return label
-    if connection and database:
-        return f"{connection} · {database}"
-    if connection:
-        return connection
-    return f"Session {seq}"
+def _label(label: str | None, seq: int) -> str:
+    """A pinned name, else the stable ordinal. Connection and database are shown
+    beside the name rather than folded into it, so a session's name does not
+    change under you when you switch databases."""
+    return label or f"Session {seq}"
 
 
 def display_label(rec: SessionRec) -> str:
-    return _label(rec.label, rec.connection_name, rec.database, rec.seq)
+    return _label(rec.label, rec.seq)
 
 
 def _merge_ui(current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
@@ -184,7 +180,7 @@ async def list_sessions() -> list[dict[str, Any]]:
     return [
         {
             "id": r.id,
-            "label": _label(r.label, r.connection_name, r.database, r.seq),
+            "label": _label(r.label, r.seq),
             "connection": r.connection_name,
             "database": r.database,
             "held": bool(

@@ -63,8 +63,9 @@ session would overwrite each other's state.
 - **Rename this session** pins a name; clearing it unpins.
 - **×** deletes a session, unless a live tab holds it.
 
-An unpinned label is derived: `connection · database`, else the connection name,
-else `Session <n>`.
+An unpinned label is `Session <n>`, with `n` a stable ordinal, so a name never
+changes under you when you switch databases. Each row shows the session's
+connection and database beside its name.
 
 Sessions never expire, so the list grows until you prune it — the cost of
 sessions being durable and nameable rather than a capped history.
@@ -86,7 +87,7 @@ One row per session in SQLite (`sessions`), alongside connections and workspaces
 ```sql
 id              TEXT PRIMARY KEY  -- also the agent channel id
 seq             INTEGER           -- stable ordinal behind "Session 3"
-label           TEXT              -- NULL = derived; set = pinned by you
+label           TEXT              -- NULL = Session <n>; set = pinned by you
 connection_name TEXT              -- NULL is the durable "disconnected" state
 database        TEXT
 workspace       TEXT

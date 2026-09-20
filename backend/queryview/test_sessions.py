@@ -1,5 +1,5 @@
-"""Session store: rows persist UI state, labels derive from connection state,
-and a held session refuses deletion."""
+"""Session store: rows persist UI state, labels are pinned or ordinal, and a
+held session refuses deletion."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def test_patch_returns_the_updated_record():
     unpinned = _run(sessions.patch_session(rec.id, label=""))
     assert unpinned is not None
     assert unpinned.label is None
-    assert sessions.display_label(unpinned) == "reporting · events"
+    assert sessions.display_label(unpinned) == f"Session {rec.seq}"
 
 
 def test_delete_removes_the_row():
@@ -77,17 +77,9 @@ def test_delete_removes_the_row():
     assert _run(sessions.get_session_rec(rec.id)) is None
 
 
-def test_label_prefers_connection_and_database():
+def test_label_is_the_ordinal_whatever_the_connection():
     rec = _run(sessions.create_session())
     rec.connection_name, rec.database = "reporting", "events"
-    assert sessions.display_label(rec) == "reporting · events"
-
-
-def test_label_falls_back_to_connection_then_seq():
-    rec = _run(sessions.create_session())
-    rec.connection_name, rec.database = "reporting", None
-    assert sessions.display_label(rec) == "reporting"
-    rec.connection_name = None
     assert sessions.display_label(rec) == f"Session {rec.seq}"
 
 

@@ -6,6 +6,7 @@ import {
   removeSession,
   renameSession,
   selectSession,
+  sessionId,
   type SessionState,
   type SessionSummary,
 } from '../session'
@@ -21,6 +22,7 @@ type Props = {
 // shown but not selectable: two tabs on one session would overwrite each
 // other's state, which is the whole point of the per-tab claim.
 export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
+  const current = sessionId()
   const [open, setOpen] = useState(false)
   const [list, setList] = useState<SessionSummary[]>([])
   const [renaming, setRenaming] = useState(false)
@@ -98,14 +100,19 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
                 <button
                   type="button"
                   role="option"
-                  aria-selected={s.label === label}
-                  disabled={s.held && s.label !== label}
+                  aria-selected={s.id === current}
+                  disabled={s.held && s.id !== current}
                   data-testid={`session-row-${s.id}`}
                   onClick={() => void switchTo(s.id)}
                   className="flex-1 truncate rounded px-2 py-1.5 text-left text-slate-200 hover:bg-white/10 disabled:text-slate-500 disabled:hover:bg-transparent"
                 >
                   {s.label}
-                  {s.held && s.label !== label && (
+                  {s.connection && (
+                    <span className="ml-2 text-xs text-slate-400">
+                      {s.database ? `${s.connection} · ${s.database}` : s.connection}
+                    </span>
+                  )}
+                  {s.held && s.id !== current && (
                     <span className="ml-2 text-xs text-slate-400">in another tab</span>
                   )}
                 </button>
