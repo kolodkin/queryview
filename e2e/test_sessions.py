@@ -6,7 +6,10 @@ Uses DuckDB throughout: it needs no server, so these run anywhere the SPA does.
 from __future__ import annotations
 
 import re
+import uuid
 
+import httpx
+import pytest
 from conftest import open_query_panel
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
@@ -103,3 +106,31 @@ def test_a_restored_panel_does_not_page_a_new_query_into_nothing(seeded_duckdb, 
     # fresh result set.
     page.get_by_test_id("query-run").click()
     expect(page.get_by_test_id("query-output")).to_contain_text("alpha")
+
+
+@pytest.fixture
+def left_behind(base_url: str):
+    """An earlier test's session: panel state saved, then released by its closing
+    tab, so it is the most recently active unheld session — exactly what a new
+    tab resumes. Requested before `page`, so it exists when the `context` fixture
+    seeds this test's session."""
+    tab = f"e2e-{uuid.uuid4().hex}"
+    sid = httpx.post(f"{base_url}/api/sessions/attach", json={"tab": tab}).json()["session"]["id"]
+    ui = {"query": {"sql": "SELECT 'left behind'", "orderBy": [{"name": "name", "dir": "DESC"}]}}
+    httpx.post(f"{base_url}/api/sessions/release", json={"tab": tab, "session_id": sid, "ui": ui})
+    yield sid
+    httpx.delete(f"{base_url}/api/sessions/{sid}")
+
+
+def test_each_test_starts_on_a_fresh_session(left_behind: str, seeded_duckdb, page: Page) -> None:
+    """The `context` fixture must seed a brand-new session, not resume the last
+    one another test released: that one carries its SQL and order-by, and a
+    restored DESC order turned this suite's first page into its last."""
+    page.goto("/", wait_until="networkidle")
+    assert page.evaluate("() => sessionStorage.getItem('qv_session')") != left_behind
+
+    _connect_duckdb(page, seeded_duckdb)
+    open_query_panel(page)
+    expect(page.get_by_test_id("query-input")).to_have_value("")
+    expect(page.get_by_test_id("orderby-chip")).to_have_count(0)
+    expect(page.get_by_test_id("query-offset")).to_have_value("0")
