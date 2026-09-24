@@ -141,13 +141,12 @@ async def list_connections(session_id: str | None = None) -> dict[str, Any]:
     disconnected) — the natural choice for run_query.
 
     Args:
-        session_id: Optional armed-session id; scopes the call to that
-            session's workspace (default workspace otherwise). Connections are
-            shared across workspaces, so the list itself is the same.
+        session_id: Optional armed-session id. Connections are shared across
+            workspaces, so the list is the same for every session; the id only
+            adds "session_connection".
     """
     from .connect import list_connections as _list_connections
 
-    await _session_workspace_rec(session_id)
     out: dict[str, Any] = {"connections": await _list_connections()}
     if session_id:
         rec = await sessions.get_session_rec(session_id)

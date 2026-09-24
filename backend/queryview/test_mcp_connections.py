@@ -61,6 +61,20 @@ def test_list_connections_scoped_to_session():
         remote.unregister(rid)
 
 
+def test_list_connections_survives_deleted_session_workspace():
+    """Connections are global, so a session whose workspace is gone still lists them."""
+    from queryview.mcp_server import list_connections
+    from queryview.workspaces import create_workspace, delete_workspace
+
+    _save("lc-gone")
+    _run(create_workspace("t-lc-gone"))
+    rec = _run(sessions.create_session())
+    _run(sessions.patch_session(rec.id, workspace="t-lc-gone"))
+    _run(delete_workspace("t-lc-gone"))
+    out = _run(list_connections(session_id=rec.id))
+    assert "lc-gone" in [c["name"] for c in out["connections"]]
+
+
 def test_list_connections_is_registered():
     from queryview.mcp_server import mcp
 
