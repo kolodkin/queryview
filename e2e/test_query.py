@@ -190,12 +190,14 @@ def test_field_pickers_visibility_and_order_by(seeded_test_db, page: Page, shot)
     # Fields describes the query's output columns and reveals both pickers.
     page.get_by_test_id("query-fields").click()
     expect(page.get_by_test_id("field-pickers")).to_be_visible()
+    expect(page.get_by_test_id("fields-count")).to_have_text("2/2")
+    page.get_by_test_id("fields-menu").click()
     expect(page.locator('[data-testid="field-toggle"]')).to_have_count(2)
     expect(page.locator('[data-testid="field-toggle"][data-col="id"]')).to_be_visible()
     expect(page.locator('[data-testid="field-toggle"][data-col="name"]')).to_be_visible()
     shot("fields described - both pickers")
 
-    # Execute renders both columns.
+    # Execute renders both columns (the click also closes the fields menu).
     page.get_by_test_id("query-run").click()
     output = page.get_by_test_id("query-output")
     expect(output).to_be_visible()
@@ -204,6 +206,7 @@ def test_field_pickers_visibility_and_order_by(seeded_test_db, page: Page, shot)
 
     # Select fields is client-side: hiding `id` drops its column without re-running,
     # and the toggle immediately reflects the unselected state.
+    page.get_by_test_id("fields-menu").click()
     id_toggle = page.locator('[data-testid="field-toggle"][data-col="id"]')
     id_toggle.click()
     expect(output.locator("table thead th")).to_have_count(1)
@@ -231,6 +234,7 @@ def test_field_pickers_visibility_and_order_by(seeded_test_db, page: Page, shot)
     # Order by name DESC (server-side): selecting it does NOT change results until
     # the query re-runs. The order-by Run button re-runs the query (like Execute),
     # so it also applies the current limit.
+    page.get_by_test_id("orderby-menu").click()
     page.locator('[data-testid="orderby-add"][data-col="name"]').click()
     chip = page.locator('[data-testid="orderby-chip"][data-col="name"]')
     expect(chip).to_be_visible()

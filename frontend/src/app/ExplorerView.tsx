@@ -285,14 +285,16 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
 
   return (
     // mt-10 keeps the panels clear of the absolutely-positioned connection
-    // pill (top-left) and nav (top-right) when the content is viewport-tall.
-    <div className="mt-10 flex w-full max-w-[85vw] items-start gap-4">
+    // pill (top-left) and nav (top-right). The height fills the viewport (less
+    // the shell's py-10 and that margin) so the table list and the rows scroll
+    // inside their panels; below the min-height the page itself scrolls.
+    <div className="mt-10 flex h-[calc(100vh-7.5rem)] min-h-[30rem] w-full max-w-[85vw] gap-4">
       <aside
         ref={asideRef}
         data-testid="explorer-tables"
         data-width={sidebarWidth}
         style={{ width: sidebarWidth }}
-        className="glass-panel relative shrink-0 p-4"
+        className="glass-panel relative flex shrink-0 flex-col p-4"
       >
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-slate-200">Tables</h2>
@@ -316,7 +318,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
         {tablesLoading ? (
           <Loading label="Loading tables…" testid="explorer-tables-loading" />
         ) : (
-          <div className="mt-2 max-h-[70vh] space-y-1 overflow-auto">
+          <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-auto">
             {tables.map((t) => {
               const meta = tableMeta(t)
               return (
@@ -376,7 +378,10 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
         />
       </aside>
 
-      <section data-testid="explorer-panel" className="glass-panel min-w-0 flex-1 space-y-3 p-6">
+      <section
+        data-testid="explorer-panel"
+        className="glass-panel flex min-w-0 flex-1 flex-col gap-3 p-6"
+      >
         {!table ? (
           <p data-testid="explorer-hint" className="text-sm text-slate-400">
             Select a table to browse its rows.
@@ -453,12 +458,15 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               <Loading label="Loading rows…" testid="explorer-rows-loading" />
             )}
             {result !== null && (
-              <div className={busy ? 'opacity-50 transition-opacity' : undefined}>
+              <div
+                className={`flex min-h-0 flex-1 flex-col ${busy ? 'opacity-50 transition-opacity' : ''}`}
+              >
                 <ResultsTable
                   columns={columns}
                   rows={rows}
                   shownIdx={shownIdx}
                   testid="explorer-output"
+                  className="min-h-0"
                 />
               </div>
             )}

@@ -16,9 +16,8 @@ order-by select the query panel uses.
 │ ┌────────┐ ┌─────────────────────────────────────┐ │
 │ │ Tables │ │ items      Limit [100] ← Prev Next → │ │
 │ │ events │ │ ┌─────────────────────────────────┐ │ │
-│ │ items ◀│ │ │ Select fields  [id] [name]      │ │ │
-│ │ users  │ │ │ Order by       [id] [name]      │ │ │
-│ │        │ │ └─────────────────────────────────┘ │ │
+│ │ items ◀│ │ │ Fields 2/2 ▾  Order by ▾  1.id ASC│ │ │
+│ │ users  │ │ └─────────────────────────────────┘ │ │
 │ │        │ │  id │ name                          │ │
 │ │        │ │  …  │ …                             │ │
 │ └────────┘ └─────────────────────────────────────┘ │
@@ -41,6 +40,9 @@ order-by select the query panel uses.
   one key per view, settings as JSON, so a new option costs no new key).
 - **Rows panel** — the selected table's rows. The selection lives in the URL
   (`/explorer?table=<name>`), so reloads and links land on the same table.
+- **Viewport height** — the page fills the window (with a 30rem minimum, below
+  which the page itself scrolls). The table list and the rows grid scroll inside
+  their own panels, so the grid's horizontal scrollbar stays on screen.
 - **Loading** — panels show *Loading tables…* / *Loading rows…* rather than
   sitting empty. Re-running a loaded table (paging, a new order-by) keeps its
   rows on screen, dimmed, with a spinner by the table name.

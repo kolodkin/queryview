@@ -42,9 +42,10 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
 
     # The pickers come pre-populated from an automatic describe.
     expect(page.get_by_test_id("field-pickers")).to_be_visible()
-    expect(page.locator('[data-testid="field-toggle"]')).to_have_count(2)
+    expect(page.get_by_test_id("fields-count")).to_have_text("2/2")
 
     # Order by id, flipped to DESC, re-runs immediately: gamma (id 3) first.
+    page.get_by_test_id("orderby-menu").click()
     page.locator('[data-testid="orderby-add"][data-col="id"]').click()
     chip = page.locator('[data-testid="orderby-chip"][data-col="id"]')
     expect(chip).to_be_visible()
@@ -53,6 +54,7 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
     shot(f"{case.id} explorer ordered desc")
 
     # Hiding a field is client-side column visibility — no re-run.
+    page.get_by_test_id("fields-menu").click()
     page.locator('[data-testid="field-toggle"][data-col="id"]').click()
     expect(output.locator("table thead th")).to_have_count(1)
     page.locator('[data-testid="field-toggle"][data-col="id"]').click()
@@ -87,7 +89,8 @@ def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: 
     page.locator('[data-testid="explorer-table"][data-table="items"]').click()
     output = page.get_by_test_id("explorer-output")
     expect(output).to_contain_text("alpha")
-    expect(page.locator('[data-testid="field-toggle"]')).to_have_count(2)
+    expect(page.get_by_test_id("fields-count")).to_have_text("2/2")
+    page.get_by_test_id("orderby-menu").click()
 
     # From here on, hold every browse run instead of letting it reach the server.
     held: list = []

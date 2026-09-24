@@ -135,6 +135,8 @@ def test_fields_describe(case: DriverCase, request, page: Page, shot) -> None:
     page.get_by_test_id("query-input").fill("SELECT id, name FROM items")
     page.get_by_test_id("query-fields").click()
     expect(page.get_by_test_id("field-pickers")).to_be_visible()
+    expect(page.get_by_test_id("fields-count")).to_have_text("2/2")
+    page.get_by_test_id("fields-menu").click()
     expect(page.locator('[data-testid="field-toggle"]')).to_have_count(2)
     expect(page.locator('[data-testid="field-toggle"][data-col="id"]')).to_be_visible()
     expect(page.locator('[data-testid="field-toggle"][data-col="name"]')).to_be_visible()
