@@ -216,6 +216,19 @@ def test_select_none_creates_a_new_session():
     assert got.held is True
 
 
+def test_select_none_does_not_resume_a_released_session():
+    """Unlike attach, which hands a new tab the last released session with its
+    saved state. The e2e fixture relies on this for per-test isolation."""
+    _free_everything()
+    left, _ = _run(sessions.attach("tab-a", None))
+    _run(sessions.patch_session(left.id, ui={"query": {"sql": "SELECT 1"}}))
+    _run(sessions.release("tab-a"))
+    got, _ = _run(sessions.select_session("tab-b", None))
+    assert got is not None
+    assert got.id != left.id
+    assert got.ui == {}
+
+
 def test_select_refuses_a_session_held_by_another_tab():
     _free_everything()
     held, _ = _run(sessions.attach("tab-a", None))

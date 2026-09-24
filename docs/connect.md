@@ -47,7 +47,10 @@ needed.
 
 All matching is case-insensitive and whitespace-trimmed. An unknown command
 shows a hint (`Try "new clickhouse" or "connect <name>"`); `connect <name>` for
-an unknown name reports `no connection named "<name>"`.
+an unknown name reports `no connection named "<name>"; available: <names>`.
+When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`
+fails, the error suggests `host.docker.internal` (see the README's
+[Connecting to databases on your machine](../README.md#connecting-to-databases-on-your-machine)).
 
 ## Concepts
 
