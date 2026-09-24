@@ -29,9 +29,11 @@ async def push_query(
 ) -> dict[str, Any]:
     """Push a SQL query to a live QueryView browser session.
 
-    The targeted browser fills its query panel and auto-runs the query. Get the
-    `session_id` from the QueryView UI: the agent icon next to the connection
-    status pill, after enabling "Allow remote control".
+    The targeted browser fills its query panel and auto-runs the query against
+    the session's own connection. Get the `session_id` from the QueryView UI:
+    the agent icon next to the connection status pill, after enabling "Allow
+    remote control". To explore data first with run_query, call
+    list_connections for the saved connection names rather than guessing one.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -92,6 +94,10 @@ async def run_query(
     `database` is the connection's currently-selected database (the user can
     change it from the connection pill), so check it before deciding whether to
     fully-qualify tables as db.table.
+
+    `connection` is a saved connection name. The default "clickhouse" is only a
+    guess: if you don't know the name, call list_connections first. An unknown
+    name fails with a message listing the available ones.
     """
     from .connect import _connection_by_name
     from .dashboard_queries import run_queries_for_connection
@@ -120,6 +126,33 @@ async def _session_workspace_rec(session_id: str | None):
 
     name = await sessions.workspace_of(session_id) if session_id else None
     return await workspaces.resolve(name or workspaces.DEFAULT_WORKSPACE)
+
+
+@mcp.tool()
+async def list_connections(session_id: str | None = None) -> dict[str, Any]:
+    """List the saved connections: the valid `connection` names for run_query
+    and push_dashboard. Call this before run_query / push_query whenever the
+    connection name is unknown — don't guess.
+
+    Returns {"connections": [{name, type, database}]}, most recently used
+    first; `database` is the connection's currently-selected database (null if
+    none). Hosts and credentials are never returned. With a `session_id`, also
+    returns "session_connection": the connection that session is on (null if
+    disconnected) — the natural choice for run_query.
+
+    Args:
+        session_id: Optional armed-session id; scopes the call to that
+            session's workspace (default workspace otherwise). Connections are
+            shared across workspaces, so the list itself is the same.
+    """
+    from .connect import list_connections as _list_connections
+
+    await _session_workspace_rec(session_id)
+    out: dict[str, Any] = {"connections": await _list_connections()}
+    if session_id:
+        rec = await sessions.get_session_rec(session_id)
+        out["session_connection"] = rec.connection_name if rec else None
+    return out
 
 
 @mcp.tool()
@@ -187,12 +220,19 @@ async def push_dashboard(
     Args:
         session_id: The session id shown in the QueryView popover.
         name: Dashboard name (the name the user's Save will persist under).
-        connection: Saved connection name the queries run against.
+        connection: Saved connection name the queries run against (see
+            list_connections).
         html: The dashboard HTML document (renders in a sandboxed iframe).
         queries: Map of query name to SQL.
 
-    Returns {ok, pushed, message}.
+    Returns {ok, pushed, message}. An unknown `connection` fails without
+    pushing, with a message listing the available names (see list_connections).
     """
+    from .connect import _connection_by_name, unknown_connection_message
+
+    if await _connection_by_name(connection) is None:
+        message = await unknown_connection_message(connection)
+        return {"ok": False, "pushed": False, "message": message, "database": None}
     pushed, message = await _push_dashboard(name, connection, html, queries, session_id or None)
     return {
         "ok": pushed,

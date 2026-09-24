@@ -103,6 +103,21 @@ To let Docker own the location instead, swap the path for a named volume,
 ownership is already right and there is nothing to create up front, but the
 state no longer lines up with a local run.
 
+### Connecting to databases on your machine
+
+Inside the container, `localhost` is the container itself, not your machine,
+so a connection to `localhost:8123` finds nothing. Instead:
+
+- **Database on the host:** use `host.docker.internal` as the host. Docker
+  Desktop provides it; on Linux add
+  `--add-host=host.docker.internal:host-gateway` to `docker run`.
+- **Database in another container:** put QueryView on that container's
+  network and use the container name as the host:
+  `docker network connect <net> queryview`.
+- **Host networking:** `docker run --network host ...` makes `localhost` mean
+  your machine (Linux, or Docker Desktop 4.34+ with host networking enabled).
+  `-p` is then ignored; QueryView listens on the host's port 8000 directly.
+
 ### Git sync
 
 The image ships `git`, so workspace git sync works in the container, and its
@@ -155,9 +170,11 @@ connection and rewrite workspace git state, so don't publish the port. Bind the
 container to loopback — `docker run -p 127.0.0.1:8000:8000 ...` — since a plain
 `-p 8000:8000` listens on all interfaces.
 
-Tools: `run_query` (read-only SQL, rows returned to the agent), `push_query`
-and `push_dashboard` (fill a live browser session), `list_queries` /
-`list_dashboards`, and `git_store` / `git_history` / `git_restore` (workspace
+Tools: `list_connections` (saved connection names, types and selected
+databases — never hosts or credentials; call it before `run_query` when the
+connection name is unknown), `run_query` (read-only SQL, rows returned to the
+agent), `push_query` and `push_dashboard` (fill a live browser session),
+`list_queries` / `list_dashboards`, and `git_store` / `git_history` / `git_restore` (workspace
 git backups). The push tools target an **armed** browser session: enable
 "Allow remote control" from the agent icon next to the connection pill and use
 the session id it shows. See [docs/remote.md](docs/remote.md) for the full
