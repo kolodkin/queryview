@@ -70,7 +70,7 @@ export function ResultsTable({
   shownIdx,
   testid,
   renderCell,
-  className = 'max-h-[70vh]',
+  fill = false,
 }: {
   columns: string[]
   rows: Cell[][]
@@ -78,15 +78,15 @@ export function ResultsTable({
   testid: string
   // Cell content; defaults to plain text (the query panel plugs in cell views).
   renderCell?: RenderCell
-  // Sizing of the scroll box; the explorer makes it fill its panel instead.
-  className?: string
+  // Shrink to a flex-column parent's height instead of capping at 70vh.
+  fill?: boolean
 }) {
   const [open, setOpen] = useState<Opened | null>(null)
 
   return (
     <div
       data-testid={testid}
-      className={`${className} overflow-auto rounded-xl border border-white/10`}
+      className={`${fill ? 'min-h-0' : 'max-h-[70vh]'} overflow-auto rounded-xl border border-white/10`}
     >
       {/* `table-layout: fixed` only takes effect on a table with an explicit
           width — left to `auto`, the browser falls back to automatic layout and

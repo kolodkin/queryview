@@ -9,11 +9,13 @@ import {
   parseCellViewYaml,
   cellText,
   columnNames,
+  filterNames,
   columnTypes,
   parseQueryParams,
   presentationForSave,
   renderCell,
   shownColumnIndices,
+  useDismiss,
   type CellViewMap,
   type Field,
   type OrderCol,
@@ -25,10 +27,8 @@ import { isReady, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
-import { useDismiss } from './controls/useDismiss'
 import { downloadText } from './yamlio'
 import { suggestCompletions, type Suggestion } from './promptSuggestions'
-import { filterDatabases } from './databaseFilter'
 import { postLock } from './sessionLock'
 import { apiFetch } from './api'
 import { activeWorkspace, flushPatches, patchView, viewState } from './session'
@@ -521,7 +521,7 @@ function DatabasePicker({
 }) {
   const [filter, setFilter] = useState('')
   const visible = useMemo(
-    () => filterDatabases(connection.databases, filter),
+    () => filterNames(connection.databases, filter),
     [connection.databases, filter],
   )
   return (
@@ -1280,7 +1280,7 @@ function QueryPanel({
           orderBy={orderBy}
           onVisibleColsChange={setVisibleCols}
           onOrderByChange={setOrderBy}
-          orderHeaderExtra={
+          trailing={
             <>
               <button
                 type="button"

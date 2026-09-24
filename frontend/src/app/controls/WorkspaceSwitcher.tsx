@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import ExportImportControls from './ExportImportControls'
-import { useDismiss } from './useDismiss'
+import { useDismiss } from '../../core'
 import { invalidateGitStatus } from '../gitsync'
 import {
   createWorkspace,

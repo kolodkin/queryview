@@ -3,125 +3,105 @@
 // order-by chips. Field toggles only change client-side column visibility;
 // order-by changes go back to the parent, which decides when to re-run the query.
 
-import { useEffect, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
+
+import { filterNames } from '../nameFilter'
+import { useDismiss } from '../useDismiss'
 
 export type Field = { name: string; type: string }
 
 export type OrderCol = { name: string; dir: 'ASC' | 'DESC' }
 
-// A trigger button plus a popover holding a filter input and a list of fields.
-// Closes on a pointer press outside it or on Escape.
-function FieldMenu({
-  label,
-  testid,
-  fields,
-  isOn,
-  onToggle,
-  itemTestid,
-  headerExtra,
-}: {
-  label: React.ReactNode
+type MenuProps = {
   testid: string
   fields: Field[]
   isOn: (name: string) => boolean
   onToggle: (name: string) => void
   itemTestid: string
   headerExtra?: React.ReactNode
-}) {
+}
+
+// A trigger button plus a searchable checklist popover of fields.
+function FieldMenu({ label, ...panel }: MenuProps & { label: React.ReactNode }) {
   const [open, setOpen] = useState(false)
-  const [filter, setFilter] = useState('')
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    const onKeyDown = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
-
-  const needle = filter.trim().toLowerCase()
-  const visible = needle ? fields.filter((f) => f.name.toLowerCase().includes(needle)) : fields
-
+  const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false))
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
-        data-testid={testid}
+        data-testid={panel.testid}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => {
-          setOpen((o) => !o)
-          setFilter('')
-        }}
+        onClick={() => setOpen((o) => !o)}
         className={`glass-toggle flex items-center gap-1.5 px-2.5 py-1 text-xs ${open ? 'is-active-soft' : ''}`}
       >
         {label}
         <span className="text-slate-400">▾</span>
       </button>
-      {open && (
-        <div
-          data-testid={`${testid}-panel`}
-          className="glass-popover absolute left-0 top-full z-20 mt-2 flex max-h-80 w-72 flex-col p-1 text-sm"
-        >
-          <div className="flex items-center gap-1 p-1">
-            <input
-              type="search"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder={`Search ${fields.length} fields…`}
-              aria-label="Search fields"
-              data-testid={`${testid}-filter`}
-              autoFocus
-              autoComplete="off"
-              className="glass-input min-w-0 flex-1 px-2 py-1 text-sm"
-            />
-            {headerExtra}
-          </div>
-          <div role="listbox" aria-multiselectable className="overflow-auto">
-            {visible.map((f) => {
-              const on = isOn(f.name)
-              return (
-                <button
-                  key={f.name}
-                  type="button"
-                  role="option"
-                  aria-selected={on}
-                  onClick={() => onToggle(f.name)}
-                  data-testid={itemTestid}
-                  data-col={f.name}
-                  data-on={on}
-                  title={f.type}
-                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-white/10"
-                >
-                  <span
-                    className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[10px] leading-none ${
-                      on ? 'border-indigo-400 bg-indigo-500 text-white' : 'border-white/25'
-                    }`}
-                  >
-                    {on ? '✓' : ''}
-                  </span>
-                  <span className={`truncate ${on ? 'text-indigo-100' : 'text-slate-300'}`}>
-                    {f.name}
-                  </span>
-                  <span className="ml-auto shrink-0 truncate font-mono text-[10px] text-slate-500">
-                    {f.type}
-                  </span>
-                </button>
-              )
-            })}
-            {visible.length === 0 && (
-              <p className="px-2 py-1.5 text-slate-400">No fields match “{filter.trim()}”.</p>
-            )}
-          </div>
-        </div>
-      )}
+      {open && <FieldMenuPanel {...panel} />}
+    </div>
+  )
+}
+
+// Mounted only while open, so the search starts blank on each open.
+function FieldMenuPanel({ testid, fields, isOn, onToggle, itemTestid, headerExtra }: MenuProps) {
+  const [filter, setFilter] = useState('')
+  const visible = filterNames(fields, filter, (f) => f.name)
+  return (
+    <div
+      data-testid={`${testid}-panel`}
+      className="glass-popover absolute left-0 top-full z-20 mt-2 flex max-h-80 w-72 flex-col p-1 text-sm"
+    >
+      <div className="flex items-center gap-1 p-1">
+        <input
+          type="search"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder={`Search ${fields.length} fields…`}
+          aria-label="Search fields"
+          data-testid={`${testid}-filter`}
+          autoFocus
+          autoComplete="off"
+          className="glass-input min-w-0 flex-1 px-2 py-1 text-sm"
+        />
+        {headerExtra}
+      </div>
+      <div role="listbox" aria-multiselectable className="overflow-auto">
+        {visible.map((f) => {
+          const on = isOn(f.name)
+          return (
+            <button
+              key={f.name}
+              type="button"
+              role="option"
+              aria-selected={on}
+              onClick={() => onToggle(f.name)}
+              data-testid={itemTestid}
+              data-col={f.name}
+              data-on={on}
+              title={f.type}
+              className="flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-white/10"
+            >
+              <span
+                className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[10px] leading-none ${
+                  on ? 'border-indigo-400 bg-indigo-500 text-white' : 'border-white/25'
+                }`}
+              >
+                {on ? '✓' : ''}
+              </span>
+              <span className={`truncate ${on ? 'text-indigo-100' : 'text-slate-300'}`}>
+                {f.name}
+              </span>
+              <span className="ml-auto shrink-0 truncate font-mono text-[10px] text-slate-500">
+                {f.type}
+              </span>
+            </button>
+          )
+        })}
+        {visible.length === 0 && (
+          <p className="px-2 py-1.5 text-slate-400">No fields match “{filter.trim()}”.</p>
+        )}
+      </div>
     </div>
   )
 }
@@ -132,7 +112,7 @@ export function FieldPickers({
   orderBy,
   onVisibleColsChange,
   onOrderByChange,
-  orderHeaderExtra,
+  trailing,
 }: {
   fields: Field[]
   visibleCols: string[]
@@ -140,7 +120,7 @@ export function FieldPickers({
   onVisibleColsChange: (cols: string[]) => void
   onOrderByChange: (order: OrderCol[]) => void
   // Rendered after the order-by chips (e.g. the query panel's Run button).
-  orderHeaderExtra?: React.ReactNode
+  trailing?: React.ReactNode
 }) {
   function toggleField(name: string) {
     onVisibleColsChange(
@@ -166,7 +146,9 @@ export function FieldPickers({
     )
   }
 
-  const shown = fields.filter((f) => visibleCols.includes(f.name)).length
+  const visible = useMemo(() => new Set(visibleCols), [visibleCols])
+  const isVisible = (name: string) => visible.has(name)
+  const shown = fields.filter((f) => isVisible(f.name)).length
 
   return (
     <div
@@ -184,7 +166,7 @@ export function FieldPickers({
           </>
         }
         fields={fields}
-        isOn={(name) => visibleCols.includes(name)}
+        isOn={isVisible}
         onToggle={toggleField}
         itemTestid="field-toggle"
         headerExtra={
@@ -246,7 +228,7 @@ export function FieldPickers({
           </button>
         </span>
       ))}
-      {orderHeaderExtra}
+      {trailing}
     </div>
   )
 }

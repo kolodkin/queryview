@@ -46,9 +46,7 @@ predefined-query controls, to save vertical space.
 
 **Fields** describes the current query's output columns (names and ClickHouse
 types) without scanning data (ClickHouse `DESCRIBE (<query>)`), and populates two
-pickers from that list, shown as one compact bar: a **Fields** dropdown (with a
-shown/total count) and an **Order by** dropdown, each with a search box, followed
-by the active order-by chips.
+pickers from that list, shown as two searchable dropdowns in one bar:
 
 - **Select fields** — a toggle per column for what the results table shows.
   **Client-side and immediate**: toggling shows/hides the column with no re-query,
@@ -57,7 +55,7 @@ by the active order-by chips.
   **Fields** call always show, so a stale list can't blank the table.
 - **Order by** — pick one or more columns, each **ASC** (default) or **DESC**.
   **Server-side**, so it takes effect only on a re-run: **Execute** / **Previous** /
-  **Next**, **Download CSV**, or the **Run** button after the order-by chips (re-runs the
+  **Next**, **Download CSV**, or **Run** (re-runs the
   whole query like Execute, applying the current limit/offset). Column names are
   backtick-quoted and directions whitelisted, so the picker can't inject SQL.
 

@@ -284,10 +284,8 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   }
 
   return (
-    // mt-10 keeps the panels clear of the absolutely-positioned connection
-    // pill (top-left) and nav (top-right). The height fills the viewport (less
-    // the shell's py-10 and that margin) so the table list and the rows scroll
-    // inside their panels; below the min-height the page itself scrolls.
+    // Fills the viewport less the shell's py-10 and this mt-10 (which clears the
+    // absolutely-positioned pill and nav); the panels scroll internally.
     <div className="mt-10 flex h-[calc(100vh-7.5rem)] min-h-[30rem] w-full max-w-[85vw] gap-4">
       <aside
         ref={asideRef}
@@ -448,7 +446,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
                 orderBy={orderBy}
                 onVisibleColsChange={setVisibleCols}
                 onOrderByChange={changeOrder}
-                orderHeaderExtra={
+                trailing={
                   <span className="text-xs text-slate-400">(re-runs the query)</span>
                 }
               />
@@ -466,7 +464,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
                   rows={rows}
                   shownIdx={shownIdx}
                   testid="explorer-output"
-                  className="min-h-0"
+                  fill
                 />
               </div>
             )}

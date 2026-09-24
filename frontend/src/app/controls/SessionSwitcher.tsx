@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import { useDismiss } from './useDismiss'
+import { useDismiss } from '../../core'
 import {
   listSessions,
   removeSession,

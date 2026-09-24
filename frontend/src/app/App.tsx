@@ -9,15 +9,14 @@ import {
   useNavigate,
 } from 'react-router-dom'
 
+import { filterNames, useDismiss } from '../core'
 import { isReady, type Connection } from './connection'
-import { filterDatabases } from './databaseFilter'
 import QueryView, { type QueryPush } from './QueryView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
-import { useDismiss } from './controls/useDismiss'
 import SessionSwitcher from './controls/SessionSwitcher'
 import {
   attachSession,
@@ -43,7 +42,7 @@ function DatabaseMenu({
 }) {
   const [filter, setFilter] = useState('')
   const visible = useMemo(
-    () => filterDatabases(connection.databases, filter),
+    () => filterNames(connection.databases, filter),
     [connection.databases, filter],
   )
   return (
