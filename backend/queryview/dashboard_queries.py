@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .connect import _connection_by_name
+from .connect import _connection_by_name, unknown_connection_message
 from .drivers import DRIVERS
 from .drivers.base import rows_to_columns
 
@@ -33,7 +33,7 @@ async def run_queries_for_connection(
         return {
             "ok": False,
             "reason": "no-connection",
-            "message": f'no connection named "{name}"',
+            "message": await unknown_connection_message(name),
         }
     driver = DRIVERS[stored.type]
     if driver.requires_database and not stored.database:

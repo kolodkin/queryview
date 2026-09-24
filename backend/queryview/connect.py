@@ -201,6 +201,27 @@ async def list_connection_names() -> list[str]:
         return list(rows.all())
 
 
+async def list_connections() -> list[dict[str, Any]]:
+    """Every saved connection as {name, type, database}, most-recently-active
+    first. Reads only those columns: the encrypted config (host, credentials)
+    never leaves this module."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        rows = await s.exec(
+            select(Connection.name, Connection.type, Connection.database).order_by(
+                col(Connection.last_active_at).desc()
+            )
+        )
+        return [{"name": n, "type": t, "database": d} for n, t, d in rows.all()]
+
+
+async def unknown_connection_message(name: str) -> str:
+    """The error for an unresolvable connection name, listing the valid ones so
+    a caller (typically an agent) can retry without guessing."""
+    names = await list_connection_names()
+    return f'no connection named "{name}"; available: {", ".join(names) if names else "(none)"}'
+
+
 async def _connection_by_name(name: str) -> StoredConnection | None:
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
@@ -255,13 +276,32 @@ def _set_session_entry(sid: str, state: _SessionState) -> None:
         _sessions.popitem(last=False)
 
 
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def _in_container() -> bool:
+    return Path("/.dockerenv").exists()
+
+
+def _with_localhost_hint(message: str, config: DriverConfig) -> str:
+    """Inside a container `localhost` is the container itself, so a failed
+    connect to it most likely meant the host machine's database."""
+    host = getattr(config, "host", None)
+    if host in _LOCAL_HOSTS and _in_container():
+        return (
+            f"{message} — QueryView runs in a container, where {host} is the container "
+            "itself; for a database on your machine use host.docker.internal"
+        )
+    return message
+
+
 async def _build_session(
     name: str, config: DriverConfig, database: str | None, conn_type: str = "clickhouse"
 ) -> tuple[_SessionState | None, str | None]:
     """List a connection's databases and build a session object."""
     ok, result = await DRIVERS[conn_type].list_databases(config)
     if not ok:
-        return None, result  # type: ignore[return-value]
+        return None, _with_localhost_hint(result, config)  # type: ignore[arg-type]
     databases: list[str] = result  # type: ignore[assignment]
     return (
         _SessionState(
@@ -326,7 +366,7 @@ async def open_saved(sid: str, name: str) -> dict[str, Any]:
     if stored is None:
         return {
             "ok": False,
-            "message": f'no connection named "{name}"',
+            "message": await unknown_connection_message(name),
             "not_found": True,
         }
     # Reset the database so `connect <name>` always lands on the picker.

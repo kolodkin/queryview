@@ -56,7 +56,9 @@ def context(context, base_url: str):
     session.
     """
     tab = f"e2e-{uuid.uuid4().hex}"
-    created = httpx.post(f"{base_url}/api/sessions/attach", json={"tab": tab})
+    # `select` with no id always creates a session. `attach` would resume the
+    # most recent unheld one — the previous test's, once its tab has released.
+    created = httpx.post(f"{base_url}/api/sessions/select", json={"tab": tab})
     sid = created.json()["session"]["id"]
     # Release it so the page's own tab token can claim it on load.
     httpx.post(f"{base_url}/api/sessions/release", json={"tab": tab})

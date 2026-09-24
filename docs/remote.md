@@ -26,8 +26,8 @@ port QueryView listens on, and start it first). See
 
 ## MCP tools
 
-The backend mounts a FastMCP server (Streamable HTTP) at `/mcp/` exposing four
-tools:
+The backend mounts a FastMCP server (Streamable HTTP) at `/mcp/` exposing these
+tools (among others):
 
 - `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
   push a query. `order_by` is `[{name, dir}]`; `fields` are the columns to show
@@ -36,6 +36,12 @@ tools:
   the session's currently-selected DB, reported by the browser) — `ok:false` for
   an unknown id, a held lock (`"blocked, user editing"`), or malformed
   `order_by`/`fields` (`"invalid …"`).
+- `list_connections(session_id?)` — list saved connections:
+  `{connections: [{name, type, database}]}`, most recently used first, where
+  `database` is the currently-selected one. Never returns hosts or credentials.
+  With `session_id` it also returns `session_connection` (the connection that
+  session is on). Call it before `run_query` when the connection name is
+  unknown.
 - `list_queries(conn_type?="clickhouse")` — list saved queries:
   `{queries: [{query_name, query, cell_view, order_by, fields}]}`. Pass a
   `query_name` back as `push_query`'s `name`.
@@ -47,11 +53,14 @@ tools:
   currently-selected database
   (the user can change it from the pill), so the agent can tell what it's querying
   and whether to fully-qualify tables. For schema discovery / data inspection.
+  The default `"clickhouse"` is only a guess; an unknown name fails with
+  `no connection named "<name>"; available: <names>`.
 - `push_dashboard(session_id, name, connection, html, queries)` — push a
   dashboard **draft** to the session, which navigates to it and renders it.
   Does **not** persist — only the user's **Save** button in the dashboard view
   writes it to the store (mirrors `push_query`). Returns
-  `{ok, pushed, message, database}`. See [dashboard.md](./dashboard.md).
+  `{ok, pushed, message, database}`; an unknown `connection` fails up front
+  with the available names. See [dashboard.md](./dashboard.md).
 
 The pushed query runs through the normal `POST /api/db/query`, so all of
 that path's pagination and order-by safety applies; the push layer never talks

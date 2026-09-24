@@ -164,8 +164,11 @@ def test_dashboards_upsert_pushes_to_registered_session():
 
 
 def test_mcp_upsert_dashboard_pushes_draft_without_persisting(default_ws_id):
+    from queryview.connect import _save_active_connection
+    from queryview.drivers.clickhouse import ChConfig
     from queryview.mcp_server import push_dashboard as mcp_push
 
+    _run(_save_active_connection("c", ChConfig("h", 8123, "u", "p"), "clickhouse"))
     rid = remote.register(uuid.uuid4().hex)
     try:
         out = _run(mcp_push(rid, "draftdash", "c", "<p>d</p>", {"q": "SELECT 1"}))
