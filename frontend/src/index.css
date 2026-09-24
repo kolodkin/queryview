@@ -164,6 +164,15 @@
     background: rgba(99, 102, 241, 0.16);
   }
 
+  /* A full-height page (Queries, Explorer): at least the viewport less the
+     shell's py-10 and this top margin (which clears the floating pill and nav),
+     never under 30rem. Its tables scroll inside their panels; only content
+     that can't fit makes the page itself scroll. */
+  .viewport-page {
+    margin-top: 2.5rem;
+    min-height: max(30rem, calc(100vh - 7.5rem));
+  }
+
   /* Per-cell horizontal scroller in the results grid. Thin, dim bars so a
      table full of long values doesn't read as a wall of scrollbars. */
   .cell-scroll {

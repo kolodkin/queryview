@@ -41,8 +41,8 @@ order-by select the query panel uses.
 - **Rows panel** — the selected table's rows. The selection lives in the URL
   (`/explorer?table=<name>`), so reloads and links land on the same table.
 - **Viewport height** — the page fills the window (min 30rem, then the page
-  scrolls); the table list and rows grid scroll internally, keeping the grid's
-  horizontal scrollbar on screen.
+  scrolls), as the Queries page does; the table list and rows grid scroll
+  internally, keeping the grid's horizontal scrollbar on screen.
 - **Loading** — panels show *Loading tables…* / *Loading rows…* rather than
   sitting empty. Re-running a loaded table (paging, a new order-by) keeps its
   rows on screen, dimmed, with a spinner by the table name.

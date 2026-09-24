@@ -92,7 +92,7 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
         <div
           data-testid="session-menu"
           role="listbox"
-          className="glass-popover absolute right-0 top-full z-10 mt-2 flex max-h-96 w-72 flex-col p-1 text-sm"
+          className="glass-popover absolute right-0 top-full z-10 mt-2 flex max-h-80 w-72 flex-col p-1 text-sm"
         >
           <div className="overflow-auto">
             {list.map((s) => (

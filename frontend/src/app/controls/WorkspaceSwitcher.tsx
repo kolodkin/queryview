@@ -150,7 +150,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
             data-testid="workspace-name-input"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded bg-white/10 px-2 py-1 text-slate-100"
+            className="glass-input w-full px-2 py-1 text-slate-100"
           />
           <div className="text-xs text-slate-400">
             Git remote URL (leave blank to keep; settings are write-only)
@@ -160,7 +160,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
             value={remote}
             onChange={(e) => setRemote(e.target.value)}
             placeholder="https://user:token@github.com/org/repo.git"
-            className="w-full rounded bg-white/10 px-2 py-1 font-mono text-xs text-slate-100"
+            className="glass-input w-full px-2 py-1 font-mono text-xs text-slate-100"
           />
           <div className="text-xs text-slate-400">Branch</div>
           <input
@@ -168,7 +168,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
             value={branch}
             onChange={(e) => setBranch(e.target.value)}
             placeholder="main"
-            className="w-full rounded bg-white/10 px-2 py-1 text-slate-100"
+            className="glass-input w-full px-2 py-1 text-slate-100"
           />
           <div className="text-xs text-slate-400">
             Export / import the whole workspace (queries + dashboards) as YAML

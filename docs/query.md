@@ -40,7 +40,9 @@ predefined-query controls, to save vertical space.
   last row into an empty result.
 - **Download CSV** — downloads the **current page** as `query.csv`, always with
   **all** columns (the field selection below is view-only).
-- **Results table** — the rows for the current page, in a scrollable table.
+- **Results table** — the rows for the current page. Like the explorer, the
+  page fills the window (min 30rem) and the table takes the panel's remaining
+  height (at least 12rem), scrolling inside it both ways.
 
 ## Fields, selection & ordering
 

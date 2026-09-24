@@ -355,7 +355,7 @@ function QueryView({
   )
 
   return (
-    <div className={`w-full ${inQueryMode ? 'max-w-[80vw]' : 'max-w-md'}`}>
+    <div className={`w-full ${inQueryMode ? 'viewport-page flex max-w-[80vw] flex-col' : 'max-w-md'}`}>
       <div className="mb-6 flex items-center justify-center">
         <h1 className="text-3xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           QueryView
@@ -1061,7 +1061,7 @@ function QueryPanel({
     <section
       ref={panelRef}
       data-testid="query-panel"
-      className="glass-panel mt-6 space-y-3 p-6"
+      className="glass-panel mt-6 flex grow flex-col gap-3 p-6"
     >
       <div className="flex items-center gap-2">
         {promptSlot}

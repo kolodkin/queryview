@@ -284,9 +284,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   }
 
   return (
-    // Fills the viewport less the shell's py-10 and this mt-10 (which clears the
-    // absolutely-positioned pill and nav); the panels scroll internally.
-    <div className="mt-10 flex h-[calc(100vh-7.5rem)] min-h-[30rem] w-full max-w-[85vw] gap-4">
+    <div className="viewport-page flex w-full max-w-[85vw] gap-4">
       <aside
         ref={asideRef}
         data-testid="explorer-tables"
@@ -316,7 +314,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
         {tablesLoading ? (
           <Loading label="Loading tables…" testid="explorer-tables-loading" />
         ) : (
-          <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-auto">
+          <div className="mt-2 min-h-0 grow basis-0 space-y-1 overflow-auto">
             {tables.map((t) => {
               const meta = tableMeta(t)
               return (
@@ -456,17 +454,13 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               <Loading label="Loading rows…" testid="explorer-rows-loading" />
             )}
             {result !== null && (
-              <div
-                className={`flex min-h-0 flex-1 flex-col ${busy ? 'opacity-50 transition-opacity' : ''}`}
-              >
-                <ResultsTable
-                  columns={columns}
-                  rows={rows}
-                  shownIdx={shownIdx}
-                  testid="explorer-output"
-                  fill
-                />
-              </div>
+              <ResultsTable
+                columns={columns}
+                rows={rows}
+                shownIdx={shownIdx}
+                testid="explorer-output"
+                dimmed={busy}
+              />
             )}
             {error && (
               <p data-testid="explorer-error" className="text-sm text-red-300">

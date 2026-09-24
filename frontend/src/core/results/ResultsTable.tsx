@@ -1,6 +1,7 @@
 // The results grid shared by the query panel and the explorer: a sticky-header
 // table over result rows, restricted to the visible columns (see
-// shownColumnIndices in presentation.ts).
+// shownColumnIndices in presentation.ts). It fills the rest of its flex-column
+// parent (at least 12rem) and scrolls inside, both ways.
 //
 // Columns are a fixed width (see cellWidth.ts) so one long-text column can't
 // stretch the grid: a value that doesn't fit scrolls inside its own cell and
@@ -70,7 +71,7 @@ export function ResultsTable({
   shownIdx,
   testid,
   renderCell,
-  fill = false,
+  dimmed = false,
 }: {
   columns: string[]
   rows: Cell[][]
@@ -78,15 +79,17 @@ export function ResultsTable({
   testid: string
   // Cell content; defaults to plain text (the query panel plugs in cell views).
   renderCell?: RenderCell
-  // Shrink to a flex-column parent's height instead of capping at 70vh.
-  fill?: boolean
+  // Faded while a re-run is in flight.
+  dimmed?: boolean
 }) {
   const [open, setOpen] = useState<Opened | null>(null)
 
   return (
     <div
       data-testid={testid}
-      className={`${fill ? 'min-h-0' : 'max-h-[70vh]'} overflow-auto rounded-xl border border-white/10`}
+      className={`min-h-0 flex-[1_1_12rem] overflow-auto rounded-xl border border-white/10 ${
+        dimmed ? 'opacity-50 transition-opacity' : ''
+      }`}
     >
       {/* `table-layout: fixed` only takes effect on a table with an explicit
           width — left to `auto`, the browser falls back to automatic layout and
