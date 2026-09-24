@@ -1,6 +1,5 @@
-// Picker search filter (databases, fields): case-insensitive substring match of
-// each item's name on the trimmed query, preserving the input order. A blank
-// query keeps everything.
+// Case-insensitive substring match of each item's name on the trimmed query,
+// keeping input order. A blank query keeps everything.
 export function filterNames<T>(
   items: T[],
   query: string,

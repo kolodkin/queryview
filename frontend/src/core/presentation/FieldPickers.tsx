@@ -1,7 +1,6 @@
-// The "Select fields" / "Order by" pickers shared by the query panel and the
-// explorer: one compact bar with two searchable dropdowns, plus the active
-// order-by chips. Field toggles only change client-side column visibility;
-// order-by changes go back to the parent, which decides when to re-run the query.
+// "Fields" / "Order by" dropdowns shared by the query panel and explorer.
+// Field toggles only change client-side column visibility; order-by changes
+// go to the parent, which decides when to re-run the query.
 
 import { useMemo, useState } from 'react'
 
