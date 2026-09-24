@@ -59,7 +59,9 @@ def context(context, base_url: str):
     # `select` with no id always creates a session. `attach` would resume the
     # most recent unheld one — the previous test's, once its tab has released.
     created = httpx.post(f"{base_url}/api/sessions/select", json={"tab": tab})
-    sid = created.json()["session"]["id"]
+    session = created.json()["session"]
+    assert session["ui"] == {}, "the context fixture resumed a used session"
+    sid = session["id"]
     # Release it so the page's own tab token can claim it on load.
     httpx.post(f"{base_url}/api/sessions/release", json={"tab": tab})
     context.add_init_script(f"sessionStorage.setItem('qv_session', {sid!r});")
