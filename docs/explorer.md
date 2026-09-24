@@ -16,7 +16,7 @@ order-by select the query panel uses.
 │ ┌────────┐ ┌─────────────────────────────────────┐ │
 │ │ Tables │ │ items      Limit [100] ← Prev Next → │ │
 │ │ events │ │ ┌─────────────────────────────────┐ │ │
-│ │ items ◀│ │ │ Fields 2/2 ▾  Order by ▾  1.id ASC│ │ │
+│ │ items ◀│ │ │ Fields 2/2 ▾ Order by ▾ 1.id ASC│ │ │
 │ │ users  │ │ └─────────────────────────────────┘ │ │
 │ │        │ │  id │ name                          │ │
 │ │        │ │  …  │ …                             │ │
