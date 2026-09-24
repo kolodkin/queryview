@@ -54,13 +54,11 @@ def context(context, base_url: str):
     Seeds `qv_session` but never `qv_tab`, so each page still mints its own tab
     token and a second tab opened inside a test correctly starts its own
     session.
-
-    Uses `select` with no id, which always creates. `attach` without an id is a
-    new tab, and a new tab resumes the most recently active unheld session:
-    whichever an earlier test's closing tab released last.
     """
     tab = f"e2e-{uuid.uuid4().hex}"
-    created = httpx.post(f"{base_url}/api/sessions/select", json={"tab": tab, "id": None})
+    # `select` with no id always creates a session. `attach` would resume the
+    # most recent unheld one — the previous test's, once its tab has released.
+    created = httpx.post(f"{base_url}/api/sessions/select", json={"tab": tab})
     sid = created.json()["session"]["id"]
     # Release it so the page's own tab token can claim it on load.
     httpx.post(f"{base_url}/api/sessions/release", json={"tab": tab})

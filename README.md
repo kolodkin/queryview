@@ -103,6 +103,17 @@ To let Docker own the location instead, swap the path for a named volume,
 ownership is already right and there is nothing to create up front, but the
 state no longer lines up with a local run.
 
+### Connecting to databases on your machine
+
+Inside the container, `localhost` is the container itself. To reach a database:
+
+- **On the host:** use `host.docker.internal` (on Linux, add
+  `--add-host=host.docker.internal:host-gateway`).
+- **In another container:** `docker network connect <net> queryview`, then use
+  its container name as the host.
+- **Host networking:** `--network host` makes `localhost` your machine (Linux,
+  or Docker Desktop 4.34+ with host networking enabled); `-p` is then ignored.
+
 ### Git sync
 
 The image ships `git`, so workspace git sync works in the container, and its
@@ -155,10 +166,11 @@ connection and rewrite workspace git state, so don't publish the port. Bind the
 container to loopback — `docker run -p 127.0.0.1:8000:8000 ...` — since a plain
 `-p 8000:8000` listens on all interfaces.
 
-Tools: `run_query` (read-only SQL, rows returned to the agent), `push_query`
-and `push_dashboard` (fill a live browser session), `list_queries` /
-`list_dashboards`, and `git_store` / `git_history` / `git_restore` (workspace
-git backups). The push tools target an **armed** browser session: enable
+Tools: `list_connections` (saved connection names; call it before `run_query`
+when unsure), `run_query` (read-only SQL, rows returned to the agent),
+`push_query` and `push_dashboard` (fill a live browser session),
+`list_queries` / `list_dashboards`, and `git_store` / `git_history` /
+`git_restore` (workspace git backups). The push tools target an **armed** browser session: enable
 "Allow remote control" from the agent icon next to the connection pill and use
 the session id it shows. See [docs/remote.md](docs/remote.md) for the full
 protocol.
