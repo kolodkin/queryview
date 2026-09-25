@@ -166,11 +166,10 @@ connection and rewrite workspace git state, so don't publish the port. Bind the
 container to loopback — `docker run -p 127.0.0.1:8000:8000 ...` — since a plain
 `-p 8000:8000` listens on all interfaces.
 
-Tools: `list_connections` (saved connection names; call it before `run_query`
-when unsure), `run_query` (read-only SQL, rows returned to the agent),
-`push_query` and `push_dashboard` (fill a live browser session),
+Tools: `run_query` (read-only SQL on the session's connection, rows returned
+to the agent), `push_query` and `push_dashboard` (fill a live browser session),
 `list_queries` / `list_dashboards`, and `git_store` / `git_history` /
-`git_restore` (workspace git backups). The push tools target an **armed** browser session: enable
+`git_restore` (workspace git backups). `run_query` and the push tools target an **armed** browser session: enable
 "Allow remote control" from the agent icon next to the connection pill and use
 the session id it shows. See [docs/remote.md](docs/remote.md) for the full
 protocol.

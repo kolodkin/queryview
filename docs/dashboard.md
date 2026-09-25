@@ -28,18 +28,17 @@ always shows live data.
 The FastMCP server at `/mcp` (see [remote.md](./remote.md) for arming and the
 session id) exposes:
 
-- `push_dashboard(session_id, name, connection, html, queries)` — push the
+- `push_dashboard(session_id, name, html, queries)` — push the
   dashboard **draft** to the browser identified by `session_id`, which navigates
   to `/dashboard?name=<name>` and renders it. It does **not** persist — only the
   user's **Save** button in the dashboard view writes it to the store (mirrors
-  `push_query`). Returns `{ok, pushed, message}`; an unknown/disarmed
-  `session_id` reports `pushed:false`.
+  `push_query`). Returns `{ok, pushed, message, database}`; an unknown/disarmed
+  `session_id` reports `pushed:false`, a disconnected one `not connected`.
 
-`session_id` and `connection` are distinct: `session_id` is the live browser to
-push the preview to; `connection` is the saved [connection](./connect.md) the
-queries run against (by name — a dashboard is self-contained and portable). Its
-**stored database** is used, so select a database for that connection first, or
-fully-qualify table names as `db.table`.
+The agent never names a connection: the dashboard takes the session's
+[connection](./connect.md) and keeps it by name when saved, so a saved dashboard
+is portable. Queries use that connection's **stored database**; select one
+first, or fully-qualify tables as `db.table`.
 
 The REST mirror `POST /api/dashboards` takes the same fields (plus optional
 `session_id`) and drives the same persist-and-push path (used by the e2e suite).

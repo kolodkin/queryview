@@ -155,16 +155,3 @@ def test_mcp_list_queries_parses_presentation(default_ws_id):
     assert row["order_by"] == [{"name": "id", "dir": "ASC"}]
     assert row["fields"] == ["id"]
     assert row["query"] == "SELECT 1"
-
-
-def test_columns_to_rows():
-    from queryview.mcp_server import _columns_to_rows
-
-    out = _columns_to_rows({"a": ["1", "2"], "b": ["x", "y"]})
-    assert out == {"columns": ["a", "b"], "rows": [["1", "x"], ["2", "y"]]}
-
-
-def test_columns_to_rows_empty():
-    from queryview.mcp_server import _columns_to_rows
-
-    assert _columns_to_rows({}) == {"columns": [], "rows": []}

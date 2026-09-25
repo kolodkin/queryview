@@ -201,20 +201,6 @@ async def list_connection_names() -> list[str]:
         return list(rows.all())
 
 
-async def list_connections() -> list[dict[str, Any]]:
-    """Every saved connection as {name, type, database}, most-recently-active
-    first. Reads only those columns: the encrypted config (host, credentials)
-    never leaves this module."""
-    await _ensure_schema()
-    async with AsyncSession(_engine_for_db()) as s:
-        rows = await s.exec(
-            select(Connection.name, Connection.type, Connection.database).order_by(
-                col(Connection.last_active_at).desc()
-            )
-        )
-        return [{"name": n, "type": t, "database": d} for n, t, d in rows.all()]
-
-
 async def unknown_connection_message(name: str) -> str:
     """The error for an unresolvable connection name, listing the valid ones so
     a caller (typically an agent) can retry without guessing."""
@@ -451,7 +437,7 @@ async def run_query(
     order_by: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run a paginated SQL query against this session's selected database and
-    return `{ok, meta: [{name, type}], data: [[…]]}`. The driver owns
+    return `{ok, database, meta: [{name, type}], data: [[…]]}`. The driver owns
     pagination/quoting."""
     s, err = await _gated_session(sid)
     if s is None:
@@ -459,7 +445,7 @@ async def run_query(
     r = await DRIVERS[s.type].run_query(s.config, sql, s.database, limit, offset, order_by)
     if not r.ok or r.rows is None:
         return {"ok": False, "message": r.message}
-    return {"ok": True, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
+    return {"ok": True, "database": s.database, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
 
 
 async def export_csv(

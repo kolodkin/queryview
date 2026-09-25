@@ -9,7 +9,7 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from queryview import remote
+from queryview import remote, sessions
 from queryview.dashboards import (
     _upsert_and_push,
     get_dashboard,
@@ -169,9 +169,11 @@ def test_mcp_upsert_dashboard_pushes_draft_without_persisting(default_ws_id):
     from queryview.mcp_server import push_dashboard as mcp_push
 
     _run(_save_active_connection("c", ChConfig("h", 8123, "u", "p"), "clickhouse"))
-    rid = remote.register(uuid.uuid4().hex)
+    rec = _run(sessions.create_session())
+    _run(sessions.set_connection(rec.id, "c"))
+    rid = remote.register(rec.id)
     try:
-        out = _run(mcp_push(rid, "draftdash", "c", "<p>d</p>", {"q": "SELECT 1"}))
+        out = _run(mcp_push(rid, "draftdash", "<p>d</p>", {"q": "SELECT 1"}))
         assert out["pushed"] is True
         # Draft: the agent push must NOT persist — only the user's Save does.
         assert _run(get_dashboard("draftdash", default_ws_id)) is None
@@ -212,8 +214,6 @@ def test_mcp_list_dashboards_scopes_by_session_workspace(default_ws_id):
 
     # A session on the other workspace sees it. The workspace comes from the
     # session row now, not from the browser reporting it into the channel.
-    from queryview import sessions
-
     rec = _run(sessions.create_session())
     _run(sessions.patch_session(rec.id, workspace="t-mcp-ld"))
     remote.register(rec.id)

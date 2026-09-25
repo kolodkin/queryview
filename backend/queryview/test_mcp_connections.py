@@ -1,117 +1,90 @@
-"""list_connections exposes only {name, type, database} (never hosts or
-credentials), and an unknown connection name fails listing the valid ones."""
+"""MCP tools take the connection from the session; the agent never names one."""
 
 from __future__ import annotations
 
 import asyncio
-import json
-import uuid
 
 from queryview import remote, sessions
-from queryview.connect import _save_active_connection, _save_selected_database
+from queryview.connect import _save_active_connection, open_saved
 from queryview.drivers.clickhouse import ChConfig
+from queryview.drivers.duckdb import DuckConfig
 
 
 def _run(coro):
     return asyncio.run(coro)
 
 
-def _save(name: str, database: str | None = None) -> None:
-    _run(
-        _save_active_connection(
-            name, ChConfig("secret-host.example.internal", 8123, "alice", "TOPSECRET"), "clickhouse"
-        )
-    )
-    if database:
-        _run(_save_selected_database(name, database))
-
-
-def test_list_connections_returns_names_types_databases_without_secrets():
-    from queryview.mcp_server import list_connections
-
-    _save("lc-local", "sales_reporting")
-    out = _run(list_connections())
-    assert set(out) == {"connections"}
-    by_name = {c["name"]: c for c in out["connections"]}
-    assert by_name["lc-local"] == {"name": "lc-local", "type": "clickhouse", "database": "sales_reporting"}
-    assert all(set(c) == {"name", "type", "database"} for c in out["connections"])
-    dumped = json.dumps(out)
-    for secret in ("secret-host.example.internal", "alice", "TOPSECRET", "8123"):
-        assert secret not in dumped
-
-
-def test_list_connections_scoped_to_session():
-    """A session on another workspace still sees the (global) connections, plus
-    the connection it is on."""
-    from queryview.mcp_server import list_connections
-    from queryview.workspaces import create_workspace
-
-    _save("lc-sess")
-    _run(create_workspace("t-lc-ws"))
+def _connected_session(name: str) -> str:
+    """A new session on a saved in-memory DuckDB connection named `name`."""
+    _run(_save_active_connection(name, DuckConfig(":memory:"), "duckdb"))
     rec = _run(sessions.create_session())
-    _run(sessions.patch_session(rec.id, workspace="t-lc-ws"))
-    _run(sessions.set_connection(rec.id, "lc-sess"))
-    rid = remote.register(rec.id)
+    assert _run(open_saved(rec.id, name))["ok"]
+    return rec.id
+
+
+def test_run_query_uses_the_session_connection():
+    from queryview.mcp_server import run_query
+
+    sid = _connected_session("sc-duck")
+    out = _run(run_query(sid, "SELECT 42 AS answer, 'x' AS label", limit=10))
+    assert out["ok"] is True
+    assert out["columns"] == ["answer", "label"]
+    assert out["rows"] == [[42, "x"]]
+    assert len(out["types"]) == 2
+    assert "connection" not in out
+
+
+def test_run_query_on_disconnected_session_fails():
+    from queryview.mcp_server import run_query
+
+    rec = _run(sessions.create_session())
+    out = _run(run_query(rec.id, "SELECT 1"))
+    assert out == {"ok": False, "message": "not connected"}
+
+
+def test_run_query_unknown_session_fails():
+    from queryview.mcp_server import run_query
+
+    out = _run(run_query("no-such-session", "SELECT 1"))
+    assert out["ok"] is False
+
+
+def test_push_dashboard_runs_on_the_session_connection():
+    from queryview.mcp_server import push_dashboard
+
+    sid = _connected_session("sc-dash")
+    rid = remote.register(sid)
     try:
-        out = _run(list_connections(session_id=rid))
-        assert "lc-sess" in [c["name"] for c in out["connections"]]
-        assert out["session_connection"] == "lc-sess"
-        assert "TOPSECRET" not in json.dumps(out)
+        out = _run(push_dashboard(rid, "d", "<p></p>", {"q": "SELECT 1"}))
+        assert out["ok"] is True and out["pushed"] is True
+        msg = _run(remote.next_message(rid, 1.0))
+        assert msg is not None and msg["connection"] == "sc-dash"
     finally:
         remote.unregister(rid)
 
 
-def test_list_connections_survives_deleted_session_workspace():
-    """Connections are global, so a session whose workspace is gone still lists them."""
-    from queryview.mcp_server import list_connections
-    from queryview.workspaces import create_workspace, delete_workspace
-
-    _save("lc-gone")
-    _run(create_workspace("t-lc-gone"))
-    rec = _run(sessions.create_session())
-    _run(sessions.patch_session(rec.id, workspace="t-lc-gone"))
-    _run(delete_workspace("t-lc-gone"))
-    out = _run(list_connections(session_id=rec.id))
-    assert "lc-gone" in [c["name"] for c in out["connections"]]
-
-
-def test_list_connections_is_registered():
-    from queryview.mcp_server import mcp
-
-    assert "list_connections" in {t.name for t in _run(mcp.list_tools())}
-
-
-def test_run_query_unknown_connection_lists_available_names():
-    from queryview.mcp_server import run_query
-
-    _save("lc-avail-a")
-    _save("lc-avail-b")
-    out = _run(run_query("SELECT 1", connection="lc-missing"))
-    assert out["ok"] is False
-    msg = out["message"]
-    assert msg.startswith('no connection named "lc-missing"; available: ')
-    assert "lc-avail-a" in msg and "lc-avail-b" in msg
-
-
-def test_push_dashboard_unknown_connection_fails_without_pushing():
+def test_push_dashboard_on_disconnected_session_fails_without_pushing():
     from queryview.mcp_server import push_dashboard
 
-    _save("lc-dash")
-    rid = remote.register(uuid.uuid4().hex)
+    rec = _run(sessions.create_session())
+    rid = remote.register(rec.id)
     try:
-        out = _run(push_dashboard(rid, "d", "lc-nope", "<p></p>", {"q": "SELECT 1"}))
+        out = _run(push_dashboard(rid, "d", "<p></p>", {"q": "SELECT 1"}))
         assert out["ok"] is False and out["pushed"] is False
-        assert 'no connection named "lc-nope"; available: ' in out["message"]
-        assert "lc-dash" in out["message"]
+        assert out["message"] == "not connected"
         assert _run(remote.next_message(rid, 0.1)) is None
     finally:
         remote.unregister(rid)
 
 
-def test_open_saved_unknown_connection_lists_available_names():
-    from queryview.connect import open_saved
+def test_no_list_connections_tool():
+    from queryview.mcp_server import mcp
 
-    _save("lc-open")
+    assert "list_connections" not in {t.name for t in _run(mcp.list_tools())}
+
+
+def test_open_saved_unknown_connection_lists_available_names():
+    _run(_save_active_connection("lc-open", ChConfig("h.example.internal", 8123, "u", "p"), "clickhouse"))
     out = _run(open_saved("lc-open-sid", "lc-absent"))
     assert out["not_found"] is True
     assert "available: " in out["message"] and "lc-open" in out["message"]
