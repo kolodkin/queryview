@@ -9,15 +9,14 @@ import {
   useNavigate,
 } from 'react-router-dom'
 
+import { SearchPanel, useDismiss } from '../core'
 import { isReady, type Connection } from './connection'
-import { filterDatabases } from './databaseFilter'
 import QueryView, { type QueryPush } from './QueryView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
-import { useDismiss } from './controls/useDismiss'
 import SessionSwitcher from './controls/SessionSwitcher'
 import {
   attachSession,
@@ -30,71 +29,27 @@ import {
 import { apiFetch } from './api'
 
 // The database list behind the connection pill. Long connections list hundreds
-// of databases, so it carries the landing picker's filter; mounted only while
-// open, so the filter starts blank on each open.
+// of databases, so it carries the landing picker's filter.
 function DatabaseMenu({
   connection,
   onSelect,
-  onDismiss,
 }: {
   connection: Connection
   onSelect: (database: string) => void
-  onDismiss: () => void
 }) {
-  const [filter, setFilter] = useState('')
-  const visible = useMemo(
-    () => filterDatabases(connection.databases, filter),
-    [connection.databases, filter],
-  )
   return (
-    <div
-      data-testid="db-select"
-      role="listbox"
-      className="glass-popover absolute left-0 top-full z-10 mt-2 flex max-h-80 w-64 flex-col p-1 text-sm"
-    >
-      <form
-        className="p-1"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (visible.length > 0) onSelect(visible[0])
-        }}
-      >
-        <input
-          type="search"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          onKeyDown={(e) => e.key === 'Escape' && onDismiss()}
-          placeholder={`Filter ${connection.databases.length} databases…`}
-          aria-label="Filter databases"
-          data-testid="db-select-filter"
-          autoFocus
-          autoComplete="off"
-          className="glass-input w-full px-2 py-1.5 text-sm"
-        />
-      </form>
-      {visible.length === 0 ? (
-        <p className="px-2 py-1.5 text-slate-400" data-testid="db-select-empty">
-          No databases match “{filter.trim()}”.
-        </p>
-      ) : (
-        <div className="overflow-auto">
-          {visible.map((db) => (
-            <button
-              key={db}
-              type="button"
-              role="option"
-              aria-selected={db === connection.database}
-              onClick={() => onSelect(db)}
-              className={`block w-full truncate rounded px-2 py-1.5 text-left hover:bg-white/10 ${
-                db === connection.database ? 'text-indigo-200' : 'text-slate-200'
-              }`}
-            >
-              {db}
-            </button>
-          ))}
-        </div>
+    <SearchPanel
+      items={connection.databases}
+      nameOf={(db) => db}
+      noun="databases"
+      testid="db-select"
+      isSelected={(db) => db === connection.database}
+      onPick={onSelect}
+      className="left-0 w-64"
+      renderItem={(db, current) => (
+        <span className={`truncate ${current ? 'text-indigo-200' : 'text-slate-200'}`}>{db}</span>
       )}
-    </div>
+    />
   )
 }
 
@@ -326,7 +281,6 @@ function Shell() {
               <DatabaseMenu
                 connection={connection}
                 onSelect={(db) => void switchDatabase(db)}
-                onDismiss={() => setDbOpen(false)}
               />
             )}
           </div>

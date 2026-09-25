@@ -9,11 +9,13 @@ import {
   parseCellViewYaml,
   cellText,
   columnNames,
+  filterNames,
   columnTypes,
   parseQueryParams,
   presentationForSave,
   renderCell,
   shownColumnIndices,
+  useDismiss,
   type CellViewMap,
   type Field,
   type OrderCol,
@@ -25,10 +27,8 @@ import { isReady, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
-import { useDismiss } from './controls/useDismiss'
 import { downloadText } from './yamlio'
 import { suggestCompletions, type Suggestion } from './promptSuggestions'
-import { filterDatabases } from './databaseFilter'
 import { postLock } from './sessionLock'
 import { apiFetch } from './api'
 import { activeWorkspace, flushPatches, patchView, viewState } from './session'
@@ -355,7 +355,7 @@ function QueryView({
   )
 
   return (
-    <div className={`w-full ${inQueryMode ? 'max-w-[80vw]' : 'max-w-md'}`}>
+    <div className={`w-full ${inQueryMode ? 'viewport-page flex max-w-[80vw] flex-col' : 'max-w-md'}`}>
       <div className="mb-6 flex items-center justify-center">
         <h1 className="text-3xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           QueryView
@@ -521,7 +521,7 @@ function DatabasePicker({
 }) {
   const [filter, setFilter] = useState('')
   const visible = useMemo(
-    () => filterDatabases(connection.databases, filter),
+    () => filterNames(connection.databases, filter),
     [connection.databases, filter],
   )
   return (
@@ -1061,7 +1061,7 @@ function QueryPanel({
     <section
       ref={panelRef}
       data-testid="query-panel"
-      className="glass-panel mt-6 space-y-3 p-6"
+      className="glass-panel mt-6 flex grow flex-col gap-3 p-6"
     >
       <div className="flex items-center gap-2">
         {promptSlot}
@@ -1280,7 +1280,7 @@ function QueryPanel({
           orderBy={orderBy}
           onVisibleColsChange={setVisibleCols}
           onOrderByChange={setOrderBy}
-          orderHeaderExtra={
+          trailing={
             <>
               <button
                 type="button"

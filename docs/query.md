@@ -40,22 +40,24 @@ predefined-query controls, to save vertical space.
   last row into an empty result.
 - **Download CSV** — downloads the **current page** as `query.csv`, always with
   **all** columns (the field selection below is view-only).
-- **Results table** — the rows for the current page, in a scrollable table.
+- **Results table** — the rows for the current page. Like the explorer, the
+  page fills the window (min 30rem) and the table takes the panel's remaining
+  height (at least 12rem), scrolling inside it both ways.
 
 ## Fields, selection & ordering
 
 **Fields** describes the current query's output columns (names and ClickHouse
 types) without scanning data (ClickHouse `DESCRIBE (<query>)`), and populates two
-pickers from that list:
+pickers from that list, shown as two searchable dropdowns in one bar:
 
 - **Select fields** — a toggle per column for what the results table shows.
   **Client-side and immediate**: toggling shows/hides the column with no re-query,
-  and **Download CSV** ignores it (CSV always exports every column). **Select all**
-  / **Clear all** flip every toggle. New columns from a query edited since the last
+  and **Download CSV** ignores it (CSV always exports every column). **All** /
+  **None** flip every toggle. New columns from a query edited since the last
   **Fields** call always show, so a stale list can't blank the table.
 - **Order by** — pick one or more columns, each **ASC** (default) or **DESC**.
   **Server-side**, so it takes effect only on a re-run: **Execute** / **Previous** /
-  **Next**, **Download CSV**, or the order-by section's **Run** button (re-runs the
+  **Next**, **Download CSV**, or **Run** (re-runs the
   whole query like Execute, applying the current limit/offset). Column names are
   backtick-quoted and directions whitelisted, so the picker can't inject SQL.
 
