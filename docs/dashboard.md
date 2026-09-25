@@ -36,9 +36,9 @@ session id) exposes:
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
 
 The agent never names a connection: the dashboard takes the session's
-[connection](./connect.md), and keeps it by name when saved (a saved dashboard is
-self-contained and portable). That connection's **stored database** is used, so
-select a database first, or fully-qualify table names as `db.table`.
+[connection](./connect.md) and keeps it by name when saved, so a saved dashboard
+is portable. Queries use that connection's **stored database**; select one
+first, or fully-qualify tables as `db.table`.
 
 The REST mirror `POST /api/dashboards` takes the same fields (plus optional
 `session_id`) and drives the same persist-and-push path (used by the e2e suite).

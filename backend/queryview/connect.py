@@ -437,7 +437,7 @@ async def run_query(
     order_by: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Run a paginated SQL query against this session's selected database and
-    return `{ok, meta: [{name, type}], data: [[…]]}`. The driver owns
+    return `{ok, database, meta: [{name, type}], data: [[…]]}`. The driver owns
     pagination/quoting."""
     s, err = await _gated_session(sid)
     if s is None:
@@ -445,7 +445,7 @@ async def run_query(
     r = await DRIVERS[s.type].run_query(s.config, sql, s.database, limit, offset, order_by)
     if not r.ok or r.rows is None:
         return {"ok": False, "message": r.message}
-    return {"ok": True, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
+    return {"ok": True, "database": s.database, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
 
 
 async def export_csv(

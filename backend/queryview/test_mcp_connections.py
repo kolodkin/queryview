@@ -1,6 +1,4 @@
-"""MCP tools take the connection from the session: run_query queries the
-session's connection and database, push_dashboard runs on the session's
-connection. The agent never names a connection."""
+"""MCP tools take the connection from the session; the agent never names one."""
 
 from __future__ import annotations
 

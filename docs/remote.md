@@ -40,19 +40,16 @@ tools (among others):
   `{queries: [{query_name, query, cell_view, order_by, fields}]}`. Pass a
   `query_name` back as `push_query`'s `name`.
 - `run_query(session_id, query, limit?=1000, offset?=0)` — run a read-only
-  query on the session's connection and selected database, and return rows to
-  the agent (not the browser): `{ok, database, columns, types, rows}` — values
+  query on the session's connection and selected database, returning rows to
+  the agent (not the browser): `{ok, database, columns, types, rows}`, values
   typed as the driver returns them (64-bit integers and decimals as strings,
-  collections as JSON). `database` is the session's currently-selected database
-  (the user can change it from the pill), so the agent can tell what it's
-  querying and whether to fully-qualify tables. For schema discovery / data
-  inspection. A disconnected session fails with `not connected`.
+  collections as JSON). `database` tells the agent whether to fully-qualify
+  tables. A disconnected session fails with `not connected`.
 - `push_dashboard(session_id, name, html, queries)` — push a dashboard
-  **draft** to the session, which navigates to it and renders it; its queries
-  run on the session's connection. Does **not** persist — only the user's
-  **Save** button in the dashboard view writes it to the store (mirrors
-  `push_query`). Returns `{ok, pushed, message, database}`; a disconnected
-  session fails up front with `not connected`. See [dashboard.md](./dashboard.md).
+  **draft** on the session's connection; the browser navigates to it and
+  renders it. Only the user's **Save** persists it. Returns
+  `{ok, pushed, message, database}`; a disconnected session fails with
+  `not connected`. See [dashboard.md](./dashboard.md).
 
 The pushed query runs through the normal `POST /api/db/query`, so all of
 that path's pagination and order-by safety applies; the push layer never talks
