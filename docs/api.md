@@ -23,7 +23,7 @@ shared (SQLite). See [session.md](./session.md).
 | POST   | `/api/db/query`     | `{query, limit?, offset?, format?, order_by?}` | Run SQL against this session's selected database, paginated by `limit`/`offset` (defaults 100/0). `order_by` is `[{name, dir}]` (`dir` ASC/DESC, names quoted with the driver's identifier quote) sorting the pagination wrapper. `{ok, meta:[{name, type}], data:[[…]]}` — ClickHouse's `JSONCompact` shape, 64-bit integers and decimals quoted, collections as JSON arrays/objects — \| `{ok:false, message}`. `format:"csv"` returns `{ok, output}` (CSV text) instead. Empty query → `400`; no session → `409`. |
 | POST   | `/api/db/describe`  | `{query}`                              | Describe the query's output columns via ClickHouse `DESCRIBE` (no data scanned). `{ok, fields:[{name, type}]}` \| `{ok:false, message}`. Empty query → `400`; no session / no database → `409`. |
 | GET    | `/api/db/tables`    | —                                      | Tables of this session's selected database (the Explorer sidebar). `{ok, tables:[{name, rows, bytes, query}]}` — rows/bytes are engine estimates (null when untracked); `query` is the browse SELECT quoted with the driver's identifier quote — \| `{ok:false, message}`. No session / no database → `409`. |
-| GET    | `/api/predefined-queries`   | `?type=<connType>&workspace=`          | A workspace's predefined queries for a connection type (`workspace` defaults to `default`). `{queries:[{query_name, query, cell_view}]}`. `cell_view` is raw YAML text (or `null`) — see [query.md](./query.md#cell-views). |
+| GET    | `/api/predefined-queries`   | `?type=<connType>&workspace=`          | A workspace's predefined queries for a connection type (`workspace` defaults to the [fallback](./workspace.md)). `{queries:[{query_name, query, cell_view}]}`. `cell_view` is raw YAML text (or `null`) — see [query.md](./query.md#cell-views). |
 | POST   | `/api/predefined-queries`   | `{query_name, type, query, cell_view?, workspace?}` | Upsert a predefined query in a workspace. `cell_view` is optional raw YAML text, validated against the contract in [query.md](./query.md#cell-views); empty/missing clears it. `{ok}`; missing required fields or malformed `cell_view` → `400`. |
 | POST   | `/api/sessions/attach`      | `{tab, session_id?, keep?}`            | Resolve and claim this tab's session: its own id if free, else the most recent unheld session, else a new one. Doubles as the 90s-TTL claim heartbeat, sent with `keep`: then a session another live tab holds → `409` instead of a different one. `{ok, created, session}`. Missing `tab` → `400`. |
 | POST   | `/api/sessions/select`      | `{tab, id?, force?}`                   | Switch this tab to session `id`, or to a brand-new session when `id` is omitted. `{ok, session}`; a session another live tab holds → `409`, unless `force` takes it over. |
@@ -61,7 +61,7 @@ rest and never returned by the API. See [workspace.md](./workspace.md).
 | GET    | `/api/workspaces`         | —                             | List workspaces: `{workspaces:[{name, branch, configured, remote}]}`; `remote` has any embedded credential stripped. |
 | POST   | `/api/workspaces`         | `{name, remote?, branch?}`    | Create a workspace. `{ok}`, plus the merge-in result (`sync` or `sync_error`) when a remote is given; empty/`/`-containing name → `400`, duplicate → `409`. |
 | PATCH  | `/api/workspaces/{name}`  | `{name?, remote?, branch?}`   | Rename/reconfigure. A null `remote` clears it; an absent key leaves it unchanged. Entering a remote merges the repo in: `{ok, sync: {imported, conflicts}}`, or `{ok, sync_error}` if the repo is unreachable (the settings are saved either way). |
-| DELETE | `/api/workspaces/{name}`  | —                             | Delete an empty workspace. `{ok}`; unknown → `404`, still owns entities → `409`. |
+| DELETE | `/api/workspaces/{name}`  | —                             | Delete an empty workspace; its sessions move to the fallback workspace. `{ok, workspace}` (where they moved); unknown → `404`, still owns entities or is the last one → `409`. |
 
 ## YAML export / import
 
@@ -90,7 +90,7 @@ the UI.
 | POST   | `/api/git/restore` | `{kind, name, conn_type?, ref?, workspace?}`     | Overwrite the local DB row with the entity's content at `ref`. `{ok, restored, sha}`. |
 
 `kind` is `"query"` or `"dashboard"`; `conn_type` is required for queries;
-`workspace` defaults to `default`. MCP tools `git_store`, `git_history`,
+`workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_store`, `git_history`,
 `git_restore` mirror the same surface, resolving the workspace from an
 optional `session_id` (see [workspace.md](./workspace.md)).
 

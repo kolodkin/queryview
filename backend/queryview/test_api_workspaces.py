@@ -40,7 +40,7 @@ def test_create_list_update_delete_round_trip():
     assert "t6-rt" not in listed
     assert listed["t6-rt2"]["configured"] is False
 
-    assert c.delete("/api/workspaces/t6-rt2").json() == {"ok": True}
+    assert c.delete("/api/workspaces/t6-rt2").json() == {"ok": True, "workspace": "default"}
     assert c.delete("/api/workspaces/t6-rt2").status_code == 404
 
 

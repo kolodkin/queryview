@@ -92,7 +92,7 @@ are disabled when the active workspace has no remote configured.
 - `POST /api/git/restore` `{kind, name, conn_type?, ref?, workspace?}` → `{ok, restored, sha, imported, conflicts}`
 
 `kind` is `"query"` or `"dashboard"`; `conn_type` is required for queries;
-`workspace` defaults to `default`. MCP tools `git_store`, `git_history`,
+`workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_store`, `git_history`,
 `git_restore` mirror the same surface, resolving the workspace from an
 optional `session_id` (see [workspace.md](./workspace.md)).
 

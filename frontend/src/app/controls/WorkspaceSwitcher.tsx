@@ -150,7 +150,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
     }
     setManage(false)
     await reload()
-    onSwitch('default')
+    if (r.workspace) onSwitch(r.workspace)
   }
 
   return (

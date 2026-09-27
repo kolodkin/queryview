@@ -82,4 +82,4 @@ def test_workspace_export_import_between_workspaces(default_ws_id, wipe_workspac
         from queryview.workspaces import resolve
 
         wipe_workspace_entities(_run(resolve("api yio target")).id)
-        assert c.delete("/api/workspaces/api yio target").json() == {"ok": True}
+        assert c.delete("/api/workspaces/api yio target").json()["ok"] is True

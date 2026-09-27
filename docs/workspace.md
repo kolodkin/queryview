@@ -5,9 +5,12 @@ git-syncs to its own remote (see [gitsync.md](./gitsync.md)). Entity names are
 unique per workspace, so two workspaces can each have a "daily revenue"
 dashboard. Connections are global — any workspace can use any connection.
 
-A `default` workspace always exists after migration, with no remote and on
-branch `main`. It is an ordinary row — renamable and deletable like any other,
-special only as the fallback for an omitted `workspace` parameter.
+A `default` workspace is seeded by migration, with no remote and on branch
+`main`. It is an ordinary row, renamable like any other. The **fallback**
+workspace — used for an omitted `workspace` parameter and for new sessions —
+is the oldest one, found by id, never by the name `default`. Renaming a
+workspace moves the sessions on it along; deleting one moves them to the
+fallback, and the last workspace can't be deleted.
 
 ## Configuration
 
@@ -30,7 +33,7 @@ keeps its history either way.
 - `DELETE /api/workspaces/{name}`
 
 Scoped endpoints (predefined queries, dashboards, `/api/git/*`) accept an
-optional `workspace` name, defaulting to `default`.
+optional `workspace` name, defaulting to the fallback workspace.
 
 ## UI
 
@@ -44,7 +47,7 @@ lists.
 MCP is workspace-unaware: no workspace parameter, no workspace tools. The
 armed browser session reports its active workspace (alongside the database);
 `list_queries`, `list_dashboards`, and the `git_*` tools take an optional
-`session_id` and resolve the workspace from it, falling back to `default`. The human picks the
+`session_id` and resolve the workspace from it, else the fallback. The human picks the
 workspace; the agent works inside the session it was invited into. Workspace
 CRUD stays API/UI-only because it is admin configuration involving secrets.
 

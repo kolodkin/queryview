@@ -66,7 +66,7 @@ pair for the whole active workspace.
   body → `{ok, kind, queries, dashboards}` (counts of upserted entities).
 
 `kind` is `"query"`, `"dashboard"` or `"workspace"`; `name` is required for
-entity kinds and `conn_type` for queries; `workspace` defaults to `default`.
+entity kinds and `conn_type` for queries; `workspace` defaults to the fallback workspace.
 Errors: `400` malformed document or missing arguments, `404` unknown
 entity/workspace.
 

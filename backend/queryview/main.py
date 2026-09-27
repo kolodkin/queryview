@@ -392,10 +392,10 @@ async def db_describe(request: Request):
 
 async def _resolve_workspace(raw: Any) -> workspaces.WorkspaceRec | JSONResponse:
     """The workspace for a request's optional `workspace` field (empty/missing
-    means the default workspace), or the error response to return."""
-    name = _clean_str(raw) or workspaces.DEFAULT_WORKSPACE
+    means the fallback workspace), or the error response to return."""
+    name = _clean_str(raw)
     try:
-        return await workspaces.resolve(name)
+        return await (workspaces.resolve(name) if name else workspaces.fallback())
     except workspaces.WorkspaceError as e:
         return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
 
@@ -821,11 +821,12 @@ async def workspaces_update(name: str, request: Request):
 async def workspaces_delete(name: str):
     try:
         ws = await workspaces.resolve(name)
-        await workspaces.delete_workspace(name)
+        moved_to = await workspaces.delete_workspace(name)
     except workspaces.WorkspaceError as e:
         return _workspace_error(e)
     gitsync.forget(ws.id)
-    return {"ok": True}
+    # Sessions that were on it now are on this one.
+    return {"ok": True, "workspace": moved_to}
 
 
 @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])

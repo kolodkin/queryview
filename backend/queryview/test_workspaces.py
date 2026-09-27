@@ -113,3 +113,35 @@ def test_delete_refuses_non_empty_then_deletes_empty():
     _run(delete_workspace("t2-del"))
     with pytest.raises(WorkspaceError):
         _run(resolve("t2-del"))
+
+
+def test_rename_and_delete_carry_sessions_along():
+    """Sessions name their workspace, so a rename moves them with it and a
+    delete moves them to the fallback workspace instead of stranding them."""
+    from queryview import sessions
+    from queryview.workspaces import create_workspace, delete_workspace, fallback, update_workspace
+
+    _run(create_workspace("t-carry", None, "main"))
+    rec = _run(sessions.create_session())
+    _run(sessions.patch_session(rec.id, workspace="t-carry"))
+
+    _run(update_workspace("t-carry", new_name="t-carried"))
+    assert _run(sessions.workspace_of(rec.id)) == "t-carried"
+
+    moved_to = _run(delete_workspace("t-carried"))
+    assert moved_to == _run(fallback()).name
+    assert _run(sessions.workspace_of(rec.id)) == moved_to
+
+
+def test_the_fallback_survives_renaming_the_seeded_workspace():
+    """Nothing looks the first workspace up by the name "default"."""
+    from queryview import sessions
+    from queryview.workspaces import DEFAULT_WORKSPACE, fallback, update_workspace
+
+    _run(update_workspace(DEFAULT_WORKSPACE, new_name="t-renamed-default"))
+    try:
+        assert _run(fallback()).name == "t-renamed-default"
+        new = _run(sessions.create_session())
+        assert new.workspace == "t-renamed-default"
+    finally:
+        _run(update_workspace("t-renamed-default", new_name=DEFAULT_WORKSPACE))

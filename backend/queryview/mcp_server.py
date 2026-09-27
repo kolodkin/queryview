@@ -107,12 +107,12 @@ async def run_query(
 
 async def _session_workspace_rec(session_id: str | None):
     """The workspace the given session is on, read from its row, else the
-    default workspace. MCP is deliberately workspace-unaware: the human picks
+    fallback workspace. MCP is deliberately workspace-unaware: the human picks
     the workspace in the UI; the agent works in session scope."""
     from . import workspaces
 
     name = await sessions.workspace_of(session_id) if session_id else None
-    return await workspaces.resolve(name or workspaces.DEFAULT_WORKSPACE)
+    return await (workspaces.resolve(name) if name else workspaces.fallback())
 
 
 @mcp.tool()

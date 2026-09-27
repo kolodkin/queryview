@@ -9,12 +9,14 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from sqlalchemy import text
-from sqlmodel import Field, SQLModel, select
+from sqlalchemy import column, table, text, update
+from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .connect import _decrypt_str, _encrypt_str, _engine_for_db, _ensure_schema
 
+# The name the first workspace is seeded with. It can be renamed, so nothing
+# looks a workspace up by this name: "no workspace given" means fallback().
 DEFAULT_WORKSPACE = "default"
 
 
@@ -64,6 +66,27 @@ def _valid_name(name: str) -> str:
         # Names travel in /api/workspaces/{name} URL paths.
         raise WorkspaceError("workspace name must not contain '/'", status=400)
     return name
+
+
+# Sessions name their workspace. This module can't import sessions (sessions ->
+# connect -> here), so it reaches the table through a bare table clause.
+_sessions_table = table("sessions", column("workspace"))
+
+
+def _move_sessions(old: str, new: str):
+    """Point every session on workspace `old` at `new`."""
+    return update(_sessions_table).where(_sessions_table.c.workspace == old).values(workspace=new)
+
+
+async def fallback() -> WorkspaceRec:
+    """The workspace used when none is named: the oldest one (the seeded
+    workspace), whatever it is called now."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = (await s.exec(select(Workspace).order_by(col(Workspace.id)).limit(1))).first()
+    if row is None:
+        raise WorkspaceError("no workspaces", status=404)
+    return _to_rec(row)
 
 
 async def resolve(name: str) -> WorkspaceRec:
@@ -139,6 +162,7 @@ async def update_workspace(
             dup = (await s.exec(select(Workspace).where(Workspace.name == new_name))).first()
             if dup is not None:
                 raise WorkspaceError(f"workspace {new_name!r} already exists", status=409)
+            await s.exec(_move_sessions(row.name, new_name))
             row.name = new_name
         if remote is not _UNSET:
             row.remote = _encrypt_str(remote) if remote else None
@@ -164,9 +188,10 @@ async def _entity_count(workspace_id: int) -> int:
     return int(n or 0)
 
 
-async def delete_workspace(name: str) -> None:
-    """Delete an empty workspace; 409 while it still owns entities. The git
-    remote keeps its history either way — this only removes the local row."""
+async def delete_workspace(name: str) -> str:
+    """Delete an empty workspace; 409 while it still owns entities, or if it is
+    the last one. Sessions on it move to the fallback workspace, whose name is
+    returned. The git remote keeps its history — this only removes the row."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         row = (await s.exec(select(Workspace).where(Workspace.name == name))).first()
@@ -178,8 +203,16 @@ async def delete_workspace(name: str) -> None:
                 f"workspace {name!r} still contains {count} entities; delete them first",
                 status=409,
             )
+        others = (
+            await s.exec(select(Workspace).where(Workspace.id != row.id).order_by(col(Workspace.id)).limit(1))
+        ).first()
+        if others is None:
+            raise WorkspaceError("can't delete the last workspace", status=409)
+        moved_to = others.name  # read before the commit expires it
+        await s.exec(_move_sessions(name, moved_to))
         await s.delete(row)
         await s.commit()
+        return moved_to
 
 
 def split_credential(url: str) -> tuple[str, tuple[str, str] | None]:

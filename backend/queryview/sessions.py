@@ -10,6 +10,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+from sqlalchemy import column, table
 from sqlalchemy.orm import load_only
 from sqlmodel import Field, SQLModel, col, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -134,7 +135,11 @@ def _unheld_query(now: int):
 async def _new_row(s: AsyncSession, now: int) -> Session:
     """A fresh row in the caller's transaction, so a create-and-claim is one pass."""
     next_seq = (await s.exec(select(func.coalesce(func.max(Session.seq), 0)))).one() + 1
-    row = Session(id=uuid.uuid4().hex, seq=next_seq, last_active_at=now)
+    # The fallback workspace (the oldest), not one named "default": that one
+    # can be renamed. A bare table clause: importing workspaces would be a cycle.
+    ws = table("workspaces", column("id"), column("name"))
+    first_ws = (await s.exec(select(ws.c.name).order_by(ws.c.id).limit(1))).first()
+    row = Session(id=uuid.uuid4().hex, seq=next_seq, last_active_at=now, workspace=first_ws or "default")
     s.add(row)
     return row
 
