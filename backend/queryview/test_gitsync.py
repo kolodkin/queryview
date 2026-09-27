@@ -9,7 +9,7 @@ import subprocess
 
 import pytest
 
-from queryview import gitsync
+from queryview import gitsync, workspaces
 from queryview.gitsync import (
     GitSyncError,
     dashboard_from_files,
@@ -66,7 +66,6 @@ def test_query_from_yaml_rejects_malformed():
 def test_dashboard_files_round_trip():
     d = {
         "name": "sales",
-        "connection": "prod",
         "html": "<html>\n<body>hi — ünicode</body>\n</html>",
         "queries": {"revenue": "SELECT 1", "multi": "SELECT a\nFROM b"},
     }
@@ -153,14 +152,18 @@ def test_store_no_change_makes_no_commit(git_env):
     r1 = _run(gitsync.store(_default_ws(), "query", "gs same", "clickhouse"))
     r2 = _run(gitsync.store(_default_ws(), "query", "gs same", "clickhouse"))
     assert r1["committed"] is True
-    assert r2 == {"committed": False, "sha": None, "message": "no changes"}
+    assert {k: r2[k] for k in ("committed", "sha", "message")} == {
+        "committed": False,
+        "sha": None,
+        "message": "no changes",
+    }
     assert _remote_log(git_env).count("\n") == 1  # exactly one commit
 
 
 def test_store_dashboard_touches_only_its_dir(git_env):
     from queryview.dashboards import upsert_dashboard
 
-    _run(upsert_dashboard("gs dash", "prod", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs dash", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
     r = _run(gitsync.store(_default_ws(), "dashboard", "gs dash"))
     assert r["committed"] is True
     out = subprocess.run(
@@ -281,14 +284,13 @@ def test_restore_default_ref_is_remote_head(git_env):
 def test_restore_dashboard_round_trip(git_env):
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
-    _run(upsert_dashboard("gs rdash", "prod", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs rdash", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
     _run(gitsync.store(_default_ws(), "dashboard", "gs rdash"))
-    _run(upsert_dashboard("gs rdash", "other", "<html>v2</html>", {"q": "SELECT 2"}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs rdash", "<html>v2</html>", {"q": "SELECT 2"}, workspace_id=_default_ws_id()))
     _run(gitsync.restore(_default_ws(), "dashboard", "gs rdash"))
     d = _run(get_dashboard("gs rdash", _default_ws_id()))
     assert d == {
         "name": "gs rdash",
-        "connection": "prod",
         "html": "<html>v1</html>",
         "queries": {"q": "SELECT 1"},
     }
@@ -358,20 +360,20 @@ def test_git_missing_binary_is_gitsync_error(tmp_path, monkeypatch):
 
 def test_split_credential_separates_http_userinfo():
     url = "https://x-access-token:ghp_tok@github.com/acme/repo.git"
-    assert gitsync._split_credential(url) == (
+    assert workspaces.split_credential(url) == (
         "https://github.com/acme/repo.git",
         ("x-access-token", "ghp_tok"),
     )
 
 
 def test_split_credential_handles_a_bare_token_and_a_port():
-    sanitized, cred = gitsync._split_credential("https://ghp_tok@git.example.internal:8443/a/b.git")
+    sanitized, cred = workspaces.split_credential("https://ghp_tok@git.example.internal:8443/a/b.git")
     assert sanitized == "https://git.example.internal:8443/a/b.git"
     assert cred == ("ghp_tok", "")
 
 
 def test_split_credential_percent_decodes():
-    _, cred = gitsync._split_credential("https://user:p%40ss%2Fword@example.internal/r.git")
+    _, cred = workspaces.split_credential("https://user:p%40ss%2Fword@example.internal/r.git")
     assert cred == ("user", "p@ss/word")
 
 
@@ -383,7 +385,7 @@ def test_split_credential_leaves_ssh_and_plain_urls_alone():
         "https://github.com/acme/repo.git",
         "/srv/mirrors/repo.git",
     ):
-        assert gitsync._split_credential(url) == (url, None)
+        assert workspaces.split_credential(url) == (url, None)
 
 
 def test_credential_never_reaches_the_clone_config(monkeypatch, clone_base):
@@ -444,3 +446,97 @@ def test_git_times_out_instead_of_hanging(monkeypatch):
         _run(gitsync._git("-c", "alias.zzz=!sleep 5", "zzz"))
     assert "timed out" in str(e.value)
     assert e.value.status == 502
+
+
+# --- Merge-in --------------------------------------------------------------
+
+
+@pytest.fixture
+def other_instance(git_env, wipe_workspace_entities):
+    """A second workspace on the same remote, standing in for another
+    QueryView that commits to the repo."""
+    from queryview.workspaces import create_workspace, delete_workspace, resolve
+
+    _run(create_workspace("gs other", str(git_env), "main"))
+    ws = _run(resolve("gs other"))
+    yield ws
+    wipe_workspace_entities(ws.id)
+    _run(delete_workspace("gs other"))
+    gitsync.forget(ws.id)
+
+
+def test_sync_imports_what_the_repo_has(other_instance):
+    from queryview.dashboards import get_dashboard, upsert_dashboard
+    from queryview.queries import get_predefined_query, save_predefined_query
+
+    _run(upsert_dashboard("gs incoming", "<html>x</html>", {"q": "SELECT 1"}, workspace_id=other_instance.id))
+    _run(save_predefined_query("gs incoming q", "clickhouse", "SELECT 2", workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "dashboard", "gs incoming"))
+    _run(gitsync.store(other_instance, "query", "gs incoming q", "clickhouse"))
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert {"kind": "dashboard", "name": "gs incoming", "conn_type": None} in r["imported"]
+    assert {"kind": "query", "name": "gs incoming q", "conn_type": "clickhouse"} in r["imported"]
+    dash = _run(get_dashboard("gs incoming", _default_ws_id()))
+    query = _run(get_predefined_query("clickhouse", "gs incoming q", _default_ws_id()))
+    assert dash is not None and dash["html"] == "<html>x</html>"
+    assert query is not None and query["query"] == "SELECT 2"
+    assert r["conflicts"] == []
+
+
+def test_sync_never_overwrites_and_reports_the_conflict(other_instance):
+    from queryview.dashboards import get_dashboard, upsert_dashboard
+
+    _run(upsert_dashboard("gs clash", "<html>mine</html>", {}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs clash", "<html>theirs</html>", {}, workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "dashboard", "gs clash"))
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    clash = {"kind": "dashboard", "name": "gs clash", "conn_type": None}
+    assert clash in r["conflicts"]
+    assert clash in gitsync.conflicts(_default_ws())  # persists for the UI
+    local = _run(get_dashboard("gs clash", _default_ws_id()))
+    assert local is not None and local["html"] == "<html>mine</html>"
+
+    # Committing the local copy settles it.
+    _run(gitsync.store(_default_ws(), "dashboard", "gs clash"))
+    assert clash not in gitsync.conflicts(_default_ws())
+
+
+def test_restoring_settles_a_conflict(other_instance):
+    from queryview.dashboards import get_dashboard, upsert_dashboard
+
+    _run(upsert_dashboard("gs clash2", "<html>mine</html>", {}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs clash2", "<html>theirs</html>", {}, workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "dashboard", "gs clash2"))
+    _run(gitsync.sync(_default_ws()))
+
+    _run(gitsync.restore(_default_ws(), "dashboard", "gs clash2"))
+
+    local = _run(get_dashboard("gs clash2", _default_ws_id()))
+    assert local is not None and local["html"] == "<html>theirs</html>"
+    assert all(c["name"] != "gs clash2" for c in gitsync.conflicts(_default_ws()))
+
+
+def test_a_local_edit_on_an_unchanged_repo_copy_is_not_a_conflict(git_env):
+    from queryview.dashboards import upsert_dashboard
+
+    _run(upsert_dashboard("gs edited", "<html>v1</html>", {}, workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "dashboard", "gs edited"))
+    _run(upsert_dashboard("gs edited", "<html>v2, not committed</html>", {}, workspace_id=_default_ws_id()))
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert all(c["name"] != "gs edited" for c in r["conflicts"])
+
+
+def test_an_older_meta_yaml_naming_a_connection_still_reads():
+    """Repos written before dashboards dropped their connection keep working;
+    the key is ignored."""
+    d = dashboard_from_files(
+        {"meta.yaml": "name: legacy\nconnection: reporting-db\n", "dashboard.html": "<p/>", "queries.yaml": "{}"}
+    )
+    assert d == {"name": "legacy", "html": "<p/>", "queries": {}}
+    assert "connection" not in dashboard_to_files(d)["meta.yaml"]

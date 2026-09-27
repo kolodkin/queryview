@@ -21,11 +21,18 @@ def test_create_list_update_delete_round_trip():
         "/api/workspaces",
         json={"name": "t6-rt", "remote": "https://u:tok@example.test/r.git", "branch": "dev"},
     )
-    assert r.json() == {"ok": True}
+    # Saved even though the fake remote can't be reached to merge from.
+    assert r.json()["ok"] is True and "sync_error" in r.json()
 
     listed = {w["name"]: w for w in c.get("/api/workspaces").json()["workspaces"]}
-    assert listed["t6-rt"] == {"name": "t6-rt", "branch": "dev", "configured": True}
-    assert "tok" not in r.text and "remote" not in listed["t6-rt"]
+    assert listed["t6-rt"] == {
+        "name": "t6-rt",
+        "branch": "dev",
+        "configured": True,
+        # Shown without the credential, which never leaves the server.
+        "remote": "https://example.test/r.git",
+    }
+    assert "tok" not in r.text and "tok" not in str(listed["t6-rt"])
 
     # Rename + clear the remote (present-but-null clears; absent keeps).
     assert c.patch("/api/workspaces/t6-rt", json={"name": "t6-rt2", "remote": None}).json() == {"ok": True}
@@ -33,7 +40,7 @@ def test_create_list_update_delete_round_trip():
     assert "t6-rt" not in listed
     assert listed["t6-rt2"]["configured"] is False
 
-    assert c.delete("/api/workspaces/t6-rt2").json() == {"ok": True}
+    assert c.delete("/api/workspaces/t6-rt2").json() == {"ok": True, "workspace": "default"}
     assert c.delete("/api/workspaces/t6-rt2").status_code == 404
 
 

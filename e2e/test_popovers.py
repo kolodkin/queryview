@@ -23,12 +23,19 @@ def test_popovers_close_on_outside_click_and_escape(page: Page) -> None:
     page.keyboard.press("Escape")
     expect(option).to_have_count(0)
 
-    # The manage panel is the exception: it holds unsaved form input, so an
-    # outside click and Escape both leave it alone; its own Close dismisses it.
+    # The manage panel dismisses the same way while untouched...
     switcher.click()
     page.get_by_test_id("workspace-manage").click()
     name_input = page.get_by_test_id("workspace-name-input")
     expect(name_input).to_be_visible()
+    heading.click()
+    expect(name_input).to_have_count(0)
+
+    # ...but once it holds unsaved input, an outside click and Escape both
+    # leave it alone; its own Close dismisses it.
+    switcher.click()
+    page.get_by_test_id("workspace-manage").click()
+    page.get_by_test_id("workspace-branch-input").fill("draft")
     heading.click()
     page.keyboard.press("Escape")
     expect(name_input).to_be_visible()

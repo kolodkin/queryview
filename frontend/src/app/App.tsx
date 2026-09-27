@@ -95,8 +95,8 @@ function Shell() {
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
-  // Seeded from the session once it attaches; 'default' matches the backend.
-  const [workspace, setWorkspace] = useState('default')
+  // Seeded from the session once it attaches.
+  const [workspace, setWorkspace] = useState('')
   const [sessionLabel, setSessionLabel] = useState('Session')
   // Panels hydrate from the session at mount, so they must remount when the
   // session changes — not only when the workspace does. Every adoption bumps
@@ -477,7 +477,7 @@ function Shell() {
                 key={`${sessionKey}:${workspace}`}
                 pushed={dashboardPush}
                 onPushConsumed={() => setDashboardPush(null)}
-                database={connection?.database ?? null}
+                runOn={connection ? `${connection.name}/${connection.database ?? ''}` : null}
               />
             }
           />

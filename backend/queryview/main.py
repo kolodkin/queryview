@@ -33,7 +33,7 @@ from .connect import (
     run_query,
     select_database,
 )
-from .dashboard_queries import run_queries_for_connection
+from .dashboard_queries import run_dashboard_queries
 from .dashboards import _upsert_and_push, get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
@@ -392,10 +392,10 @@ async def db_describe(request: Request):
 
 async def _resolve_workspace(raw: Any) -> workspaces.WorkspaceRec | JSONResponse:
     """The workspace for a request's optional `workspace` field (empty/missing
-    means the default workspace), or the error response to return."""
-    name = _clean_str(raw) or workspaces.DEFAULT_WORKSPACE
+    means the fallback workspace), or the error response to return."""
+    name = _clean_str(raw)
     try:
-        return await workspaces.resolve(name)
+        return await (workspaces.resolve(name) if name else workspaces.fallback())
     except workspaces.WorkspaceError as e:
         return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
 
@@ -557,23 +557,20 @@ async def remote_lock(request: Request):
 # --- Dashboards (persist + reopen + run-against-a-named-connection) --------
 
 
-# Run a dashboard's named queries against a named connection. Fail-fast: any
-# failure returns an HTTP error and no partial results.
+# Run a dashboard's named queries on this session's connection and selected
+# database. Fail-fast: any failure returns an HTTP error and no partial results.
 @app.post("/api/runqueries")
 async def run_queries(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
-    connection = _clean_str(b.get("connection"))
     queries = _clean_queries(b.get("queries"))
-    if not connection or not queries:
-        return JSONResponse(
-            {"ok": False, "message": "connection and queries are required"},
-            status_code=400,
-        )
-    r = await run_queries_for_connection(connection, queries)
+    if not queries:
+        return JSONResponse({"ok": False, "message": "queries are required"}, status_code=400)
+    r = await run_dashboard_queries(request.state.sid, queries)
     if not r["ok"]:
-        status = 404 if r.get("reason") == "no-connection" else 400
-        return JSONResponse({"ok": False, "message": r["message"]}, status_code=status)
+        # Not connected / no database: the session must act first, not the request.
+        status = 400 if r.get("reason") == "query" else 409
+        return JSONResponse({"ok": False, "message": r["message"], "reason": r.get("reason")}, status_code=status)
     return {"ok": True, "results": r["results"]}
 
 
@@ -584,22 +581,16 @@ async def dashboards_upsert(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
     name = _clean_str(b.get("name"))
-    connection = _clean_str(b.get("connection"))
     raw_html = b.get("html")
     html = raw_html if isinstance(raw_html, str) else ""
     queries = _clean_queries(b.get("queries"))
-    if not name or not connection or not html.strip():
-        return JSONResponse(
-            {"ok": False, "message": "name, connection and html are required"},
-            status_code=400,
-        )
+    if not name or not html.strip():
+        return JSONResponse({"ok": False, "message": "name and html are required"}, status_code=400)
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
     session_id = _clean_str(b.get("session_id"))
-    persisted, pushed, message = await _upsert_and_push(
-        name, connection, html, queries, session_id or None, workspace_id=ws.id
-    )
+    persisted, pushed, message = await _upsert_and_push(name, html, queries, session_id or None, workspace_id=ws.id)
     return {"ok": persisted, "persisted": persisted, "pushed": pushed, "message": message}
 
 
@@ -657,7 +648,27 @@ async def git_status(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    return {"configured": gitsync.configured(ws)}
+    return {"configured": gitsync.configured(ws), "conflicts": gitsync.conflicts(ws)}
+
+
+# The workspace panel's Sync: merge in what was committed elsewhere.
+@app.post("/api/git/sync")
+async def git_sync(request: Request):
+    b = await _read_json(request)
+    b = b if isinstance(b, dict) else {}
+    ws = await _resolve_workspace(_clean_str(b.get("workspace")) or None)
+    if isinstance(ws, JSONResponse):
+        return ws
+    return await _gitsync_json(gitsync.sync(ws))
+
+
+async def _sync_attached(name: str) -> dict[str, Any]:
+    """Merge a just-attached remote in. The workspace is saved either way, so a
+    sync failure (unreachable remote) is reported, not raised."""
+    try:
+        return {"sync": await gitsync.sync(await workspaces.resolve(name))}
+    except (gitsync.GitSyncError, workspaces.WorkspaceError) as e:
+        return {"sync_error": str(e)}
 
 
 @app.post("/api/git/store")
@@ -775,7 +786,7 @@ async def workspaces_create(request: Request):
         await workspaces.create_workspace(name, remote_url, branch)
     except workspaces.WorkspaceError as e:
         return _workspace_error(e)
-    return {"ok": True}
+    return {"ok": True, **(await _sync_attached(name) if remote_url else {})}
 
 
 @app.patch("/api/workspaces/{name}")
@@ -790,19 +801,32 @@ async def workspaces_update(name: str, request: Request):
     if "branch" in b:
         kwargs["branch"] = _clean_str(b.get("branch")) or None
     try:
+        before = await workspaces.resolve(name)
         await workspaces.update_workspace(name, **kwargs)
     except workspaces.WorkspaceError as e:
         return _workspace_error(e)
+    current = kwargs.get("new_name") or name
+    after = await workspaces.resolve(current)
+    changed = (after.remote, after.branch) != (before.remote, before.branch)
+    if changed:
+        # A different repo: the old clone and sync state no longer apply.
+        gitsync.forget(before.id)
+    # Entering a remote (even the same one again) merges whatever it holds.
+    if after.remote and (changed or kwargs.get("remote")):
+        return {"ok": True, **(await _sync_attached(current))}
     return {"ok": True}
 
 
 @app.delete("/api/workspaces/{name}")
 async def workspaces_delete(name: str):
     try:
-        await workspaces.delete_workspace(name)
+        ws = await workspaces.resolve(name)
+        moved_to = await workspaces.delete_workspace(name)
     except workspaces.WorkspaceError as e:
         return _workspace_error(e)
-    return {"ok": True}
+    gitsync.forget(ws.id)
+    # Sessions that were on it now are on this one.
+    return {"ok": True, "workspace": moved_to}
 
 
 @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])

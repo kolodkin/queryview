@@ -68,7 +68,8 @@ export function sessionId(): string | null {
 // — scoping predefined queries, dashboards, export/import — read it here rather
 // than threading it through props.
 export function activeWorkspace(): string {
-  return state?.workspace ?? 'default'
+  // Empty before attach: the backend then uses its fallback workspace.
+  return state?.workspace ?? ''
 }
 
 function adopt(next: SessionState): SessionState {

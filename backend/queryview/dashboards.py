@@ -23,15 +23,14 @@ class Dashboard(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True)  # unique per workspace, not globally
     workspace_id: int  # owning workspace (workspaces.id)
-    connection: str  # connection name the queries run against
     html: str  # agent-authored HTML document
     queries: str  # JSON text: {query_name: SQL}
     updated_at: int  # unix ms
 
 
 async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -> None:
-    """Upsert many dashboards — each a dict with `name`, `connection`, `html`
-    and a `queries` dict — in one transaction, keyed by (workspace, name).
+    """Upsert many dashboards — each a dict with `name`, `html` and a
+    `queries` dict — in one transaction, keyed by (workspace, name).
     `queries` is serialized to JSON text."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
@@ -42,10 +41,7 @@ async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -
                 )
             ).first()
             if row is None:
-                row = Dashboard(
-                    name=d["name"], workspace_id=workspace_id, connection="", html="", queries="", updated_at=0
-                )
-            row.connection = d["connection"]
+                row = Dashboard(name=d["name"], workspace_id=workspace_id, html="", queries="", updated_at=0)
             row.html = d["html"]
             row.queries = json.dumps(d["queries"])
             row.updated_at = _now_ms()
@@ -53,13 +49,9 @@ async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -
         await s.commit()
 
 
-async def upsert_dashboard(
-    name: str, connection: str, html: str, queries: dict[str, str], *, workspace_id: int
-) -> None:
+async def upsert_dashboard(name: str, html: str, queries: dict[str, str], *, workspace_id: int) -> None:
     """Upsert a dashboard by (workspace, name); `queries` is serialized to JSON text."""
-    await upsert_dashboards(
-        [{"name": name, "connection": connection, "html": html, "queries": queries}], workspace_id=workspace_id
-    )
+    await upsert_dashboards([{"name": name, "html": html, "queries": queries}], workspace_id=workspace_id)
 
 
 def _payload(row: Dashboard) -> dict[str, Any]:
@@ -71,7 +63,6 @@ def _payload(row: Dashboard) -> dict[str, Any]:
         queries = {}
     return {
         "name": row.name,
-        "connection": row.connection,
         "html": row.html,
         "queries": queries,
     }
@@ -94,7 +85,7 @@ async def list_dashboards(workspace_id: int) -> list[dict[str, Any]]:
         rows = (
             await s.exec(select(Dashboard).where(Dashboard.workspace_id == workspace_id).order_by(Dashboard.name))
         ).all()
-    return [{"name": r.name, "connection": r.connection, "updated_at": r.updated_at} for r in rows]
+    return [{"name": r.name, "updated_at": r.updated_at} for r in rows]
 
 
 async def list_dashboards_full(workspace_id: int) -> list[dict[str, Any]]:
@@ -109,12 +100,11 @@ async def list_dashboards_full(workspace_id: int) -> list[dict[str, Any]]:
     return [_payload(r) for r in rows]
 
 
-def _dashboard_event(name: str, connection: str, html: str, queries: dict[str, str]) -> dict[str, Any]:
+def _dashboard_event(name: str, html: str, queries: dict[str, str]) -> dict[str, Any]:
     """The SSE payload the browser renders for a pushed dashboard."""
     return {
         "type": "dashboard",
         "name": name,
-        "connection": connection,
         "html": html,
         "queries": queries,
     }
@@ -122,7 +112,6 @@ def _dashboard_event(name: str, connection: str, html: str, queries: dict[str, s
 
 async def _push_dashboard(
     name: str,
-    connection: str,
     html: str,
     queries: dict[str, str],
     session_id: str | None,
@@ -133,12 +122,11 @@ async def _push_dashboard(
     no session_id -> (False, "no session")."""
     if not session_id:
         return False, "no session"
-    return remote.push(session_id, _dashboard_event(name, connection, html, queries))
+    return remote.push(session_id, _dashboard_event(name, html, queries))
 
 
 async def _upsert_and_push(
     name: str,
-    connection: str,
     html: str,
     queries: dict[str, str],
     session_id: str | None,
@@ -149,8 +137,8 @@ async def _upsert_and_push(
     browser session. Returns (persisted, pushed, message). Push is best-effort:
     an unknown/inactive session leaves it saved with pushed=False, per
     remote.push's contract. Used by the REST endpoint (the user-Save path)."""
-    await upsert_dashboard(name, connection, html, queries, workspace_id=workspace_id)
+    await upsert_dashboard(name, html, queries, workspace_id=workspace_id)
     if session_id:
-        ok, message = remote.push(session_id, _dashboard_event(name, connection, html, queries))
+        ok, message = remote.push(session_id, _dashboard_event(name, html, queries))
         return True, ok, message
     return True, False, "persisted"

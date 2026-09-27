@@ -1,12 +1,13 @@
-"""Dashboard query runner: typed, column-oriented results straight from the
-driver's rows (no text round-trip), fail-fast on the first failing query."""
+"""Dashboard query runner: runs on the session's connection, typed and
+column-oriented straight from the driver's rows (no text round-trip),
+fail-fast on the first failing query."""
 
 from __future__ import annotations
 
 import asyncio
 
 import queryview.connect as connect
-from queryview.dashboard_queries import run_queries_for_connection
+from queryview.dashboard_queries import run_dashboard_queries
 from queryview.drivers import DRIVERS
 from queryview.drivers.base import Column, QueryResult, QueryRows
 
@@ -40,7 +41,7 @@ class _RowsDriver:
 def test_run_queries_returns_typed_columns(monkeypatch):
     monkeypatch.setitem(DRIVERS, "rowsfake", _RowsDriver())
     asyncio.run(connect.connect_new("s-dash", "dash", {"v": 1}, "rowsfake"))
-    out = asyncio.run(run_queries_for_connection("dash", {"q": "SELECT 1"}))
+    out = asyncio.run(run_dashboard_queries("s-dash", {"q": "SELECT 1"}))
     assert out["ok"]
     assert out["results"] == {"q": {"n": [1, 2], "s": ["a", "b"]}}
     assert out["meta"] == {"q": [{"name": "n", "type": "Int32"}, {"name": "s", "type": "String"}]}
@@ -49,5 +50,10 @@ def test_run_queries_returns_typed_columns(monkeypatch):
 def test_run_queries_fails_fast_with_query_name(monkeypatch):
     monkeypatch.setitem(DRIVERS, "rowsfake", _RowsDriver())
     asyncio.run(connect.connect_new("s-dash2", "dash2", {"v": 1}, "rowsfake"))
-    out = asyncio.run(run_queries_for_connection("dash2", {"ok": "SELECT 1", "broken": "fail"}))
+    out = asyncio.run(run_dashboard_queries("s-dash2", {"ok": "SELECT 1", "broken": "fail"}))
     assert out == {"ok": False, "reason": "query", "message": "broken: bad sql"}
+
+
+def test_run_queries_needs_a_connected_session():
+    out = asyncio.run(run_dashboard_queries("s-dash-none", {"q": "SELECT 1"}))
+    assert out["ok"] is False and out["reason"] == "no-session"

@@ -23,7 +23,7 @@ shared (SQLite). See [session.md](./session.md).
 | POST   | `/api/db/query`     | `{query, limit?, offset?, format?, order_by?}` | Run SQL against this session's selected database, paginated by `limit`/`offset` (defaults 100/0). `order_by` is `[{name, dir}]` (`dir` ASC/DESC, names quoted with the driver's identifier quote) sorting the pagination wrapper. `{ok, meta:[{name, type}], data:[[…]]}` — ClickHouse's `JSONCompact` shape, 64-bit integers and decimals quoted, collections as JSON arrays/objects — \| `{ok:false, message}`. `format:"csv"` returns `{ok, output}` (CSV text) instead. Empty query → `400`; no session → `409`. |
 | POST   | `/api/db/describe`  | `{query}`                              | Describe the query's output columns via ClickHouse `DESCRIBE` (no data scanned). `{ok, fields:[{name, type}]}` \| `{ok:false, message}`. Empty query → `400`; no session / no database → `409`. |
 | GET    | `/api/db/tables`    | —                                      | Tables of this session's selected database (the Explorer sidebar). `{ok, tables:[{name, rows, bytes, query}]}` — rows/bytes are engine estimates (null when untracked); `query` is the browse SELECT quoted with the driver's identifier quote — \| `{ok:false, message}`. No session / no database → `409`. |
-| GET    | `/api/predefined-queries`   | `?type=<connType>&workspace=`          | A workspace's predefined queries for a connection type (`workspace` defaults to `default`). `{queries:[{query_name, query, cell_view}]}`. `cell_view` is raw YAML text (or `null`) — see [query.md](./query.md#cell-views). |
+| GET    | `/api/predefined-queries`   | `?type=<connType>&workspace=`          | A workspace's predefined queries for a connection type (`workspace` defaults to the [fallback](./workspace.md)). `{queries:[{query_name, query, cell_view}]}`. `cell_view` is raw YAML text (or `null`) — see [query.md](./query.md#cell-views). |
 | POST   | `/api/predefined-queries`   | `{query_name, type, query, cell_view?, workspace?}` | Upsert a predefined query in a workspace. `cell_view` is optional raw YAML text, validated against the contract in [query.md](./query.md#cell-views); empty/missing clears it. `{ok}`; missing required fields or malformed `cell_view` → `400`. |
 | POST   | `/api/sessions/attach`      | `{tab, session_id?, keep?}`            | Resolve and claim this tab's session: its own id if free, else the most recent unheld session, else a new one. Doubles as the 90s-TTL claim heartbeat, sent with `keep`: then a session another live tab holds → `409` instead of a different one. `{ok, created, session}`. Missing `tab` → `400`. |
 | POST   | `/api/sessions/select`      | `{tab, id?, force?}`                   | Switch this tab to session `id`, or to a brand-new session when `id` is omitted. `{ok, session}`; a session another live tab holds → `409`, unless `force` takes it over. |
@@ -33,10 +33,10 @@ shared (SQLite). See [session.md](./session.md).
 | POST   | `/api/sessions/release`     | `{tab}`                                | Free whatever this tab holds — the `pagehide` beacon. `{ok}`. |
 | GET    | `/api/remote/events`        | `?session=<id>`                        | SSE stream a browser opens when "remote control" is armed; the channel is keyed by that session id (`EventSource` cannot send the header). Emits a `ready` event (`{id}`) then `query` and `dashboard` events with pushed payloads (each emitted under the SSE event named by the payload's `type`). |
 | POST   | `/api/remote/push`          | `{session_id, query, limit?, offset?, order_by?, fields?}` | Push a query to a live armed session (`session_id` is the session's id) (the surface `push_query` and the e2e suite use). `{ok}` \| `{ok:false, message}` (unknown session). Empty `query`/`session_id` → `400`. |
-| POST   | `/api/runqueries`           | `{connection, queries:{name:SQL}}`     | Run a dashboard's named queries against a saved connection (by name), using its stored database. Fail-fast: `{ok, results:{name:{col:[…]}}, meta:{name:[{name, type}]}}` (column-oriented, values typed as the driver returns them) on full success; on any failure an HTTP error with `{ok:false, message}` — `404` unknown connection, `400` bad body / no selected database / a failing query (message prefixed with the panel name). See [dashboard.md](./dashboard.md). |
-| POST   | `/api/dashboards`           | `{name, connection, html, queries, session_id?, workspace?}` | Upsert a dashboard by name within a workspace; with `session_id`, also pushes it to that live session. `{ok, persisted, pushed, message}`. Missing `name`/`connection`/`html` → `400`. |
-| GET    | `/api/dashboards`           | `?workspace=`                          | List a workspace's dashboards (no payload): `{dashboards:[{name, connection, updated_at}]}`, ordered by name. |
-| GET    | `/api/dashboards/{name}`    | `?workspace=`                          | A saved dashboard `{name, connection, html, queries}` (`queries` parsed to a dict), or `404 {error:"not found"}`. |
+| POST   | `/api/runqueries`           | `{queries:{name:SQL}}`                 | Run a dashboard's named queries on this session's connection and selected database. Fail-fast: `{ok, results:{name:{col:[…]}}, meta:{name:[{name, type}]}}` (column-oriented, values typed as the driver returns them) on full success; on any failure an HTTP error with `{ok:false, message, reason}` — `409` not connected / no database selected, `400` bad body / a failing query (message prefixed with the panel name). See [dashboard.md](./dashboard.md). |
+| POST   | `/api/dashboards`           | `{name, html, queries, session_id?, workspace?}` | Upsert a dashboard by name within a workspace; with `session_id`, also pushes it to that live session. `{ok, persisted, pushed, message}`. Missing `name`/`html` → `400`. |
+| GET    | `/api/dashboards`           | `?workspace=`                          | List a workspace's dashboards (no payload): `{dashboards:[{name, updated_at}]}`, ordered by name. |
+| GET    | `/api/dashboards/{name}`    | `?workspace=`                          | A saved dashboard `{name, html, queries}` (`queries` parsed to a dict), or `404 {error:"not found"}`. |
 
 **MCP:** a FastMCP server is mounted at `/mcp/` (Streamable HTTP) exposing
 `push_query` (push SQL to a session's query panel), `push_dashboard` (push a
@@ -58,10 +58,10 @@ rest and never returned by the API. See [workspace.md](./workspace.md).
 
 | Method | Path                      | Body                          | Description |
 | ------ | ------------------------- | ----------------------------- | ----------- |
-| GET    | `/api/workspaces`         | —                             | List workspaces: `{workspaces:[{name, branch, configured}]}` (never the remote URL). |
-| POST   | `/api/workspaces`         | `{name, remote?, branch?}`    | Create a workspace. `{ok}`; empty/`/`-containing name → `400`, duplicate → `409`. |
-| PATCH  | `/api/workspaces/{name}`  | `{name?, remote?, branch?}`   | Rename/reconfigure. A null `remote` clears it; an absent key leaves it unchanged. `{ok}`. |
-| DELETE | `/api/workspaces/{name}`  | —                             | Delete an empty workspace. `{ok}`; unknown → `404`, still owns entities → `409`. |
+| GET    | `/api/workspaces`         | —                             | List workspaces: `{workspaces:[{name, branch, configured, remote}]}`; `remote` has any embedded credential stripped. |
+| POST   | `/api/workspaces`         | `{name, remote?, branch?}`    | Create a workspace. `{ok}`, plus the merge-in result (`sync` or `sync_error`) when a remote is given; empty/`/`-containing name → `400`, duplicate → `409`. |
+| PATCH  | `/api/workspaces/{name}`  | `{name?, remote?, branch?}`   | Rename/reconfigure. A null `remote` clears it; an absent key leaves it unchanged. Entering a remote merges the repo in: `{ok, sync: {imported, conflicts}}`, or `{ok, sync_error}` if the repo is unreachable (the settings are saved either way). |
+| DELETE | `/api/workspaces/{name}`  | —                             | Delete an empty workspace; its sessions move to the fallback workspace. `{ok, workspace}` (where they moved); unknown → `404`, still owns entities or is the last one → `409`. |
 
 ## YAML export / import
 
@@ -83,13 +83,14 @@ the UI.
 
 | Method | Path              | Body                                            | Description |
 | ------ | ----------------- | ------------------------------------------------ | ----------- |
-| GET    | `/api/git/status`  | `?workspace=`                                    | Whether the workspace has a git remote configured. `{configured}`. |
+| GET    | `/api/git/status`  | `?workspace=`                                    | Whether the workspace has a git remote configured, and the conflicts the last sync recorded. `{configured, conflicts: [{kind, name, conn_type}]}`. |
+| POST   | `/api/git/sync`    | `{workspace?}`                                   | Merge the repo in (see [gitsync.md](./gitsync.md#merge-in)). `{ok, imported, conflicts}`; no remote → `409`. |
 | POST   | `/api/git/store`   | `{kind, name, conn_type?, message?, workspace?}` | Commit the entity's saved DB state and push. `{ok, committed, sha, message}`. |
 | GET    | `/api/git/history` | `?kind=&name=&conn_type=&before=&limit=10&workspace=` | The entity's revisions, newest first. `{ok, revisions: [{sha, date, message}], has_more}`. |
 | POST   | `/api/git/restore` | `{kind, name, conn_type?, ref?, workspace?}`     | Overwrite the local DB row with the entity's content at `ref`. `{ok, restored, sha}`. |
 
 `kind` is `"query"` or `"dashboard"`; `conn_type` is required for queries;
-`workspace` defaults to `default`. MCP tools `git_store`, `git_history`,
+`workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_store`, `git_history`,
 `git_restore` mirror the same surface, resolving the workspace from an
 optional `session_id` (see [workspace.md](./workspace.md)).
 

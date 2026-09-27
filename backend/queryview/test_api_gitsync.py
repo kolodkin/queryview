@@ -25,12 +25,12 @@ def _default_ws_id() -> int:
 def test_status_reports_unconfigured():
     # Outside git_env the default workspace has no remote configured.
     c = TestClient(app)
-    assert c.get("/api/git/status").json() == {"configured": False}
+    assert c.get("/api/git/status").json() == {"configured": False, "conflicts": []}
 
 
 def test_status_reports_configured(git_env):
     c = TestClient(app)
-    assert c.get("/api/git/status").json() == {"configured": True}
+    assert c.get("/api/git/status").json() == {"configured": True, "conflicts": []}
 
 
 def test_store_validation_400():
@@ -81,3 +81,9 @@ def test_restore_unknown_entity_404(git_env):
         json={"kind": "query", "name": "never stored api", "conn_type": "clickhouse"},
     )
     assert r.status_code == 404
+
+
+def test_sync_merges_on_demand_and_needs_a_remote():
+    c = TestClient(app)
+    r = c.post("/api/git/sync", json={})
+    assert r.status_code == 409  # the default workspace has no remote here

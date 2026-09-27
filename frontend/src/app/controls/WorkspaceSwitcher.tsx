@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
 import ExportImportControls from './ExportImportControls'
 import { useDismiss } from '../../core'
-import { invalidateGitStatus } from '../gitsync'
+import {
+  announceGitSync,
+  gitConflicts,
+  invalidateGitStatus,
+  gitSync,
+  onGitSync,
+  type GitConflict,
+} from '../gitsync'
 import {
   createWorkspace,
   deleteWorkspace,
@@ -16,20 +23,45 @@ type Props = {
 }
 
 // Header dropdown for the active workspace plus a small manage panel
-// (create / rename / set-clear remote / delete). Workspace settings are admin
-// config; the remote URL is write-only here — the server never returns it.
+// (create / rename / set-clear remote / delete), and a warning when the last
+// git sync kept local copies the repo disagrees with. Workspace settings are
+// admin config; a remote's token is write-only — the server never returns it.
 export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [open, setOpen] = useState(false)
   const [manage, setManage] = useState(false)
   const [list, setList] = useState<Workspace[]>([])
   const [error, setError] = useState('')
+  const [conflicts, setConflicts] = useState<GitConflict[]>([])
+  const [warnOpen, setWarnOpen] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncNote, setSyncNote] = useState('')
   // Manage-panel form state; empty remote means "leave as-is" on save.
   const [name, setName] = useState('')
   const [remote, setRemote] = useState('')
   const [branch, setBranch] = useState('')
-  // Only the menu light-dismisses: the manage panel holds unsaved form input
-  // (including a write-only remote URL), so it closes through its own Close.
-  const rootRef = useDismiss<HTMLDivElement>(open, () => setOpen(false))
+  const current = list.find((w) => w.name === workspace)
+  // The manage panel light-dismisses only while untouched: once it holds
+  // unsaved input (a new remote URL above all), it closes through its buttons.
+  const dirty =
+    manage &&
+    (name.trim() !== workspace || remote.trim() !== '' || branch.trim() !== (current?.branch ?? ''))
+  const rootRef = useDismiss<HTMLDivElement>(open || warnOpen || (manage && !dirty), () => {
+    setOpen(false)
+    setWarnOpen(false)
+    setManage(false)
+  })
+
+  // Conflicts are recorded server-side by each sync, so re-read them after any.
+  useEffect(() => {
+    let live = true
+    const load = () => void gitConflicts(workspace).then((c) => live && setConflicts(c))
+    load()
+    const off = onGitSync(load)
+    return () => {
+      live = false
+      off()
+    }
+  }, [workspace])
 
   async function reload() {
     try {
@@ -49,8 +81,25 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
     setManage(true)
     setName(workspace)
     setRemote('')
-    setBranch(list.find((w) => w.name === workspace)?.branch ?? '')
+    setBranch(current?.branch ?? '')
     setError('')
+    setSyncNote('')
+  }
+
+  async function syncNow() {
+    setSyncing(true)
+    setSyncNote('')
+    const r = await gitSync(workspace).catch(() => ({ ok: false, message: 'sync failed' }) as const)
+    setSyncing(false)
+    if (!r.ok) {
+      setSyncNote(`Sync failed: ${r.message ?? 'unknown error'}`)
+      return
+    }
+    const n = r.imported?.length ?? 0
+    const c = r.conflicts?.length ?? 0
+    setSyncNote(
+      `Synced: ${n ? `imported ${n}` : 'nothing new'}${c ? ` · ${c} differ (see ⚠)` : ''}.`,
+    )
   }
 
   async function saveSettings() {
@@ -64,6 +113,11 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
       return
     }
     invalidateGitStatus()
+    announceGitSync()
+    if (r.sync_error) {
+      setError(`Saved, but syncing with the repo failed: ${r.sync_error}`)
+      return
+    }
     setManage(false)
     await reload()
     if (changes.name) onSwitch(changes.name)
@@ -81,6 +135,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
       return
     }
     invalidateGitStatus()
+    announceGitSync()
     setManage(false)
     await reload()
     onSwitch(name.trim())
@@ -95,11 +150,50 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
     }
     setManage(false)
     await reload()
-    onSwitch('default')
+    if (r.workspace) onSwitch(r.workspace)
   }
 
   return (
-    <div ref={rootRef} className="relative min-w-0">
+    <div ref={rootRef} className="relative flex min-w-0 items-center gap-1">
+      {conflicts.length > 0 && (
+        <button
+          type="button"
+          data-testid="workspace-conflicts"
+          aria-label={`${conflicts.length} differ from the git repo`}
+          title="Differs from the git repo"
+          onClick={() => setWarnOpen((o) => !o)}
+          className="shrink-0 rounded-full px-1.5 py-1 text-sm text-amber-300 hover:bg-white/10"
+        >
+          ⚠
+        </button>
+      )}
+      {warnOpen && conflicts.length > 0 && (
+        <div
+          data-testid="workspace-conflicts-panel"
+          className="glass-popover absolute right-0 top-full z-10 mt-2 w-80 space-y-2 p-3 text-sm"
+        >
+          <p className="font-medium text-amber-200">
+            {conflicts.length === 1 ? '1 item differs' : `${conflicts.length} items differ`} from the git
+            repo
+          </p>
+          <p className="text-xs text-slate-400">
+            Both here and in the repo, with different content. Sync never overwrites local work, so
+            your version was kept.
+          </p>
+          <ul className="space-y-1 text-slate-200">
+            {conflicts.map((c) => (
+              <li key={`${c.kind}/${c.conn_type}/${c.name}`} className="truncate">
+                <span className="text-xs text-slate-400">{c.kind}</span> {c.name}
+                {c.conn_type && <span className="text-xs text-slate-500"> · {c.conn_type}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-slate-400">
+            To settle one, open it and <b className="text-slate-200">Commit</b> to push your version,
+            or <b className="text-slate-200">Restore</b> to take the repo&apos;s.
+          </p>
+        </div>
+      )}
       <button
         type="button"
         data-testid="workspace-switcher"
@@ -153,13 +247,14 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
             className="glass-input w-full px-2 py-1 text-slate-100"
           />
           <div className="text-xs text-slate-400">
-            Git remote URL (leave blank to keep; settings are write-only)
+            Git remote URL ({current?.remote ? 'leave blank to keep' : 'not set'}; a token is never
+            shown back)
           </div>
           <input
             data-testid="workspace-remote-input"
             value={remote}
             onChange={(e) => setRemote(e.target.value)}
-            placeholder="https://user:token@github.com/org/repo.git"
+            placeholder={current?.remote ?? 'https://user:token@github.com/org/repo.git'}
             className="glass-input w-full px-2 py-1 font-mono text-xs text-slate-100"
           />
           <div className="text-xs text-slate-400">Branch</div>
@@ -170,6 +265,25 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
             placeholder="main"
             className="glass-input w-full px-2 py-1 text-slate-100"
           />
+          {current?.configured && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="workspace-sync"
+                disabled={syncing}
+                onClick={() => void syncNow()}
+                title="Import what the repo has that this workspace doesn't; never overwrites"
+                className="glass-btn px-2 py-1 text-xs"
+              >
+                {syncing ? 'Syncing…' : 'Sync from repo'}
+              </button>
+              {syncNote && (
+                <span data-testid="workspace-sync-note" className="text-xs text-slate-400">
+                  {syncNote}
+                </span>
+              )}
+            </div>
+          )}
           <div className="text-xs text-slate-400">
             Export / import the whole workspace (queries + dashboards) as YAML
           </div>

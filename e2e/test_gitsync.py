@@ -31,7 +31,6 @@ def test_commit_and_restore_dashboard_round_trip(page: Page, base_url: str):
         f"{base_url}/api/dashboards",
         json={
             "name": "gs e2e",
-            "connection": "prod",
             "html": "<html><body>v1</body></html>",
             "queries": {"q": "SELECT 1"},
         },
@@ -46,7 +45,6 @@ def test_commit_and_restore_dashboard_round_trip(page: Page, base_url: str):
         f"{base_url}/api/dashboards",
         json={
             "name": "gs e2e",
-            "connection": "prod",
             "html": "<html><body>v2</body></html>",
             "queries": {"q": "SELECT 2"},
         },

@@ -7,16 +7,17 @@ upserts the DB row; HEAD never moves. Docs: docs/gitsync.md, docs/workspace.md."
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlsplit, urlunsplit
+from urllib.parse import unquote
 
 import yaml
 
 from .connect import _data_dir
-from .workspaces import WorkspaceRec
+from .workspaces import WorkspaceRec, split_credential
 from .yamlio import YamlIOError, dashboard_from_data, dump_yaml, query_from_data, query_to_data, slug
 
 
@@ -67,7 +68,7 @@ def query_from_yaml(text: str) -> dict[str, Any]:
 def dashboard_to_files(d: dict[str, Any]) -> dict[str, str]:
     """A dashboard (as returned by get_dashboard) as its three repo files."""
     return {
-        "meta.yaml": dump_yaml({"name": d["name"], "connection": d["connection"]}),
+        "meta.yaml": dump_yaml({"name": d["name"]}),
         "dashboard.html": d["html"],
         "queries.yaml": dump_yaml(d["queries"] or {}),
     }
@@ -112,6 +113,13 @@ def configured(ws: WorkspaceRec) -> bool:
     return bool(ws.remote)
 
 
+def forget(workspace_id: int) -> None:
+    """Drop a workspace's clone and sync state — its remote or branch changed
+    (or it is gone), so both describe a repo it no longer syncs with."""
+    shutil.rmtree(_clone_base() / str(workspace_id), ignore_errors=True)
+    (_clone_base() / f"{workspace_id}.sync.json").unlink(missing_ok=True)
+
+
 # --- Git plumbing ----------------------------------------------------------
 
 # One git operation at a time per workspace; each workdir is shared mutable
@@ -141,25 +149,9 @@ _CREDENTIAL_HELPER = (
 )
 
 
-def _split_credential(url: str) -> tuple[str, tuple[str, str] | None]:
-    """Split an http(s) URL's credential from the URL, so the URL can be handed
-    to git (and persisted in the clone's config) without it.
-
-    Only http(s) userinfo is a secret: `git@host:path` and `ssh://git@host` name
-    an SSH login, so those are returned untouched."""
-    parts = urlsplit(url)
-    if parts.scheme not in ("http", "https") or not (parts.username or parts.password):
-        return url, None
-    host = parts.hostname or ""
-    if parts.port:
-        host = f"{host}:{parts.port}"
-    sanitized = urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment))
-    return sanitized, (unquote(parts.username or ""), unquote(parts.password or ""))
-
-
 def _credential(ws: WorkspaceRec) -> tuple[str, str] | None:
     """This workspace's git credential, if its remote embeds one."""
-    return _split_credential(_require_remote(ws))[1]
+    return split_credential(_require_remote(ws))[1]
 
 
 async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] | None = None) -> str:
@@ -212,7 +204,7 @@ async def _ensure_repo(ws: WorkspaceRec) -> Path:
     wd.parent.mkdir(parents=True, exist_ok=True)
     # The clone records its remote in .git/config, so only the credential-free
     # URL goes to git as an argument; the credential travels out of band.
-    remote, cred = _split_credential(_require_remote(ws))
+    remote, cred = split_credential(_require_remote(ws))
     try:
         await _git("clone", "--branch", branch, remote, str(wd), credential=cred)
     except GitSyncError as clone_err:
@@ -280,6 +272,153 @@ async def _load_entity(ws: WorkspaceRec, kind: str, name: str, conn_type: str | 
     return d
 
 
+# --- Merge-in --------------------------------------------------------------
+# Every sync (attaching a remote, Commit, Restore, opening history) first
+# merges the repo head into the DB: entities missing locally are imported,
+# nothing local is ever overwritten. An entity is a *conflict* when the repo's
+# copy changed since this workspace last agreed with it and differs from the
+# local one; a local edit on top of an unchanged repo copy is not.
+#
+# State lives beside the clone, {base}/{id}.sync.json:
+#   {"agreed": {entity key: repo object id}, "conflicts": [{kind, name, conn_type}]}
+
+
+def _state_path(ws: WorkspaceRec) -> Path:
+    return _clone_base() / f"{ws.id}.sync.json"
+
+
+def _load_state(ws: WorkspaceRec) -> dict[str, Any]:
+    try:
+        state = json.loads(_state_path(ws).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        state = {}
+    return {"agreed": state.get("agreed") or {}, "conflicts": state.get("conflicts") or []}
+
+
+def _save_state(ws: WorkspaceRec, state: dict[str, Any]) -> None:
+    path = _state_path(ws)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=1), encoding="utf-8")
+
+
+def conflicts(ws: WorkspaceRec) -> list[dict[str, Any]]:
+    """Entities the last sync kept local although the repo had another version."""
+    return _load_state(ws)["conflicts"] if configured(ws) else []
+
+
+def _key(kind: str, name: str, conn_type: str | None) -> str:
+    return f"query/{conn_type}/{name}" if kind == "query" else f"dashboard/{name}"
+
+
+async def _repo_entities(wd: Path, ref: str, path: str | None = None) -> list[dict[str, Any]]:
+    """The entities in the tree at `ref` (under `path` if given), each with an
+    id that changes whenever any of its files does."""
+    out = await _git("ls-tree", "-r", ref, *(["--", path] if path else []), cwd=wd)
+    files: dict[str, str] = {}
+    for line in out.splitlines():
+        meta, _, fpath = line.partition("\t")
+        files[fpath] = meta.split()[2]
+    found = []
+    for fpath, oid in files.items():
+        parts = fpath.split("/")
+        if len(parts) == 3 and parts[0] == "queries" and parts[2].endswith(".yaml"):
+            found.append({"kind": "query", "conn_type": unquote(parts[1]), "relpath": fpath, "oid": oid})
+        elif len(parts) == 3 and parts[0] == "dashboards" and parts[2] == "meta.yaml":
+            ddir = f"dashboards/{parts[1]}"
+            oid = "+".join(files.get(f"{ddir}/{f}", "") for f in ("meta.yaml", "dashboard.html", "queries.yaml"))
+            found.append({"kind": "dashboard", "conn_type": None, "relpath": ddir, "oid": oid})
+    return found
+
+
+async def _read_repo_entity(wd: Path, ref: str, kind: str, relpath: str) -> dict[str, Any]:
+    """An entity's content at `ref`, in the DB row shape."""
+    if kind == "query":
+        return query_from_yaml(await _git("show", f"{ref}:{relpath}", cwd=wd))
+    files: dict[str, str] = {}
+    for fname in ("meta.yaml", "dashboard.html", "queries.yaml"):
+        try:
+            files[fname] = await _git("show", f"{ref}:{relpath}/{fname}", cwd=wd)
+        except GitSyncError:
+            if fname == "meta.yaml":
+                raise
+    return dashboard_from_files(files)
+
+
+async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
+    """Import what the repo has and the DB lacks; record conflicts. Caller holds
+    the lock and has fetched."""
+    from .dashboards import get_dashboard, upsert_dashboard
+    from .queries import get_predefined_query, save_predefined_query
+
+    state = _load_state(ws)
+    agreed: dict[str, str] = state["agreed"]
+    imported: list[dict[str, Any]] = []
+    found_conflicts: list[dict[str, Any]] = []
+    for e in await _repo_entities(wd, head):
+        kind, conn_type = e["kind"], e["conn_type"]
+        try:
+            repo = await _read_repo_entity(wd, head, kind, e["relpath"])
+        except GitSyncError:
+            continue  # unreadable in the repo: nothing to import or compare
+        name = repo["query_name"] if kind == "query" else repo["name"]
+        if kind == "query":
+            local = await get_predefined_query(conn_type, name, ws.id)
+            same = local is not None and query_to_yaml(local) == query_to_yaml(repo)
+        else:
+            local = await get_dashboard(name, ws.id)
+            same = local is not None and dashboard_to_files(local) == dashboard_to_files(repo)
+        key = _key(kind, name, conn_type)
+        entry = {"kind": kind, "name": name, "conn_type": conn_type}
+        if local is None:
+            if kind == "query":
+                await save_predefined_query(
+                    name,
+                    conn_type,
+                    repo["query"],
+                    repo["cell_view"],
+                    repo["order_by"],
+                    repo["fields"],
+                    workspace_id=ws.id,
+                )
+            else:
+                await upsert_dashboard(name, repo["html"], repo["queries"], workspace_id=ws.id)
+            imported.append(entry)
+            agreed[key] = e["oid"]
+        elif same:
+            agreed[key] = e["oid"]
+        elif agreed.get(key) != e["oid"]:
+            found_conflicts.append(entry)
+    state["conflicts"] = found_conflicts
+    _save_state(ws, state)
+    return {"imported": imported, "conflicts": found_conflicts}
+
+
+async def _agree(ws: WorkspaceRec, wd: Path, ref: str, kind: str, name: str, conn_type: str | None) -> None:
+    """Record that the DB now matches (or deliberately took) the repo's copy of
+    one entity at `ref`, clearing any conflict on it."""
+    state = _load_state(ws)
+    found = await _repo_entities(wd, ref, entity_relpath(kind, name, conn_type))
+    if found:
+        state["agreed"][_key(kind, name, conn_type)] = found[0]["oid"]
+    state["conflicts"] = [
+        c for c in state["conflicts"] if (c["kind"], c["name"], c["conn_type"]) != (kind, name, conn_type)
+    ]
+    _save_state(ws, state)
+
+
+async def sync(ws: WorkspaceRec) -> dict[str, Any]:
+    """Fetch and merge the repo into the DB (see above): the workspace panel's
+    Sync, and saving a remote. Commit, Restore and history run the same merge
+    after their own fetch."""
+    _require_remote(ws)
+    async with _lock(ws):
+        wd = await _ensure_repo(ws)
+        head = await _origin_head(wd, ws)
+        if head is None:
+            return {"imported": [], "conflicts": []}
+        return await _merge(ws, wd, head)
+
+
 # --- Operations ------------------------------------------------------------
 
 
@@ -300,8 +439,10 @@ async def store(
     async with _lock(ws):
         wd = await _ensure_repo(ws)
         head = await _origin_head(wd, ws)
+        merged: dict[str, Any] = {"imported": [], "conflicts": []}
         if head:
             await _git("reset", "--hard", head, cwd=wd)
+            merged = await _merge(ws, wd, head)
         relpath = entity_relpath(kind, name, conn_type)
         if kind == "query":
             path = wd / relpath
@@ -316,12 +457,15 @@ async def store(
                 (ddir / fname).write_text(content, encoding="utf-8")
         await _git("add", "-A", "--", relpath, cwd=wd)
         if not (await _git("status", "--porcelain", "--", relpath, cwd=wd)).strip():
-            return {"committed": False, "sha": None, "message": "no changes"}
+            return {"committed": False, "sha": None, "message": "no changes", **merged}
         label = f"{conn_type}/{name}" if kind == "query" else name
         await _git("commit", "-m", message or f"store {kind} {label}", cwd=wd)
         await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
         sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
-        return {"committed": True, "sha": sha, "message": "stored"}
+        # The repo now holds exactly the local copy.
+        await _agree(ws, wd, "HEAD", kind, name, conn_type)
+        merged["conflicts"] = conflicts(ws)
+        return {"committed": True, "sha": sha, "message": "stored", **merged}
 
 
 async def history(
@@ -342,6 +486,7 @@ async def history(
         head = await _origin_head(wd, ws)
         if head is None:
             return {"revisions": [], "has_more": False}
+        await _merge(ws, wd, head)
         start = head
         if before:
             try:
@@ -390,6 +535,7 @@ async def restore(
         resolved = ref if ref and ref != "HEAD" else head
         if resolved is None:
             raise GitSyncError(f"{kind} {name!r} not found in git", status=404)
+        merged = await _merge(ws, wd, head) if head else {"imported": [], "conflicts": []}
 
         async def _show(path: str) -> str:
             return await _git("show", f"{resolved}:{path}", cwd=wd)
@@ -428,9 +574,13 @@ async def restore(
 
         await upsert_dashboard(
             data["name"],
-            data["connection"],
             data["html"],
             data["queries"],
             workspace_id=ws.id,
         )
-    return {"restored": True, "sha": resolved}
+    # Taking a revision on purpose settles any conflict with the repo's head.
+    if head:
+        async with _lock(ws):
+            await _agree(ws, wd, head, kind, name, conn_type)
+    merged["conflicts"] = conflicts(ws)
+    return {"restored": True, "sha": resolved, **merged}

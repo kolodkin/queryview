@@ -154,10 +154,10 @@ describe('patchView', () => {
 })
 
 describe('activeWorkspace', () => {
-  it('defaults to "default" before a session is attached', async () => {
+  it('is empty before a session is attached, so the backend picks its fallback', async () => {
     stubTabStorage()
     const { activeWorkspace } = await import('./session')
-    expect(activeWorkspace()).toBe('default')
+    expect(activeWorkspace()).toBe('')
   })
 
   it("reports the attached session's workspace", async () => {
