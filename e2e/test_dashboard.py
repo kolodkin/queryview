@@ -119,3 +119,42 @@ def test_a_dashboard_runs_on_the_viewing_sessions_connection(seeded_test_db, pag
     page.get_by_test_id("dashboard-select").select_option("portable")
 
     expect(page.get_by_test_id("dashboard-error")).to_contain_text("Connect to a database")
+
+
+# Draws its own selector from window.params and re-runs via setParams; the
+# results come back through onQueryResults without reloading the frame.
+_PARAMS_HTML = (
+    "<div id='out'></div><div id='pick'></div>"
+    "<script>"
+    "function show(q){document.getElementById('out').textContent ="
+    " q.items ? q.items.name.join(',') : 'NO DATA';}"
+    "show(window.queries);"
+    "document.getElementById('pick').textContent = window.params[0].options.join('|');"
+    "window.onQueryResults = function(q){show(q);};"
+    "window.addEventListener('keydown', function(){window.setParams({n: 'beta'});});"
+    "</script>"
+)
+
+
+def test_dashboard_params_resolve_and_rerun_through_set_params(seeded_test_db, page: Page, base_url: str) -> None:
+    _connect_and_select_test_db(page)
+    httpx.post(
+        f"{base_url}/api/dashboards",
+        json={
+            "name": "picker",
+            "html": _PARAMS_HTML,
+            "queries": {"items": "SELECT name FROM items WHERE name = {n}"},
+            "params": [{"name": "n", "options_sql": "SELECT name FROM items ORDER BY id"}],
+        },
+        timeout=10.0,
+    ).raise_for_status()
+
+    page.get_by_test_id("nav-dashboard").click()
+    page.get_by_test_id("dashboard-select").select_option("picker")
+    frame = page.frame_locator('[data-testid="dashboard-frame"]')
+    # options_sql ran on the session; the first option is the default.
+    expect(frame.locator("#pick")).to_have_text("alpha|beta|gamma")
+    expect(frame.locator("#out")).to_have_text("alpha")
+
+    frame.locator("body").press("x")  # the page calls setParams({n: 'beta'})
+    expect(frame.locator("#out")).to_have_text("beta")

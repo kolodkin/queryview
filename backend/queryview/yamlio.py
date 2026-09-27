@@ -14,7 +14,7 @@ from typing import Any
 
 import yaml
 
-from .validation import cell_view_error, presentation_error
+from .validation import cell_view_error, dashboard_params_error, presentation_error
 from .workspaces import WorkspaceRec
 
 
@@ -117,6 +117,8 @@ def dashboard_to_data(d: dict[str, Any]) -> dict[str, Any]:
         "name": d["name"],
         "html": d["html"],
         "queries": d["queries"] or {},
+        # Only when declared, so a params-free dashboard exports as before.
+        **({"params": d["params"]} if d.get("params") else {}),
     }
 
 
@@ -133,7 +135,11 @@ def dashboard_from_data(data: Any, where: str = "dashboard file", require_html: 
     queries = data.get("queries") or {}
     if not isinstance(queries, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in queries.items()):
         raise YamlIOError(f"malformed {where}: queries must be a {{name: SQL}} map")
-    return {"name": name, "html": html, "queries": queries}
+    params = data.get("params") or []
+    perr = dashboard_params_error(params)
+    if perr is not None:
+        raise YamlIOError(f"malformed {where}: {perr}")
+    return {"name": name, "html": html, "queries": queries, "params": params}
 
 
 # --- Import documents -------------------------------------------------------

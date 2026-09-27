@@ -168,6 +168,7 @@ function Shell() {
         type: (probe.type ?? 'clickhouse') as string,
         databases: (probe.databases ?? []) as string[],
         database: (probe.database ?? null) as string | null,
+        identQuote: (probe.ident_quote ?? '"') as string,
       })
     } catch {
       /* leave the connection as-is */
@@ -478,6 +479,7 @@ function Shell() {
                 pushed={dashboardPush}
                 onPushConsumed={() => setDashboardPush(null)}
                 runOn={connection ? `${connection.name}/${connection.database ?? ''}` : null}
+                identQuote={connection?.identQuote}
               />
             }
           />

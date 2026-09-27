@@ -68,6 +68,7 @@ def test_dashboard_files_round_trip():
         "name": "sales",
         "html": "<html>\n<body>hi — ünicode</body>\n</html>",
         "queries": {"revenue": "SELECT 1", "multi": "SELECT a\nFROM b"},
+        "params": [],
     }
     files = dashboard_to_files(d)
     assert set(files) == {"meta.yaml", "dashboard.html", "queries.yaml"}
@@ -293,6 +294,7 @@ def test_restore_dashboard_round_trip(git_env):
         "name": "gs rdash",
         "html": "<html>v1</html>",
         "queries": {"q": "SELECT 1"},
+        "params": [],
     }
 
 
@@ -538,5 +540,23 @@ def test_an_older_meta_yaml_naming_a_connection_still_reads():
     d = dashboard_from_files(
         {"meta.yaml": "name: legacy\nconnection: reporting-db\n", "dashboard.html": "<p/>", "queries.yaml": "{}"}
     )
-    assert d == {"name": "legacy", "html": "<p/>", "queries": {}}
+    assert d == {"name": "legacy", "html": "<p/>", "queries": {}, "params": []}
     assert "connection" not in dashboard_to_files(d)["meta.yaml"]
+
+
+def test_dashboard_params_round_trip_through_meta_yaml():
+    params = [
+        {"name": "table", "kind": "identifier", "default": "none", "options_sql": "SELECT name FROM system.tables"},
+        {"name": "by_region", "kind": "dimension"},
+    ]
+    d = {"name": "p", "html": "<p/>", "queries": {"q": "SELECT {by_region} FROM {table}"}, "params": params}
+    files = dashboard_to_files(d)
+    assert "params:" in files["meta.yaml"]
+    assert dashboard_from_files(files) == d
+    # A params-free dashboard keeps its meta.yaml to the name alone.
+    assert dashboard_to_files({**d, "params": []})["meta.yaml"].strip() == "name: p"
+
+
+def test_malformed_dashboard_params_are_rejected():
+    with pytest.raises(GitSyncError):
+        dashboard_from_files({"meta.yaml": "name: p\nparams:\n- name: x\n  kind: nope\n"})

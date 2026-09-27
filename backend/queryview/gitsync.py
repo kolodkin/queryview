@@ -68,7 +68,8 @@ def query_from_yaml(text: str) -> dict[str, Any]:
 def dashboard_to_files(d: dict[str, Any]) -> dict[str, str]:
     """A dashboard (as returned by get_dashboard) as its three repo files."""
     return {
-        "meta.yaml": dump_yaml({"name": d["name"]}),
+        # params only when declared, keeping params-free dashboards' meta.yaml as is.
+        "meta.yaml": dump_yaml({"name": d["name"], **({"params": d["params"]} if d.get("params") else {})}),
         "dashboard.html": d["html"],
         "queries.yaml": dump_yaml(d["queries"] or {}),
     }
@@ -381,7 +382,7 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
                     workspace_id=ws.id,
                 )
             else:
-                await upsert_dashboard(name, repo["html"], repo["queries"], workspace_id=ws.id)
+                await upsert_dashboard(name, repo["html"], repo["queries"], repo["params"], workspace_id=ws.id)
             imported.append(entry)
             agreed[key] = e["oid"]
         elif same:
@@ -576,6 +577,7 @@ async def restore(
             data["name"],
             data["html"],
             data["queries"],
+            data["params"],
             workspace_id=ws.id,
         )
     # Taking a revision on purpose settles any conflict with the repo's head.

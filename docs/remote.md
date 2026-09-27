@@ -45,7 +45,7 @@ tools (among others):
   typed as the driver returns them (64-bit integers and decimals as strings,
   collections as JSON). `database` tells the agent whether to fully-qualify
   tables. A disconnected session fails with `not connected`.
-- `push_dashboard(session_id, name, html, queries)` — push a dashboard
+- `push_dashboard(session_id, name, html, queries, params?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
   renders it. Only the user's **Save** persists it. Returns
   `{ok, pushed, message, database}`; a disconnected session fails with

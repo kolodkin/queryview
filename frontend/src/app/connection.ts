@@ -5,6 +5,8 @@ export type Connection = {
   type: string
   databases: string[]
   database: string | null
+  // The dialect's identifier quote (`"` or a backtick), for dashboard params.
+  identQuote?: string
 }
 
 // Ready to query when a database is selected, or the driver has no picker

@@ -11,6 +11,7 @@ from mcp.server.fastmcp import FastMCP
 from . import gitsync, remote, sessions
 from .dashboards import _push_dashboard
 from .queries import list_predefined_queries_view
+from .validation import dashboard_params_error
 
 mcp = FastMCP("queryview", stateless_http=True)
 mcp.settings.streamable_http_path = "/"
@@ -162,6 +163,7 @@ async def push_dashboard(
     name: str,
     html: str,
     queries: dict[str, str],
+    params: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Push a dashboard DRAFT to a live QueryView session (does not persist).
 
@@ -176,11 +178,17 @@ async def push_dashboard(
     `{query_name: {column_name: [values, …]}}` — e.g.
     `window.queries.sales.revenue`. Load chart libraries from a CDN if needed.
 
+    `params` declares selectors substituted into the queries' `{name}`
+    placeholders (kinds value / identifier / dimension, `options` or
+    `options_sql`, `default: none`); the page gets them as `window.params` and
+    re-runs with `window.setParams({...})`. See docs/dashboard.md.
+
     Args:
         session_id: The session id shown in the QueryView popover.
         name: Dashboard name (the name the user's Save will persist under).
         html: The dashboard HTML document (renders in a sandboxed iframe).
         queries: Map of query name to SQL.
+        params: Optional selector specs (see above).
 
     Returns {ok, pushed, message, database}; "not connected" if the session
     has no connection.
@@ -188,7 +196,10 @@ async def push_dashboard(
     rec = await sessions.get_session_rec(session_id) if session_id else None
     if rec is None or rec.connection_name is None:
         return {"ok": False, "pushed": False, "message": "not connected", "database": None}
-    pushed, message = await _push_dashboard(name, html, queries, session_id)
+    perr = dashboard_params_error(params)
+    if perr is not None:
+        return {"ok": False, "pushed": False, "message": perr, "database": None}
+    pushed, message = await _push_dashboard(name, html, queries, session_id, params)
     return {
         "ok": pushed,
         "pushed": pushed,

@@ -38,7 +38,7 @@ from .dashboards import _upsert_and_push, get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
 from .queries import list_predefined_queries_view, save_predefined_query
-from .validation import cell_view_error, presentation_error
+from .validation import cell_view_error, dashboard_params_error, presentation_error
 
 # SPA bundle shipped inside the wheel (release CI copies frontend/dist here);
 # absent in a source checkout, where the repo's frontend/dist is used instead.
@@ -586,11 +586,17 @@ async def dashboards_upsert(request: Request):
     queries = _clean_queries(b.get("queries"))
     if not name or not html.strip():
         return JSONResponse({"ok": False, "message": "name and html are required"}, status_code=400)
+    params = b.get("params")
+    perr = dashboard_params_error(params)
+    if perr is not None:
+        return JSONResponse({"ok": False, "message": perr}, status_code=400)
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
     session_id = _clean_str(b.get("session_id"))
-    persisted, pushed, message = await _upsert_and_push(name, html, queries, session_id or None, workspace_id=ws.id)
+    persisted, pushed, message = await _upsert_and_push(
+        name, html, queries, session_id or None, params, workspace_id=ws.id
+    )
     return {"ok": persisted, "persisted": persisted, "pushed": pushed, "message": message}
 
 

@@ -332,6 +332,8 @@ async def get_session(sid: str) -> dict[str, Any]:
         "type": s.type,
         "databases": s.databases,
         "database": s.database,
+        # How this dialect quotes a table/column (dashboard `identifier` params).
+        "ident_quote": DRIVERS[s.type].ident_quote,
     }
 
 

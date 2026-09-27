@@ -37,26 +37,66 @@ def presentation_error(order_by: object, fields: object) -> str | None:
     return None
 
 
+def _selector_error(entry: object, label: str) -> str | None:
+    """One selector spec's shared rules — a name and exactly one of `options` /
+    `options_sql` — with messages prefixed by `label` (e.g. "cell_view: params[0]")."""
+    if not isinstance(entry, dict):
+        return f"invalid {label} must be a mapping"
+    name = entry.get("name")
+    if not isinstance(name, str) or not name:
+        return f"invalid {label} name must be a non-empty string"
+    options, sql = entry.get("options"), entry.get("options_sql")
+    if (options is None) == (sql is None):
+        return f"invalid {label} must declare exactly one of options or options_sql"
+    if sql is not None and (not isinstance(sql, str) or not sql.strip()):
+        return f"invalid {label} options_sql must be a non-empty string"
+    if options is not None:
+        if not isinstance(options, list) or not options:
+            return f"invalid {label} options must be a non-empty list"
+        if any(isinstance(v, (dict, list)) or v is None for v in options):
+            return f"invalid {label} options must be scalars"
+    return None
+
+
 def _cell_view_params_error(raw: object) -> str | None:
     """Validate the reserved `params:` selector list (see docs/query.md)."""
     if not isinstance(raw, list):
         return "invalid cell_view: params must be a list of selector specs"
     for i, entry in enumerate(raw):
+        err = _selector_error(entry, f"cell_view: params[{i}]")
+        if err:
+            return err
+    return None
+
+
+DASHBOARD_PARAM_KINDS = ("value", "identifier", "dimension")
+
+
+def dashboard_params_error(raw: object) -> str | None:
+    """Validate a dashboard's `params` (see docs/dashboard.md#dashboard-parameters):
+    the query selector rules, plus a `kind` and an optional `default: none`. A
+    `dimension` is a checkbox, so it needs no options. None is no params."""
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        return "invalid params: must be a list of selector specs"
+    for i, entry in enumerate(raw):
+        label = f"params[{i}]"
         if not isinstance(entry, dict):
-            return f"invalid cell_view: params[{i}] must be a mapping"
-        name = entry.get("name")
-        if not isinstance(name, str) or not name:
-            return f"invalid cell_view: params[{i}] name must be a non-empty string"
-        options, sql = entry.get("options"), entry.get("options_sql")
-        if (options is None) == (sql is None):
-            return f"invalid cell_view: params[{i}] must declare exactly one of options or options_sql"
-        if sql is not None and (not isinstance(sql, str) or not sql.strip()):
-            return f"invalid cell_view: params[{i}] options_sql must be a non-empty string"
-        if options is not None:
-            if not isinstance(options, list) or not options:
-                return f"invalid cell_view: params[{i}] options must be a non-empty list"
-            if any(isinstance(v, (dict, list)) or v is None for v in options):
-                return f"invalid cell_view: params[{i}] options must be scalars"
+            return f"invalid {label} must be a mapping"
+        kind = entry.get("kind", "value")
+        if kind not in DASHBOARD_PARAM_KINDS:
+            return f"invalid {label} kind must be one of {', '.join(DASHBOARD_PARAM_KINDS)}"
+        if entry.get("default") not in (None, "none"):
+            return f"invalid {label} default must be 'none' when given"
+        if kind == "dimension" and entry.get("options") is None and entry.get("options_sql") is None:
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                return f"invalid {label} name must be a non-empty string"
+            continue
+        err = _selector_error(entry, label)
+        if err:
+            return err
     return None
 
 
