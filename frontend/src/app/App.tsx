@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BrowserRouter,
   Link,
@@ -99,8 +99,10 @@ function Shell() {
   const [workspace, setWorkspace] = useState('default')
   const [sessionLabel, setSessionLabel] = useState('Session')
   // Panels hydrate from the session at mount, so they must remount when the
-  // session changes — not only when the workspace does.
+  // session changes — not only when the workspace does. Every adoption bumps
+  // it, even of the same id: a take-over brings back state another tab wrote.
   const [sessionKey, setSessionKey] = useState('')
+  const adoptions = useRef(0)
   // Whether the initial /api/session probe has answered. The `/` route waits on
   // it: until the session is known it can't tell a connected visitor (who wants
   // the explorer) from a disconnected one (who wants the prompt).
@@ -178,7 +180,7 @@ function Shell() {
     setTaken(false)
     setWorkspace(next.workspace)
     setSessionLabel(next.label)
-    setSessionKey(next.id)
+    setSessionKey(`${next.id}:${++adoptions.current}`)
     navigate(next.url || '/queries')
     void refreshConnection()
   }

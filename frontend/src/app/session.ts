@@ -41,6 +41,10 @@ type PendingPatch = SessionPatch & { ui?: Record<string, Record<string, unknown>
 let state: SessionState | null = null
 // Another tab took this session: stop writing to it until the user picks one.
 let taken = false
+// The heartbeat in flight, if any. A switch waits it out, and no beat starts
+// mid-switch: a beat carrying the old id would claim it back.
+let beating: Promise<void> | null = null
+let switching = false
 let pending: PendingPatch = {}
 let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -108,12 +112,8 @@ export type HeartbeatEvents = {
 // endpoint. It also beats when the tab becomes visible, since a hidden tab's
 // timers are throttled and its claim may have lapsed meanwhile.
 export function startHeartbeat(events: HeartbeatEvents): () => void {
-  let inflight = false
   let last = Date.now()
-  const beat = async () => {
-    if (taken || inflight) return
-    inflight = true
-    last = Date.now()
+  const run = async () => {
     const before = state?.id
     try {
       const next = await attachSession(true)
@@ -124,9 +124,15 @@ export function startHeartbeat(events: HeartbeatEvents): () => void {
       pending = {}
       clearTimeout(timer)
       events.onTaken()
-    } finally {
-      inflight = false
     }
+  }
+  const beat = async () => {
+    if (taken || beating || switching) return
+    last = Date.now()
+    beating = run().finally(() => {
+      beating = null
+    })
+    await beating
   }
   const handle = setInterval(() => void beat(), HEARTBEAT_MS)
   // Only a beat overdue by the interval can have let the claim lapse.
@@ -220,16 +226,22 @@ export async function listSessions(): Promise<SessionSummary[]> {
 // open in another tab, which the switcher reports rather than stealing it —
 // unless `force` takes it over (the other tab then finds it taken).
 export async function selectSession(id: string | null, force = false): Promise<SessionState | null> {
-  await flushPatches()
-  const res = await apiFetch('/api/sessions/select', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tab: tabToken(), id, force }),
-  })
-  const data = await res.json()
-  if (!data.ok) return null
-  taken = false
-  return adopt(data.session as SessionState)
+  switching = true
+  try {
+    await beating
+    await flushPatches()
+    const res = await apiFetch('/api/sessions/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tab: tabToken(), id, force }),
+    })
+    const data = await res.json()
+    if (!data.ok) return null
+    taken = false
+    return adopt(data.session as SessionState)
+  } finally {
+    switching = false
+  }
 }
 
 export async function removeSession(id: string): Promise<{ ok: boolean; message?: string }> {

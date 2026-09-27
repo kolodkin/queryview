@@ -254,6 +254,31 @@ describe('startHeartbeat', () => {
     stop()
   })
 
+  it('makes a session switch wait out a beat already in flight', async () => {
+    const { attachSession, startHeartbeat, selectSession } = await import('./session')
+    await attachSession()
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn() })
+    let answerBeat!: () => void
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerBeat = () => resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
+        }),
+    )
+    await vi.advanceTimersByTimeAsync(10_000)
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: { ...SESSION, id: 's2' } }) })
+
+    const switched = selectSession('s2')
+    await vi.advanceTimersByTimeAsync(0)
+    const urls = () => fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls().some((u) => u.includes('/select'))).toBe(false)
+
+    answerBeat()
+    expect((await switched)?.id).toBe('s2')
+    expect(urls().at(-1)).toContain('/api/sessions/select')
+    stop()
+  })
+
   it('hands a different session to onChanged', async () => {
     const { attachSession, startHeartbeat } = await import('./session')
     await attachSession()
