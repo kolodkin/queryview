@@ -12,6 +12,7 @@
     "backend": "uv run uvicorn queryview.main:app --reload --port 8000",
     "frontend": "npm run dev -w frontend",
     "dev": "concurrently -n backend,frontend -c blue,magenta \"npm run backend\" \"npm run frontend\"",
+    "debug": "concurrently -k -n backend,frontend -c blue,magenta \"SERVE_STATIC=1 uv run uvicorn queryview.main:app --reload --port ${PORT:-8000}\" \"npm exec -w frontend -- vite build --watch\"",
     "build": "npm run build -w frontend",
     "start": "SERVE_STATIC=1 uv run queryview-backend",
     "preview": "npm run build && npm run start"
