@@ -13,7 +13,9 @@ special only as the fallback for an omitted `workspace` parameter.
 
 Workspace settings live in the database, not env vars. The remote URL may
 embed a token, so it is encrypted at rest (same AES-GCM key as connection
-configs) and is write-only through the API — never returned. A workspace
+configs). The API returns it only with the credential stripped
+(`https://host/org/repo.git`, or an SSH URL as is), so the token itself is
+write-only. A workspace
 without a remote is a pure namespace: its git controls are disabled.
 
 Deleting a workspace requires it to be empty (409 otherwise); the git remote
@@ -21,7 +23,7 @@ keeps its history either way.
 
 ## API
 
-- `GET /api/workspaces` → `{workspaces: [{name, branch, configured}]}`
+- `GET /api/workspaces` → `{workspaces: [{name, branch, configured, remote}]}`
 - `POST /api/workspaces` `{name, remote?, branch?}`
 - `PATCH /api/workspaces/{name}` `{name?, remote?, branch?}` — a null `remote`
   clears it; an absent key leaves it unchanged

@@ -58,9 +58,9 @@ rest and never returned by the API. See [workspace.md](./workspace.md).
 
 | Method | Path                      | Body                          | Description |
 | ------ | ------------------------- | ----------------------------- | ----------- |
-| GET    | `/api/workspaces`         | —                             | List workspaces: `{workspaces:[{name, branch, configured}]}` (never the remote URL). |
-| POST   | `/api/workspaces`         | `{name, remote?, branch?}`    | Create a workspace. `{ok}`; empty/`/`-containing name → `400`, duplicate → `409`. |
-| PATCH  | `/api/workspaces/{name}`  | `{name?, remote?, branch?}`   | Rename/reconfigure. A null `remote` clears it; an absent key leaves it unchanged. `{ok}`. |
+| GET    | `/api/workspaces`         | —                             | List workspaces: `{workspaces:[{name, branch, configured, remote}]}`; `remote` has any embedded credential stripped. |
+| POST   | `/api/workspaces`         | `{name, remote?, branch?}`    | Create a workspace. `{ok}`, plus the merge-in result (`sync` or `sync_error`) when a remote is given; empty/`/`-containing name → `400`, duplicate → `409`. |
+| PATCH  | `/api/workspaces/{name}`  | `{name?, remote?, branch?}`   | Rename/reconfigure. A null `remote` clears it; an absent key leaves it unchanged. Entering a remote merges the repo in: `{ok, sync: {imported, conflicts}}`, or `{ok, sync_error}` if the repo is unreachable (the settings are saved either way). |
 | DELETE | `/api/workspaces/{name}`  | —                             | Delete an empty workspace. `{ok}`; unknown → `404`, still owns entities → `409`. |
 
 ## YAML export / import
@@ -83,7 +83,8 @@ the UI.
 
 | Method | Path              | Body                                            | Description |
 | ------ | ----------------- | ------------------------------------------------ | ----------- |
-| GET    | `/api/git/status`  | `?workspace=`                                    | Whether the workspace has a git remote configured. `{configured}`. |
+| GET    | `/api/git/status`  | `?workspace=`                                    | Whether the workspace has a git remote configured, and the conflicts the last sync recorded. `{configured, conflicts: [{kind, name, conn_type}]}`. |
+| POST   | `/api/git/sync`    | `{workspace?}`                                   | Merge the repo in (see [gitsync.md](./gitsync.md#merge-in)). `{ok, imported, conflicts}`; no remote → `409`. |
 | POST   | `/api/git/store`   | `{kind, name, conn_type?, message?, workspace?}` | Commit the entity's saved DB state and push. `{ok, committed, sha, message}`. |
 | GET    | `/api/git/history` | `?kind=&name=&conn_type=&before=&limit=10&workspace=` | The entity's revisions, newest first. `{ok, revisions: [{sha, date, message}], has_more}`. |
 | POST   | `/api/git/restore` | `{kind, name, conn_type?, ref?, workspace?}`     | Overwrite the local DB row with the entity's content at `ref`. `{ok, restored, sha}`. |

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, ClassVar
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from sqlalchemy import text
 from sqlmodel import Field, SQLModel, select
@@ -75,13 +76,27 @@ async def resolve(name: str) -> WorkspaceRec:
     return _to_rec(row)
 
 
+def _public_remote(stored: str | None) -> str | None:
+    """A stored remote as the UI may show it: the URL without its credential.
+    None when unset or no longer decryptable."""
+    if not stored:
+        return None
+    try:
+        return split_credential(_decrypt_str(stored))[0]
+    except Exception:
+        return None
+
+
 async def list_workspaces() -> list[dict[str, Any]]:
-    """All workspaces ordered by name; exposes whether a remote is configured
-    but never the remote itself."""
+    """All workspaces ordered by name, each with its remote minus any embedded
+    credential — the credential itself never leaves the server."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         rows = (await s.exec(select(Workspace).order_by(Workspace.name))).all()
-    return [{"name": r.name, "branch": r.branch, "configured": bool(r.remote)} for r in rows]
+    return [
+        {"name": r.name, "branch": r.branch, "configured": bool(r.remote), "remote": _public_remote(r.remote)}
+        for r in rows
+    ]
 
 
 async def create_workspace(name: str, remote: str | None = None, branch: str = "main") -> None:
@@ -165,3 +180,19 @@ async def delete_workspace(name: str) -> None:
             )
         await s.delete(row)
         await s.commit()
+
+
+def split_credential(url: str) -> tuple[str, tuple[str, str] | None]:
+    """Split an http(s) URL's credential from the URL, so the URL can be handed
+    to git (and persisted in the clone's config) without it.
+
+    Only http(s) userinfo is a secret: `git@host:path` and `ssh://git@host` name
+    an SSH login, so those are returned untouched."""
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not (parts.username or parts.password):
+        return url, None
+    host = parts.hostname or ""
+    if parts.port:
+        host = f"{host}:{parts.port}"
+    sanitized = urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment))
+    return sanitized, (unquote(parts.username or ""), unquote(parts.password or ""))

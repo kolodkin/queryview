@@ -41,6 +41,33 @@ dashboards/{name}/queries.yaml     # {query_name: SQL}
 File names are percent-encoded where needed; the canonical name lives inside
 the YAML.
 
+## Merge-in
+
+A sync fetches the repo and merges its head into the workspace. It runs:
+
+- when a remote is saved (re-entering the same URL counts);
+- on **Commit**, **Restore**, and opening an entity's revision list;
+- on **Sync** in the workspace panel (header dropdown → *Manage workspaces…*),
+  to pick up what was committed elsewhere.
+
+Opening or refreshing the app never syncs.
+
+The merge only adds, never overwrites:
+
+- in the repo, not here → **imported**;
+- the same on both sides → nothing to do;
+- different, and the repo's copy changed since this workspace last agreed with
+  it → a **conflict**: the local copy is kept and the entity is listed under a
+  ⚠ next to the workspace switcher until you **Commit** (push yours) or
+  **Restore** (take the repo's);
+- different, but only because you edited it locally → just an uncommitted
+  change, not a conflict.
+
+Nothing is ever deleted by a sync. "Last agreed" is the repo object id each
+entity had when it was imported, committed, restored or found identical, kept
+with the conflict list in `{data dir}/gitsync/{workspace id}.sync.json`.
+Changing a workspace's remote or branch drops its clone and that file.
+
 ## Versioning
 
 Git commits are the versions — each Commit makes exactly one commit touching
@@ -58,10 +85,11 @@ are disabled when the active workspace has no remote configured.
 
 ## API
 
-- `GET /api/git/status?workspace=` → `{configured}`
-- `POST /api/git/store` `{kind, name, conn_type?, message?, workspace?}` → `{ok, committed, sha, message}`
+- `GET /api/git/status?workspace=` → `{configured, conflicts}`
+- `POST /api/git/sync` `{workspace?}` → `{ok, imported, conflicts}`
+- `POST /api/git/store` `{kind, name, conn_type?, message?, workspace?}` → `{ok, committed, sha, message, imported, conflicts}`
 - `GET /api/git/history?kind=&name=&conn_type=&before=&limit=10&workspace=` → `{ok, revisions: [{sha, date, message}], has_more}`
-- `POST /api/git/restore` `{kind, name, conn_type?, ref?, workspace?}` → `{ok, restored, sha}`
+- `POST /api/git/restore` `{kind, name, conn_type?, ref?, workspace?}` → `{ok, restored, sha, imported, conflicts}`
 
 `kind` is `"query"` or `"dashboard"`; `conn_type` is required for queries;
 `workspace` defaults to `default`. MCP tools `git_store`, `git_history`,

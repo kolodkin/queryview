@@ -44,8 +44,14 @@ def test_create_list_and_encrypted_remote_round_trip():
     assert rec.branch == "dev"
 
     listed = {w["name"]: w for w in _run(list_workspaces())}
-    assert listed["t2-crt"] == {"name": "t2-crt", "branch": "dev", "configured": True}
-    assert "remote" not in listed["t2-crt"]  # the URL (a secret) never leaves the store
+    assert listed["t2-crt"] == {
+        "name": "t2-crt",
+        "branch": "dev",
+        "configured": True,
+        # Shown without the credential, which never leaves the server.
+        "remote": "https://example.test/r.git",
+    }
+    assert "tok" not in str(listed["t2-crt"])  # the credential never leaves the store
 
     # At rest the remote is ciphertext, not the URL.
     con = sqlite3.connect(_db_path())

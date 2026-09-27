@@ -5,6 +5,7 @@ import { DashboardFrame, type DashboardResults } from '../core'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
+import { onGitSync } from './gitsync'
 import { activeWorkspace } from './session'
 
 export type DashboardPush = {
@@ -85,6 +86,9 @@ function DashboardView({
       setSaving(false)
     }
   }
+
+  // A git sync may have imported dashboards from the repo.
+  useEffect(() => onGitSync(() => void loadDashboards()), [])
 
   // Load the dropdown list; refresh on each push so a new dashboard appears.
   useEffect(() => {

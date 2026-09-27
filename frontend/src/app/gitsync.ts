@@ -47,6 +47,51 @@ export function invalidateGitStatus(): void {
   statusCache.clear()
 }
 
+// An entity the last sync kept local although the repo has another version.
+export type GitConflict = { kind: GitKind; name: string; conn_type: string | null }
+
+export async function gitConflicts(workspace: string): Promise<GitConflict[]> {
+  try {
+    const r = await (await apiFetch(`/api/git/status?workspace=${encodeURIComponent(workspace)}`)).json()
+    return (r.conflicts ?? []) as GitConflict[]
+  } catch {
+    return []
+  }
+}
+
+export type GitSyncResult = {
+  ok: boolean
+  imported?: GitConflict[]
+  conflicts?: GitConflict[]
+  message?: string
+}
+
+// Merge the repo into `workspace` (see docs/gitsync.md, "Merge-in").
+export async function gitSync(workspace: string): Promise<GitSyncResult> {
+  const res = await apiFetch('/api/git/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace }),
+  })
+  const data = await res.json()
+  announceGitSync()
+  return data
+}
+
+// Every sync may import entities or change conflicts. Views listen for this to
+// reload their lists; the workspace switcher, to refresh its warning.
+export const GIT_SYNCED = 'qv:git-synced'
+
+export function announceGitSync(): void {
+  window.dispatchEvent(new Event(GIT_SYNCED))
+}
+
+// Run `f` whenever a sync has happened; returns the unsubscribe.
+export function onGitSync(f: () => void): () => void {
+  window.addEventListener(GIT_SYNCED, f)
+  return () => window.removeEventListener(GIT_SYNCED, f)
+}
+
 export async function gitStore(
   kind: GitKind,
   name: string,
@@ -58,7 +103,9 @@ export async function gitStore(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ kind, name, conn_type: connType, workspace }),
   })
-  return res.json()
+  const data = await res.json()
+  announceGitSync()
+  return data
 }
 
 export async function gitHistory(
@@ -72,7 +119,9 @@ export async function gitHistory(
   if (opts.limit) params.set('limit', String(opts.limit))
   if (opts.workspace) params.set('workspace', opts.workspace)
   const res = await apiFetch(`/api/git/history?${params.toString()}`)
-  return res.json()
+  const data = await res.json()
+  announceGitSync()
+  return data
 }
 
 export async function gitRestore(
@@ -87,7 +136,9 @@ export async function gitRestore(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ kind, name, conn_type: connType, ref, workspace }),
   })
-  return res.json()
+  const data = await res.json()
+  announceGitSync()
+  return data
 }
 
 // Merge a fetched page into the already-loaded revisions, dropping any shas

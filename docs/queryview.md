@@ -42,8 +42,8 @@ describes the prompt page.
   collapse into one **☰ &lt;page&gt;** menu, and full-height pages keep a 48rem
   minimum width, scrolling sideways rather than squeezing.
 - **Popovers** — dropdowns and their panels close on a click outside or on
-  Escape. Panels holding unsaved input are the exception — the workspace manage
-  form and the cell-view editor close through their own buttons.
+  Escape. Panels holding unsaved input are the exception: the workspace manage
+  form once edited, and the cell-view editor, close through their own buttons.
 
 ## Sessions
 

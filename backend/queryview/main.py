@@ -657,7 +657,27 @@ async def git_status(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    return {"configured": gitsync.configured(ws)}
+    return {"configured": gitsync.configured(ws), "conflicts": gitsync.conflicts(ws)}
+
+
+# The workspace panel's Sync: merge in what was committed elsewhere.
+@app.post("/api/git/sync")
+async def git_sync(request: Request):
+    b = await _read_json(request)
+    b = b if isinstance(b, dict) else {}
+    ws = await _resolve_workspace(_clean_str(b.get("workspace")) or None)
+    if isinstance(ws, JSONResponse):
+        return ws
+    return await _gitsync_json(gitsync.sync(ws))
+
+
+async def _sync_attached(name: str) -> dict[str, Any]:
+    """Merge a just-attached remote in. The workspace is saved either way, so a
+    sync failure (unreachable remote) is reported, not raised."""
+    try:
+        return {"sync": await gitsync.sync(await workspaces.resolve(name))}
+    except (gitsync.GitSyncError, workspaces.WorkspaceError) as e:
+        return {"sync_error": str(e)}
 
 
 @app.post("/api/git/store")
@@ -775,7 +795,7 @@ async def workspaces_create(request: Request):
         await workspaces.create_workspace(name, remote_url, branch)
     except workspaces.WorkspaceError as e:
         return _workspace_error(e)
-    return {"ok": True}
+    return {"ok": True, **(await _sync_attached(name) if remote_url else {})}
 
 
 @app.patch("/api/workspaces/{name}")
@@ -790,18 +810,30 @@ async def workspaces_update(name: str, request: Request):
     if "branch" in b:
         kwargs["branch"] = _clean_str(b.get("branch")) or None
     try:
+        before = await workspaces.resolve(name)
         await workspaces.update_workspace(name, **kwargs)
     except workspaces.WorkspaceError as e:
         return _workspace_error(e)
+    current = kwargs.get("new_name") or name
+    after = await workspaces.resolve(current)
+    changed = (after.remote, after.branch) != (before.remote, before.branch)
+    if changed:
+        # A different repo: the old clone and sync state no longer apply.
+        gitsync.forget(before.id)
+    # Entering a remote (even the same one again) merges whatever it holds.
+    if after.remote and (changed or kwargs.get("remote")):
+        return {"ok": True, **(await _sync_attached(current))}
     return {"ok": True}
 
 
 @app.delete("/api/workspaces/{name}")
 async def workspaces_delete(name: str):
     try:
+        ws = await workspaces.resolve(name)
         await workspaces.delete_workspace(name)
     except workspaces.WorkspaceError as e:
         return _workspace_error(e)
+    gitsync.forget(ws.id)
     return {"ok": True}
 
 

@@ -32,6 +32,7 @@ import { downloadText } from './yamlio'
 import { suggestCompletions, type Suggestion } from './promptSuggestions'
 import { postLock } from './sessionLock'
 import { apiFetch } from './api'
+import { onGitSync } from './gitsync'
 import { activeWorkspace, flushPatches, patchView, viewState } from './session'
 
 type TestResult = { ok: boolean; message: string }
@@ -824,6 +825,9 @@ function QueryPanel({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPredefined()
   }, [loadPredefined])
+
+  // A git sync may have imported queries from the repo.
+  useEffect(() => onGitSync(() => void loadPredefined()), [loadPredefined])
 
   // Apply a pushed query: reflect it in the controls and run it with the pushed
   // values directly (not state, which hasn't settled).

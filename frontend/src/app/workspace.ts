@@ -4,9 +4,11 @@
 
 import { apiFetch } from './api'
 
-export type Workspace = { name: string; branch: string; configured: boolean }
+// `remote` is the URL without any embedded credential; the token never comes back.
+export type Workspace = { name: string; branch: string; configured: boolean; remote: string | null }
 
-export type WorkspaceResult = { ok: boolean; message?: string }
+// `sync_error`: saved, but merging the newly attached repo in failed.
+export type WorkspaceResult = { ok: boolean; message?: string; sync_error?: string }
 
 export async function listWorkspaces(): Promise<Workspace[]> {
   const r = await (await apiFetch('/api/workspaces')).json()
