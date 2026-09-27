@@ -477,7 +477,7 @@ function Shell() {
                 key={`${sessionKey}:${workspace}`}
                 pushed={dashboardPush}
                 onPushConsumed={() => setDashboardPush(null)}
-                database={connection?.database ?? null}
+                runOn={connection ? `${connection.name}/${connection.database ?? ''}` : null}
               />
             }
           />

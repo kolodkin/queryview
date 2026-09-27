@@ -24,24 +24,22 @@ def _run(coro):
 
 
 def test_upsert_creates_then_updates_by_name(default_ws_id):
-    _run(upsert_dashboard("d1", "conn-a", "<h1>v1</h1>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
+    _run(upsert_dashboard("d1", "<h1>v1</h1>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
     got = _run(get_dashboard("d1", default_ws_id))
     assert got is not None
-    assert got["connection"] == "conn-a"
     assert got["html"] == "<h1>v1</h1>"
     assert got["queries"] == {"q": "SELECT 1"}
 
-    _run(upsert_dashboard("d1", "conn-b", "<h1>v2</h1>", {"q": "SELECT 2"}, workspace_id=default_ws_id))
+    _run(upsert_dashboard("d1", "<h1>v2</h1>", {"q": "SELECT 2"}, workspace_id=default_ws_id))
     got = _run(get_dashboard("d1", default_ws_id))
     assert got is not None
-    assert got["connection"] == "conn-b"
     assert got["html"] == "<h1>v2</h1>"
     assert got["queries"] == {"q": "SELECT 2"}
 
 
 def test_get_dashboard_round_trips_queries_dict(default_ws_id):
     queries = {"sales": "SELECT * FROM sales", "users": "SELECT count() FROM users"}
-    _run(upsert_dashboard("multi", "c", "<div></div>", queries, workspace_id=default_ws_id))
+    _run(upsert_dashboard("multi", "<div></div>", queries, workspace_id=default_ws_id))
     got = _run(get_dashboard("multi", default_ws_id))
     assert got is not None
     assert got["queries"] == queries
@@ -52,18 +50,16 @@ def test_get_missing_dashboard_is_none(default_ws_id):
 
 
 def test_list_dashboards_orders_by_name_and_omits_payload(default_ws_id):
-    _run(upsert_dashboard("zeta", "c", "<i></i>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
-    _run(upsert_dashboard("alpha", "c", "<i></i>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
+    _run(upsert_dashboard("zeta", "<i></i>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
+    _run(upsert_dashboard("alpha", "<i></i>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
     names = [d["name"] for d in _run(list_dashboards(default_ws_id))]
     assert names.index("alpha") < names.index("zeta")
     row = next(d for d in _run(list_dashboards(default_ws_id)) if d["name"] == "alpha")
-    assert set(row) == {"name", "connection", "updated_at"}
+    assert set(row) == {"name", "updated_at"}
 
 
 def test_upsert_and_push_persists_without_session(default_ws_id):
-    persisted, pushed, _ = _run(
-        _upsert_and_push("np", "c", "<p></p>", {"q": "SELECT 1"}, None, workspace_id=default_ws_id)
-    )
+    persisted, pushed, _ = _run(_upsert_and_push("np", "<p></p>", {"q": "SELECT 1"}, None, workspace_id=default_ws_id))
     assert persisted is True and pushed is False
     assert _run(get_dashboard("np", default_ws_id)) is not None
 
@@ -72,14 +68,13 @@ def test_upsert_and_push_delivers_to_registered_session(default_ws_id):
     rid = remote.register(uuid.uuid4().hex)
     try:
         persisted, pushed, _ = _run(
-            _upsert_and_push("pushed", "c", "<p>x</p>", {"q": "SELECT 1"}, rid, workspace_id=default_ws_id)
+            _upsert_and_push("pushed", "<p>x</p>", {"q": "SELECT 1"}, rid, workspace_id=default_ws_id)
         )
         assert persisted is True and pushed is True
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None
         assert msg["type"] == "dashboard"
         assert msg["name"] == "pushed"
-        assert msg["connection"] == "c"
         assert msg["html"] == "<p>x</p>"
         assert msg["queries"] == {"q": "SELECT 1"}
     finally:
@@ -89,27 +84,24 @@ def test_upsert_and_push_delivers_to_registered_session(default_ws_id):
 # --- REST surface ---------------------------------------------------------
 
 
-def test_runqueries_requires_connection_and_queries():
+def test_runqueries_requires_queries():
     client = TestClient(app)
-    assert client.post("/api/runqueries", json={"queries": {"q": "SELECT 1"}}).status_code == 400
-    assert client.post("/api/runqueries", json={"connection": "c"}).status_code == 400
-    assert client.post("/api/runqueries", json={"connection": "c", "queries": {}}).status_code == 400
+    assert client.post("/api/runqueries", json={}).status_code == 400
+    assert client.post("/api/runqueries", json={"queries": {}}).status_code == 400
 
 
-def test_runqueries_unknown_connection_returns_404():
+def test_runqueries_on_a_disconnected_session_is_409():
+    """A dashboard runs on the viewing session's connection; with none there
+    is nothing to run on, and the session (not the request) must change."""
     client = TestClient(app)
-    r = client.post(
-        "/api/runqueries",
-        json={"connection": "no-such-connection", "queries": {"q": "SELECT 1"}},
-    )
-    assert r.status_code == 404
-    assert r.json()["ok"] is False
-    assert "no connection" in r.json()["message"].lower()
+    r = client.post("/api/runqueries", json={"queries": {"q": "SELECT 1"}})
+    assert r.status_code == 409
+    assert r.json()["ok"] is False and r.json()["reason"] == "no-session"
 
 
 def test_dashboards_upsert_requires_fields():
     client = TestClient(app)
-    r = client.post("/api/dashboards", json={"name": "x", "connection": "c"})
+    r = client.post("/api/dashboards", json={"name": "x"})  # no html
     assert r.status_code == 400
 
 
@@ -119,7 +111,6 @@ def test_dashboards_upsert_persists_and_lists_and_gets():
         "/api/dashboards",
         json={
             "name": "rest-dash",
-            "connection": "c",
             "html": "<h1>hi</h1>",
             "queries": {"q": "SELECT 1"},
         },
@@ -150,7 +141,6 @@ def test_dashboards_upsert_pushes_to_registered_session():
             json={
                 "session_id": rid,
                 "name": "live-dash",
-                "connection": "c",
                 "html": "<p></p>",
                 "queries": {"q": "SELECT 1"},
             },
@@ -189,8 +179,8 @@ def test_dashboard_names_distinct_per_workspace(default_ws_id):
 
     _run(create_workspace("t4-iso"))
     other = _run(resolve("t4-iso")).id
-    _run(upsert_dashboard("iso d", "prod", "<html>1</html>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
-    _run(upsert_dashboard("iso d", "prod", "<html>2</html>", {"q": "SELECT 2"}, workspace_id=other))
+    _run(upsert_dashboard("iso d", "<html>1</html>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
+    _run(upsert_dashboard("iso d", "<html>2</html>", {"q": "SELECT 2"}, workspace_id=other))
 
     d_default = _run(get_dashboard("iso d", default_ws_id))
     d_other = _run(get_dashboard("iso d", other))
@@ -206,7 +196,7 @@ def test_mcp_list_dashboards_scopes_by_session_workspace(default_ws_id):
 
     _run(create_workspace("t-mcp-ld"))
     other = _run(resolve("t-mcp-ld")).id
-    _run(upsert_dashboard("mcp ld", "c", "<i></i>", {}, workspace_id=other))
+    _run(upsert_dashboard("mcp ld", "<i></i>", {}, workspace_id=other))
 
     # No session_id -> default workspace: the other workspace's dashboard is absent.
     names = [d["name"] for d in _run(mcp_list())["dashboards"]]

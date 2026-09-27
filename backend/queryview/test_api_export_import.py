@@ -66,7 +66,7 @@ def test_workspace_export_import_between_workspaces(default_ws_id, wipe_workspac
     from queryview.dashboards import upsert_dashboard
 
     c = TestClient(app)
-    _run(upsert_dashboard("api ws dash", "prod", "<p>v1</p>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
+    _run(upsert_dashboard("api ws dash", "<p>v1</p>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
     r = c.get("/api/export", params={"kind": "workspace"})
     assert r.status_code == 200
     assert r.headers["content-disposition"] == 'attachment; filename="default.workspace.yaml"'

@@ -28,7 +28,6 @@ fields: [user, count] # optional
 # kind: dashboard — one dashboard
 kind: dashboard
 name: sales
-connection: prod
 html: |
   <html>...</html>
 queries:

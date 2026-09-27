@@ -68,7 +68,7 @@ def query_from_yaml(text: str) -> dict[str, Any]:
 def dashboard_to_files(d: dict[str, Any]) -> dict[str, str]:
     """A dashboard (as returned by get_dashboard) as its three repo files."""
     return {
-        "meta.yaml": dump_yaml({"name": d["name"], "connection": d["connection"]}),
+        "meta.yaml": dump_yaml({"name": d["name"]}),
         "dashboard.html": d["html"],
         "queries.yaml": dump_yaml(d["queries"] or {}),
     }
@@ -381,7 +381,7 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
                     workspace_id=ws.id,
                 )
             else:
-                await upsert_dashboard(name, repo["connection"], repo["html"], repo["queries"], workspace_id=ws.id)
+                await upsert_dashboard(name, repo["html"], repo["queries"], workspace_id=ws.id)
             imported.append(entry)
             agreed[key] = e["oid"]
         elif same:
@@ -574,7 +574,6 @@ async def restore(
 
         await upsert_dashboard(
             data["name"],
-            data["connection"],
             data["html"],
             data["queries"],
             workspace_id=ws.id,

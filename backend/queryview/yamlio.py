@@ -115,7 +115,6 @@ def dashboard_to_data(d: dict[str, Any]) -> dict[str, Any]:
     store accessors happen to return."""
     return {
         "name": d["name"],
-        "connection": d["connection"],
         "html": d["html"],
         "queries": d["queries"] or {},
     }
@@ -128,12 +127,13 @@ def dashboard_from_data(data: Any, where: str = "dashboard file", require_html: 
     if not isinstance(data, dict):
         raise YamlIOError(f"malformed {where}: expected a mapping")
     name = _require_str(data, "name", where)
-    connection = _require_str(data, "connection", where)
+    # A `connection` key (older documents) is ignored: a dashboard runs on the
+    # viewing session's connection.
     html = _require_str(data, "html", where) if require_html else str(data.get("html") or "")
     queries = data.get("queries") or {}
     if not isinstance(queries, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in queries.items()):
         raise YamlIOError(f"malformed {where}: queries must be a {{name: SQL}} map")
-    return {"name": name, "connection": connection, "html": html, "queries": queries}
+    return {"name": name, "html": html, "queries": queries}
 
 
 # --- Import documents -------------------------------------------------------

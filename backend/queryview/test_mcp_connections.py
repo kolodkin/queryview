@@ -49,7 +49,8 @@ def test_run_query_unknown_session_fails():
     assert out["ok"] is False
 
 
-def test_push_dashboard_runs_on_the_session_connection():
+def test_push_dashboard_names_no_connection():
+    """The draft carries no connection: it runs on whichever session views it."""
     from queryview.mcp_server import push_dashboard
 
     sid = _connected_session("sc-dash")
@@ -58,7 +59,7 @@ def test_push_dashboard_runs_on_the_session_connection():
         out = _run(push_dashboard(rid, "d", "<p></p>", {"q": "SELECT 1"}))
         assert out["ok"] is True and out["pushed"] is True
         msg = _run(remote.next_message(rid, 1.0))
-        assert msg is not None and msg["connection"] == "sc-dash"
+        assert msg is not None and msg["type"] == "dashboard" and "connection" not in msg
     finally:
         remote.unregister(rid)
 

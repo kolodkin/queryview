@@ -50,7 +50,6 @@ def test_dashboard_push_and_reopen(seeded_test_db, page: Page, base_url: str, sh
         json={
             "session_id": session_id,
             "name": "sales",
-            "connection": "clickhouse",
             "html": _DASHBOARD_HTML,
             "queries": {"items": "SELECT name FROM items ORDER BY id"},
         },
@@ -88,7 +87,6 @@ def test_dashboard_runqueries_error_shows_banner(seeded_test_db, page: Page, bas
         f"{base_url}/api/dashboards",
         json={
             "name": "broken",
-            "connection": "clickhouse",
             "html": _DASHBOARD_HTML,
             "queries": {"items": "SELECT name FROM no_such_table"},
         },
@@ -101,3 +99,20 @@ def test_dashboard_runqueries_error_shows_banner(seeded_test_db, page: Page, bas
     expect(page.get_by_test_id("dashboard-error")).to_contain_text("items")
     expect(page.get_by_test_id("dashboard-frame")).to_have_count(0)
     shot("fail-fast error banner")
+
+
+def test_a_dashboard_runs_on_the_viewing_sessions_connection(seeded_test_db, page: Page, base_url: str) -> None:
+    """A saved dashboard names no connection: a disconnected session is told to
+    connect rather than failing on some connection the dashboard remembers."""
+    _connect_and_select_test_db(page)
+    httpx.post(
+        f"{base_url}/api/dashboards",
+        json={"name": "portable", "html": _DASHBOARD_HTML, "queries": {"items": "SELECT name FROM items ORDER BY id"}},
+        timeout=10.0,
+    ).raise_for_status()
+
+    page.get_by_test_id("session-switcher").click()
+    page.get_by_test_id("session-new").click()
+    page.goto("/dashboard?name=portable", wait_until="networkidle")
+
+    expect(page.get_by_test_id("dashboard-error")).to_contain_text("Connect to a database")

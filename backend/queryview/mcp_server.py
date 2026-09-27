@@ -147,7 +147,7 @@ async def list_dashboards(session_id: str | None = None) -> dict[str, Any]:
         session_id: Optional armed-session id; scopes the list to that
             session's workspace (default workspace otherwise).
 
-    Returns {"dashboards": [{name, connection, updated_at}]}; updated_at is
+    Returns {"dashboards": [{name, updated_at}]}; updated_at is
     unix ms.
     """
     from .dashboards import list_dashboards as _list_dashboards
@@ -168,8 +168,8 @@ async def push_dashboard(
     The dashboard renders immediately in the browser, but nothing is written to
     the store — only the user's **Save** button in the dashboard view persists
     it, mirroring how push_query drafts a query for the user to Save. Re-push to
-    update the live draft. Its queries run on the session's connection, which
-    the Save keeps.
+    update the live draft. Its queries run on the viewing session's connection
+    and selected database — a dashboard never names a connection.
 
     The browser consumes the results, not the agent: the HTML reads them from a
     `window.queries` global, a column-oriented map
@@ -188,7 +188,7 @@ async def push_dashboard(
     rec = await sessions.get_session_rec(session_id) if session_id else None
     if rec is None or rec.connection_name is None:
         return {"ok": False, "pushed": False, "message": "not connected", "database": None}
-    pushed, message = await _push_dashboard(name, rec.connection_name, html, queries, session_id)
+    pushed, message = await _push_dashboard(name, html, queries, session_id)
     return {
         "ok": pushed,
         "pushed": pushed,

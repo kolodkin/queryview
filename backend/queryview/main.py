@@ -33,7 +33,7 @@ from .connect import (
     run_query,
     select_database,
 )
-from .dashboard_queries import run_queries_for_connection
+from .dashboard_queries import run_dashboard_queries
 from .dashboards import _upsert_and_push, get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
@@ -557,23 +557,20 @@ async def remote_lock(request: Request):
 # --- Dashboards (persist + reopen + run-against-a-named-connection) --------
 
 
-# Run a dashboard's named queries against a named connection. Fail-fast: any
-# failure returns an HTTP error and no partial results.
+# Run a dashboard's named queries on this session's connection and selected
+# database. Fail-fast: any failure returns an HTTP error and no partial results.
 @app.post("/api/runqueries")
 async def run_queries(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
-    connection = _clean_str(b.get("connection"))
     queries = _clean_queries(b.get("queries"))
-    if not connection or not queries:
-        return JSONResponse(
-            {"ok": False, "message": "connection and queries are required"},
-            status_code=400,
-        )
-    r = await run_queries_for_connection(connection, queries)
+    if not queries:
+        return JSONResponse({"ok": False, "message": "queries are required"}, status_code=400)
+    r = await run_dashboard_queries(request.state.sid, queries)
     if not r["ok"]:
-        status = 404 if r.get("reason") == "no-connection" else 400
-        return JSONResponse({"ok": False, "message": r["message"]}, status_code=status)
+        # Not connected / no database: the session must act first, not the request.
+        status = 400 if r.get("reason") == "query" else 409
+        return JSONResponse({"ok": False, "message": r["message"], "reason": r.get("reason")}, status_code=status)
     return {"ok": True, "results": r["results"]}
 
 
@@ -584,22 +581,16 @@ async def dashboards_upsert(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
     name = _clean_str(b.get("name"))
-    connection = _clean_str(b.get("connection"))
     raw_html = b.get("html")
     html = raw_html if isinstance(raw_html, str) else ""
     queries = _clean_queries(b.get("queries"))
-    if not name or not connection or not html.strip():
-        return JSONResponse(
-            {"ok": False, "message": "name, connection and html are required"},
-            status_code=400,
-        )
+    if not name or not html.strip():
+        return JSONResponse({"ok": False, "message": "name and html are required"}, status_code=400)
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
     session_id = _clean_str(b.get("session_id"))
-    persisted, pushed, message = await _upsert_and_push(
-        name, connection, html, queries, session_id or None, workspace_id=ws.id
-    )
+    persisted, pushed, message = await _upsert_and_push(name, html, queries, session_id or None, workspace_id=ws.id)
     return {"ok": persisted, "persisted": persisted, "pushed": pushed, "message": message}
 
 

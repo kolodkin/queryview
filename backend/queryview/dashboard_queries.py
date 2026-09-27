@@ -1,13 +1,12 @@
-"""Run a dashboard's named SQL against a connection by name, decoupled from any
-session/cookie. Reads the saved connection (and its stored database) via
-connect.py, queries via the driver registry; dashboard persistence lives in
-dashboards.py."""
+"""Run a dashboard's named SQL on a session's connection and selected
+database — the viewer's, never one the dashboard names. Dashboard persistence
+lives in dashboards.py."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from .connect import _connection_by_name, unknown_connection_message
+from .connect import _gated_session
 from .drivers import DRIVERS
 from .drivers.base import rows_to_columns
 
@@ -16,39 +15,27 @@ from .drivers.base import rows_to_columns
 DASHBOARD_ROW_CAP = 1000
 
 
-async def run_queries_for_connection(
-    name: str,
+async def run_dashboard_queries(
+    sid: str,
     queries: dict[str, str],
     limit: int = DASHBOARD_ROW_CAP,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """Run a dashboard's named queries against a saved connection by name.
-    Fail-fast: an unknown connection, no selected database, or the first failing
-    query aborts the call. On full success returns {"ok": True, "results": {name:
-    {col: [values, …]}}, "meta": {name: [{name, type}, …]}} — column-oriented,
-    ready for window.queries, values typed as the driver returned them.
+    """Run a dashboard's named queries on session `sid`'s connection and
+    selected database. Fail-fast: not connected, no database selected, or the
+    first failing query aborts the call (`reason`: no-session / no-database /
+    query). On full success returns {"ok": True, "results": {name: {col:
+    [values, …]}}, "meta": {name: [{name, type}, …]}} — column-oriented, ready
+    for window.queries, values typed as the driver returned them.
     `limit`/`offset` page each query (default: the dashboard row cap, from row 0)."""
-    stored = await _connection_by_name(name)
-    if stored is None:
-        return {
-            "ok": False,
-            "reason": "no-connection",
-            "message": await unknown_connection_message(name),
-        }
-    driver = DRIVERS[stored.type]
-    if driver.requires_database and not stored.database:
-        return {
-            "ok": False,
-            "reason": "no-database",
-            "message": (
-                f'connection "{name}" has no selected database — select one for it '
-                "or fully-qualify table names as db.table"
-            ),
-        }
+    s, err = await _gated_session(sid)
+    if s is None:
+        return err  # type: ignore[return-value]
+    driver = DRIVERS[s.type]
     results: dict[str, dict[str, list[Any]]] = {}
     meta: dict[str, list[dict[str, str]]] = {}
     for qname, sql in queries.items():
-        r = await driver.run_query(stored.config, sql, stored.database, limit=limit, offset=offset, order_by=None)
+        r = await driver.run_query(s.config, sql, s.database, limit=limit, offset=offset, order_by=None)
         if not r.ok or r.rows is None:
             return {"ok": False, "reason": "query", "message": f"{qname}: {r.message}"}
         results[qname] = rows_to_columns(r.rows)

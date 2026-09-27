@@ -66,7 +66,6 @@ def test_query_from_yaml_rejects_malformed():
 def test_dashboard_files_round_trip():
     d = {
         "name": "sales",
-        "connection": "prod",
         "html": "<html>\n<body>hi — ünicode</body>\n</html>",
         "queries": {"revenue": "SELECT 1", "multi": "SELECT a\nFROM b"},
     }
@@ -164,7 +163,7 @@ def test_store_no_change_makes_no_commit(git_env):
 def test_store_dashboard_touches_only_its_dir(git_env):
     from queryview.dashboards import upsert_dashboard
 
-    _run(upsert_dashboard("gs dash", "prod", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs dash", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
     r = _run(gitsync.store(_default_ws(), "dashboard", "gs dash"))
     assert r["committed"] is True
     out = subprocess.run(
@@ -285,14 +284,13 @@ def test_restore_default_ref_is_remote_head(git_env):
 def test_restore_dashboard_round_trip(git_env):
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
-    _run(upsert_dashboard("gs rdash", "prod", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs rdash", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
     _run(gitsync.store(_default_ws(), "dashboard", "gs rdash"))
-    _run(upsert_dashboard("gs rdash", "other", "<html>v2</html>", {"q": "SELECT 2"}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs rdash", "<html>v2</html>", {"q": "SELECT 2"}, workspace_id=_default_ws_id()))
     _run(gitsync.restore(_default_ws(), "dashboard", "gs rdash"))
     d = _run(get_dashboard("gs rdash", _default_ws_id()))
     assert d == {
         "name": "gs rdash",
-        "connection": "prod",
         "html": "<html>v1</html>",
         "queries": {"q": "SELECT 1"},
     }
@@ -471,7 +469,7 @@ def test_sync_imports_what_the_repo_has(other_instance):
     from queryview.dashboards import get_dashboard, upsert_dashboard
     from queryview.queries import get_predefined_query, save_predefined_query
 
-    _run(upsert_dashboard("gs incoming", "prod", "<html>x</html>", {"q": "SELECT 1"}, workspace_id=other_instance.id))
+    _run(upsert_dashboard("gs incoming", "<html>x</html>", {"q": "SELECT 1"}, workspace_id=other_instance.id))
     _run(save_predefined_query("gs incoming q", "clickhouse", "SELECT 2", workspace_id=other_instance.id))
     _run(gitsync.store(other_instance, "dashboard", "gs incoming"))
     _run(gitsync.store(other_instance, "query", "gs incoming q", "clickhouse"))
@@ -490,8 +488,8 @@ def test_sync_imports_what_the_repo_has(other_instance):
 def test_sync_never_overwrites_and_reports_the_conflict(other_instance):
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
-    _run(upsert_dashboard("gs clash", "prod", "<html>mine</html>", {}, workspace_id=_default_ws_id()))
-    _run(upsert_dashboard("gs clash", "prod", "<html>theirs</html>", {}, workspace_id=other_instance.id))
+    _run(upsert_dashboard("gs clash", "<html>mine</html>", {}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs clash", "<html>theirs</html>", {}, workspace_id=other_instance.id))
     _run(gitsync.store(other_instance, "dashboard", "gs clash"))
 
     r = _run(gitsync.sync(_default_ws()))
@@ -510,8 +508,8 @@ def test_sync_never_overwrites_and_reports_the_conflict(other_instance):
 def test_restoring_settles_a_conflict(other_instance):
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
-    _run(upsert_dashboard("gs clash2", "prod", "<html>mine</html>", {}, workspace_id=_default_ws_id()))
-    _run(upsert_dashboard("gs clash2", "prod", "<html>theirs</html>", {}, workspace_id=other_instance.id))
+    _run(upsert_dashboard("gs clash2", "<html>mine</html>", {}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs clash2", "<html>theirs</html>", {}, workspace_id=other_instance.id))
     _run(gitsync.store(other_instance, "dashboard", "gs clash2"))
     _run(gitsync.sync(_default_ws()))
 
@@ -525,10 +523,20 @@ def test_restoring_settles_a_conflict(other_instance):
 def test_a_local_edit_on_an_unchanged_repo_copy_is_not_a_conflict(git_env):
     from queryview.dashboards import upsert_dashboard
 
-    _run(upsert_dashboard("gs edited", "prod", "<html>v1</html>", {}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs edited", "<html>v1</html>", {}, workspace_id=_default_ws_id()))
     _run(gitsync.store(_default_ws(), "dashboard", "gs edited"))
-    _run(upsert_dashboard("gs edited", "prod", "<html>v2, not committed</html>", {}, workspace_id=_default_ws_id()))
+    _run(upsert_dashboard("gs edited", "<html>v2, not committed</html>", {}, workspace_id=_default_ws_id()))
 
     r = _run(gitsync.sync(_default_ws()))
 
     assert all(c["name"] != "gs edited" for c in r["conflicts"])
+
+
+def test_an_older_meta_yaml_naming_a_connection_still_reads():
+    """Repos written before dashboards dropped their connection keep working;
+    the key is ignored."""
+    d = dashboard_from_files(
+        {"meta.yaml": "name: legacy\nconnection: reporting-db\n", "dashboard.html": "<p/>", "queries.yaml": "{}"}
+    )
+    assert d == {"name": "legacy", "html": "<p/>", "queries": {}}
+    assert "connection" not in dashboard_to_files(d)["meta.yaml"]

@@ -8,28 +8,36 @@ import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace } from './session'
 
+// A dashboard names no connection: it runs on the viewing session's.
 export type DashboardPush = {
   name: string
-  connection: string
   html: string
   queries: Record<string, string>
 }
 
-type DashboardSummary = { name: string; connection: string; updated_at: number }
+type DashboardSummary = { name: string; updated_at: number }
 
 // The dashboard page (`/dashboard?name=x`). Picks a saved dashboard (dropdown or
-// `?name=`), runs its queries via /api/runqueries, and renders the agent HTML in
+// `?name=`), runs its queries via /api/runqueries on the session's connection
+// and selected database, and renders the agent HTML in
 // a sandboxed iframe with results injected as `window.queries`. A pushed
 // dashboard renders without a refetch.
+// Not connected / no database: say what to do, not what went wrong.
+function runError(data: { reason?: string; message?: string }): string {
+  if (data.reason === 'no-session') return 'Connect to a database to run this dashboard.'
+  if (data.reason === 'no-database') return 'Select a database to run this dashboard.'
+  return data.message ?? 'Failed to run queries.'
+}
+
 function DashboardView({
   pushed,
   onPushConsumed,
-  database,
+  runOn,
 }: {
   pushed?: DashboardPush | null
   onPushConsumed?: () => void
-  // Active connection database; a change re-runs the dashboard's queries.
-  database?: string | null
+  // The session's connection and database; a change re-runs the queries.
+  runOn?: string | null
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const name = searchParams.get('name') ?? ''
@@ -68,7 +76,6 @@ function DashboardView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: active.name,
-          connection: active.connection,
           html: active.html,
           queries: active.queries,
           workspace: activeWorkspace(),
@@ -153,11 +160,11 @@ function DashboardView({
         const res = await apiFetch('/api/runqueries', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connection: dash.connection, queries: dash.queries }),
+          body: JSON.stringify({ queries: dash.queries }),
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok || !data.ok) {
-          if (!cancelled) setError(data.message ?? 'Failed to run queries.')
+          if (!cancelled) setError(runError(data))
           return
         }
         if (!cancelled) setResults((data.results ?? {}) as DashboardResults)
@@ -172,7 +179,7 @@ function DashboardView({
     return () => {
       cancelled = true
     }
-  }, [name, localPush, database, reloadNonce])
+  }, [name, localPush, runOn, reloadNonce])
 
   return (
     <div className="w-full max-w-[80vw]" data-testid="dashboard-view">

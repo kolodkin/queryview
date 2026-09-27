@@ -6,7 +6,7 @@ it is also persisted so it can be reopened later by name.
 
 Responsibilities mirror the [remote-control](./remote.md) layer: the agent never
 receives query results back. The **browser** (trusted code with a session) runs
-the queries against a named connection and feeds the results into the
+the queries on its session's connection and feeds the results into the
 agent-authored HTML, which renders inside an isolated iframe.
 
 ## The page (`/dashboard`)
@@ -35,10 +35,11 @@ session id) exposes:
   `push_query`). Returns `{ok, pushed, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
 
-The agent never names a connection: the dashboard takes the session's
-[connection](./connect.md) and keeps it by name when saved, so a saved dashboard
-is portable. Queries use that connection's **stored database**; select one
-first, or fully-qualify tables as `db.table`.
+A dashboard never names a [connection](./connect.md): it runs on the
+**viewing** session's connection and selected database, like a saved query. So
+a dashboard is portable across sessions, instances and git sync; opened in a
+disconnected session it asks you to connect. Select a database first, or
+fully-qualify tables as `db.table`.
 
 The REST mirror `POST /api/dashboards` takes the same fields (plus optional
 `session_id`) and drives the same persist-and-push path (used by the e2e suite).
@@ -77,12 +78,13 @@ Load any chart library from a CDN inside the HTML. A minimal dashboard:
 
 ## Running the queries: `/api/runqueries`
 
-The browser POSTs `{connection, queries}` to `/api/runqueries`, which runs each
-query against the connection's stored database (wrapped in a paginated subselect
-capped at 1000 rows) and returns column-oriented results.
+The browser POSTs `{queries}` to `/api/runqueries`, which runs each query on
+the session's connection and selected database (wrapped in a paginated subselect
+capped at 1000 rows) and returns column-oriented results. Switching the
+connection or database re-runs them.
 
-It is **fail-fast**: if any query fails, the connection is unknown, or it has no
-selected database, the whole request returns an HTTP error and the page shows a
+It is **fail-fast**: if any query fails, or the session is not connected or has
+no database selected, the whole request returns an HTTP error and the page shows a
 dashboard-level error banner instead of partial panels. On success every named
 query is present in `window.queries`. A failing query's message is prefixed with
 its panel name (e.g. `churn: Unknown table …`) so it's clear which one to fix.

@@ -131,7 +131,6 @@ def test_dashboard_export_import_round_trip(default_ws_id):
     _run(
         upsert_dashboard(
             "yio dash",
-            "prod",
             "<html>\n<body>v1</body>\n</html>",
             {"panel": "SELECT 1"},
             workspace_id=default_ws_id,
@@ -139,15 +138,15 @@ def test_dashboard_export_import_round_trip(default_ws_id):
     )
     text = _run(export_dashboard("yio dash", default_ws_id))
     data = yaml.safe_load(text)
-    assert data["kind"] == "dashboard" and data["connection"] == "prod"
+    assert data["kind"] == "dashboard" and "connection" not in data
 
     # Drift the stored copy, then import the export to restore it.
-    _run(upsert_dashboard("yio dash", "other", "<p>v2</p>", {}, workspace_id=default_ws_id))
+    _run(upsert_dashboard("yio dash", "<p>v2</p>", {}, workspace_id=default_ws_id))
     r = _run(import_text(text, default_ws_id))
     assert r == {"kind": "dashboard", "queries": 0, "dashboards": 1}
     d = _run(get_dashboard("yio dash", default_ws_id))
     assert d is not None
-    assert d["connection"] == "prod" and "v1" in d["html"] and d["queries"] == {"panel": "SELECT 1"}
+    assert "v1" in d["html"] and d["queries"] == {"panel": "SELECT 1"}
 
 
 def test_workspace_export_import_round_trip(default_ws_id, wipe_workspace_entities):
@@ -158,7 +157,7 @@ def test_workspace_export_import_round_trip(default_ws_id, wipe_workspace_entiti
 
     _run(save_predefined_query("ws q1", "clickhouse", "SELECT 1", workspace_id=default_ws_id))
     _run(save_predefined_query("ws q2", "postgres", "SELECT 2", workspace_id=default_ws_id))
-    _run(upsert_dashboard("ws dash", "prod", "<p>hi</p>", {"a": "SELECT 3"}, workspace_id=default_ws_id))
+    _run(upsert_dashboard("ws dash", "<p>hi</p>", {"a": "SELECT 3"}, workspace_id=default_ws_id))
     text = _run(export_workspace(default_ws_id))
     data = yaml.safe_load(text)
     assert data["kind"] == "workspace"

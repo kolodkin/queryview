@@ -33,7 +33,7 @@ for that case is in the README's [Run with Docker](../README.md#run-with-docker)
 
 ```
 queries/{type}/{name}.yaml         # query, cell_view, order_by, fields
-dashboards/{name}/meta.yaml        # name, connection
+dashboards/{name}/meta.yaml        # name
 dashboards/{name}/dashboard.html   # the HTML, verbatim
 dashboards/{name}/queries.yaml     # {query_name: SQL}
 ```
