@@ -67,6 +67,15 @@ npm run frontend   # http://localhost:5173
 
 The Vite dev server proxies `/api/*` to the FastAPI backend, so the SPA can call the API on the same origin.
 
+To serve everything from one backend on any port, run `PORT=<port> npm run debug`
+(default 8000): the backend reloads on Python changes and `frontend/dist` is
+rebuilt on save (refresh the browser to see frontend changes). It uses the same
+`~/.queryview` state as an installed QueryView; set `DATA_DIR` for a throwaway one.
+
+The repo's `.mcp.json` deliberately omits the queryview MCP server. In Claude
+Code, `/debug <port>` runs `npm run debug` and registers the server in local
+scope against that port.
+
 ## Build & preview production
 
 ```bash
