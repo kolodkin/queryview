@@ -105,6 +105,38 @@ async def run_query(
     }
 
 
+@mcp.tool()
+async def session_info(session_id: str) -> dict[str, Any]:
+    """What a QueryView session is on: its connection, selected database, the
+    databases it can switch to, its workspace, and the selected database's
+    tables. Start here to discover schema; then run_query on the same session.
+
+    The agent never picks a server or database — the user does, in the UI
+    (connection pill). Fully-qualify tables as db.table to reach another one.
+
+    Args:
+        session_id: The session id shown in the QueryView popover.
+
+    Returns {"ok": True, "connected", "connection", "type", "database",
+    "databases", "workspace", "tables": [{name, ...}]}; a disconnected session
+    has "connected": False and no connection fields; "tables" is empty until a
+    database is selected. Unknown session → {"ok": False, "message"}.
+    """
+    from .connect import get_session, list_tables
+
+    rec = await sessions.get_session_rec(session_id) if session_id else None
+    if rec is None:
+        return {"ok": False, "message": "unknown session"}
+    info: dict[str, Any] = {"ok": True, "workspace": rec.workspace, **await get_session(session_id)}
+    if info["connected"]:
+        info["connection"] = info.pop("name")
+        listed = await list_tables(session_id)  # not ok until a database is picked
+        tables: list[dict[str, Any]] = listed.get("tables") or []
+        # The browse SELECT is for the Explorer UI; the agent writes its own SQL.
+        info["tables"] = [{k: v for k, v in t.items() if k != "query"} for t in tables]
+    return info
+
+
 async def _session_workspace_rec(session_id: str | None):
     """The workspace the given session is on, read from its row, else the
     fallback workspace. MCP is deliberately workspace-unaware: the human picks

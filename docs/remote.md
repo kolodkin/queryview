@@ -39,6 +39,10 @@ tools (among others):
 - `list_queries(conn_type?="clickhouse")` — list saved queries:
   `{queries: [{query_name, query, cell_view, order_by, fields}]}`. Pass a
   `query_name` back as `push_query`'s `name`.
+- `session_info(session_id)` — what the session is on: `{ok, connected,
+  connection, type, database, databases, workspace, tables: [{name, …}]}`
+  (`tables` lists the selected database's). The starting point for schema
+  discovery; the user, not the agent, picks connection and database.
 - `run_query(session_id, query, limit?=1000, offset?=0)` — run a read-only
   query on the session's connection and selected database, returning rows to
   the agent (not the browser): `{ok, database, columns, types, rows}`, values
