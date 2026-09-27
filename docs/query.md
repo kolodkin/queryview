@@ -204,7 +204,10 @@ and its glyph says what that value looks like:
 
 - **`{ }`** — parses as JSON or YAML: the popup opens on a **collapsible tree**
   of the parsed document with a **Raw** toggle. Containers below the top level
-  start folded, so a large document opens readable.
+  start folded, so a large document opens readable. A value the database sent
+  as a collection (a ClickHouse `Map`, `Array`, `Tuple` or `JSON` column, a
+  Postgres `jsonb`) is labelled by its column type, full type on hover; only
+  text is labelled by the detected format (`json`, `yaml`).
 - **`⤢`** — long text that is neither: the popup shows it as wrapped raw text.
 
 Detection is deliberately conservative, because almost any string is valid YAML.

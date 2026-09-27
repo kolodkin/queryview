@@ -1300,6 +1300,7 @@ function QueryPanel({
       {result !== null && (
         <ResultsTable
           columns={columns}
+          types={colTypes}
           rows={resultRows}
           shownIdx={shownIdx}
           testid="query-output"

@@ -53,6 +53,14 @@ tab's, else the most recently active unheld session, else a new one. The first
 case falls through when a *different* live tab holds that id — duplicating a tab
 copies its `sessionStorage`, and the copy must not hijack the original.
 
+A running tab is never moved silently. Browsers throttle a hidden tab's timers,
+so its claim can lapse and a new tab take its session. The heartbeat attaches
+with `keep`, and a session another live tab now holds answers `409` instead of
+handing over a different one; the tab greys out (within one beat, or at once
+when it becomes visible) and stops writing until you pick **Use it here** (a
+forced `select` — the other tab then greys out) or **New session**. Whenever a
+tab does land on a different session, the whole shell switches to match it.
+
 ## The session dropdown
 
 The top-right dropdown lists every session, most recently active first. A
@@ -61,7 +69,7 @@ session would overwrite each other's state.
 
 - **New session** starts a fresh one in this tab.
 - **Rename this session** pins a name; clearing it unpins.
-- **×** deletes a session, unless a live tab holds it.
+- **×** deletes a session, unless a live tab holds it; the one this tab is on has none.
 
 An unpinned label is `Session <n>`, with `n` a stable ordinal, so a name never
 changes under you when you switch databases. Each row shows the session's

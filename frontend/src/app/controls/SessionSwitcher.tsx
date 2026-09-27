@@ -77,16 +77,17 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
   }
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative min-w-0">
       <button
         type="button"
         data-testid="session-switcher"
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="glass-toggle px-3 py-1.5 text-sm"
+        className="glass-toggle flex max-w-full items-center gap-1 px-3 py-1.5 text-sm"
       >
-        {label} <span className="text-xs text-slate-400">▾</span>
+        <span className="truncate">{label}</span>
+        <span className="text-xs text-slate-400">▾</span>
       </button>
       {open && (
         <div
@@ -116,15 +117,18 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
                     <span className="ml-2 text-xs text-slate-400">in another tab</span>
                   )}
                 </button>
-                <button
-                  type="button"
-                  aria-label={`Delete ${s.label}`}
-                  data-testid={`session-delete-${s.id}`}
-                  onClick={() => void remove(s.id)}
-                  className="rounded px-2 py-1.5 text-slate-400 hover:bg-white/10"
-                >
-                  ×
-                </button>
+                {/* The session this tab is on can't be deleted, so it offers no ×. */}
+                {s.id !== current && (
+                  <button
+                    type="button"
+                    aria-label={`Delete ${s.label}`}
+                    data-testid={`session-delete-${s.id}`}
+                    onClick={() => void remove(s.id)}
+                    className="rounded px-2 py-1.5 text-slate-400 hover:bg-white/10"
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             ))}
           </div>

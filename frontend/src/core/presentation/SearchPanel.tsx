@@ -16,6 +16,7 @@ export function SearchPanel<T>({
   onPick,
   renderItem,
   itemProps,
+  itemAction,
   headerExtra,
   className = '',
 }: {
@@ -30,6 +31,9 @@ export function SearchPanel<T>({
   renderItem: (item: T, selected: boolean) => React.ReactNode
   // Extra attributes per option (data-* for tests).
   itemProps?: (item: T) => Record<string, string | boolean>
+  // A control beside each option (e.g. copy). A sibling, not a child: the
+  // option is itself a button.
+  itemAction?: (item: T) => React.ReactNode
   // Beside the search box (e.g. All / None).
   headerExtra?: React.ReactNode
   // Placement and width, e.g. "left-0 w-64".
@@ -71,17 +75,19 @@ export function SearchPanel<T>({
           {visible.map((item) => {
             const selected = isSelected(item)
             return (
-              <button
-                key={nameOf(item)}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                onClick={() => onPick(item)}
-                {...itemProps?.(item)}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-white/10"
-              >
-                {renderItem(item, selected)}
-              </button>
+              <div key={nameOf(item)} className="group flex items-center rounded hover:bg-white/10">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => onPick(item)}
+                  {...itemProps?.(item)}
+                  className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
+                >
+                  {renderItem(item, selected)}
+                </button>
+                {itemAction?.(item)}
+              </div>
             )
           })}
         </div>

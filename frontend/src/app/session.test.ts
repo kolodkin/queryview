@@ -219,3 +219,54 @@ describe('releaseSession', () => {
     vi.useRealTimers()
   })
 })
+
+describe('startHeartbeat', () => {
+  it('reports a taken session and stops writing to it', async () => {
+    vi.useFakeTimers()
+    stubTabStorage()
+    vi.stubGlobal('document', { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { attachSession, startHeartbeat, patchView, flushPatches, isTaken } = await import('./session')
+    await attachSession()
+    const onTaken = vi.fn()
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken })
+
+    fetchMock.mockResolvedValue({ ok: false, status: 409, json: async () => ({ ok: false }) })
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(onTaken).toHaveBeenCalledOnce()
+    expect(isTaken()).toBe(true)
+    const beat = JSON.parse(fetchMock.mock.calls.at(-1)![1].body)
+    expect(beat.keep).toBe(true)
+    fetchMock.mockClear()
+    patchView('query', { sql: 'SELECT 1' })
+    await flushPatches()
+    expect(fetchMock).not.toHaveBeenCalled()
+    stop()
+    vi.useRealTimers()
+  })
+
+  it('hands a different session to onChanged', async () => {
+    vi.useFakeTimers()
+    stubTabStorage()
+    vi.stubGlobal('document', { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const { attachSession, startHeartbeat } = await import('./session')
+    await attachSession()
+    const onChanged = vi.fn()
+    const stop = startHeartbeat({ onChanged, onTaken: vi.fn() })
+
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: { ...SESSION, id: 's2' } }) })
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ id: 's2' }))
+    stop()
+    vi.useRealTimers()
+  })
+})

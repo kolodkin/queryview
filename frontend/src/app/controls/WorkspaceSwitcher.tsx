@@ -99,7 +99,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   }
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative min-w-0">
       <button
         type="button"
         data-testid="workspace-switcher"
@@ -107,9 +107,9 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
           setOpen((o) => !o)
           if (!open) void reload()
         }}
-        className="glass-chip flex items-center gap-2 px-3 py-1.5 text-sm font-medium"
+        className="glass-chip flex max-w-full items-center gap-2 px-3 py-1.5 text-sm font-medium"
       >
-        {workspace}
+        <span className="truncate">{workspace}</span>
         <span className="text-xs text-slate-400">▾</span>
       </button>
       {open && (

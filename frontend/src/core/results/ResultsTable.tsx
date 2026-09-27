@@ -12,20 +12,24 @@ import { useMemo, useState } from 'react'
 import { CellDataModal } from '../cells/CellDataModal'
 import { detectFormat } from '../cells/structured'
 import { CELL_WIDTH, isOverflowing } from './cellWidth'
-import { cellText, type Cell } from './rows'
+import { cellText, isContainer, type Cell } from './rows'
 
-type Opened = { column: string; text: string }
+// `native` is set when the driver sent a real collection (a Map, Array, JSON
+// column...), so the popup labels it by `type` rather than guessing from text.
+type Opened = { column: string; text: string; native?: Cell; type?: string }
 
 type RenderCell = (col: string, value: Cell, row: Cell[]) => React.ReactNode
 
 function BodyCell({
   col,
+  type,
   value,
   row,
   renderCell,
   onOpen,
 }: {
   col: string
+  type?: string
   value: Cell
   row: Cell[]
   renderCell?: RenderCell
@@ -46,7 +50,9 @@ function BodyCell({
         {overflowing && (
           <button
             type="button"
-            onClick={() => onOpen({ column: col, text })}
+            onClick={() =>
+              onOpen(isContainer(value) ? { column: col, text, native: value, type } : { column: col, text })
+            }
             data-testid="cell-expand"
             data-col={col}
             aria-label={`Open ${col} value`}
@@ -72,9 +78,12 @@ export function ResultsTable({
   testid,
   renderCell,
   dimmed = false,
+  types = {},
 }: {
   columns: string[]
   rows: Cell[][]
+  // Column name → database type, from the result's meta.
+  types?: Record<string, string>
   shownIdx: number[]
   testid: string
   // Cell content; defaults to plain text (the query panel plugs in cell views).
@@ -119,6 +128,7 @@ export function ResultsTable({
                 <BodyCell
                   key={j}
                   col={columns[j]}
+                  type={types[columns[j]]}
                   value={row[j]}
                   row={row}
                   renderCell={renderCell}
@@ -130,7 +140,13 @@ export function ResultsTable({
         </tbody>
       </table>
       {open && (
-        <CellDataModal column={open.column} text={open.text} onClose={() => setOpen(null)} />
+        <CellDataModal
+          column={open.column}
+          text={open.text}
+          native={open.native}
+          type={open.type}
+          onClose={() => setOpen(null)}
+        />
       )}
     </div>
   )

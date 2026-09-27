@@ -63,3 +63,12 @@ def test_release_applies_the_state_the_tab_had_not_flushed():
     resumed = client.post("/api/sessions/attach", json={"tab": "tab-http-7"}).json()["session"]
     assert resumed["id"] == sid
     assert resumed["ui"]["explorer"]["sidebarWidth"] == 376
+
+
+def test_a_heartbeat_on_a_taken_session_is_409_and_force_takes_it_back():
+    client = TestClient(app)
+    sid = client.post("/api/sessions/attach", json={"tab": "tab-http-6"}).json()["session"]["id"]
+    r = client.post("/api/sessions/select", json={"tab": "tab-http-7", "id": sid, "force": True})
+    assert r.json()["session"]["id"] == sid
+    beat = client.post("/api/sessions/attach", json={"tab": "tab-http-6", "session_id": sid, "keep": True})
+    assert beat.status_code == 409
