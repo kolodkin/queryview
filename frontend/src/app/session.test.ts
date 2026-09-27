@@ -221,14 +221,20 @@ describe('releaseSession', () => {
 })
 
 describe('startHeartbeat', () => {
-  it('reports a taken session and stops writing to it', async () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
     vi.useFakeTimers()
     stubTabStorage()
     vi.stubGlobal('document', { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} })
-    const fetchMock = vi
+    fetchMock = vi
       .fn()
       .mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
     vi.stubGlobal('fetch', fetchMock)
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('reports a taken session and stops writing to it', async () => {
     const { attachSession, startHeartbeat, patchView, flushPatches, isTaken } = await import('./session')
     await attachSession()
     const onTaken = vi.fn()
@@ -246,17 +252,9 @@ describe('startHeartbeat', () => {
     await flushPatches()
     expect(fetchMock).not.toHaveBeenCalled()
     stop()
-    vi.useRealTimers()
   })
 
   it('hands a different session to onChanged', async () => {
-    vi.useFakeTimers()
-    stubTabStorage()
-    vi.stubGlobal('document', { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} })
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
-    vi.stubGlobal('fetch', fetchMock)
     const { attachSession, startHeartbeat } = await import('./session')
     await attachSession()
     const onChanged = vi.fn()
@@ -267,6 +265,5 @@ describe('startHeartbeat', () => {
 
     expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ id: 's2' }))
     stop()
-    vi.useRealTimers()
   })
 })

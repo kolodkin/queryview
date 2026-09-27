@@ -27,8 +27,8 @@ export type SessionSummary = {
 
 export type SessionPatch = { url?: string; label?: string; workspace?: string }
 
-// Matches the backend's claim TTL of 30s: a heartbeat every 10s leaves room for
-// two missed beats before another tab may take the session.
+// Well inside the backend's 90s claim TTL, which also covers a hidden tab
+// throttled to about one beat a minute.
 const HEARTBEAT_MS = 10_000
 // Flushes queued view state after a pause in editing. A backstop, not the main
 // mechanism — the query panel flushes on focus-out and `pagehide` beacons what
@@ -108,8 +108,12 @@ export type HeartbeatEvents = {
 // endpoint. It also beats when the tab becomes visible, since a hidden tab's
 // timers are throttled and its claim may have lapsed meanwhile.
 export function startHeartbeat(events: HeartbeatEvents): () => void {
+  let inflight = false
+  let last = Date.now()
   const beat = async () => {
-    if (taken) return
+    if (taken || inflight) return
+    inflight = true
+    last = Date.now()
     const before = state?.id
     try {
       const next = await attachSession(true)
@@ -120,11 +124,14 @@ export function startHeartbeat(events: HeartbeatEvents): () => void {
       pending = {}
       clearTimeout(timer)
       events.onTaken()
+    } finally {
+      inflight = false
     }
   }
   const handle = setInterval(() => void beat(), HEARTBEAT_MS)
+  // Only a beat overdue by the interval can have let the claim lapse.
   const onVisible = () => {
-    if (document.visibilityState === 'visible') void beat()
+    if (document.visibilityState === 'visible' && Date.now() - last >= HEARTBEAT_MS) void beat()
   }
   document.addEventListener('visibilitychange', onVisible)
   return () => {

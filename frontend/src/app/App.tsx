@@ -9,7 +9,7 @@ import {
   useNavigate,
 } from 'react-router-dom'
 
-import { SearchPanel, useDismiss } from '../core'
+import { SearchPanel, useCopy, useDismiss } from '../core'
 import { isReady, type Connection } from './connection'
 import QueryView, { type QueryPush } from './QueryView'
 import DashboardView, { type DashboardPush } from './DashboardView'
@@ -58,18 +58,14 @@ function DatabaseMenu({
 
 // Copies a database name without picking it; dim until its row is hovered.
 function CopyName({ name }: { name: string }) {
-  const [copied, setCopied] = useState(false)
+  const [copied, copy] = useCopy()
   return (
     <button
       type="button"
       data-testid="db-copy"
       aria-label={`Copy ${name}`}
       title={copied ? 'Copied' : 'Copy name'}
-      onClick={() => {
-        void navigator.clipboard?.writeText(name)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1200)
-      }}
+      onClick={() => void copy(name)}
       className="shrink-0 rounded px-2 py-1.5 text-xs text-slate-500 group-hover:text-slate-300 hover:!text-indigo-200"
     >
       {copied ? (
@@ -114,7 +110,6 @@ function Shell() {
 
   const dbRef = useDismiss<HTMLDivElement>(dbOpen, () => setDbOpen(false))
   const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
-  // Below `md` the right-hand controls collapse into one menu.
   const [navOpen, setNavOpen] = useState(false)
   const navRef = useDismiss<HTMLDivElement>(navOpen, () => setNavOpen(false))
 
@@ -186,11 +181,6 @@ function Shell() {
     setSessionKey(next.id)
     navigate(next.url || '/queries')
     void refreshConnection()
-  }
-
-  async function recoverSession(takeOver: boolean) {
-    const next = await selectSession(takeOver ? sessionId() : null, takeOver)
-    if (next) applySession(next)
   }
 
   // The session decides the landing page, the live connection and what the
@@ -425,9 +415,7 @@ function Shell() {
           </button>
           {/* One set of controls: an inline row from `md` up, a dropdown panel
               below it, so nothing renders twice. */}
-          <div
-            className={`${navOpen ? 'flex' : 'hidden'} absolute right-0 top-full mt-2 w-56 flex-col gap-2 rounded-xl border border-white/10 bg-slate-900/95 p-2 shadow-xl backdrop-blur md:static md:mt-0 md:flex md:w-auto md:min-w-0 md:flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none`}
-          >
+          <div className={`${navOpen ? 'flex' : 'hidden'} ${NAV_PANEL} ${NAV_ROW}`}>
             <SessionSwitcher
               label={sessionLabel}
               onRenamed={setSessionLabel}
@@ -502,17 +490,20 @@ function Shell() {
       <Toast message={toast} onDone={() => setToast(null)} />
       {taken && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Session open in another tab"
           data-testid="session-taken"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-grayscale"
+          className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm backdrop-grayscale"
         >
-          <div className="glass-panel w-80 space-y-3 p-5 text-sm">
+          <div className="glass-popover w-80 space-y-3 p-5 text-sm">
             <p className="font-medium text-slate-100">{sessionLabel} is open in another tab.</p>
             <p className="text-slate-400">This tab is paused so the two don't overwrite each other.</p>
             <div className="flex gap-2">
               <button
                 type="button"
                 data-testid="session-take-over"
-                onClick={() => void recoverSession(true)}
+                onClick={() => void selectSession(sessionId(), true).then((n) => n && applySession(n))}
                 className="glass-btn-primary px-3 py-1.5"
               >
                 Use it here
@@ -520,7 +511,7 @@ function Shell() {
               <button
                 type="button"
                 data-testid="session-taken-new"
-                onClick={() => void recoverSession(false)}
+                onClick={() => void selectSession(null).then((n) => n && applySession(n))}
                 className="glass-btn px-3 py-1.5"
               >
                 New session
@@ -532,6 +523,12 @@ function Shell() {
     </main>
   )
 }
+
+// The right-hand controls: a popover panel below `md`, stripped back to a plain
+// row from `md` up.
+const NAV_PANEL = 'glass-popover absolute right-0 top-full mt-2 w-56 flex-col gap-2 p-2'
+const NAV_ROW =
+  'md:static md:mt-0 md:flex md:w-auto md:min-w-0 md:flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-filter-none'
 
 function pageTitle(path: string): string {
   if (path.startsWith('/explorer')) return 'Explorer'

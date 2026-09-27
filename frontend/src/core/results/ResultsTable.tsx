@@ -12,11 +12,9 @@ import { useMemo, useState } from 'react'
 import { CellDataModal } from '../cells/CellDataModal'
 import { detectFormat } from '../cells/structured'
 import { CELL_WIDTH, isOverflowing } from './cellWidth'
-import { cellText, isContainer, type Cell } from './rows'
+import { cellText, type Cell } from './rows'
 
-// `native` is set when the driver sent a real collection (a Map, Array, JSON
-// column...), so the popup labels it by `type` rather than guessing from text.
-type Opened = { column: string; text: string; native?: Cell; type?: string }
+type Opened = { column: string; value: Cell; type?: string }
 
 type RenderCell = (col: string, value: Cell, row: Cell[]) => React.ReactNode
 
@@ -51,7 +49,7 @@ function BodyCell({
           <button
             type="button"
             onClick={() =>
-              onOpen(isContainer(value) ? { column: col, text, native: value, type } : { column: col, text })
+              onOpen({ column: col, value, type })
             }
             data-testid="cell-expand"
             data-col={col}
@@ -142,8 +140,7 @@ export function ResultsTable({
       {open && (
         <CellDataModal
           column={open.column}
-          text={open.text}
-          native={open.native}
+          value={open.value}
           type={open.type}
           onClose={() => setOpen(null)}
         />

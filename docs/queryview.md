@@ -35,8 +35,7 @@ describes the prompt page.
   pill in the **top-left** corner, hidden until a database is selected, then
   showing 🟢 `connected - <database>` (just the database below `md` width).
   Clicking it opens a searchable database switcher; each row's **copy** icon
-  copies the name without switching. Next to it, an
-  **agent icon** opens the
+  copies the name without switching. Next to it, an **agent icon** opens the
   remote-control popover (opt-in "Allow remote control"); see
   [remote.md](./remote.md).
 - **Narrow windows** — below `md` the session, workspace and page links

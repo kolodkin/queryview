@@ -15,6 +15,7 @@ import {
   presentationForSave,
   renderCell,
   shownColumnIndices,
+  useCopy,
   useDismiss,
   type CellViewMap,
   type Field,
@@ -637,7 +638,7 @@ function QueryPanel({
 
   const [cellViewModalOpen, setCellViewModalOpen] = useState(false)
   // Transient "Copied" feedback for the copy-name button.
-  const [copiedName, setCopiedName] = useState(false)
+  const [copiedName, copy] = useCopy()
   // Panel root, for the focus tracker below.
   const panelRef = useRef<HTMLElement>(null)
 
@@ -958,18 +959,10 @@ function QueryPanel({
 
   // Dropdown selection: a saved query loads its SQL and cell_view; the "new name"
   // item prompts for a fresh name. The chosen name is what Save writes under.
-  // Copy the selected predefined-query name to the clipboard, with a brief
-  // "Copied" confirmation on the button.
+  // Copy the selected predefined-query name, with a brief "Copied" on the button.
   async function copyName() {
     const name = selectedName.trim()
-    if (!name) return
-    try {
-      await navigator.clipboard.writeText(name)
-      setCopiedName(true)
-      window.setTimeout(() => setCopiedName(false), 1500)
-    } catch {
-      /* clipboard blocked (e.g. insecure context); silently no-op */
-    }
+    if (name) await copy(name)
   }
 
   // Load a predefined query's SQL/presentation into the editor.

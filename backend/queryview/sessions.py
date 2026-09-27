@@ -17,8 +17,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from .connect import _engine_for_db, _ensure_schema, _now_ms
 
 # A claim older than this is stale: the tab closed, crashed or slept, and the
-# session is free for the next tab that asks.
-SESSION_CLAIM_TTL_MS = 30_000
+# session is free for the next tab that asks. Past a minute because browsers
+# throttle a hidden tab's timers to about one run a minute; a closing tab
+# releases at once by beacon, so only a crashed one waits this out.
+SESSION_CLAIM_TTL_MS = 90_000
 
 DEFAULT_URL = "/queries"
 

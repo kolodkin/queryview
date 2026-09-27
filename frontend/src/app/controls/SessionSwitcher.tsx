@@ -117,8 +117,8 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
                     <span className="ml-2 text-xs text-slate-400">in another tab</span>
                   )}
                 </button>
-                {/* The session this tab is on can't be deleted, so it offers no ×. */}
-                {s.id !== current && (
+                {/* A held session (this tab's or another's) can't be deleted. */}
+                {!s.held && (
                   <button
                     type="button"
                     aria-label={`Delete ${s.label}`}

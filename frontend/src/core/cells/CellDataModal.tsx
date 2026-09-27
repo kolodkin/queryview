@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from 'react'
 
+import { cellText, isContainer, type Cell } from '../results/rows'
 import { detectStructured } from './structured'
 import { defaultCollapsed, treeRows } from './structuredTree'
 
@@ -53,24 +54,24 @@ function ParsedTree({ data }: { data: unknown }) {
 
 export function CellDataModal({
   column,
-  text,
-  native,
+  value,
   type,
   onClose,
 }: {
   column: string
-  text: string
-  // A collection the driver sent as such, and its column type. It is shown as
-  // what it is (`Map`, `Array`, ...), not as the JSON it was serialized to.
-  native?: unknown
+  value: Cell
+  // The column's database type. A collection the driver sent as such is
+  // labelled by it (`Map`, `Array`, ...), not as the JSON it serializes to.
   type?: string
   onClose: () => void
 }) {
+  const text = cellText(value)
+  const native = isContainer(value)
   const structured = useMemo(() => {
-    if (native !== undefined) return { label: type ? type.split('(')[0] : 'value', data: native }
+    if (native) return { label: type ? type.split('(')[0] : 'value', data: value }
     const found = detectStructured(text)
     return found && { label: found.format, data: found.data }
-  }, [native, type, text])
+  }, [native, type, value, text])
   const [raw, setRaw] = useState(false)
   const showParsed = structured !== null && !raw
 
@@ -93,7 +94,7 @@ export function CellDataModal({
             {structured && (
               <span
                 data-testid="cell-data-format"
-                title={native !== undefined ? type : undefined}
+                title={native ? type : undefined}
                 className="shrink-0 rounded bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-indigo-300"
               >
                 {structured.label}
