@@ -124,6 +124,7 @@ def test_a_dashboard_runs_on_the_viewing_sessions_connection(seeded_test_db, pag
 # Draws its own selector from window.params and re-runs via setParams; the
 # results come back through onQueryResults without reloading the frame.
 _PARAMS_HTML = (
+    "<button id='go' onclick=\"window.setParams({n: 'beta'})\">beta</button>"
     "<div id='out'></div><div id='pick'></div>"
     "<script>"
     "function show(q){document.getElementById('out').textContent ="
@@ -131,7 +132,6 @@ _PARAMS_HTML = (
     "show(window.queries);"
     "document.getElementById('pick').textContent = window.params[0].options.join('|');"
     "window.onQueryResults = function(q){show(q);};"
-    "window.addEventListener('keydown', function(){window.setParams({n: 'beta'});});"
     "</script>"
 )
 
@@ -156,5 +156,5 @@ def test_dashboard_params_resolve_and_rerun_through_set_params(seeded_test_db, p
     expect(frame.locator("#pick")).to_have_text("alpha|beta|gamma")
     expect(frame.locator("#out")).to_have_text("alpha")
 
-    frame.locator("body").press("x")  # the page calls setParams({n: 'beta'})
+    frame.locator("#go").click()  # the page calls setParams({n: 'beta'})
     expect(frame.locator("#out")).to_have_text("beta")
