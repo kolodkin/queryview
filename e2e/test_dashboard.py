@@ -113,6 +113,9 @@ def test_a_dashboard_runs_on_the_viewing_sessions_connection(seeded_test_db, pag
 
     page.get_by_test_id("session-switcher").click()
     page.get_by_test_id("session-new").click()
-    page.goto("/dashboard?name=portable", wait_until="networkidle")
+    # Navigate inside the app: a reload would re-run the fixture's init script
+    # and put the tab back on the original (connected) session.
+    page.get_by_test_id("nav-dashboard").click()
+    page.get_by_test_id("dashboard-select").select_option("portable")
 
     expect(page.get_by_test_id("dashboard-error")).to_contain_text("Connect to a database")
