@@ -14,18 +14,20 @@ import { detectFormat } from '../cells/structured'
 import { CELL_WIDTH, isOverflowing } from './cellWidth'
 import { cellText, type Cell } from './rows'
 
-type Opened = { column: string; text: string }
+type Opened = { column: string; value: Cell; type?: string }
 
 type RenderCell = (col: string, value: Cell, row: Cell[]) => React.ReactNode
 
 function BodyCell({
   col,
+  type,
   value,
   row,
   renderCell,
   onOpen,
 }: {
   col: string
+  type?: string
   value: Cell
   row: Cell[]
   renderCell?: RenderCell
@@ -46,7 +48,9 @@ function BodyCell({
         {overflowing && (
           <button
             type="button"
-            onClick={() => onOpen({ column: col, text })}
+            onClick={() =>
+              onOpen({ column: col, value, type })
+            }
             data-testid="cell-expand"
             data-col={col}
             aria-label={`Open ${col} value`}
@@ -72,9 +76,12 @@ export function ResultsTable({
   testid,
   renderCell,
   dimmed = false,
+  types = {},
 }: {
   columns: string[]
   rows: Cell[][]
+  // Column name → database type, from the result's meta.
+  types?: Record<string, string>
   shownIdx: number[]
   testid: string
   // Cell content; defaults to plain text (the query panel plugs in cell views).
@@ -119,6 +126,7 @@ export function ResultsTable({
                 <BodyCell
                   key={j}
                   col={columns[j]}
+                  type={types[columns[j]]}
                   value={row[j]}
                   row={row}
                   renderCell={renderCell}
@@ -130,7 +138,12 @@ export function ResultsTable({
         </tbody>
       </table>
       {open && (
-        <CellDataModal column={open.column} text={open.text} onClose={() => setOpen(null)} />
+        <CellDataModal
+          column={open.column}
+          value={open.value}
+          type={open.type}
+          onClose={() => setOpen(null)}
+        />
       )}
     </div>
   )

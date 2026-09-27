@@ -27,8 +27,8 @@ export type SessionSummary = {
 
 export type SessionPatch = { url?: string; label?: string; workspace?: string }
 
-// Matches the backend's claim TTL of 30s: a heartbeat every 10s leaves room for
-// two missed beats before another tab may take the session.
+// Well inside the backend's 90s claim TTL, which also covers a hidden tab
+// throttled to about one beat a minute.
 const HEARTBEAT_MS = 10_000
 // Flushes queued view state after a pause in editing. A backstop, not the main
 // mechanism — the query panel flushes on focus-out and `pagehide` beacons what
@@ -39,6 +39,12 @@ const IDLE_MS = 5_000
 type PendingPatch = SessionPatch & { ui?: Record<string, Record<string, unknown>> }
 
 let state: SessionState | null = null
+// Another tab took this session: stop writing to it until the user picks one.
+let taken = false
+// The heartbeat in flight, if any. A switch waits it out, and no beat starts
+// mid-switch: a beat carrying the old id would claim it back.
+let beating: Promise<void> | null = null
+let switching = false
 let pending: PendingPatch = {}
 let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -71,25 +77,73 @@ function adopt(next: SessionState): SessionState {
   return state
 }
 
-export async function attachSession(): Promise<SessionState> {
-  const body: Record<string, string> = { tab: tabToken() }
+export class SessionTakenError extends Error {}
+
+// `keep` is the heartbeat's form: a session another live tab now holds is
+// reported (409) rather than swapped for a different one.
+export async function attachSession(keep = false): Promise<SessionState> {
+  const body: Record<string, unknown> = { tab: tabToken() }
   const known = tabRead(SESSION_KEY)
   if (known) body.session_id = known
+  if (keep) body.keep = true
   const res = await apiFetch('/api/sessions/attach', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+  if (keep && res.status === 409) throw new SessionTakenError()
   const data = await res.json()
   if (!data?.session) throw new Error('attach returned no session')
   return adopt(data.session as SessionState)
 }
 
+export function isTaken(): boolean {
+  return taken
+}
+
+export type HeartbeatEvents = {
+  // The server handed this tab a different session (its own was deleted).
+  onChanged: (next: SessionState) => void
+  // Another tab took this session; the tab stops beating and writing.
+  onTaken: () => void
+}
+
 // Re-attaching is the heartbeat: it refreshes the claim without a second
-// endpoint, and re-adopts the session if the server handed us a different one.
-export function startHeartbeat(): () => void {
-  const handle = setInterval(() => void attachSession().catch(() => {}), HEARTBEAT_MS)
-  return () => clearInterval(handle)
+// endpoint. It also beats when the tab becomes visible, since a hidden tab's
+// timers are throttled and its claim may have lapsed meanwhile.
+export function startHeartbeat(events: HeartbeatEvents): () => void {
+  let last = Date.now()
+  const run = async () => {
+    const before = state?.id
+    try {
+      const next = await attachSession(true)
+      if (next.id !== before) events.onChanged(next)
+    } catch (e) {
+      if (!(e instanceof SessionTakenError)) return
+      taken = true
+      pending = {}
+      clearTimeout(timer)
+      events.onTaken()
+    }
+  }
+  const beat = async () => {
+    if (taken || beating || switching) return
+    last = Date.now()
+    beating = run().finally(() => {
+      beating = null
+    })
+    await beating
+  }
+  const handle = setInterval(() => void beat(), HEARTBEAT_MS)
+  // Only a beat overdue by the interval can have let the claim lapse.
+  const onVisible = () => {
+    if (document.visibilityState === 'visible' && Date.now() - last >= HEARTBEAT_MS) void beat()
+  }
+  document.addEventListener('visibilitychange', onVisible)
+  return () => {
+    clearInterval(handle)
+    document.removeEventListener('visibilitychange', onVisible)
+  }
 }
 
 // The closing tab's last word. It carries whatever is still queued, because
@@ -101,7 +155,7 @@ export function releaseSession(): void {
   if (!tab) return
   clearTimeout(timer)
   const payload: Record<string, unknown> = { tab, ...pending }
-  if (state?.id) payload.session_id = state.id
+  if (state?.id && !taken) payload.session_id = state.id
   pending = {}
   try {
     navigator.sendBeacon?.(
@@ -127,7 +181,7 @@ export async function flushPatches(): Promise<void> {
   const sid = state?.id
   const body = pending
   pending = {}
-  if (!sid || Object.keys(body).length === 0) return
+  if (!sid || taken || Object.keys(body).length === 0) return
   try {
     const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
       method: 'PATCH',
@@ -169,17 +223,25 @@ export async function listSessions(): Promise<SessionSummary[]> {
 }
 
 // id === null asks for a brand-new session. Returns null when the target is
-// open in another tab, which the switcher reports rather than stealing it.
-export async function selectSession(id: string | null): Promise<SessionState | null> {
-  await flushPatches()
-  const res = await apiFetch('/api/sessions/select', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tab: tabToken(), id }),
-  })
-  const data = await res.json()
-  if (!data.ok) return null
-  return adopt(data.session as SessionState)
+// open in another tab, which the switcher reports rather than stealing it —
+// unless `force` takes it over (the other tab then finds it taken).
+export async function selectSession(id: string | null, force = false): Promise<SessionState | null> {
+  switching = true
+  try {
+    await beating
+    await flushPatches()
+    const res = await apiFetch('/api/sessions/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tab: tabToken(), id, force }),
+    })
+    const data = await res.json()
+    if (!data.ok) return null
+    taken = false
+    return adopt(data.session as SessionState)
+  } finally {
+    switching = false
+  }
 }
 
 export async function removeSession(id: string): Promise<{ ok: boolean; message?: string }> {

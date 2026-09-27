@@ -43,15 +43,23 @@ Each tab keeps `qv_tab` (a token it mints) and `qv_session` (what it is attached
 to) in `sessionStorage`. Both survive a refresh, neither crosses to a new tab —
 so **a tab that already has an id is refreshing, a tab without one is new.**
 
-A session is **held** while its tab has been heard from within 30 seconds. Tabs
+A session is **held** while its tab has been heard from within 90 seconds. Tabs
 re-attach every 10 seconds, which doubles as the heartbeat, and beacon a release
 when they close; a crashed tab simply stops heartbeating and frees its session.
+The TTL is well past a minute because browsers throttle a hidden tab's timers
+to about one run a minute.
 
 `POST /api/sessions/attach` decides in one server-side pass, so two tabs opening
 at once cannot race: the id the tab already has if it is free or already this
 tab's, else the most recently active unheld session, else a new one. The first
 case falls through when a *different* live tab holds that id — duplicating a tab
 copies its `sessionStorage`, and the copy must not hijack the original.
+
+A running tab is never moved silently. A sleeping laptop or a frozen tab can
+still let a claim lapse and another tab take its session. Its next heartbeat (sent
+with `keep`, see [api.md](./api.md)) gets a `409`: the tab greys out and stops
+writing until you pick **Use it here** (the other tab then greys out) or **New
+session**. Any session change re-syncs the whole shell.
 
 ## The session dropdown
 
@@ -61,7 +69,7 @@ session would overwrite each other's state.
 
 - **New session** starts a fresh one in this tab.
 - **Rename this session** pins a name; clearing it unpins.
-- **×** deletes a session, unless a live tab holds it.
+- **×** deletes a session; a session a live tab holds (this one included) has none.
 
 An unpinned label is `Session <n>`, with `n` a stable ordinal, so a name never
 changes under you when you switch databases. Each row shows the session's
@@ -94,7 +102,7 @@ workspace       TEXT
 url             TEXT              -- path + query string
 ui              TEXT              -- JSON, namespaced by view
 claimed_by      TEXT              -- the tab token holding it
-claim_seen_at   INTEGER           -- unix ms; stale after 30s
+claim_seen_at   INTEGER           -- unix ms; stale after 90s
 last_active_at  INTEGER           -- unix ms
 ```
 

@@ -17,8 +17,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from .connect import _engine_for_db, _ensure_schema, _now_ms
 
 # A claim older than this is stale: the tab closed, crashed or slept, and the
-# session is free for the next tab that asks.
-SESSION_CLAIM_TTL_MS = 30_000
+# session is free for the next tab that asks. Past a minute because browsers
+# throttle a hidden tab's timers to about one run a minute; a closing tab
+# releases at once by beacon, so only a crashed one waits this out.
+SESSION_CLAIM_TTL_MS = 90_000
 
 DEFAULT_URL = "/queries"
 
@@ -257,13 +259,21 @@ async def _claim(s: AsyncSession, row: Session, tab: str, now: int) -> None:
     s.add(row)
 
 
-async def attach(tab: str, session_id: str | None, force_new: bool = False) -> tuple[SessionRec, bool]:
+class SessionTaken(Exception):
+    """A heartbeat found its session claimed by another live tab."""
+
+
+async def attach(
+    tab: str, session_id: str | None, force_new: bool = False, keep: bool = False
+) -> tuple[SessionRec, bool]:
     """Resolve and claim the session this tab should show: the id it already has,
     else the most recently active unheld session, else a fresh one.
 
     Decided in one server-side pass so concurrent tabs can't race. The first
     case falls through when another live tab holds that id — a duplicated tab
-    carries a copy of sessionStorage and must not hijack the original.
+    carries a copy of sessionStorage and must not hijack the original. With
+    `keep` (a running tab's heartbeat) it raises SessionTaken instead, so the
+    tab is told rather than silently moved to another session.
     """
     await _ensure_schema()
     now = _now_ms()
@@ -273,6 +283,8 @@ async def attach(tab: str, session_id: str | None, force_new: bool = False) -> t
             await _claim(s, row, tab, now)
             await s.commit()
             return _to_rec(row, now), False
+        if keep and row is not None:
+            raise SessionTaken
 
         free = None if force_new else (await s.exec(_unheld_query(now))).first()
         if free is not None:
@@ -286,10 +298,11 @@ async def attach(tab: str, session_id: str | None, force_new: bool = False) -> t
         return _to_rec(row, now), True
 
 
-async def select_session(tab: str, sid: str | None) -> tuple[SessionRec | None, str]:
+async def select_session(tab: str, sid: str | None, force: bool = False) -> tuple[SessionRec | None, str]:
     """Switch this tab to a specific session, or to a brand-new one when `sid`
     is None. Refuses a session another live tab holds — two tabs on one session
-    would overwrite each other's state."""
+    would overwrite each other's state — unless `force` takes it over; the
+    other tab's next heartbeat then finds it taken."""
     if sid is None:
         rec, _ = await attach(tab, None, force_new=True)
         return rec, ""
@@ -299,7 +312,7 @@ async def select_session(tab: str, sid: str | None) -> tuple[SessionRec | None, 
         row = await s.get(Session, sid)
         if row is None:
             return None, "unknown"
-        if _is_held(row, now) and row.claimed_by != tab:
+        if not force and _is_held(row, now) and row.claimed_by != tab:
             return None, "held"
         await _claim(s, row, tab, now)
         await s.commit()

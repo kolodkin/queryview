@@ -136,6 +136,7 @@ async def session(request: Request) -> dict[str, Any]:
 _SESSION_ERRORS = {
     "unknown": (404, "unknown session"),
     "held": (409, "session is open in another tab"),
+    "taken": (409, "session was taken by another tab"),
 }
 
 
@@ -175,7 +176,10 @@ async def sessions_attach(request: Request):
     if not tab:
         return JSONResponse({"ok": False, "message": "tab is required"}, status_code=400)
     raw_id = _clean_str(b.get("session_id"))
-    rec, created = await sessions.attach(tab, raw_id or None)
+    try:
+        rec, created = await sessions.attach(tab, raw_id or None, keep=b.get("keep") is True)
+    except sessions.SessionTaken:
+        return _session_error("taken")
     return {"ok": True, "created": created, "session": _session_payload(rec)}
 
 
@@ -187,7 +191,7 @@ async def sessions_select(request: Request):
     if not tab:
         return JSONResponse({"ok": False, "message": "tab is required"}, status_code=400)
     raw_id = _clean_str(b.get("id"))
-    rec, reason = await sessions.select_session(tab, raw_id or None)
+    rec, reason = await sessions.select_session(tab, raw_id or None, force=b.get("force") is True)
     if rec is None:
         return _session_error(reason)
     return {"ok": True, "session": _session_payload(rec)}

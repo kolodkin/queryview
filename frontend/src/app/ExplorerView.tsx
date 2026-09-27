@@ -5,6 +5,7 @@ import {
   FieldPickers,
   ResultsTable,
   columnNames,
+  columnTypes,
   shownColumnIndices,
   type Field,
   type OrderCol,
@@ -261,8 +262,11 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     }
   }
 
-  const { columns, rows } = useMemo(
-    () => (result ? { columns: columnNames(result), rows: result.data } : { columns: [], rows: [] }),
+  const { columns, rows, types } = useMemo(
+    () =>
+      result
+        ? { columns: columnNames(result), rows: result.data, types: columnTypes(result) }
+        : { columns: [], rows: [], types: {} },
     [result],
   )
   const shownIdx = useMemo(
@@ -457,6 +461,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               <ResultsTable
                 columns={columns}
                 rows={rows}
+                types={types}
                 shownIdx={shownIdx}
                 testid="explorer-output"
                 dimmed={busy}

@@ -33,9 +33,14 @@ describes the prompt page.
   navigate.
 - **Connection status** — the one element that persists across every mode: a
   pill in the **top-left** corner, hidden until a database is selected, then
-  showing 🟢 `connected - <database>`. Next to it, an **agent icon** opens the
+  showing 🟢 `connected - <database>` (just the database below `md` width).
+  Clicking it opens a searchable database switcher; each row's **copy** icon
+  copies the name without switching. Next to it, an **agent icon** opens the
   remote-control popover (opt-in "Allow remote control"); see
   [remote.md](./remote.md).
+- **Narrow windows** — below `md` the session, workspace and page links
+  collapse into one **☰ &lt;page&gt;** menu, and full-height pages keep a 48rem
+  minimum width, scrolling sideways rather than squeezing.
 - **Popovers** — dropdowns and their panels close on a click outside or on
   Escape. Panels holding unsaved input are the exception — the workspace manage
   form and the cell-view editor close through their own buttons.

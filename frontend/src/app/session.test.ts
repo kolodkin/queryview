@@ -219,3 +219,76 @@ describe('releaseSession', () => {
     vi.useRealTimers()
   })
 })
+
+describe('startHeartbeat', () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    stubTabStorage()
+    vi.stubGlobal('document', { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} })
+    fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
+    vi.stubGlobal('fetch', fetchMock)
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('reports a taken session and stops writing to it', async () => {
+    const { attachSession, startHeartbeat, patchView, flushPatches, isTaken } = await import('./session')
+    await attachSession()
+    const onTaken = vi.fn()
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken })
+
+    fetchMock.mockResolvedValue({ ok: false, status: 409, json: async () => ({ ok: false }) })
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(onTaken).toHaveBeenCalledOnce()
+    expect(isTaken()).toBe(true)
+    const beat = JSON.parse(fetchMock.mock.calls.at(-1)![1].body)
+    expect(beat.keep).toBe(true)
+    fetchMock.mockClear()
+    patchView('query', { sql: 'SELECT 1' })
+    await flushPatches()
+    expect(fetchMock).not.toHaveBeenCalled()
+    stop()
+  })
+
+  it('makes a session switch wait out a beat already in flight', async () => {
+    const { attachSession, startHeartbeat, selectSession } = await import('./session')
+    await attachSession()
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn() })
+    let answerBeat!: () => void
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerBeat = () => resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
+        }),
+    )
+    await vi.advanceTimersByTimeAsync(10_000)
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: { ...SESSION, id: 's2' } }) })
+
+    const switched = selectSession('s2')
+    await vi.advanceTimersByTimeAsync(0)
+    const urls = () => fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls().some((u) => u.includes('/select'))).toBe(false)
+
+    answerBeat()
+    expect((await switched)?.id).toBe('s2')
+    expect(urls().at(-1)).toContain('/api/sessions/select')
+    stop()
+  })
+
+  it('hands a different session to onChanged', async () => {
+    const { attachSession, startHeartbeat } = await import('./session')
+    await attachSession()
+    const onChanged = vi.fn()
+    const stop = startHeartbeat({ onChanged, onTaken: vi.fn() })
+
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: { ...SESSION, id: 's2' } }) })
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ id: 's2' }))
+    stop()
+  })
+})

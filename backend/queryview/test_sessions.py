@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from queryview import sessions
 from queryview.connect import _now_ms as _now_ms_for_test
 
@@ -244,3 +246,25 @@ def test_delete_refuses_while_held():
     ok, reason = _run(sessions.delete_session(held.id))
     assert ok is False
     assert reason == "held"
+
+
+def test_a_heartbeat_whose_session_was_taken_raises_instead_of_moving():
+    """A backgrounded tab's claim can go stale and another tab take its session;
+    its next heartbeat must learn that, not be handed some other session."""
+    _free_everything()
+    mine, _ = _run(sessions.attach("tab-a", None))
+    _run(sessions.touch_for_test(mine.id, claim_seen_at=_now_ms_for_test() - sessions.SESSION_CLAIM_TTL_MS - 1))
+    _run(sessions.attach("tab-b", None))
+    with pytest.raises(sessions.SessionTaken):
+        _run(sessions.attach("tab-a", mine.id, keep=True))
+
+
+def test_select_with_force_takes_a_held_session_over():
+    _free_everything()
+    held, _ = _run(sessions.attach("tab-a", None))
+    _run(sessions.attach("tab-b", None))
+    got, _ = _run(sessions.select_session("tab-b", held.id, force=True))
+    assert got is not None
+    assert got.id == held.id
+    with pytest.raises(sessions.SessionTaken):
+        _run(sessions.attach("tab-a", held.id, keep=True))

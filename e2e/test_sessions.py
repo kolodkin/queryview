@@ -59,6 +59,28 @@ def test_a_second_tab_gets_its_own_session(seeded_duckdb, page: Page, context) -
         second.close()
 
 
+def test_a_tab_whose_session_is_taken_greys_out_until_it_takes_it_back(
+    seeded_duckdb, page: Page, base_url: str
+) -> None:
+    """A backgrounded tab's claim can lapse and another tab take its session.
+    The tab must say so instead of silently moving to some other session."""
+    _connect_duckdb(page, seeded_duckdb)
+    sid = page.evaluate("() => sessionStorage.getItem('qv_session')")
+    other = f"e2e-thief-{uuid.uuid4()}"
+    httpx.post(f"{base_url}/api/sessions/select", json={"tab": other, "id": sid, "force": True})
+    try:
+        # The next heartbeat (every 10s) finds it taken.
+        expect(page.get_by_test_id("session-taken")).to_be_visible(timeout=15_000)
+
+        page.get_by_test_id("session-take-over").click()
+
+        expect(page.get_by_test_id("session-taken")).to_have_count(0)
+        expect(page.get_by_test_id("connection-status")).to_contain_text("connected - duckdb")
+        assert page.evaluate("() => sessionStorage.getItem('qv_session')") == sid
+    finally:
+        httpx.post(f"{base_url}/api/sessions/release", json={"tab": other})
+
+
 def test_the_switcher_opens_a_new_session(seeded_duckdb, page: Page) -> None:
     _connect_duckdb(page, seeded_duckdb)
     page.get_by_test_id("session-switcher").click()

@@ -37,5 +37,6 @@ export { FieldPickers, type Field, type OrderCol } from './presentation/FieldPic
 export { SearchPanel } from './presentation/SearchPanel'
 export { filterNames } from './nameFilter'
 export { useDismiss } from './useDismiss'
+export { useCopy } from './useCopy'
 export { DashboardFrame } from './dashboard/DashboardFrame'
 export { buildSrcDoc, type DashboardResults } from './dashboard/srcDoc'

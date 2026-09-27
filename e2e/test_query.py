@@ -454,3 +454,20 @@ def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_test_db, page: Page
     expect(modal.get_by_test_id("cell-data-format")).to_have_count(0)
     expect(modal.get_by_test_id("cell-data-raw")).to_contain_text("long text")
     shot("cell popup - raw long text")
+
+
+def test_a_native_map_cell_is_labelled_by_its_column_type(seeded_test_db, page: Page) -> None:
+    """A Map arrives from the driver as an object; the popup names it by its
+    type rather than calling it JSON because that is how it was serialized."""
+    _open_query_panel(page)
+    page.get_by_test_id("query-input").fill(
+        "SELECT map('service', ['billing', 'invoicing'], 'region', [repeat('eu-west ', 8)]) AS tags"
+    )
+    page.get_by_test_id("query-run").click()
+    output = page.get_by_test_id("query-output")
+    output.locator('[data-testid="cell-expand"][data-col="tags"]').click()
+
+    modal = page.get_by_test_id("cell-data-modal")
+    expect(modal.get_by_test_id("cell-data-format")).to_have_text("Map")
+    expect(modal.get_by_test_id("cell-data-format")).to_have_attribute("title", "Map(String, Array(String))")
+    expect(modal.get_by_test_id("cell-data-tree")).to_contain_text("service")

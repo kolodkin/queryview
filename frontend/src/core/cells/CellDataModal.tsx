@@ -5,6 +5,7 @@
 
 import { useMemo, useState } from 'react'
 
+import { cellText, isContainer, type Cell } from '../results/rows'
 import { detectStructured } from './structured'
 import { defaultCollapsed, treeRows } from './structuredTree'
 
@@ -53,14 +54,24 @@ function ParsedTree({ data }: { data: unknown }) {
 
 export function CellDataModal({
   column,
-  text,
+  value,
+  type,
   onClose,
 }: {
   column: string
-  text: string
+  value: Cell
+  // The column's database type. A collection the driver sent as such is
+  // labelled by it (`Map`, `Array`, ...), not as the JSON it serializes to.
+  type?: string
   onClose: () => void
 }) {
-  const structured = useMemo(() => detectStructured(text), [text])
+  const text = cellText(value)
+  const native = isContainer(value)
+  const structured = useMemo(() => {
+    if (native) return { label: type ? type.split('(')[0] : 'value', data: value }
+    const found = detectStructured(text)
+    return found && { label: found.format, data: found.data }
+  }, [native, type, value, text])
   const [raw, setRaw] = useState(false)
   const showParsed = structured !== null && !raw
 
@@ -77,17 +88,21 @@ export function CellDataModal({
     >
       <div className="glass-popover flex max-h-[80vh] w-full max-w-3xl flex-col p-5">
         <div className="mb-3 flex items-center gap-3">
-          <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-100">
-            {column}
-          </h3>
-          {structured && (
-            <>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <h3 className="min-w-0 truncate text-base font-semibold text-slate-100">{column}</h3>
+            {/* A label, not a control: it sits with the title, away from the buttons. */}
+            {structured && (
               <span
                 data-testid="cell-data-format"
-                className="glass-chip px-2 py-0.5 text-xs uppercase"
+                title={native ? type : undefined}
+                className="shrink-0 rounded bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-indigo-300"
               >
-                {structured.format}
+                {structured.label}
               </span>
+            )}
+          </div>
+          {structured && (
+            <>
               <button
                 type="button"
                 onClick={() => setRaw((r) => !r)}
