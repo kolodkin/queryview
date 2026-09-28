@@ -101,3 +101,31 @@ def test_localhost_hint_only_inside_container(monkeypatch):
     assert "host.docker.internal" in connect._with_localhost_hint("refused", cfg)
     other = ChConfig("db.example.internal", 8123, "u", "p")
     assert connect._with_localhost_hint("refused", other) == "refused"
+
+
+def test_session_info_describes_the_session(tmp_path):
+    import duckdb
+
+    from queryview.mcp_server import session_info
+
+    path = str(tmp_path / "info.duckdb")
+    duckdb.connect(path).execute("CREATE TABLE info_items (id INTEGER)").close()
+    _run(_save_active_connection("sc-info", DuckConfig(path), "duckdb"))
+    sid = _run(sessions.create_session()).id
+    assert _run(open_saved(sid, "sc-info"))["ok"]
+
+    out = _run(session_info(sid))
+    assert out["ok"] is True and out["connected"] is True
+    assert out["connection"] == "sc-info" and out["type"] == "duckdb"
+    assert out["workspace"]
+    assert "info_items" in [t["name"] for t in out["tables"]]
+    assert all("query" not in t for t in out["tables"])
+
+
+def test_session_info_on_a_disconnected_or_unknown_session():
+    from queryview.mcp_server import session_info
+
+    rec = _run(sessions.create_session())
+    out = _run(session_info(rec.id))
+    assert out["ok"] is True and out["connected"] is False and "tables" not in out
+    assert _run(session_info("no-such-session"))["ok"] is False
