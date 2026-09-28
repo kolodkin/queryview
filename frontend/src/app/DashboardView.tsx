@@ -1,7 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-import { DashboardFrame, type DashboardResults } from '../core'
+import {
+  DashboardFrame,
+  applyToQueries,
+  parseDashboardParams,
+  parseParamsRequest,
+  resolveParams,
+  type DashboardResults,
+  type QueryRunner,
+  type ResolvedParam,
+} from '../core'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
@@ -13,15 +22,12 @@ export type DashboardPush = {
   name: string
   html: string
   queries: Record<string, string>
+  // Selector specs (docs/dashboard.md, "Dashboard parameters").
+  params?: unknown[]
 }
 
 type DashboardSummary = { name: string; updated_at: number }
 
-// The dashboard page (`/dashboard?name=x`). Picks a saved dashboard (dropdown or
-// `?name=`), runs its queries via /api/runqueries on the session's connection
-// and selected database, and renders the agent HTML in
-// a sandboxed iframe with results injected as `window.queries`. A pushed
-// dashboard renders without a refetch.
 // Not connected / no database: say what to do, not what went wrong.
 function runError(data: { reason?: string; message?: string }): string {
   if (data.reason === 'no-session') return 'Connect to a database to run this dashboard.'
@@ -29,15 +35,40 @@ function runError(data: { reason?: string; message?: string }): string {
   return data.message ?? 'Failed to run queries.'
 }
 
+// Run named SQL on the session's connection; shared by the load, the params'
+// options_sql, and set-params re-runs.
+const runQueries: QueryRunner = async (queries) => {
+  try {
+    const res = await apiFetch('/api/runqueries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queries }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.ok) return { ok: false, message: runError(data) }
+    return { ok: true, results: (data.results ?? {}) as DashboardResults }
+  } catch {
+    return { ok: false, message: 'Failed to run queries.' }
+  }
+}
+
+// The dashboard page (`/dashboard?name=x`). Picks a saved dashboard (dropdown or
+// `?name=`), resolves its params, runs its queries via /api/runqueries on the
+// session's connection and selected database, and renders the agent HTML in a
+// sandboxed iframe with results as `window.queries` and selectors as
+// `window.params`. A pushed dashboard renders without a refetch.
 function DashboardView({
   pushed,
   onPushConsumed,
   runOn,
+  identQuote = '"',
 }: {
   pushed?: DashboardPush | null
   onPushConsumed?: () => void
   // The session's connection and database; a change re-runs the queries.
   runOn?: string | null
+  // The connection's identifier quote, for `identifier` params.
+  identQuote?: string
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const name = searchParams.get('name') ?? ''
@@ -47,6 +78,9 @@ function DashboardView({
   const [localPush, setLocalPush] = useState<DashboardPush | null>(null)
   const [active, setActive] = useState<DashboardPush | null>(null)
   const [results, setResults] = useState<DashboardResults | null>(null)
+  // Resolved selectors at load; later changes live in the frame (window.params).
+  const [params, setParams] = useState<ResolvedParam[]>([])
+  const frameRef = useRef<HTMLIFrameElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -78,6 +112,7 @@ function DashboardView({
           name: active.name,
           html: active.html,
           queries: active.queries,
+          params: active.params ?? [],
           workspace: activeWorkspace(),
         }),
       })
@@ -157,19 +192,21 @@ function DashboardView({
 
       setLoading(true)
       try {
-        const res = await apiFetch('/api/runqueries', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ queries: dash.queries }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok || !data.ok) {
-          if (!cancelled) setError(runError(data))
-          return
-        }
-        if (!cancelled) setResults((data.results ?? {}) as DashboardResults)
-      } catch {
-        if (!cancelled) setError('Failed to run queries.')
+        const declared = parseDashboardParams(dash.params)
+        const resolved = await resolveParams(declared, {}, runQueries, identQuote)
+        if (cancelled) return
+        setParams(resolved)
+        // Queries still waiting on an unchosen selector (`default: none`) are
+        // held back; the page gets them once it calls setParams.
+        const runnable = applyToQueries(dash.queries, declared, resolved, identQuote)
+        const r = Object.keys(runnable).length
+          ? await runQueries(runnable)
+          : { ok: true as const, results: {} }
+        if (cancelled) return
+        if (r.ok) setResults(r.results)
+        else setError(r.message)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to run queries.')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -179,10 +216,42 @@ function DashboardView({
     return () => {
       cancelled = true
     }
-  }, [name, localPush, runOn, reloadNonce])
+  }, [name, localPush, runOn, reloadNonce, identQuote])
+
+  // Answer the page's setParams: values only, and only from this dashboard's
+  // own frame. The SQL is the dashboard's, substituted here, so the page never
+  // issues SQL of its own.
+  useEffect(() => {
+    if (!active) return
+    const declared = parseDashboardParams(active.params)
+    async function onMessage(e: MessageEvent) {
+      const frame = frameRef.current
+      if (!frame || e.source !== frame.contentWindow) return
+      const values = parseParamsRequest(e.data)
+      if (!values || !active) return
+      let answer: Record<string, unknown>
+      try {
+        const resolved = await resolveParams(declared, values, runQueries, identQuote)
+        const runnable = applyToQueries(active.queries, declared, resolved, identQuote)
+        const r = Object.keys(runnable).length
+          ? await runQueries(runnable)
+          : { ok: true as const, results: {} }
+        answer = r.ok
+          ? { type: 'params-results', ok: true, results: r.results, params: resolved }
+          : { type: 'params-results', ok: false, message: r.message, params: resolved }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to run queries.'
+        answer = { type: 'params-results', ok: false, message, params: [] }
+      }
+      frame.contentWindow?.postMessage(answer, '*')
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [active, identQuote])
 
   return (
-    <div className="w-full max-w-[80vw]" data-testid="dashboard-view">
+    // mt clears the floating header when the page is taller than the window.
+    <div className="mt-10 w-full max-w-[80vw]" data-testid="dashboard-view">
       <div className="mb-4 flex items-center justify-center gap-3">
         <h1 className="text-2xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           Dashboard
@@ -262,7 +331,9 @@ function DashboardView({
         </p>
       )}
 
-      {active && results && <DashboardFrame html={active.html} results={results} />}
+      {active && results && (
+        <DashboardFrame ref={frameRef} html={active.html} results={results} params={params} />
+      )}
     </div>
   )
 }

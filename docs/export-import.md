@@ -32,6 +32,8 @@ html: |
   <html>...</html>
 queries:
   panel1: SELECT ...
+params: # optional selectors, see dashboard.md#dashboard-parameters
+  - { name: region, options: [eu, us] }
 ```
 
 ```yaml

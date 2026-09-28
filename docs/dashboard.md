@@ -28,7 +28,7 @@ always shows live data.
 The FastMCP server at `/mcp` (see [remote.md](./remote.md) for arming and the
 session id) exposes:
 
-- `push_dashboard(session_id, name, html, queries)` — push the
+- `push_dashboard(session_id, name, html, queries, params?)` — push the
   dashboard **draft** to the browser identified by `session_id`, which navigates
   to `/dashboard?name=<name>` and renders it. It does **not** persist — only the
   user's **Save** button in the dashboard view writes it to the store (mirrors
@@ -75,6 +75,74 @@ Load any chart library from a CDN inside the HTML. A minimal dashboard:
   })
 </script>
 ```
+
+## Dashboard parameters
+
+A dashboard can declare **selectors** whose chosen values are substituted into
+its queries, so an interactive dashboard re-queries per selection instead of
+precomputing every result it might show. They live in a `params` list on the
+dashboard (stored in `dashboards.params`, written to `meta.yaml` by
+[git sync](./gitsync.md) and to [exports](./export-import.md)):
+
+```yaml
+params:
+  - name: table
+    kind: identifier
+    default: none
+    options_sql: SELECT name FROM system.tables WHERE database = currentDatabase()
+  - name: field
+    kind: identifier
+    options_sql: SELECT name FROM system.columns WHERE table = {table:literal}
+  - name: category
+    kind: dimension
+```
+
+with a query referencing the placeholders:
+
+```sql
+SELECT {field} AS value, {category} AS category, count() AS cnt
+FROM {table} GROUP BY value, category
+```
+
+| kind | substitutes as | example |
+| --- | --- | --- |
+| `value` (default) | quoted string literal, single quotes doubled | `{region}` → `'eu'` |
+| `identifier` | a quoted table/column, in the connection's own quoting | `{field}` → `"city"` (`` `city` `` on ClickHouse) |
+| `dimension` | a checkbox: its own column when checked, `''` when not | `{category}` → `"category"` / `''` |
+
+A placeholder can override its param's kind in one spot: **`{table:literal}`**
+gives a string where the SQL wants one while `FROM {table}` still gets the
+identifier. The casts are `literal` and `identifier`; anything else is an error.
+An identifier containing the quote character is rejected.
+
+As with [query params](./query.md#query-parameters), `options` and `options_sql`
+are mutually exclusive (a `dimension` needs neither), and the first option is
+chosen for you unless the param says **`default: none`** — then the selector
+starts empty and every query that needs it is held back until a choice is made.
+`options_sql` runs on the viewing session's connection and database, and may
+reference another param (`{table}`), so a field list can follow the selected
+table; params resolve in dependency order, a cycle is an error, and one whose
+dependency is still unchosen simply has no options yet.
+
+## Changing parameters: `window.params` and `setParams`
+
+The resolved selectors are injected next to the results:
+
+```js
+window.params = [{ name, kind, options: [...], value }, …]
+```
+
+The page draws its own controls from that list and asks for a re-run with
+`window.setParams({ field: 'city', category: true })`. The host substitutes the
+values into the dashboard's **own** queries, runs them on the session's
+connection, and posts the results back; `window.onQueryResults(queries, params,
+message)` then fires with the new `window.queries` and `window.params`
+(`message` is set when the run failed and the previous results were kept). The
+iframe isn't reloaded, so the page keeps its state.
+
+The page sends **values only, never SQL**, and the host answers only messages
+from the dashboard's own frame — so a dashboard's SQL stays what `queries`
+declares, reviewable in `queries.yaml`.
 
 ## Running the queries: `/api/runqueries`
 
