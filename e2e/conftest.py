@@ -12,7 +12,7 @@ expect.set_options(timeout=15_000)
 
 
 def open_queries(page: Page) -> None:
-    """Open the app on the Queries page.
+    """Open the app on the Queries page — the prompt, while disconnected.
 
     A live connection lands on the explorer, and the backend session is shared
     across tests, so a previous test's connection can resume here. Query flows

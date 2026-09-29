@@ -13,7 +13,7 @@ def test_attach_creates_a_session_and_returns_it():
     r = client.post("/api/sessions/attach", json={"tab": "tab-http-1"})
     assert r.status_code == 200
     body = r.json()
-    assert body["session"]["url"] == "/queries"
+    assert body["session"]["url"] == "/prompt"
     assert body["session"]["id"]
 
 

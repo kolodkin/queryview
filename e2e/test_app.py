@@ -96,3 +96,34 @@ def test_ready_connection_shows_query_panel(seeded_duckdb, page: Page) -> None:
     expect(page.get_by_test_id("explorer-tables")).to_be_visible()
     page.get_by_test_id("nav-queries").click()
     expect(page.get_by_test_id("query-panel")).to_be_visible()
+
+
+def test_prompt_page_and_disconnect(seeded_duckdb, page: Page) -> None:
+    """Prompt keeps the bare command prompt up for a ready connection, and the
+    pill's menu (even a picker-less driver's) ends with Disconnect."""
+    _connect(page, _DUCKDB, seeded_duckdb)
+
+    page.get_by_test_id("nav-prompt").click()
+    expect(page).to_have_url(re.compile(r"/prompt"))
+    expect(page.get_by_test_id("prompt-input")).to_be_visible()
+    expect(page.get_by_test_id("query-panel")).to_have_count(0)
+
+    page.get_by_test_id("connection-status").click()
+    page.get_by_test_id("disconnect").click()
+    expect(page.get_by_test_id("connection-status")).to_have_count(0)
+    expect(page).to_have_url(re.compile(r"/prompt"))
+
+    # Durable: a reload stays disconnected.
+    page.reload(wait_until="networkidle")
+    expect(page.get_by_test_id("connection-status")).to_have_count(0)
+
+
+def test_disconnected_lands_on_the_prompt(page: Page) -> None:
+    """A disconnected session opens on /prompt, and Queries sends it there too:
+    the query panel needs a database."""
+    page.goto("/", wait_until="networkidle")
+    expect(page).to_have_url(re.compile(r"/prompt$"))
+    expect(page.get_by_test_id("prompt-input")).to_be_visible()
+
+    page.get_by_test_id("nav-queries").click()
+    expect(page).to_have_url(re.compile(r"/prompt$"))

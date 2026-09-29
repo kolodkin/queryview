@@ -11,8 +11,8 @@ agent-authored HTML, which renders inside an isolated iframe.
 
 ## The page (`/dashboard`)
 
-`/dashboard` is the second top-level page (the first is the query workflow at
-`/queries`; see [queryview.md](./queryview.md)). It has:
+`/dashboard` is a top-level page beside the prompt (`/prompt`) and the query
+workflow (`/queries`); see [queryview.md](./queryview.md). It has:
 
 - a **dropdown** of saved dashboards — selecting one sets `?name=<name>`, so the
   URL is shareable and the back button works;

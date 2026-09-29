@@ -18,6 +18,7 @@ export function SearchPanel<T>({
   itemProps,
   itemAction,
   headerExtra,
+  footer,
   className = '',
 }: {
   items: T[]
@@ -36,6 +37,8 @@ export function SearchPanel<T>({
   itemAction?: (item: T) => React.ReactNode
   // Beside the search box (e.g. All / None).
   headerExtra?: React.ReactNode
+  // Below the list (e.g. Disconnect).
+  footer?: React.ReactNode
   // Placement and width, e.g. "left-0 w-64".
   className?: string
 }) {
@@ -92,6 +95,7 @@ export function SearchPanel<T>({
           })}
         </div>
       )}
+      {footer}
     </div>
   )
 }

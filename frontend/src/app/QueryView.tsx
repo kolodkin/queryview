@@ -64,7 +64,9 @@ const NEW_NAME_OPTION = '::new::'
 
 // The query workflow page (`/queries`). The App shell owns connection state;
 // this page owns the command prompt and the connect/pick-database/query UI.
+// `promptOnly` (`/prompt`) keeps the bare prompt even for a ready connection.
 function QueryView({
+  promptOnly = false,
   connection,
   setConnection,
   pushed,
@@ -76,6 +78,7 @@ function QueryView({
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
+  promptOnly?: boolean
 }) {
   const navigate = useNavigate()
   const [prompt, setPrompt] = useState('')
@@ -163,6 +166,7 @@ function QueryView({
         // connection form opened over it.
         setFormType(null)
         setHint(null)
+        if (promptOnly) navigate('/queries')
       } else {
         setHint('Select a database first.')
       }
@@ -245,7 +249,7 @@ function QueryView({
 
   // The query panel is the view for a ready connection — reached by clicking
   // Queries, or straight after connecting — unless a connection form covers it.
-  const inQueryMode = ready && !formType
+  const inQueryMode = ready && !formType && !promptOnly
 
   // Command-prompt autocomplete suggestions for the current input. Hidden when
   // dismissed, empty, or the lone match already equals what's typed.
@@ -309,7 +313,7 @@ function QueryView({
           setAcDismissed(false)
         }}
         onKeyDown={onPromptKeyDown}
-        placeholder={ready ? 'query' : 'Type a command, e.g. new clickhouse'}
+        placeholder={inQueryMode ? 'query' : 'Type a command, e.g. new clickhouse'}
         aria-label="Prompt"
         data-testid="prompt-input"
         autoFocus
