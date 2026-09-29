@@ -28,6 +28,7 @@ from .connect import (
     export_csv,
     get_session,
     list_connection_names,
+    list_connections,
     list_tables,
     open_saved,
     run_query,
@@ -258,7 +259,7 @@ async def db_disconnect(request: Request) -> dict[str, Any]:
 # Saved connection names, for the `connect <name>` autocomplete.
 @app.get("/api/db/connections")
 async def db_connections() -> dict[str, Any]:
-    return {"names": await list_connection_names()}
+    return {"names": await list_connection_names(), "connections": await list_connections()}
 
 
 def _driver_and_config(body: Any):

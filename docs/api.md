@@ -17,8 +17,9 @@ shared (SQLite). See [session.md](./session.md).
 | GET    | `/api/health`               | —                                      | Service health check. |
 | GET    | `/api/session`              | —                                      | This session's connection state `{connected, name?, type?, databases?, database?, ident_quote?}`, reconnecting the connection the session is on. |
 | POST   | `/api/db/test`      | `{host,port,username,password}`        | Test a connection (test only — no save, no activation). `{ok, message}`. |
-| POST   | `/api/db/connect`   | `{name,host,port,username,password}`   | Create: open + save + activate for this session; lists databases (`new <type>` form). `{ok, name, databases}` \| `{ok:false, message}`. |
-| POST   | `/api/db/open`      | `{name}`                               | Open a saved connection by name for this session; lists databases (`connect <name>`). `{ok, name, databases}` \| `{ok:false, message}`. |
+| POST   | `/api/db/connect`   | `{name,host,port,username,password}`   | Create: open + save + activate for this session; lists databases (new-connection form). `{ok, name, databases}` \| `{ok:false, message}`. |
+| GET    | `/api/db/connections` | —                                    | Saved connections, most recent first: `{names, connections:[{name, type, database, last_active_at}]}` — metadata only, never the config. |
+| POST   | `/api/db/open`      | `{name}`                               | Open a saved connection by name for this session; lists databases (a saved card on the Connect page). `{ok, name, databases}` \| `{ok:false, message}`. |
 | POST   | `/api/db/database`  | `{database}`                           | Select this session's active connection's database. `{ok}`. |
 | POST   | `/api/db/query`     | `{query, limit?, offset?, format?, order_by?}` | Run SQL against this session's selected database, paginated by `limit`/`offset` (defaults 100/0). `order_by` is `[{name, dir}]` (`dir` ASC/DESC, names quoted with the driver's identifier quote) sorting the pagination wrapper. `{ok, meta:[{name, type}], data:[[…]]}` — ClickHouse's `JSONCompact` shape, 64-bit integers and decimals quoted, collections as JSON arrays/objects — \| `{ok:false, message}`. `format:"csv"` returns `{ok, output}` (CSV text) instead. Empty query → `400`; no session → `409`. |
 | POST   | `/api/db/describe`  | `{query}`                              | Describe the query's output columns via ClickHouse `DESCRIBE` (no data scanned). `{ok, fields:[{name, type}]}` \| `{ok:false, message}`. Empty query → `400`; no session / no database → `409`. |
@@ -96,8 +97,8 @@ optional `session_id` (see [workspace.md](./workspace.md)).
 
 ## Related docs
 
-- [queryview.md](./queryview.md) — the single-prompt page concept.
-- [connect.md](./connect.md) — connecting (`new <type>` / `connect <name>`), storage, sessions.
+- [queryview.md](./queryview.md) — the Connect page and the app's pages.
+- [connect.md](./connect.md) — connecting (new and saved connection cards), storage, sessions.
 - [query.md](./query.md) — running queries: pagination, predefined queries, CSV.
 - [remote.md](./remote.md) — pushing queries to a live session over MCP.
 - [dashboard.md](./dashboard.md) — the dashboard page, `upsert_dashboard`, and the `window.queries` contract.

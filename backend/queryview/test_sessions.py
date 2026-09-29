@@ -27,7 +27,7 @@ def test_new_session_defaults():
     assert rec.connection_name is None
     assert rec.database is None
     assert rec.workspace == "default"
-    assert rec.url == "/prompt"
+    assert rec.url == "/connect"
     assert rec.ui == {}
     assert rec.held is False
 

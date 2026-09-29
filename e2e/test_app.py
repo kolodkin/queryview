@@ -1,6 +1,6 @@
 import re
 
-from conftest import open_queries
+from conftest import open_connect
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -10,12 +10,15 @@ _DUCKDB = next(c for c in CASES if c.id == "duckdb")
 
 def test_queryview_e2e(page: Page) -> None:
     # loads the app and shows the heading
-    open_queries(page)
+    open_connect(page)
     expect(page.locator("h1")).to_have_text("QueryView")
 
-    # typing `new clickhouse` reveals the connection form
-    page.get_by_test_id("prompt-input").fill("new clickhouse")
-    page.keyboard.press("Enter")
+    # the ClickHouse "new connection" card opens its form, and Back returns
+    page.get_by_test_id("new-conn-clickhouse").click()
+    expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
+    page.get_by_test_id("form-back").click()
+    expect(page.get_by_test_id("clickhouse-form")).to_have_count(0)
+    page.get_by_test_id("new-conn-clickhouse").click()
     expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
     for test_id in ("ch-name", "ch-host", "ch-port", "ch-username", "ch-password"):
         expect(page.get_by_test_id(test_id)).to_be_visible()
@@ -43,13 +46,20 @@ def test_queryview_e2e(page: Page) -> None:
     # reload resumes the session, then reconnect and select the system database
     page.goto("/", wait_until="networkidle")
     # Resume: came back connected to the previously selected database, and the
-    # landing redirect picks the explorer over the prompt.
+    # landing redirect picks the explorer over Connect.
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - default")
     expect(page).to_have_url(re.compile(r"/explorer"))
-    # `connect <name>` reopens the picker; choose a different database.
-    page.get_by_test_id("nav-queries").click()
-    page.get_by_test_id("prompt-input").fill("connect clickhouse")
-    page.keyboard.press("Enter")
+    # The saved connection's card, marked active and showing its database,
+    # reopens the picker; choose a different database.
+    page.get_by_test_id("nav-connect").click()
+    card = page.locator('[data-testid="conn-card"][data-conn="clickhouse"]')
+    expect(card).to_have_attribute("data-active", "true")
+    expect(card).to_contain_text("default")
+    card.click()
+    # The picker's Back returns to the cards; the card opens it again.
+    page.get_by_test_id("picker-back").click()
+    expect(page.get_by_test_id("db-picker")).to_have_count(0)
+    card.click()
     # The picker's filter narrows the chips (a non-match hides `default`) and
     # Enter selects the single remaining match.
     db_filter = page.get_by_test_id("db-filter")
@@ -61,7 +71,7 @@ def test_queryview_e2e(page: Page) -> None:
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - system")
 
     # opening with ?connection=<name> opens that connection. The database is
-    # not picked yet, so this stays on the prompt rather than the explorer.
+    # not picked yet, so this stays on Connect rather than the explorer.
     page.goto("/?connection=clickhouse", wait_until="networkidle")
     expect(page.get_by_test_id("db-picker")).to_be_visible()
     # The filter is case-insensitive, so both INFORMATION_SCHEMA chips remain;
@@ -98,32 +108,35 @@ def test_ready_connection_shows_query_panel(seeded_duckdb, page: Page) -> None:
     expect(page.get_by_test_id("query-panel")).to_be_visible()
 
 
-def test_prompt_page_and_disconnect(seeded_duckdb, page: Page) -> None:
-    """Prompt keeps the bare command prompt up for a ready connection, and the
-    pill's menu (even a picker-less driver's) ends with Disconnect."""
+def test_connect_page_and_disconnect(seeded_duckdb, page: Page) -> None:
+    """Connect keeps the cards up for a ready connection, and the pill's menu
+    (even a picker-less driver's) ends with Disconnect."""
     _connect(page, _DUCKDB, seeded_duckdb)
 
-    page.get_by_test_id("nav-prompt").click()
-    expect(page).to_have_url(re.compile(r"/prompt"))
-    expect(page.get_by_test_id("prompt-input")).to_be_visible()
+    page.get_by_test_id("nav-connect").click()
+    expect(page).to_have_url(re.compile(r"/connect"))
+    expect(page.locator('[data-testid="conn-card"][data-conn="duckdb"]')).to_have_attribute("data-active", "true")
     expect(page.get_by_test_id("query-panel")).to_have_count(0)
 
     page.get_by_test_id("connection-status").click()
     page.get_by_test_id("disconnect").click()
     expect(page.get_by_test_id("connection-status")).to_have_count(0)
-    expect(page).to_have_url(re.compile(r"/prompt"))
+    expect(page).to_have_url(re.compile(r"/connect"))
 
     # Durable: a reload stays disconnected.
     page.reload(wait_until="networkidle")
     expect(page.get_by_test_id("connection-status")).to_have_count(0)
 
 
-def test_disconnected_lands_on_the_prompt(page: Page) -> None:
-    """A disconnected session opens on /prompt, and Queries sends it there too:
-    the query panel needs a database."""
+def test_disconnected_lands_on_connect(page: Page) -> None:
+    """A disconnected session opens on /connect, and Queries sends it there
+    too: the query panel needs a database. The old /prompt URL redirects."""
     page.goto("/", wait_until="networkidle")
-    expect(page).to_have_url(re.compile(r"/prompt$"))
-    expect(page.get_by_test_id("prompt-input")).to_be_visible()
+    expect(page).to_have_url(re.compile(r"/connect$"))
+    expect(page.get_by_test_id("connect-page")).to_be_visible()
 
     page.get_by_test_id("nav-queries").click()
-    expect(page).to_have_url(re.compile(r"/prompt$"))
+    expect(page).to_have_url(re.compile(r"/connect$"))
+
+    page.goto("/prompt", wait_until="networkidle")
+    expect(page).to_have_url(re.compile(r"/connect$"))

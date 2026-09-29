@@ -90,6 +90,19 @@ def test_list_connection_names_orders_by_recency(monkeypatch):
     assert names[:2] == ["beta", "alpha"]
 
 
+def test_list_connections_carries_card_metadata(monkeypatch):
+    monkeypatch.setitem(DRIVERS, "fake", _FakeDriver())
+    _run(connect.connect_new("s-c", "gamma", {"secret": "x"}, "fake"))
+    cards = _run(connect.list_connections())
+    card = next(c for c in cards if c["name"] == "gamma")
+    # Type, remembered database and recency; never the (encrypted) config.
+    assert card["type"] == "fake"
+    assert card["database"] is None
+    assert isinstance(card["last_active_at"], int)
+    assert "config" not in card
+    assert cards[0]["name"] == "gamma"
+
+
 def test_list_tables_routes_to_driver_and_skips_db_gate(monkeypatch):
     monkeypatch.setitem(DRIVERS, "fake", _FakeDriver())
     sid = "s-tables"

@@ -201,6 +201,23 @@ async def list_connection_names() -> list[str]:
         return list(rows.all())
 
 
+async def list_connections() -> list[dict[str, Any]]:
+    """Saved connections for the Connect page's cards, most-recently-active
+    first. Metadata only: the encrypted config never leaves the store."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        rows = await s.exec(select(Connection).order_by(col(Connection.last_active_at).desc()))
+        return [
+            {
+                "name": c.name,
+                "type": c.type,
+                "database": c.database,
+                "last_active_at": c.last_active_at,
+            }
+            for c in rows.all()
+        ]
+
+
 async def unknown_connection_message(name: str) -> str:
     """The error for an unresolvable connection name, listing the valid ones so
     a caller (typically an agent) can retry without guessing."""

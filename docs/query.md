@@ -5,8 +5,7 @@ selected, or the driver has no picker — on the first visit and on every return
 (Connecting itself lands on the explorer; see
 [queryview.md](./queryview.md#landing-page).) It runs SQL against the session's selected database, pages
 through results, saves/loads reusable queries, and exports the current page as
-CSV. Typing `query` returns to it from a connection form; before a database is
-selected it shows the hint `Select a database first.`
+CSV. Before a database is selected, Queries redirects to the Connect page.
 
 ## Panel
 
@@ -25,9 +24,6 @@ selected it shows the hint `Select a database first.`
 │ └───────────────────────────────────────────────────────┘ │
 └───────────────────────────────────────────────────────────┘
 ```
-
-In query mode the command **prompt** moves onto the panel's top row, next to the
-predefined-query controls, to save vertical space.
 
 - **SQL textarea** — the query to run. **Min / S / M / L / XL** change its height;
   **Min** collapses it to maximize room for results.
@@ -327,6 +323,6 @@ scoped to the session's selected database.
 
 ## Related docs
 
-- [queryview.md](./queryview.md) — the single-prompt page concept.
+- [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [connect.md](./connect.md) — connecting, storage, sessions.
 - [api.md](./api.md) — the full backend JSON API.

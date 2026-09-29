@@ -11,15 +11,15 @@ agent-authored HTML, which renders inside an isolated iframe.
 
 ## The page (`/dashboard`)
 
-`/dashboard` is a top-level page beside the prompt (`/prompt`) and the query
+`/dashboard` is a top-level page beside Connect (`/connect`) and the query
 workflow (`/queries`); see [queryview.md](./queryview.md). It has:
 
 - a **dropdown** of saved dashboards — selecting one sets `?name=<name>`, so the
   URL is shareable and the back button works;
 - a **sandboxed iframe** that renders the selected dashboard.
 
-Open it from the prompt with `dashboard` (just the dropdown) or `dashboard
-<name>` (jump straight to one), from the corner nav, or by URL. Reopening
+Open it from the corner nav (just the dropdown), or by URL — `?name=<name>`
+jumps straight to one. Reopening
 re-fetches the dashboard and re-runs its queries, so a reloaded or shared link
 always shows live data.
 
@@ -173,7 +173,7 @@ the session id.
 
 ## Related docs
 
-- [queryview.md](./queryview.md) — the two pages and the prompt commands.
+- [queryview.md](./queryview.md) — the pages and the Connect page.
 - [remote.md](./remote.md) — arming a session, the session id, the MCP server.
 - [api.md](./api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
 - [connect.md](./connect.md) — connections and their stored database.

@@ -12,6 +12,7 @@ import {
 import { SearchPanel, useDismiss } from '../core'
 import { isReady, type Connection } from './connection'
 import QueryView, { type QueryPush } from './QueryView'
+import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
@@ -86,7 +87,7 @@ function DatabaseMenu({
 }
 
 // App shell: routing, shared connection state, the connection pill + agent
-// popover, and the armed/SSE remote-control channel. Pages: /prompt, /queries,
+// popover, and the armed/SSE remote-control channel. Pages: /connect, /queries,
 // /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
@@ -110,7 +111,7 @@ function Shell() {
   const adoptions = useRef(0)
   // Whether the initial /api/session probe has answered. The `/` route waits on
   // it: until the session is known it can't tell a connected visitor (who wants
-  // the explorer) from a disconnected one (who wants the prompt).
+  // the explorer) from a disconnected one (who wants the Connect page).
   const [sessionChecked, setSessionChecked] = useState(false)
   // Another tab took this tab's session; the page greys out until one is picked.
   const [taken, setTaken] = useState(false)
@@ -149,14 +150,14 @@ function Shell() {
         }
         setConnection(opened)
         // Ready already (a picker-less driver) means tables to browse;
-        // otherwise the prompt is where the database gets picked.
-        navigate(isReady(opened) ? '/explorer' : '/prompt')
+        // otherwise the Connect page is where the database gets picked.
+        navigate(isReady(opened) ? '/explorer' : '/connect')
         return
       }
     } catch {
       /* a failed deep-link open just leaves us disconnected */
     }
-    navigate('/prompt')
+    navigate('/connect')
   }
 
   // The live connection for the attached session. `/api/session` reads that
@@ -187,7 +188,7 @@ function Shell() {
     setWorkspace(next.workspace)
     setSessionLabel(next.label)
     setSessionKey(`${next.id}:${++adoptions.current}`)
-    navigate(next.url || '/prompt')
+    navigate(next.url || '/connect')
     void refreshConnection()
   }
 
@@ -298,8 +299,8 @@ function Shell() {
     }
   }
 
-  // Drop the connection (saved connections survive) and go to the prompt,
-  // where `connect <name>` reopens one.
+  // Drop the connection (saved connections survive) and go to the Connect
+  // page, where a card reopens one.
   async function disconnect() {
     setDbOpen(false)
     try {
@@ -308,7 +309,7 @@ function Shell() {
       /* a failed disconnect still clears the UI; the session is best-effort */
     }
     setConnection(null)
-    navigate('/prompt')
+    navigate('/connect')
   }
 
   // The channel is keyed by this session, so the agent's id is the session's own.
@@ -443,17 +444,17 @@ function Shell() {
             />
             <WorkspaceSwitcher workspace={workspace} onSwitch={switchWorkspace} />
             <Link
-              to="/prompt"
-              data-testid="nav-prompt"
+              to="/connect"
+              data-testid="nav-connect"
               onClick={() => setNavOpen(false)}
-              className={navLinkClass('/prompt')}
+              className={navLinkClass('/connect')}
             >
-              Prompt
+              Connect
             </Link>
-            {/* Straight to the prompt until there's a database: a round trip
+            {/* Straight to Connect until there's a database: a round trip
                 through the /queries redirect would remount it. */}
             <Link
-              to={ready ? '/queries' : '/prompt'}
+              to={ready ? '/queries' : '/connect'}
               data-testid="nav-queries"
               onClick={() => setNavOpen(false)}
               className={navLinkClass('/queries')}
@@ -484,17 +485,16 @@ function Shell() {
           attach has answered. */}
       {sessionChecked ? (
         <Routes>
-          {/* The query panel needs a database; until then Queries is the prompt. */}
+          {/* The query panel needs a database; until then Queries is Connect. */}
           <Route
             path="/queries"
             element={
-              !ready ? (
-                <Navigate to="/prompt" replace />
+              !ready || !connection ? (
+                <Navigate to="/connect" replace />
               ) : (
                 <QueryView
                   key={`${sessionKey}:${workspace}`}
                   connection={connection}
-                  setConnection={setConnection}
                   pushed={queryPush}
                   onPushConsumed={() => setQueryPush(null)}
                   remoteId={remoteId}
@@ -503,16 +503,17 @@ function Shell() {
             }
           />
           <Route
-            path="/prompt"
+            path="/connect"
             element={
-              <QueryView
-                key={`${sessionKey}:${workspace}:prompt`}
-                promptOnly
+              <ConnectView
+                key={sessionKey}
                 connection={connection}
                 setConnection={setConnection}
               />
             }
           />
+          {/* The page's old name, still in sessions saved before the rename. */}
+          <Route path="/prompt" element={<Navigate to="/connect" replace />} />
           <Route path="/explorer" element={<ExplorerView connection={connection} />} />
           <Route
             path="/dashboard"
@@ -528,8 +529,8 @@ function Shell() {
           />
           {/* Only `/` picks a landing page. An unknown path is just a bad URL,
               not a landing question. */}
-          <Route path="/" element={<Navigate to={ready ? '/explorer' : '/prompt'} replace />} />
-          <Route path="*" element={<Navigate to="/prompt" replace />} />
+          <Route path="/" element={<Navigate to={ready ? '/explorer' : '/connect'} replace />} />
+          <Route path="*" element={<Navigate to="/connect" replace />} />
         </Routes>
       ) : (
         <Loading label="Restoring session…" testid="session-loading" />
@@ -581,7 +582,7 @@ function pageTitle(path: string): string {
   if (path.startsWith('/queries')) return 'Queries'
   if (path.startsWith('/explorer')) return 'Explorer'
   if (path.startsWith('/dashboard')) return 'Dashboard'
-  return 'Prompt'
+  return 'Connect'
 }
 
 function App() {
