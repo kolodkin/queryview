@@ -21,7 +21,6 @@ import {
   type ParamSpec,
   type QueryRows,
 } from '../core'
-import { type Connection } from './connection'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { downloadText } from './yamlio'
@@ -58,12 +57,12 @@ const NEW_NAME_OPTION = '::new::'
 // The query page (`/queries`), mounted by the App shell only for a ready
 // connection; picking one happens on the Connect page (ConnectView).
 function QueryView({
-  connection,
+  connectionType,
   pushed,
   onPushConsumed,
   remoteId,
 }: {
-  connection: Connection
+  connectionType: string
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
@@ -76,7 +75,7 @@ function QueryView({
         </h1>
       </div>
       <QueryPanel
-        connectionType={connection.type}
+        connectionType={connectionType}
         pushed={pushed}
         onPushConsumed={onPushConsumed}
         remoteId={remoteId}

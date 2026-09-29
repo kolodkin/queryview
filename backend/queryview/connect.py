@@ -192,30 +192,19 @@ def _row_to_stored(row: Connection | None) -> StoredConnection | None:
     )
 
 
-async def list_connection_names() -> list[str]:
-    """All saved connection names, most-recently-active first (for `connect`
-    autocomplete)."""
-    await _ensure_schema()
-    async with AsyncSession(_engine_for_db()) as s:
-        rows = await s.exec(select(Connection.name).order_by(col(Connection.last_active_at).desc()))
-        return list(rows.all())
-
-
 async def list_connections() -> list[dict[str, Any]]:
     """Saved connections for the Connect page's cards, most-recently-active
-    first. Metadata only: the encrypted config never leaves the store."""
+    first. Metadata only: the encrypted config is never read."""
     await _ensure_schema()
+    cols = (Connection.name, Connection.type, col(Connection.database), Connection.last_active_at)
     async with AsyncSession(_engine_for_db()) as s:
-        rows = await s.exec(select(Connection).order_by(col(Connection.last_active_at).desc()))
-        return [
-            {
-                "name": c.name,
-                "type": c.type,
-                "database": c.database,
-                "last_active_at": c.last_active_at,
-            }
-            for c in rows.all()
-        ]
+        rows = await s.exec(select(*cols).order_by(col(Connection.last_active_at).desc()))
+        return [{"name": n, "type": t, "database": d, "last_active_at": at} for n, t, d, at in rows.all()]
+
+
+async def list_connection_names() -> list[str]:
+    """All saved connection names, most-recently-active first."""
+    return [c["name"] for c in await list_connections()]
 
 
 async def unknown_connection_message(name: str) -> str:
@@ -374,7 +363,7 @@ async def open_saved(sid: str, name: str) -> dict[str, Any]:
             "message": await unknown_connection_message(name),
             "not_found": True,
         }
-    # Reset the database so `connect <name>` always lands on the picker.
+    # Reset the database so opening always lands on the picker.
     state, message = await _build_session(stored.name, stored.config, None, stored.type)
     if state is None:
         return {"ok": False, "message": message}
@@ -386,7 +375,7 @@ async def open_saved(sid: str, name: str) -> dict[str, Any]:
 
 async def disconnect(sid: str) -> dict[str, Any]:
     """Drop this session's active connection. Saved connections are left intact
-    — `connect <name>` still reopens them."""
+    — the Connect page still reopens them."""
     _sessions.pop(sid, None)
     await sessions.set_connection(sid, None)
     return {"ok": True}

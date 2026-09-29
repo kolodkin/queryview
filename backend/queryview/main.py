@@ -27,7 +27,6 @@ from .connect import (
     disconnect,
     export_csv,
     get_session,
-    list_connection_names,
     list_connections,
     list_tables,
     open_saved,
@@ -256,10 +255,10 @@ async def db_disconnect(request: Request) -> dict[str, Any]:
     return await disconnect(request.state.sid)
 
 
-# Saved connection names, for the `connect <name>` autocomplete.
+# Saved connections, for the Connect page's cards.
 @app.get("/api/db/connections")
 async def db_connections() -> dict[str, Any]:
-    return {"names": await list_connection_names(), "connections": await list_connections()}
+    return {"connections": await list_connections()}
 
 
 def _driver_and_config(body: Any):
@@ -302,7 +301,7 @@ async def db_connect(request: Request):
     return await connect_new(request.state.sid, name, config, driver.type)
 
 
-# Open a saved connection by name for this session (connect <name>).
+# Open a saved connection by name for this session (a Connect page card).
 @app.post("/api/db/open")
 async def db_open(request: Request):
     b = await _read_json(request) or {}

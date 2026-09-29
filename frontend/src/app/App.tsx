@@ -10,7 +10,7 @@ import {
 } from 'react-router-dom'
 
 import { SearchPanel, useDismiss } from '../core'
-import { isReady, type Connection } from './connection'
+import { isReady, openSaved, selectDatabase, toConnection, type Connection } from './connection'
 import QueryView, { type QueryPush } from './QueryView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
@@ -133,31 +133,12 @@ function Shell() {
     [],
   )
 
+  // A failed deep-link open just leaves us disconnected. Ready already (a
+  // picker-less driver) means tables to browse; otherwise Connect's picker.
   async function openConnection(name: string) {
-    try {
-      const res = await apiFetch('/api/db/open', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        const opened = {
-          name: data.name as string,
-          type: (data.type ?? 'clickhouse') as string,
-          databases: (data.databases ?? []) as string[],
-          database: null,
-        }
-        setConnection(opened)
-        // Ready already (a picker-less driver) means tables to browse;
-        // otherwise the Connect page is where the database gets picked.
-        navigate(isReady(opened) ? '/explorer' : '/connect')
-        return
-      }
-    } catch {
-      /* a failed deep-link open just leaves us disconnected */
-    }
-    navigate('/connect')
+    const r = await openSaved(name)
+    if (r.ok) setConnection(r.connection)
+    navigate(r.ok && isReady(r.connection) ? '/explorer' : '/connect')
   }
 
   // The live connection for the attached session. `/api/session` reads that
@@ -169,13 +150,7 @@ function Shell() {
         setConnection(null)
         return
       }
-      setConnection({
-        name: probe.name as string,
-        type: (probe.type ?? 'clickhouse') as string,
-        databases: (probe.databases ?? []) as string[],
-        database: (probe.database ?? null) as string | null,
-        identQuote: (probe.ident_quote ?? '"') as string,
-      })
+      setConnection(toConnection(probe))
     } catch {
       /* leave the connection as-is */
     }
@@ -287,16 +262,8 @@ function Shell() {
   async function switchDatabase(database: string) {
     setDbOpen(false)
     if (!connection || database === connection.database) return
-    try {
-      const res = await apiFetch('/api/db/database', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ database }),
-      })
-      if (res.ok) setConnection({ ...connection, database })
-    } catch {
-      /* leave the connection as-is on a failed switch */
-    }
+    // A failed switch leaves the connection as-is.
+    if (await selectDatabase(database)) setConnection({ ...connection, database })
   }
 
   // Drop the connection (saved connections survive) and go to the Connect
@@ -489,12 +456,12 @@ function Shell() {
           <Route
             path="/queries"
             element={
-              !ready || !connection ? (
+              !isReady(connection) ? (
                 <Navigate to="/connect" replace />
               ) : (
                 <QueryView
                   key={`${sessionKey}:${workspace}`}
-                  connection={connection}
+                  connectionType={connection.type}
                   pushed={queryPush}
                   onPushConsumed={() => setQueryPush(null)}
                   remoteId={remoteId}
@@ -512,8 +479,6 @@ function Shell() {
               />
             }
           />
-          {/* The page's old name, still in sessions saved before the rename. */}
-          <Route path="/prompt" element={<Navigate to="/connect" replace />} />
           <Route path="/explorer" element={<ExplorerView connection={connection} />} />
           <Route
             path="/dashboard"

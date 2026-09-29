@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { filterNames } from '../core'
-import { isReady, type Connection } from './connection'
+import { isReady, openSaved, selectDatabase, toConnection, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
 import { timeAgo } from './timeAgo'
@@ -61,51 +61,29 @@ function ConnectView({
   )
 
   // Land where an opened connection belongs: a ready one browses its tables,
-  // the rest stay here on the database picker.
+  // the rest stay here on the database picker (with the card list refreshed,
+  // since a new connection isn't in it yet).
   function adopt(opened: Connection) {
     setConnection(opened)
     setFormType(null)
     setBrowsing(false)
     setError(null)
-    void refreshSaved()
     if (isReady(opened)) navigate('/explorer')
+    else void refreshSaved()
   }
 
-  async function openSaved(name: string) {
+  async function open(name: string) {
     setOpening(name)
     setError(null)
-    try {
-      const res = await apiFetch('/api/db/open', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      })
-      const data = await res.json()
-      if (!data.ok) {
-        setError(data.message ?? `could not open “${name}”`)
-        return
-      }
-      adopt({
-        name: data.name as string,
-        type: (data.type ?? 'clickhouse') as string,
-        databases: (data.databases ?? []) as string[],
-        database: null,
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'request failed')
-    } finally {
-      setOpening(null)
-    }
+    const r = await openSaved(name)
+    setOpening(null)
+    if (r.ok) adopt(r.connection)
+    else setError(r.message)
   }
 
-  async function selectDatabase(database: string) {
+  async function pickDatabase(database: string) {
     if (!connection) return
-    const res = await apiFetch('/api/db/database', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ database }),
-    })
-    if (res.ok) {
+    if (await selectDatabase(database)) {
       setConnection({ ...connection, database })
       navigate('/explorer')
     }
@@ -129,132 +107,115 @@ function ConnectView({
     </div>
   )
 
-  if (formType && DRIVERS[formType]) {
-    return (
-      <div className="w-full max-w-md" data-testid="connect-page">
-        {heading}
-        <ConnectionForm
-          meta={DRIVERS[formType]}
-          onBack={() => setFormType(null)}
-          onConnected={(name, type, databases) =>
-            adopt({ name, type, databases, database: null })
-          }
-        />
-      </div>
-    )
-  }
-
-  if (picking && connection) {
-    const remembered = saved?.find((c) => c.name === connection.name)?.database ?? null
-    return (
-      <div className="w-full max-w-3xl" data-testid="connect-page">
-        {heading}
-        <DatabasePicker
-          connection={connection}
-          remembered={remembered}
-          onSelect={(db) => void selectDatabase(db)}
-          onBack={() => setBrowsing(true)}
-        />
-      </div>
-    )
-  }
-
+  const form = formType ? DRIVERS[formType] : undefined
   const active = connection?.name ?? null
   const count = saved?.length ?? 0
 
   return (
-    <div className="w-full max-w-3xl" data-testid="connect-page">
+    <div className={`w-full ${form ? 'max-w-md' : 'max-w-3xl'}`} data-testid="connect-page">
       {heading}
+      {form ? (
+        <ConnectionForm meta={form} onBack={() => setFormType(null)} onConnected={adopt} />
+      ) : picking ? (
+        <DatabasePicker
+          connection={connection}
+          remembered={saved?.find((c) => c.name === connection.name)?.database ?? null}
+          onSelect={(db) => void pickDatabase(db)}
+          onBack={() => setBrowsing(true)}
+        />
+      ) : (
+        <>
+          <section aria-labelledby="saved-heading">
+            <div className="mb-3 flex items-center gap-3">
+              <h2 id="saved-heading" className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Saved connections
+              </h2>
+              {count > FILTER_THRESHOLD && (
+                <form
+                  className="ml-auto w-56"
+                  onSubmit={(e) => {
+                    // Enter opens the first match, so a typed prefix is enough.
+                    e.preventDefault()
+                    if (visible.length > 0) void open(visible[0].name)
+                  }}
+                >
+                  <input
+                    type="search"
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                    placeholder={`Filter ${count} connections…`}
+                    aria-label="Filter connections"
+                    data-testid="conn-filter"
+                    autoFocus
+                    autoComplete="off"
+                    className="glass-input w-full px-3 py-1.5 text-sm"
+                  />
+                </form>
+              )}
+            </div>
 
-      <section aria-labelledby="saved-heading">
-        <div className="mb-3 flex items-center gap-3">
-          <h2 id="saved-heading" className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Saved connections
-          </h2>
-          {count > FILTER_THRESHOLD && (
-            <form
-              className="ml-auto w-56"
-              onSubmit={(e) => {
-                // Enter opens the first match, so a typed prefix is enough.
-                e.preventDefault()
-                if (visible.length > 0) void openSaved(visible[0].name)
-              }}
-            >
-              <input
-                type="search"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                placeholder={`Filter ${count} connections…`}
-                aria-label="Filter connections"
-                data-testid="conn-filter"
-                autoFocus
-                autoComplete="off"
-                className="glass-input w-full px-3 py-1.5 text-sm"
-              />
-            </form>
-          )}
-        </div>
+            {saved === null ? (
+              <Loading label="Loading connections…" />
+            ) : count === 0 ? (
+              <p data-testid="conn-empty" className="glass-panel p-5 text-center text-sm text-slate-400">
+                No saved connections yet — create one below.
+              </p>
+            ) : visible.length === 0 ? (
+              <p data-testid="conn-filter-empty" className="text-sm text-slate-400">
+                No connections match “{filter.trim()}”.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {visible.map((c) => (
+                  <SavedCard
+                    key={c.name}
+                    conn={c}
+                    active={c.name === active}
+                    busy={opening === c.name}
+                    disabled={opening !== null}
+                    onOpen={() => void open(c.name)}
+                  />
+                ))}
+              </div>
+            )}
 
-        {saved === null ? (
-          <Loading label="Loading connections…" />
-        ) : count === 0 ? (
-          <p data-testid="conn-empty" className="glass-panel p-5 text-center text-sm text-slate-400">
-            No saved connections yet — create one below.
-          </p>
-        ) : visible.length === 0 ? (
-          <p data-testid="conn-filter-empty" className="text-sm text-slate-400">
-            No connections match “{filter.trim()}”.
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {visible.map((c) => (
-              <SavedCard
-                key={c.name}
-                conn={c}
-                active={c.name === active}
-                busy={opening === c.name}
-                disabled={opening !== null}
-                onOpen={() => void openSaved(c.name)}
-              />
-            ))}
-          </div>
-        )}
+            {error && (
+              <p data-testid="connect-error" className="mt-3 text-sm text-red-300">
+                {error}
+              </p>
+            )}
+          </section>
 
-        {error && (
-          <p data-testid="connect-error" className="mt-3 text-sm text-red-300">
-            {error}
-          </p>
-        )}
-      </section>
-
-      <section aria-labelledby="new-heading" className="mt-8">
-        <h2 id="new-heading" className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
-          New connection
-        </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {Object.values(DRIVERS).map((d) => (
-            <button
-              key={d.type}
-              type="button"
-              data-testid={`new-conn-${d.type}`}
-              onClick={() => {
-                setFormType(d.type)
-                setError(null)
-              }}
-              className="glass-card group flex items-center gap-3 p-4 text-left"
-            >
-              <DriverMark type={d.type} />
-              <span className="min-w-0">
-                <span className="block font-medium text-slate-100">{d.label}</span>
-                <span className="block text-xs text-slate-400">{d.blurb}</span>
-              </span>
-              <span className="ml-auto text-lg text-slate-500 group-hover:text-indigo-200" aria-hidden>
-                +
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
+          <section aria-labelledby="new-heading" className="mt-8">
+            <h2 id="new-heading" className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              New connection
+            </h2>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {Object.values(DRIVERS).map((d) => (
+                <button
+                  key={d.type}
+                  type="button"
+                  data-testid={`new-conn-${d.type}`}
+                  onClick={() => {
+                    setFormType(d.type)
+                    setError(null)
+                  }}
+                  className="glass-card group flex items-center gap-3 p-4 text-left"
+                >
+                  <DriverMark type={d.type} />
+                  <span className="min-w-0">
+                    <span className="block font-medium text-slate-100">{d.label}</span>
+                    <span className="block text-xs text-slate-400">{d.blurb}</span>
+                  </span>
+                  <span className="ml-auto text-lg text-slate-500 group-hover:text-indigo-200" aria-hidden>
+                    +
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
     </div>
   )
 }
@@ -331,7 +292,7 @@ function ConnectionForm({
 }: {
   meta: DriverMeta
   onBack: () => void
-  onConnected: (name: string, type: string, databases: string[]) => void
+  onConnected: (connection: Connection) => void
 }) {
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(meta.fields.map((f) => [f.key, f.default])),
@@ -371,11 +332,7 @@ function ConnectionForm({
       })
       const data = await res.json()
       if (data.ok) {
-        onConnected(
-          data.name as string,
-          (data.type ?? meta.type) as string,
-          (data.databases ?? []) as string[],
-        )
+        onConnected(toConnection({ type: meta.type, ...data }))
       } else {
         setResult({ ok: false, message: data.message ?? 'connect failed' })
       }

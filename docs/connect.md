@@ -190,7 +190,7 @@ session.
 | ------ | ----------------------------- | -------------------------------------- | ------ |
 | POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
 | POST   | `/api/db/connect`     | `{type, name, …driver config}`         | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form) |
-| GET    | `/api/db/connections` | —                                      | `{names, connections:[{name, type, database, last_active_at}]}`, most recent first; the saved cards (never the config) |
+| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at}]}`, most recent first; the saved cards (never the config) |
 | POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a saved connection (a saved card) |
 | POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database |
 | POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |
