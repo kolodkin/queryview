@@ -1,16 +1,10 @@
 # QueryView — the Connect page
 
-QueryView's Connect page (`/connect`) is where a disconnected session lands:
-cards for every saved connection and one "new connection" card per driver,
-centered, with nothing else on the page. It stays reachable once connected
-(e.g. to switch connections). Once a database is selected, `/queries` shows the
-query panel; before that it redirects to `/connect`. Two more top-level pages
-exist: `/explorer`, the classical table navigator (see
-[explorer.md](./explorer.md)), and `/dashboard`, which renders agent-authored
-dashboards (see [dashboard.md](./dashboard.md)); a corner nav switches between
-them, and the connection status pill persists across all of them. This doc
-describes the Connect page. `/prompt`, its name before the command prompt was
-retired, redirects here.
+The Connect page (`/connect`) is where a disconnected session lands: a card per
+saved connection and a "new connection" card per driver. The other pages are
+`/queries` (redirects here until a database is selected), `/explorer` (see
+[explorer.md](./explorer.md)) and `/dashboard` (see
+[dashboard.md](./dashboard.md)). The old `/prompt` URL redirects here.
 
 ## Layout
 
@@ -30,16 +24,14 @@ retired, redirects here.
 └───────────────────────────────────────────────────────────┘
 ```
 
-- **Saved connections** — one card per saved connection, most recently used
-  first: the driver's monogram, the name, the database it was last on and how
-  long ago it was used. The session's active connection carries a green dot.
-  Clicking a card opens it: a driver with a database picker swaps the cards for
-  the picker (the last-used database highlighted), a picker-less one (DuckDB)
-  goes straight to the explorer. Past six connections a **filter** box appears;
-  Enter opens the first match.
-- **New connection** — one card per driver; clicking it opens that driver's
-  form in place (see [connect.md](./connect.md)).
-- **← Connections** — the form and the picker both carry it, back to the cards.
+- **Saved connections** — most recent first: driver monogram, name, last
+  database, last used; the active one has a green dot. Clicking opens it: the
+  database picker (last-used database highlighted), or the explorer for a
+  picker-less driver (DuckDB). Past six cards a **filter** appears; Enter opens
+  the first match.
+- **New connection** — opens that driver's form in place (see
+  [connect.md](./connect.md)).
+- **← Connections** — on the form and the picker; back to the cards.
 - **Connection status** — the one element that persists across every page: a
   pill in the **top-left** corner, hidden until a database is selected, then
   showing 🟢 `connected - <database>` (just the database below `md` width).

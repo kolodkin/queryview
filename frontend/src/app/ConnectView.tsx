@@ -10,7 +10,7 @@ import { apiFetch } from './api'
 
 type TestResult = { ok: boolean; message: string }
 
-// A saved connection as listed by /api/db/connections: metadata only.
+// A saved connection's card data, from /api/db/connections.
 type SavedConnection = {
   name: string
   type: string
@@ -21,10 +21,8 @@ type SavedConnection = {
 // Past this many saved connections the cards get a filter box.
 const FILTER_THRESHOLD = 6
 
-// The Connect page (`/connect`): saved connections and one "new connection"
-// card per driver. Opening a card with a database picker shows the picker in
-// place; a picker-less driver (DuckDB) goes straight to the explorer, as does
-// picking a database (docs/queryview.md#landing-page).
+// The Connect page (`/connect`): saved-connection cards and a "new connection"
+// card per driver. See docs/queryview.md.
 function ConnectView({
   connection,
   setConnection,
@@ -35,9 +33,9 @@ function ConnectView({
   const navigate = useNavigate()
   const [saved, setSaved] = useState<SavedConnection[] | null>(null)
   const [filter, setFilter] = useState('')
-  // The driver whose connection form is open, or null when no form is shown.
+  // The driver whose form is open, if any.
   const [formType, setFormType] = useState<string | null>(null)
-  // Back from the picker to the cards, with the half-open connection kept.
+  // Back from the picker to the cards; the opened connection stays.
   const [browsing, setBrowsing] = useState(false)
   // The card being opened, for its spinner; and the last open's failure.
   const [opening, setOpening] = useState<string | null>(null)
@@ -495,7 +493,7 @@ function DatabasePicker({
       <form
         className="mt-4"
         onSubmit={(e) => {
-          // Enter picks the first match so a typed prefix is enough to connect.
+          // Enter picks the first match, so a typed prefix is enough.
           e.preventDefault()
           if (visible.length > 0) onSelect(visible[0])
         }}

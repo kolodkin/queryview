@@ -1,11 +1,10 @@
 # Connecting
 
 Connections have two halves: a **type** (the driver, e.g. `clickhouse`) and a
-**name** (your label, e.g. `clickhouse`, `prod-ch`). You create a connection
-once from its driver's **New connection** card on the Connect page (`/connect`,
-see [queryview.md](./queryview.md)), then reopen it by clicking its saved card.
-Connections are persisted in SQLite, and a session reconnects whichever one it
-was last on.
+**name** (your label, e.g. `clickhouse`, `prod-ch`). Create one from a **New
+connection** card on the Connect page (see [queryview.md](./queryview.md)),
+reopen it from its saved card. Connections persist in SQLite, and a session
+reconnects whichever one it was last on.
 
 ## Storage & migrations
 
@@ -30,24 +29,16 @@ commit it; the app applies it on next start.
 > `alembic_version` table) is not upgraded automatically — delete it and let the
 > app recreate it on next start.
 
-## The Connect page
+## Drivers
 
-| Card | Effect |
-| ---- | ------ |
-| **New connection → ClickHouse** | Open the form to create a new ClickHouse connection. |
-| **New connection → Postgres** | Open the form to create a new Postgres connection. |
-| **New connection → DuckDB** | Open the form to create a new DuckDB connection (file path; no database picker). |
-| A **saved connection** | Open it and show its database picker (a picker-less driver goes straight to the explorer). |
-
-**Drivers.** ClickHouse and Postgres take host/port/username/password and present
+ ClickHouse and Postgres take host/port/username/password and present
 a database picker — for ClickHouse the picker lists `SHOW DATABASES`, for Postgres
 it lists real databases (`pg_database`) and the chosen one is where queries run.
 DuckDB takes a **path** (or `:memory:`), has no network and **no picker** —
 connecting goes straight to the explorer; schema-qualify tables in SQL as
 needed.
 
-A saved card that fails to open (server down, bad credentials) reports the
-error under the cards and stays put.
+A saved card that fails to open reports the error under the cards.
 When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`
 fails, the error suggests `host.docker.internal` (see the README's
 [Connecting to databases on your machine](../README.md#connecting-to-databases-on-your-machine)).
@@ -59,7 +50,7 @@ fails, the error suggests `host.docker.internal` (see the README's
   a steady connection, and does not change what the session is connected to.
 - **Connect** — opens a *steady* connection: it validates, lists the databases,
   **saves** the connection to SQLite and makes it the session's active
-  connection. The Connect page then shows its database picker.
+  connection, then shows the database picker.
 - **Active connection** — held at the **session** level (see
   [queryview.md](./queryview.md)). One per session.
 - **Database selection** — after connecting, the user picks a database. Only
@@ -68,8 +59,8 @@ fails, the error suggests `host.docker.internal` (see the README's
 
 ## Creating a connection
 
-The **ClickHouse** new-connection card renders the connection form in place of
-the cards; **← Connections** goes back without saving.
+A **New connection** card shows its driver's form in place of the cards
+(ClickHouse below); **← Connections** goes back without saving.
 
 | Field    | Default     | Notes                                          |
 | -------- | ----------- | ---------------------------------------------- |
@@ -83,8 +74,7 @@ Two actions:
 
 - **Test connection** — `POST /api/db/test`. Shows a pass/fail message
   inline. No side effects.
-- **Connect** — `POST /api/db/connect`. On success the form closes and
-  the database picker opens.
+- **Connect** — `POST /api/db/connect`. On success the picker opens.
 
 ## Flow
 
@@ -99,22 +89,14 @@ cards ── "New connection" card ──▶ connection form
                                               ▼
                               🟢 connected - <database>  (explorer)
 
-cards ── saved card ──▶ opens saved <name> ──▶ database picker ──▶ pick
+cards ── saved card ──▶ opens <name>, activates it ──▶ database picker ──▶ pick
 ```
-
-## Opening a saved connection
-
-Clicking a saved card opens that connection (lists its databases), makes it the
-active session connection, and shows the database picker. Pick a database from
-the picker to finish.
 
 ## Database picker
 
-After connecting, the Connect page shows the databases returned by
-`SHOW DATABASES`, with the one the connection was last on highlighted.
-**← Connections** returns to the cards, leaving the opened connection in place.
-A filter input at
-the top of the picker (focused on open) narrows the list by case-insensitive
+After connecting, the picker lists the databases (`SHOW DATABASES`), the last
+one used highlighted; **← Connections** returns to the cards, leaving the
+connection open. A filter input (focused on open) narrows the list by case-insensitive
 substring; **Enter** selects the first remaining match, and an empty result
 shows "No databases match". Selecting a database:
 
