@@ -26,8 +26,8 @@ order-by select the query panel uses.
 
 - **Sidebar** — the tables of the session's selected database, from
   `GET /api/db/tables`. Each entry shows the engine's row-count and size
-  estimates under the name (e.g. `1.2K rows · 3.4MB`), leaving the name the
-  panel's full width: row counts abbreviate with K/M/G/T/P at each power of
+  estimates under the name (e.g. `1.2K rows · 3.4MB`), and a **copy** icon
+  that copies the name without opening the table. Row counts abbreviate with K/M/G/T/P at each power of
   1000, byte sizes with KB/MB/GB/TB/PB at each power of 1024; an estimate the
   engine doesn't track (views, a never-analyzed Postgres table) is simply
   omitted. The list refreshes when the active database changes (via the

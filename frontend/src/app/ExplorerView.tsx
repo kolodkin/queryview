@@ -14,6 +14,7 @@ import {
 import { isReady, type Connection } from './connection'
 import { formatBytes, formatCompact } from './compactNumber'
 import { Loading, Spinner } from './controls/Spinner'
+import { CopyName } from './controls/CopyName'
 import {
   DEFAULT_SIDEBAR_WIDTH,
   MAX_SIDEBAR_WIDTH,
@@ -322,29 +323,34 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
             {tables.map((t) => {
               const meta = tableMeta(t)
               return (
-                <button
+                <div
                   key={t.name}
-                  type="button"
-                  data-testid="explorer-table"
-                  data-table={t.name}
-                  title={t.name}
-                  onClick={() => setSearchParams({ table: t.name })}
-                  className={`block w-full rounded px-2 py-1.5 text-left text-sm hover:bg-white/10 ${
-                    t.name === table
-                      ? 'bg-white/10 font-medium text-indigo-200'
-                      : 'text-slate-200'
+                  className={`group flex items-center rounded hover:bg-white/10 ${
+                    t.name === table ? 'bg-white/10' : ''
                   }`}
                 >
-                  <span className="block truncate">{t.name}</span>
-                  {meta && (
-                    <span
-                      data-testid="explorer-table-meta"
-                      className="block truncate text-xs font-normal text-slate-400"
-                    >
-                      {meta}
-                    </span>
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    data-testid="explorer-table"
+                    data-table={t.name}
+                    title={t.name}
+                    onClick={() => setSearchParams({ table: t.name })}
+                    className={`block min-w-0 flex-1 px-2 py-1.5 text-left text-sm ${
+                      t.name === table ? 'font-medium text-indigo-200' : 'text-slate-200'
+                    }`}
+                  >
+                    <span className="block truncate">{t.name}</span>
+                    {meta && (
+                      <span
+                        data-testid="explorer-table-meta"
+                        className="block truncate text-xs font-normal text-slate-400"
+                      >
+                        {meta}
+                      </span>
+                    )}
+                  </button>
+                  <CopyName name={t.name} testid="explorer-table-copy" />
+                </div>
               )
             })}
             {tables.length === 0 && !tablesError && (

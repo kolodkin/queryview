@@ -6,15 +6,18 @@ from playwright.sync_api import Page, expect
 
 
 def test_popovers_close_on_outside_click_and_escape(page: Page) -> None:
-    page.goto("/queries", wait_until="networkidle")
+    page.goto("/prompt", wait_until="networkidle")
     switcher = page.get_by_test_id("workspace-switcher")
     option = page.get_by_test_id("workspace-option").first
-    heading = page.locator("h1")  # outside every popover
+
+    def click_outside() -> None:
+        # The page's empty left edge: the header popovers open on the right.
+        page.mouse.click(5, 400)
 
     # Workspace dropdown: a click elsewhere on the page closes it.
     switcher.click()
     expect(option).to_be_visible()
-    heading.click()
+    click_outside()
     expect(option).to_have_count(0)
 
     # ...and so does Escape.
@@ -28,7 +31,7 @@ def test_popovers_close_on_outside_click_and_escape(page: Page) -> None:
     page.get_by_test_id("workspace-manage").click()
     name_input = page.get_by_test_id("workspace-name-input")
     expect(name_input).to_be_visible()
-    heading.click()
+    click_outside()
     expect(name_input).to_have_count(0)
 
     # ...but once it holds unsaved input, an outside click and Escape both
@@ -36,7 +39,7 @@ def test_popovers_close_on_outside_click_and_escape(page: Page) -> None:
     switcher.click()
     page.get_by_test_id("workspace-manage").click()
     page.get_by_test_id("workspace-branch-input").fill("draft")
-    heading.click()
+    click_outside()
     page.keyboard.press("Escape")
     expect(name_input).to_be_visible()
     page.get_by_role("button", name="Close").click()
@@ -47,7 +50,7 @@ def test_popovers_close_on_outside_click_and_escape(page: Page) -> None:
     suggestions = page.get_by_test_id("prompt-suggestions")
     prompt.fill("new")
     expect(suggestions).to_be_visible()
-    heading.click()
+    click_outside()
     expect(suggestions).to_have_count(0)
 
     prompt.fill("ne")  # a fresh value: re-typing the same one fires no change

@@ -23,7 +23,7 @@ from .connect import _engine_for_db, _ensure_schema, _now_ms
 # releases at once by beacon, so only a crashed one waits this out.
 SESSION_CLAIM_TTL_MS = 90_000
 
-DEFAULT_URL = "/queries"
+DEFAULT_URL = "/prompt"
 
 
 def _open() -> AsyncSession:

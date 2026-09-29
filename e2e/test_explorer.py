@@ -200,3 +200,15 @@ def test_panels_show_loaders_until_data_arrives(seeded_duckdb, page: Page, shot)
     expect(page.get_by_test_id("explorer-rows-loading")).to_have_count(0)
     # Drop any handler still holding a response, so page close doesn't race it.
     page.unroute_all(behavior="ignoreErrors")
+
+
+def test_table_copy_puts_the_name_on_the_clipboard(seeded_duckdb, page: Page) -> None:
+    """Each table row's copy icon copies its name without opening the table."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    _connect(page, DUCK, seeded_duckdb)
+
+    row = page.locator('[data-testid="explorer-table"][data-table="items"]')
+    row.locator("xpath=..").get_by_test_id("explorer-table-copy").click()
+
+    assert page.evaluate("navigator.clipboard.readText()") == "items"
+    expect(page).not_to_have_url(re.compile(r"table="))

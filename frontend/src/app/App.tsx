@@ -9,13 +9,14 @@ import {
   useNavigate,
 } from 'react-router-dom'
 
-import { SearchPanel, useCopy, useDismiss } from '../core'
+import { SearchPanel, useDismiss } from '../core'
 import { isReady, type Connection } from './connection'
 import QueryView, { type QueryPush } from './QueryView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
+import { CopyName } from './controls/CopyName'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
 import SessionSwitcher from './controls/SessionSwitcher'
 import {
@@ -30,15 +31,42 @@ import {
 } from './session'
 import { apiFetch } from './api'
 
-// The database list behind the connection pill. Long connections list hundreds
-// of databases, so it carries the landing picker's filter.
+// Ends the connection; the last entry of the pill's menu.
+function DisconnectButton({ onDisconnect }: { onDisconnect: () => void }) {
+  return (
+    <button
+      type="button"
+      data-testid="disconnect"
+      onClick={onDisconnect}
+      className="mt-1 w-full rounded border-t border-white/10 px-2 py-1.5 text-left text-rose-300 hover:bg-white/10"
+    >
+      Disconnect
+    </button>
+  )
+}
+
+// The menu behind the connection pill: the database list, then Disconnect.
+// Long connections list hundreds of databases, so it carries the landing
+// picker's filter; a picker-less driver gets just Disconnect.
 function DatabaseMenu({
   connection,
   onSelect,
+  onDisconnect,
 }: {
   connection: Connection
   onSelect: (database: string) => void
+  onDisconnect: () => void
 }) {
+  if (connection.databases.length === 0) {
+    return (
+      <div
+        data-testid="db-select"
+        className="glass-popover absolute left-0 top-full z-10 mt-2 w-48 p-1 text-sm"
+      >
+        <DisconnectButton onDisconnect={onDisconnect} />
+      </div>
+    )
+  }
   return (
     <SearchPanel
       items={connection.databases}
@@ -51,37 +79,14 @@ function DatabaseMenu({
       renderItem={(db, current) => (
         <span className={`truncate ${current ? 'text-indigo-200' : 'text-slate-200'}`}>{db}</span>
       )}
-      itemAction={(db) => <CopyName name={db} />}
+      itemAction={(db) => <CopyName name={db} testid="db-copy" />}
+      footer={<DisconnectButton onDisconnect={onDisconnect} />}
     />
   )
 }
 
-// Copies a database name without picking it; dim until its row is hovered.
-function CopyName({ name }: { name: string }) {
-  const [copied, copy] = useCopy()
-  return (
-    <button
-      type="button"
-      data-testid="db-copy"
-      aria-label={`Copy ${name}`}
-      title={copied ? 'Copied' : 'Copy name'}
-      onClick={() => void copy(name)}
-      className="shrink-0 rounded px-2 py-1.5 text-xs text-slate-500 group-hover:text-slate-300 hover:!text-indigo-200"
-    >
-      {copied ? (
-        '✓'
-      ) : (
-        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="9" y="9" width="11" height="11" rx="2" />
-          <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-        </svg>
-      )}
-    </button>
-  )
-}
-
 // App shell: routing, shared connection state, the connection pill + agent
-// popover, and the armed/SSE remote-control channel. Pages: /queries,
+// popover, and the armed/SSE remote-control channel. Pages: /prompt, /queries,
 // /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
@@ -120,7 +125,7 @@ function Shell() {
     setWorkspace(name)
   }
 
-  // The ?connection= deep-link, captured before the `/`→`/queries` redirect
+  // The ?connection= deep-link, captured before the `/` landing redirect
   // rewrites the URL.
   const initialConnection = useMemo(
     () => new URLSearchParams(window.location.search).get('connection'),
@@ -145,13 +150,13 @@ function Shell() {
         setConnection(opened)
         // Ready already (a picker-less driver) means tables to browse;
         // otherwise the prompt is where the database gets picked.
-        navigate(isReady(opened) ? '/explorer' : '/queries')
+        navigate(isReady(opened) ? '/explorer' : '/prompt')
         return
       }
     } catch {
       /* a failed deep-link open just leaves us disconnected */
     }
-    navigate('/queries')
+    navigate('/prompt')
   }
 
   // The live connection for the attached session. `/api/session` reads that
@@ -182,7 +187,7 @@ function Shell() {
     setWorkspace(next.workspace)
     setSessionLabel(next.label)
     setSessionKey(`${next.id}:${++adoptions.current}`)
-    navigate(next.url || '/queries')
+    navigate(next.url || '/prompt')
     void refreshConnection()
   }
 
@@ -293,6 +298,19 @@ function Shell() {
     }
   }
 
+  // Drop the connection (saved connections survive) and go to the prompt,
+  // where `connect <name>` reopens one.
+  async function disconnect() {
+    setDbOpen(false)
+    try {
+      await apiFetch('/api/db/disconnect', { method: 'POST' })
+    } catch {
+      /* a failed disconnect still clears the UI; the session is best-effort */
+    }
+    setConnection(null)
+    navigate('/prompt')
+  }
+
   // The channel is keyed by this session, so the agent's id is the session's own.
   const remoteId = channelOpen ? sessionId() : null
   const agentCommand = `Use the queryview mcp to connect to session "${remoteId ?? ''}"`
@@ -313,7 +331,7 @@ function Shell() {
               <button
                 type="button"
                 data-testid="connection-status"
-                onClick={() => connection.databases.length > 0 && setDbOpen((o) => !o)}
+                onClick={() => setDbOpen((o) => !o)}
                 aria-haspopup="listbox"
                 aria-expanded={dbOpen}
                 className="glass-chip flex max-w-full items-center gap-2 px-3 py-1.5 text-sm font-medium"
@@ -327,14 +345,13 @@ function Shell() {
                   <span className="hidden md:inline">connected - </span>
                   {connection.database ?? connection.name}
                 </span>
-                {connection.databases.length > 0 && (
-                  <span className="text-xs text-slate-400">▾</span>
-                )}
+                <span className="text-xs text-slate-400">▾</span>
               </button>
-              {dbOpen && connection.databases.length > 0 && (
+              {dbOpen && (
                 <DatabaseMenu
                   connection={connection}
                   onSelect={(db) => void switchDatabase(db)}
+                  onDisconnect={() => void disconnect()}
                 />
               )}
             </div>
@@ -426,7 +443,17 @@ function Shell() {
             />
             <WorkspaceSwitcher workspace={workspace} onSwitch={switchWorkspace} />
             <Link
-              to="/queries"
+              to="/prompt"
+              data-testid="nav-prompt"
+              onClick={() => setNavOpen(false)}
+              className={navLinkClass('/prompt')}
+            >
+              Prompt
+            </Link>
+            {/* Straight to the prompt until there's a database: a round trip
+                through the /queries redirect would remount it. */}
+            <Link
+              to={ready ? '/queries' : '/prompt'}
               data-testid="nav-queries"
               onClick={() => setNavOpen(false)}
               className={navLinkClass('/queries')}
@@ -457,16 +484,32 @@ function Shell() {
           attach has answered. */}
       {sessionChecked ? (
         <Routes>
+          {/* The query panel needs a database; until then Queries is the prompt. */}
           <Route
             path="/queries"
             element={
+              !ready ? (
+                <Navigate to="/prompt" replace />
+              ) : (
+                <QueryView
+                  key={`${sessionKey}:${workspace}`}
+                  connection={connection}
+                  setConnection={setConnection}
+                  pushed={queryPush}
+                  onPushConsumed={() => setQueryPush(null)}
+                  remoteId={remoteId}
+                />
+              )
+            }
+          />
+          <Route
+            path="/prompt"
+            element={
               <QueryView
-                key={`${sessionKey}:${workspace}`}
+                key={`${sessionKey}:${workspace}:prompt`}
+                promptOnly
                 connection={connection}
                 setConnection={setConnection}
-                pushed={queryPush}
-                onPushConsumed={() => setQueryPush(null)}
-                remoteId={remoteId}
               />
             }
           />
@@ -485,8 +528,8 @@ function Shell() {
           />
           {/* Only `/` picks a landing page. An unknown path is just a bad URL,
               not a landing question. */}
-          <Route path="/" element={<Navigate to={ready ? '/explorer' : '/queries'} replace />} />
-          <Route path="*" element={<Navigate to="/queries" replace />} />
+          <Route path="/" element={<Navigate to={ready ? '/explorer' : '/prompt'} replace />} />
+          <Route path="*" element={<Navigate to="/prompt" replace />} />
         </Routes>
       ) : (
         <Loading label="Restoring session…" testid="session-loading" />
@@ -535,9 +578,10 @@ const NAV_ROW =
   'md:static md:mt-0 md:flex md:w-auto md:min-w-0 md:flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-filter-none'
 
 function pageTitle(path: string): string {
+  if (path.startsWith('/queries')) return 'Queries'
   if (path.startsWith('/explorer')) return 'Explorer'
   if (path.startsWith('/dashboard')) return 'Dashboard'
-  return 'Queries'
+  return 'Prompt'
 }
 
 function App() {

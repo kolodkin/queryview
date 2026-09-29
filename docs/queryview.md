@@ -1,8 +1,11 @@
 # QueryView — single-prompt page concept
 
-QueryView's main page (`/queries`) is one centered prompt — the user types a
-command and the page reacts to it inline; no sidebar, no toolbars. Two more
-top-level pages exist: `/explorer`, the classical table navigator (see
+QueryView's prompt page (`/prompt`) is one centered prompt — the user types a
+command and the page reacts to it inline; no sidebar, no toolbars. It is where
+a disconnected session lands, and stays reachable once connected (e.g. to
+connect elsewhere). Once a database is selected, `/queries` shows the query
+panel (the prompt joins its top row); before that it redirects to `/prompt`.
+Two more top-level pages exist: `/explorer`, the classical table navigator (see
 [explorer.md](./explorer.md)), and `/dashboard`, which renders agent-authored
 dashboards (see [dashboard.md](./dashboard.md)); a corner nav switches between
 them, and the connection status pill persists across all three. This doc
@@ -35,7 +38,8 @@ describes the prompt page.
   pill in the **top-left** corner, hidden until a database is selected, then
   showing 🟢 `connected - <database>` (just the database below `md` width).
   Clicking it opens a searchable database switcher; each row's **copy** icon
-  copies the name without switching. Next to it, an **agent icon** opens the
+  copies the name without switching, and **Disconnect** at the bottom drops the
+  connection and goes to `/prompt` (a picker-less driver's menu is just that). Next to it, an **agent icon** opens the
   remote-control popover (opt-in "Allow remote control"); see
   [remote.md](./remote.md).
 - **Narrow windows** — below `md` the session, workspace and page links
@@ -60,7 +64,7 @@ to browse (see [explorer.md](./explorer.md)).
 
 - **Opening the app** (`/`) waits for the session to attach, then goes where
   that session left off. A session with no remembered URL lands on `/explorer`
-  for a ready connection and `/queries` otherwise. Only `/` chooses: a deep link
+  for a ready connection and `/prompt` otherwise. Only `/` chooses: a deep link
   to a page is honored as typed, and becomes the session's URL.
 - **Connecting** — picking a database (or connecting a picker-less driver)
   navigates from the connect handler itself. Nothing watches the connection, so
