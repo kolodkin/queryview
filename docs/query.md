@@ -95,7 +95,8 @@ CREATE TABLE predefined_queries (
   name…** item prompts for a fresh name (no separate name field).
 - **Save** stores the textarea's SQL (and the `cell_view` YAML) under the
   **currently selected name** and refreshes the selector. Saving an existing name
-  **upserts** (overwrites) it.
+  **upserts** (overwrites) it. In an [autosave](./workspace.md#autosave)
+  workspace there is no Save button: each successful run saves instead.
 
 Renaming and deleting predefined queries are not yet supported — see
 [future.md](./future.md).
@@ -302,7 +303,8 @@ session (owner: none / human / agent, held in memory).
 - **Save persists presentation:** the human's Save now stores `order_by` and the
   selected `fields` alongside `cell_view`, so reloading a predefined query
   restores its full presentation. Pushes never persist — only the human's Save
-  writes to the DB.
+  writes to the DB, except in an [autosave](./workspace.md#autosave) workspace,
+  where a named push saves once its auto-run succeeds.
 
 The lock and channels live in one process's memory (like the SSE relay), so this
 assumes a single backend process; multi-worker deployments would need a shared

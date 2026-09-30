@@ -28,6 +28,7 @@ import { postLock } from './sessionLock'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace, flushPatches, patchView, viewState } from './session'
+import { queryChanged } from './autosave'
 
 type PredefinedQuery = {
   query_name: string
@@ -61,11 +62,14 @@ function QueryView({
   pushed,
   onPushConsumed,
   remoteId,
+  autosave = false,
 }: {
   connectionType: string
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
+  // The workspace autosaves: no Save button; successful runs save instead.
+  autosave?: boolean
 }) {
   return (
     <div className="viewport-page flex w-full max-w-[80vw] flex-col">
@@ -79,6 +83,7 @@ function QueryView({
         pushed={pushed}
         onPushConsumed={onPushConsumed}
         remoteId={remoteId}
+        autosave={autosave}
       />
     </div>
   )
@@ -95,11 +100,14 @@ function QueryPanel({
   pushed,
   onPushConsumed,
   remoteId,
+  autosave = false,
 }: {
   connectionType: string
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
+  // The workspace autosaves: no Save button; successful runs save instead.
+  autosave?: boolean
 }) {
   // Restored from the session, inputs only: results are deliberately not, so a
   // reload can never re-fire an expensive query.
@@ -114,6 +122,10 @@ function QueryPanel({
   const [busy, setBusy] = useState(false)
   const [predefined, setPredefined] = useState<PredefinedQuery[]>([])
   const [selectedName, setSelectedName] = useState('')
+  // The last successful run — its SQL and the name it runs for, taken at start;
+  // a fresh object per run. Autosave reacts to it once the run's state (a
+  // push's name and presentation) has committed.
+  const [lastOk, setLastOk] = useState<{ query: string; name: string } | null>(null)
   const [fields, setFields] = useState<Field[]>([])
   const [visibleCols, setVisibleCols] = useState<string[]>(() =>
     Array.isArray(saved.visibleCols) ? (saved.visibleCols as string[]) : [],
@@ -351,7 +363,9 @@ function QueryPanel({
     // saved view, and Save all target it (selection only — nothing persisted).
     if (pushed.name != null) setSelectedName(pushed.name)
     /* eslint-enable react-hooks/set-state-in-effect */
-    void runWith(q, lim, off, ord, fld)
+    // An unnamed push runs for no name, so autosave never writes it over the
+    // selected query.
+    void runWith(q, lim, off, ord, fld, undefined, pushed.name ?? '')
     // Consume the push so re-mounting doesn't re-run a stale query.
     onPushConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -390,6 +404,8 @@ function QueryPanel({
     ord: OrderCol[],
     selectFields?: string[],
     paramOverride?: Record<string, string>,
+    // The query name this run saves under (autosave); defaults to the selection.
+    runFor: string = selectedName,
   ) {
     setBusy(true)
     setError(null)
@@ -407,6 +423,7 @@ function QueryPanel({
         const rows: QueryRows = { meta: data.meta ?? [], data: data.data ?? [] }
         setResult(rows)
         setOffset(off)
+        setLastOk({ query: q, name: runFor.trim() })
         // A pushed selection is authoritative: synthesize the field list from the
         // result columns so the visibility filter restricts the table to exactly
         // the pushed columns (empty/absent => show all).
@@ -499,8 +516,12 @@ function QueryPanel({
   }
 
   // SQL-only saves (top button) re-persist the existing cell_view; the modal
-  // passes its draft. Returns success so the modal closes only on a clean persist.
-  async function save(cellViewValue: string = effectiveCellView): Promise<boolean> {
+  // passes its draft, autosave the SQL it ran. Returns success so the modal
+  // closes only on a clean persist.
+  async function save(
+    cellViewValue: string = effectiveCellView,
+    query: string = sql,
+  ): Promise<boolean> {
     const name = selectedName.trim()
     if (!name) return false
     setBusy(true)
@@ -512,7 +533,7 @@ function QueryPanel({
         body: JSON.stringify({
           query_name: name,
           type: connectionType,
-          query: sql,
+          query,
           cell_view: cellViewValue,
           workspace: activeWorkspace(),
           ...presentationForSave(orderBy, visibleCols),
@@ -534,6 +555,24 @@ function QueryPanel({
       setBusy(false)
     }
   }
+
+  // Autosave: persist a named query after each successful run — the SQL that ran,
+  // never a half-typed edit — unless nothing differs from its stored row.
+  useEffect(() => {
+    // Skip when the selection moved on mid-run: its presentation isn't this run's.
+    const name = lastOk?.name
+    if (!autosave || !lastOk || !name || name !== selectedName.trim()) return
+    const next = {
+      query: lastOk.query,
+      cell_view: effectiveCellView,
+      ...presentationForSave(orderBy, visibleCols),
+    }
+    if (queryChanged(predefined.find((p) => p.query_name === name), next)) {
+      void save(effectiveCellView, lastOk.query) // eslint-disable-line react-hooks/set-state-in-effect
+    }
+    // Only a new successful run triggers it; the rest is read as of that run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastOk])
 
   // Modal owns its draft state (seeded from effectiveCellView, so a pushed
   // draft is editable); we just toggle visibility and forward the saved value.
@@ -591,15 +630,17 @@ function QueryPanel({
         >
           {copiedName ? 'Copied' : 'Copy'}
         </button>
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={busy || !selectedName.trim()}
-          data-testid="query-save"
-          className="glass-btn px-3 py-2 font-medium"
-        >
-          Save
-        </button>
+        {!autosave && (
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={busy || !selectedName.trim()}
+            data-testid="query-save"
+            className="glass-btn px-3 py-2 font-medium"
+          >
+            Save
+          </button>
+        )}
         <GitSyncControls
           kind="query"
           name={selectedName}

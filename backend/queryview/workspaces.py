@@ -37,6 +37,8 @@ class Workspace(SQLModel, table=True):
     name: str = Field(unique=True, index=True)
     remote: str | None = Field(default=None)  # base64(AES-GCM(url)) — never plaintext
     branch: str = Field(default="main")
+    # Save on update instead of an explicit Save; docs/workspace.md#autosave.
+    autosave: bool = Field(default=False)
 
 
 @dataclass
@@ -47,6 +49,7 @@ class WorkspaceRec:
     name: str
     remote: str | None
     branch: str
+    autosave: bool = False
 
 
 def _to_rec(row: Workspace) -> WorkspaceRec:
@@ -55,6 +58,7 @@ def _to_rec(row: Workspace) -> WorkspaceRec:
         name=row.name,
         remote=_decrypt_str(row.remote) if row.remote else None,
         branch=row.branch,
+        autosave=row.autosave,
     )
 
 
@@ -117,12 +121,18 @@ async def list_workspaces() -> list[dict[str, Any]]:
     async with AsyncSession(_engine_for_db()) as s:
         rows = (await s.exec(select(Workspace).order_by(Workspace.name))).all()
     return [
-        {"name": r.name, "branch": r.branch, "configured": bool(r.remote), "remote": _public_remote(r.remote)}
+        {
+            "name": r.name,
+            "branch": r.branch,
+            "configured": bool(r.remote),
+            "remote": _public_remote(r.remote),
+            "autosave": r.autosave,
+        }
         for r in rows
     ]
 
 
-async def create_workspace(name: str, remote: str | None = None, branch: str = "main") -> None:
+async def create_workspace(name: str, remote: str | None = None, branch: str = "main", autosave: bool = False) -> None:
     name = _valid_name(name)
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
@@ -134,6 +144,7 @@ async def create_workspace(name: str, remote: str | None = None, branch: str = "
                 name=name,
                 remote=_encrypt_str(remote) if remote else None,
                 branch=branch.strip() or "main",
+                autosave=autosave,
             )
         )
         await s.commit()
@@ -149,6 +160,7 @@ async def update_workspace(
     new_name: str | None = None,
     remote: Any = _UNSET,
     branch: str | None = None,
+    autosave: bool | None = None,
 ) -> None:
     """Rename and/or reconfigure a workspace. Renaming is a one-row update:
     entities and clone dirs are keyed by workspace id, so nothing else moves."""
@@ -168,6 +180,8 @@ async def update_workspace(
             row.remote = _encrypt_str(remote) if remote else None
         if branch is not None and branch.strip():
             row.branch = branch.strip()
+        if autosave is not None:
+            row.autosave = autosave
         s.add(row)
         await s.commit()
 
