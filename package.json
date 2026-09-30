@@ -15,7 +15,8 @@
     "debug": "concurrently -k -n backend,frontend -c blue,magenta \"SERVE_STATIC=1 uv run uvicorn queryview.main:app --reload --port ${PORT:-8000}\" \"npm exec -w frontend -- vite build --watch\"",
     "build": "npm run build -w frontend",
     "start": "SERVE_STATIC=1 uv run queryview-backend",
-    "preview": "npm run build && npm run start"
+    "preview": "npm run build && npm run start",
+    "e2e": "./scripts/e2e.sh"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

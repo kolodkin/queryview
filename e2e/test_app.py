@@ -1,7 +1,7 @@
 import re
 
 import httpx
-from conftest import open_connect, start_new_connection
+from conftest import CH_PASSWORD, CH_USER, fill_credentials, open_connect, start_new_connection
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -25,6 +25,7 @@ def test_queryview_e2e(page: Page) -> None:
         expect(page.get_by_test_id(test_id)).to_be_visible()
 
     # test connection succeeds against the real ClickHouse
+    fill_credentials(page, "clickhouse")
     page.get_by_test_id("ch-test").click()
     result = page.get_by_test_id("ch-result")
     expect(result).to_be_visible()
@@ -160,7 +161,14 @@ def test_many_connections(seeded_test_db, page: Page, base_url: str) -> None:
     Self-contained: two drivers for the chips, and enough cards to scroll."""
     page.goto("/connect", wait_until="networkidle")
     bulk = [{"type": "duckdb", "name": f"bulk-{i:02d}", "path": ":memory:"} for i in range(14)]
-    ch = {"type": "clickhouse", "name": "bulk-ch", "host": "localhost", "port": "8123", "username": "default"}
+    ch = {
+        "type": "clickhouse",
+        "name": "bulk-ch",
+        "host": "localhost",
+        "port": "8123",
+        "username": CH_USER,
+        "password": CH_PASSWORD,
+    }
     # ClickHouse first: the last save becomes the session's connection, and a
     # picker-less DuckDB keeps the cards up rather than a database picker.
     _save_connections(page, base_url, [ch, *bulk])

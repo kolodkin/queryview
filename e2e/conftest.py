@@ -29,16 +29,27 @@ def start_new_connection(page: Page, driver: str) -> None:
     page.get_by_test_id("new-menu").get_by_test_id(f"new-conn-{driver}").click()
 
 
+def fill_credentials(page: Page, driver: str) -> None:
+    """Type the suite's login into an open connection form. The forms default
+    to a passwordless login, which a local server with a password rejects."""
+    creds = {"clickhouse": ("ch", CH_USER, CH_PASSWORD), "postgres": ("pg", PG_USER, PG_PASSWORD)}
+    if driver in creds:
+        prefix, user, password = creds[driver]
+        page.get_by_test_id(f"{prefix}-username").fill(user)
+        page.get_by_test_id(f"{prefix}-password").fill(password)
+
+
 def connect_clickhouse_test_db(page: Page) -> None:
-    """Connect with the ClickHouse form defaults and select the seeded `test`
-    database. Ends on the explorer, where picking a database lands."""
+    """Connect to ClickHouse and select the seeded `qvtest` database. Ends on
+    the explorer, where picking a database lands."""
     open_connect(page)
     start_new_connection(page, "clickhouse")
     expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
+    fill_credentials(page, "clickhouse")
     page.get_by_test_id("ch-connect").click()
     expect(page.get_by_test_id("db-picker")).to_be_visible()
-    page.locator('[data-db="test"]').click()
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - test")
+    page.locator(f'[data-db="{CH_DB}"]').click()
+    expect(page.get_by_test_id("connection-status")).to_contain_text(f"connected - {CH_DB}")
 
 
 def open_query_panel(page: Page) -> None:
@@ -130,6 +141,9 @@ CH_HOST = os.environ.get("CLICKHOUSE_HOST", "localhost")
 CH_PORT = os.environ.get("CLICKHOUSE_PORT", "8123")
 CH_USER = os.environ.get("CLICKHOUSE_USER", "default")
 CH_PASSWORD = os.environ.get("CLICKHOUSE_PASSWORD", "")
+# Not `test`: a name that generic may already hold someone's data, and the
+# fixture drops it.
+CH_DB = "qvtest"
 
 
 def _ch_exec(sql: str) -> None:
@@ -146,17 +160,17 @@ def _ch_exec(sql: str) -> None:
 
 @pytest.fixture(scope="module")
 def seeded_test_db():
-    """Module-level: create a ClickHouse database named `test` with a small
+    """Module-level: create a ClickHouse database named `qvtest` with a small
     `items` table of known rows, then drop the whole database on teardown.
 
-    Drops `test` up front too, so seeding is idempotent and never accumulates
-    rows from an earlier run that left the database behind."""
-    _ch_exec("DROP DATABASE IF EXISTS test")
-    _ch_exec("CREATE DATABASE test")
-    _ch_exec("CREATE TABLE test.items (id UInt32, name String) ENGINE = MergeTree ORDER BY id")
-    _ch_exec("INSERT INTO test.items (id, name) VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')")
+    Drops it up front too, so seeding is idempotent and never accumulates rows
+    from an earlier run that left the database behind."""
+    _ch_exec(f"DROP DATABASE IF EXISTS {CH_DB}")
+    _ch_exec(f"CREATE DATABASE {CH_DB}")
+    _ch_exec(f"CREATE TABLE {CH_DB}.items (id UInt32, name String) ENGINE = MergeTree ORDER BY id")
+    _ch_exec(f"INSERT INTO {CH_DB}.items (id, name) VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')")
     yield
-    _ch_exec("DROP DATABASE IF EXISTS test")
+    _ch_exec(f"DROP DATABASE IF EXISTS {CH_DB}")
 
 
 # --- Postgres seeding for query tests -------------------------------------

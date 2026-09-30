@@ -6,7 +6,7 @@ from playwright.sync_api import Page, expect
 
 
 def _connect_and_select_test_db(page: Page) -> None:
-    """Connect with the form defaults and select the seeded `test` database."""
+    """Connect to ClickHouse and select the seeded `qvtest` database."""
     connect_clickhouse_test_db(page)
 
 
@@ -32,7 +32,7 @@ _DASHBOARD_HTML = (
 
 def test_dashboard_push_and_reopen(seeded_test_db, page: Page, base_url: str, shot) -> None:
     _connect_and_select_test_db(page)
-    shot("connected to test db")
+    shot("connected to qvtest db")
 
     # Arm remote control via the agent popover, then read the session id.
     page.get_by_test_id("agent-toggle").click()
