@@ -70,8 +70,7 @@ function ConnectView({
     [saved, filter, driver],
   )
   const searching = filter.trim() !== '' || driver !== null
-  // Unfiltered, the most recent few sit in their own row above the scrolling
-  // rest; the list is most-recent first, so that's a split, not a copy.
+  // Unfiltered, the first (most recent) few form the Recent row: a split, not a copy.
   const recentCount = many && !searching ? RECENT_COUNT : 0
   const current = Math.min(highlight, Math.max(visible.length - 1, 0))
 
@@ -221,7 +220,7 @@ function ConnectView({
                   <form
                     className="ml-auto w-56"
                     onSubmit={(e) => {
-                      // Enter opens the highlighted card (the first, until arrows move it).
+                      // Enter opens the highlighted card.
                       e.preventDefault()
                       if (visible.length > 0) void open(visible[current].name)
                     }}
@@ -312,8 +311,7 @@ function ConnectView({
                   </>
                 )}
                 {visible.length > recentCount && (
-                  // Capped and scrolling in the many layout, so the page never
-                  // grows past the fold; padding keeps the hover lift unclipped.
+                  // Capped so the page never grows; padding keeps the hover lift unclipped.
                   <div
                     data-testid="conn-all"
                     className={many ? `-m-1 max-h-[22rem] overflow-y-auto p-1 ${cardGrid}` : cardGrid}

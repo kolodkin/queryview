@@ -8,8 +8,7 @@ export type SavedConnection = {
   last_active_at: number
 }
 
-// Past this many saved connections the page switches to its "many" layout:
-// search, driver chips, a Recent row and a scrolling list.
+// Past this many saved connections the page switches to its "many" layout.
 export const MANY_THRESHOLD = 6
 export const RECENT_COUNT = 3
 

@@ -184,11 +184,8 @@ export async function flushPatches(): Promise<void> {
   pending = {}
   if (!sid || taken || Object.keys(body).length === 0) return
   try {
-    // keepalive: a navigation write still in flight when the page unloads
-    // (a reload right after it) must land, or the reload resumes the old URL;
-    // it has left `pending`, so the release beacon no longer carries it.
-    // Browsers cap keepalive bodies at 64KB, so a large one (long SQL) goes
-    // without it.
+    // keepalive: a write in flight at unload (a reload right after navigating)
+    // has left `pending`, so only this lets it land. Capped by browsers at 64KB.
     const json = JSON.stringify(body)
     const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
       method: 'PATCH',
