@@ -235,7 +235,8 @@ function ConnectView({
                         setHighlight(0)
                       }}
                       onKeyDown={onSearchKey}
-                      placeholder="Search name, driver, database…  /"
+                      placeholder="Search…  ( / )"
+                      title="Matches name, driver and last database"
                       aria-label="Search connections"
                       data-testid="conn-filter"
                       autoFocus
