@@ -8,7 +8,7 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-from conftest import open_connect, open_query_panel, start_new_connection
+from conftest import CH_DB, open_connect, open_query_panel, start_new_connection
 from playwright.sync_api import Page, expect
 
 
@@ -31,8 +31,8 @@ CASES = [
         "clickhouse-form",
         "ch-connect",
         "seeded_test_db",
-        "connected - test",
-        db_option="test",
+        f"connected - {CH_DB}",
+        db_option=CH_DB,
     ),
     DriverCase(
         "postgres",

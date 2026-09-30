@@ -8,7 +8,7 @@ from playwright.sync_api import Page, expect
 
 
 def _open_query_panel(page: Page) -> None:
-    """Connect with form defaults, select the seeded `test` db, open the panel."""
+    """Connect to ClickHouse, select the seeded `qvtest` db, open the panel."""
     connect_clickhouse_test_db(page)
     open_query_panel(page)
 
