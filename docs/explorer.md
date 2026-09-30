@@ -32,6 +32,8 @@ order-by select the query panel uses.
   engine doesn't track (views, a never-analyzed Postgres table) is simply
   omitted. The list refreshes when the active database changes (via the
   connection pill); a selected table that no longer exists is deselected.
+- **Table search** — the box above the list filters it by case-insensitive
+  substring of the name; Enter opens the first match.
 - **Sidebar width** — drag the panel's right edge for names too long to fit the
   256px default (200–600px); ←/→ nudge it, Home or a double-click resets, as
   does a **Reset width** button beside the *Tables* heading. A name that still

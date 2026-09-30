@@ -6,6 +6,7 @@ import {
   ResultsTable,
   columnNames,
   columnTypes,
+  filterNames,
   shownColumnIndices,
   type Field,
   type OrderCol,
@@ -53,6 +54,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   const [tables, setTables] = useState<TableInfo[]>([])
   const [tablesError, setTablesError] = useState<string | null>(null)
   const [tablesLoading, setTablesLoading] = useState(false)
+  const [tableFilter, setTableFilter] = useState('')
   const [fields, setFields] = useState<Field[]>([])
   const [visibleCols, setVisibleCols] = useState<string[]>([])
   const [orderBy, setOrderBy] = useState<OrderCol[]>([])
@@ -87,6 +89,10 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   // off this: nothing fires until the table is confirmed present, so a stale
   // selection (e.g. after a database switch) never issues doomed queries.
   const selected = tables.find((t) => t.name === table)
+  const shownTables = useMemo(
+    () => filterNames(tables, tableFilter, (t) => t.name),
+    [tables, tableFilter],
+  )
 
   // Load the sidebar whenever the active database changes; a selected table
   // that vanished (database switch) is dropped from the URL.
@@ -311,6 +317,27 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
             </button>
           )}
         </div>
+        {tables.length > 0 && (
+          <form
+            className="mt-2"
+            onSubmit={(e) => {
+              // Enter opens the first match, so a typed fragment is enough.
+              e.preventDefault()
+              if (shownTables.length > 0) setSearchParams({ table: shownTables[0].name })
+            }}
+          >
+            <input
+              type="search"
+              value={tableFilter}
+              onChange={(e) => setTableFilter(e.target.value)}
+              placeholder={`Filter ${tables.length} tables…`}
+              aria-label="Filter tables"
+              data-testid="explorer-table-filter"
+              autoComplete="off"
+              className="glass-input w-full px-3 py-1.5 text-sm"
+            />
+          </form>
+        )}
         {tablesError && (
           <p data-testid="explorer-tables-error" className="mt-2 text-sm text-red-300">
             {tablesError}
@@ -320,7 +347,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
           <Loading label="Loading tables…" testid="explorer-tables-loading" />
         ) : (
           <div className="mt-2 min-h-0 grow basis-0 space-y-1 overflow-auto">
-            {tables.map((t) => {
+            {shownTables.map((t) => {
               const meta = tableMeta(t)
               return (
                 <div
@@ -355,6 +382,11 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
             })}
             {tables.length === 0 && !tablesError && (
               <p className="text-sm text-slate-400">No tables.</p>
+            )}
+            {tables.length > 0 && shownTables.length === 0 && (
+              <p data-testid="explorer-table-filter-empty" className="text-sm text-slate-400">
+                No tables match “{tableFilter.trim()}”.
+              </p>
             )}
           </div>
         )}
