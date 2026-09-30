@@ -212,3 +212,26 @@ def test_table_copy_puts_the_name_on_the_clipboard(seeded_duckdb, page: Page) ->
 
     assert page.evaluate("navigator.clipboard.readText()") == "items"
     expect(page).not_to_have_url(re.compile(r"table="))
+
+
+def test_table_filter_narrows_the_sidebar(seeded_duckdb_long_names, page: Page) -> None:
+    """Typing in the sidebar search narrows the list case-insensitively; Enter
+    opens the first match, and a miss says so."""
+    _connect(page, DUCK, seeded_duckdb_long_names)
+    tables = page.get_by_test_id("explorer-table")
+    expect(tables).to_have_count(3)
+
+    search = page.get_by_test_id("explorer-table-filter")
+    search.fill("SALES")
+    expect(tables).to_have_count(1)
+    expect(tables.first).to_have_attribute("data-table", "sales_reporting_monthly_rollup")
+
+    search.press("Enter")
+    expect(page).to_have_url(re.compile(r"table=sales_reporting_monthly_rollup"))
+
+    search.fill("nope")
+    expect(tables).to_have_count(0)
+    expect(page.get_by_test_id("explorer-table-filter-empty")).to_be_visible()
+
+    search.fill("")
+    expect(tables).to_have_count(3)
