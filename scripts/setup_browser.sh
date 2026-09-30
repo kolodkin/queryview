@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # Run the Playwright browser e2e suite locally against a real ClickHouse, the
 # same way CI does: install the Playwright browser, ensure ClickHouse (via
-# setup_clickhouse.sh) and Postgres, then run scripts/e2e.sh, which builds the
-# SPA, serves it from a throwaway backend and drives a real Chromium.
+# setup_clickhouse.sh) and Postgres, then run scripts/e2e.sh.
 #
 # Usage:
 #   scripts/setup_browser.sh
 #
 # Environment overrides:
-#   BACKEND_PORT      backend / BASE_URL port            (default 8000)
+#   BACKEND_PORT      backend / BASE_URL port            (default: a free port)
 #   CLICKHOUSE_PORT   ClickHouse HTTP port               (default 8123)
 #   PGPORT            Postgres TCP port                  (default 5432)
 #
@@ -18,9 +17,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-
-BACKEND_PORT="${BACKEND_PORT:-8000}"
-CLICKHOUSE_PORT="${CLICKHOUSE_PORT:-8123}"
 
 log() { printf '\033[36m[browser]\033[0m %s\n' "$*"; }
 die() { printf '\033[31m[browser] error:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -41,8 +37,8 @@ else
 fi
 
 # --- Databases (delegated) ----------------------------------------------
-CLICKHOUSE_PORT="$CLICKHOUSE_PORT" "$ROOT/scripts/setup_clickhouse.sh"
+"$ROOT/scripts/setup_clickhouse.sh"
 PGPORT="${PGPORT:-5432}" "$ROOT/scripts/setup_postgres.sh"
 
 # --- e2e (throwaway backend + DATA_DIR) ----------------------------------
-BACKEND_PORT="$BACKEND_PORT" "$ROOT/scripts/e2e.sh"
+"$ROOT/scripts/e2e.sh"

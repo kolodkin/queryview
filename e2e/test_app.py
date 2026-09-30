@@ -1,7 +1,7 @@
 import re
 
 import httpx
-from conftest import CH_PASSWORD, CH_USER, fill_credentials, open_connect, start_new_connection
+from conftest import CH_HOST, CH_PASSWORD, CH_PORT, CH_USER, open_connect, start_new_connection
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -25,7 +25,6 @@ def test_queryview_e2e(page: Page) -> None:
         expect(page.get_by_test_id(test_id)).to_be_visible()
 
     # test connection succeeds against the real ClickHouse
-    fill_credentials(page, "clickhouse")
     page.get_by_test_id("ch-test").click()
     result = page.get_by_test_id("ch-result")
     expect(result).to_be_visible()
@@ -164,8 +163,8 @@ def test_many_connections(seeded_test_db, page: Page, base_url: str) -> None:
     ch = {
         "type": "clickhouse",
         "name": "bulk-ch",
-        "host": "localhost",
-        "port": "8123",
+        "host": CH_HOST,
+        "port": CH_PORT,
         "username": CH_USER,
         "password": CH_PASSWORD,
     }

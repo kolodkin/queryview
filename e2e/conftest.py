@@ -24,19 +24,18 @@ def open_connect(page: Page) -> None:
 
 def start_new_connection(page: Page, driver: str) -> None:
     """Open a driver's connection form through the Connect page's "+ New" menu,
-    present however many connections are saved."""
+    present however many connections are saved, and point it at the suite's
+    server: the form defaults are a passwordless localhost login."""
     page.get_by_test_id("new-menu-toggle").click()
     page.get_by_test_id("new-menu").get_by_test_id(f"new-conn-{driver}").click()
-
-
-def fill_credentials(page: Page, driver: str) -> None:
-    """Type the suite's login into an open connection form. The forms default
-    to a passwordless login, which a local server with a password rejects."""
-    creds = {"clickhouse": ("ch", CH_USER, CH_PASSWORD), "postgres": ("pg", PG_USER, PG_PASSWORD)}
-    if driver in creds:
-        prefix, user, password = creds[driver]
-        page.get_by_test_id(f"{prefix}-username").fill(user)
-        page.get_by_test_id(f"{prefix}-password").fill(password)
+    servers = {
+        "clickhouse": ("ch", CH_HOST, CH_PORT, CH_USER, CH_PASSWORD),
+        "postgres": ("pg", PG_HOST, str(PG_PORT), PG_USER, PG_PASSWORD),
+    }
+    if driver in servers:
+        prefix, *values = servers[driver]
+        for field, value in zip(("host", "port", "username", "password"), values, strict=True):
+            page.get_by_test_id(f"{prefix}-{field}").fill(value)
 
 
 def connect_clickhouse_test_db(page: Page) -> None:
@@ -45,7 +44,6 @@ def connect_clickhouse_test_db(page: Page) -> None:
     open_connect(page)
     start_new_connection(page, "clickhouse")
     expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
-    fill_credentials(page, "clickhouse")
     page.get_by_test_id("ch-connect").click()
     expect(page.get_by_test_id("db-picker")).to_be_visible()
     page.locator(f'[data-db="{CH_DB}"]').click()

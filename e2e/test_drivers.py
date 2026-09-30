@@ -8,7 +8,7 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-from conftest import fill_credentials, open_connect, open_query_panel, start_new_connection
+from conftest import CH_DB, open_connect, open_query_panel, start_new_connection
 from playwright.sync_api import Page, expect
 
 
@@ -31,8 +31,8 @@ CASES = [
         "clickhouse-form",
         "ch-connect",
         "seeded_test_db",
-        "connected - qvtest",
-        db_option="qvtest",
+        f"connected - {CH_DB}",
+        db_option=CH_DB,
     ),
     DriverCase(
         "postgres",
@@ -59,7 +59,6 @@ def _connect(page: Page, case: DriverCase, seed) -> None:
     expect(page.get_by_test_id(case.form_testid)).to_be_visible()
     if case.path_field:
         page.get_by_test_id(case.path_field).fill(seed)
-    fill_credentials(page, case.id)
     page.get_by_test_id(case.connect_testid).click()
     # The status pill can already read "connected" from the session the shell
     # auto-resumed on load (the previous test's saved connection), so wait for
