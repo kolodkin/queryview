@@ -11,23 +11,29 @@ from playwright.sync_api import Page, expect
 expect.set_options(timeout=15_000)
 
 
-def open_queries(page: Page) -> None:
-    """Open the app on the Queries page — the prompt, while disconnected.
+def open_connect(page: Page) -> None:
+    """Open the app on the Connect page.
 
     A live connection lands on the explorer, and the backend session is shared
-    across tests, so a previous test's connection can resume here. Query flows
-    navigate to Queries explicitly rather than assuming it."""
+    across tests, so a previous test's connection can resume here. Connect
+    flows navigate there explicitly rather than assuming it."""
     page.goto("/", wait_until="networkidle")
-    page.get_by_test_id("nav-queries").click()
-    expect(page.get_by_test_id("prompt-input")).to_be_visible()
+    page.get_by_test_id("nav-connect").click()
+    expect(page.get_by_test_id("connect-page")).to_be_visible()
+
+
+def start_new_connection(page: Page, driver: str) -> None:
+    """Open a driver's connection form through the Connect page's "+ New" menu,
+    present however many connections are saved."""
+    page.get_by_test_id("new-menu-toggle").click()
+    page.get_by_test_id("new-menu").get_by_test_id(f"new-conn-{driver}").click()
 
 
 def connect_clickhouse_test_db(page: Page) -> None:
     """Connect with the ClickHouse form defaults and select the seeded `test`
     database. Ends on the explorer, where picking a database lands."""
-    open_queries(page)
-    page.get_by_test_id("prompt-input").fill("new clickhouse")
-    page.keyboard.press("Enter")
+    open_connect(page)
+    start_new_connection(page, "clickhouse")
     expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
     page.get_by_test_id("ch-connect").click()
     expect(page.get_by_test_id("db-picker")).to_be_visible()
@@ -38,8 +44,6 @@ def connect_clickhouse_test_db(page: Page) -> None:
 def open_query_panel(page: Page) -> None:
     """Open the query panel from wherever the test is, via the Queries page."""
     page.get_by_test_id("nav-queries").click()
-    page.get_by_test_id("prompt-input").fill("query")
-    page.keyboard.press("Enter")
     expect(page.get_by_test_id("query-panel")).to_be_visible()
 
 

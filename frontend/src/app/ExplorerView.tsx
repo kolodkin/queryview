@@ -282,7 +282,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
           Explorer
         </h1>
         <p data-testid="explorer-hint" className="mt-4 text-sm text-slate-400">
-          Connect and select a database on the Queries page first.
+          Pick a connection and database on the Connect page first.
         </p>
       </div>
     )

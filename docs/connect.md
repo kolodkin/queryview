@@ -1,9 +1,10 @@
 # Connecting
 
 Connections have two halves: a **type** (the driver, e.g. `clickhouse`) and a
-**name** (your label, e.g. `clickhouse`, `prod-ch`). You create a connection
-once with `new <type>`, then open it by name with `connect <name>`. Connections
-are persisted in SQLite, and a session reconnects whichever one it was last on.
+**name** (your label, e.g. `clickhouse`, `prod-ch`). Create one from a **New
+connection** card on the Connect page (see [queryview.md](./queryview.md)),
+reopen it from its saved card. Connections persist in SQLite, and a session
+reconnects whichever one it was last on.
 
 ## Storage & migrations
 
@@ -28,26 +29,16 @@ commit it; the app applies it on next start.
 > `alembic_version` table) is not upgraded automatically — delete it and let the
 > app recreate it on next start.
 
-## Commands
+## Drivers
 
-| Command          | Effect |
-| ---------------- | ------ |
-| `new clickhouse` | Open the form to create a new ClickHouse connection. |
-| `new postgres`   | Open the form to create a new Postgres connection. |
-| `new duckdb`     | Open the form to create a new DuckDB connection (file path; no database picker). |
-| `connect <name>` | Open the saved connection `<name>` and show its database picker. |
-| `query`          | Return to the query panel from a connection form. A ready session (a database is selected, or a picker-less driver like DuckDB) already shows it (see [query.md](./query.md)). |
-
-**Drivers.** ClickHouse and Postgres take host/port/username/password and present
+ ClickHouse and Postgres take host/port/username/password and present
 a database picker — for ClickHouse the picker lists `SHOW DATABASES`, for Postgres
 it lists real databases (`pg_database`) and the chosen one is where queries run.
 DuckDB takes a **path** (or `:memory:`), has no network and **no picker** —
-connecting goes straight to the query panel; schema-qualify tables in SQL as
+connecting goes straight to the explorer; schema-qualify tables in SQL as
 needed.
 
-All matching is case-insensitive and whitespace-trimmed. An unknown command
-shows a hint (`Try "new clickhouse" or "connect <name>"`); `connect <name>` for
-an unknown name reports `no connection named "<name>"; available: <names>`.
+A saved card that fails to open reports the error under the cards.
 When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`
 fails, the error suggests `host.docker.internal` (see the README's
 [Connecting to databases on your machine](../README.md#connecting-to-databases-on-your-machine)).
@@ -59,17 +50,17 @@ fails, the error suggests `host.docker.internal` (see the README's
   a steady connection, and does not change what the session is connected to.
 - **Connect** — opens a *steady* connection: it validates, lists the databases,
   **saves** the connection to SQLite and makes it the session's active
-  connection. The UI then returns to the single prompt with
-  a database picker.
+  connection, then shows the database picker.
 - **Active connection** — held at the **session** level (see
   [queryview.md](./queryview.md)). One per session.
 - **Database selection** — after connecting, the user picks a database. Only
   then does the top-left indicator read `🟢 connected - <database>`. The choice
   is remembered with the connection.
 
-## Creating a connection (`new <type>`)
+## Creating a connection
 
-`new clickhouse` renders the connection form below the prompt.
+A **New connection** card shows its driver's form in place of the cards
+(ClickHouse below); **← Connections** goes back without saving.
 
 | Field    | Default     | Notes                                          |
 | -------- | ----------- | ---------------------------------------------- |
@@ -83,52 +74,42 @@ Two actions:
 
 - **Test connection** — `POST /api/db/test`. Shows a pass/fail message
   inline. No side effects.
-- **Connect** — `POST /api/db/connect`. On success the form closes and
-  the prompt view returns with a database picker.
+- **Connect** — `POST /api/db/connect`. On success the picker opens.
 
 ## Flow
 
 ```
-prompt ── "new clickhouse" ──▶ connection form
-                                 │
-                 ┌── Test ───────┤   (inline pass/fail, stays here)
-                 │               │
-                 └── Connect ────┴──▶ prompt "connect <name>" + database picker
+cards ── "New connection" card ──▶ connection form
+                                     │
+                     ┌── Test ───────┤   (inline pass/fail, stays here)
+                     │               │
+                     └── Connect ────┴──▶ database picker
                                               │
-                              pick a database  │   (picker collapses)
+                              pick a database  │
                                               ▼
-                                  🟢 connected - <database>
+                              🟢 connected - <database>  (explorer)
 
-prompt ── "connect <name>" ──▶ opens saved <name> ──▶ database picker ──▶ pick
+cards ── saved card ──▶ opens <name>, activates it ──▶ database picker ──▶ pick
 ```
-
-## Opening a saved connection (`connect <name>`)
-
-`connect <name>` looks up the saved connection by name, opens it (lists its
-databases), makes it the active session connection, and shows the database
-picker. Pick a database from the picker to finish.
 
 ## Database picker
 
-After connecting, the prompt view shows the databases returned by
-`SHOW DATABASES`. While the picker is open the prompt reads `connect <name>`.
-The picker panel is wider than the prompt so long database names fit several
-per row. A filter input at
-the top of the picker (focused on open) narrows the list by case-insensitive
+After connecting, the picker lists the databases (`SHOW DATABASES`), the last
+one used highlighted; **← Connections** returns to the cards, leaving the
+connection open. A filter input (focused on open) narrows the list by case-insensitive
 substring; **Enter** selects the first remaining match, and an empty result
 shows "No databases match". Selecting a database:
 
 - sets the session's selected database,
 - persists it on the saved connection (`POST /api/db/database`),
 - collapses the picker and shows the top-left indicator `🟢 connected - <database>`,
-- clears the prompt and opens the query panel (see [query.md](./query.md)),
-  which is then waiting on Queries whenever you go back,
+- makes the query panel available on Queries (see [query.md](./query.md)),
 - and lands on the explorer (see
   [queryview.md](./queryview.md#landing-page)).
 
 Clicking the `🟢 connected - <database>` pill reopens the same list as a
 dropdown — same filter, plus **Escape** to close — so the database can be
-switched from any page without going back to the prompt.
+switched from any page without going back to Connect.
 
 ## Persistence (SQLite)
 
@@ -148,7 +129,7 @@ CREATE TABLE connections (
 
 - **Connect** upserts the row by `name` and bumps `last_active_at`.
 - **Selecting a database** updates `database` for that row.
-- `last_active_at` orders the `connect` autocomplete, most recent first.
+- `last_active_at` orders the saved cards, most recent first.
 
 Driver-specific fields (host/port/user/pass for ClickHouse and Postgres, a file
 path for DuckDB) are not columns — each driver serializes its own config to a
@@ -186,7 +167,7 @@ session was on:
 - On success the SPA loads already connected, with the previously selected
   database pre-selected and the indicator shown, on the page the session was
   last on (see [queryview.md](./queryview.md#landing-page)).
-- On failure (server down, bad credentials) the SPA falls back to the prompt;
+- On failure (server down, bad credentials) the SPA falls back to Connect;
   the saved connection is left in place to retry.
 - If the connection was since deleted, or its config no longer decrypts, the
   session simply reads as disconnected. It is not repaired or repointed — you
@@ -196,7 +177,7 @@ A session with no connection (`connection_name IS NULL`) is disconnected, and
 stays that way across restarts: that is what `disconnect` records.
 
 To open a **specific** connection on load, pass `…/?connection=<name>`
-(equivalent to `connect <name>`); the SPA then cleans the URL so a later reload
+(equivalent to clicking its card); the SPA then cleans the URL so a later reload
 resumes normally.
 
 Only the live driver state — the decrypted config and the database list — is
@@ -208,8 +189,9 @@ session.
 | Method | Path                          | Body                                   | Result |
 | ------ | ----------------------------- | -------------------------------------- | ------ |
 | POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
-| POST   | `/api/db/connect`     | `{type, name, …driver config}`         | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (`new <type>` form) |
-| POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a saved connection (`connect <name>`) |
+| POST   | `/api/db/connect`     | `{type, name, …driver config}`         | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form) |
+| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at}]}`, most recent first; the saved cards (never the config) |
+| POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a saved connection (a saved card) |
 | POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database |
 | POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |
 | GET    | `/api/predefined-queries`     | `?type=<connType>`                     | `{queries:[{query_name, query}]}`; global predefined queries by connection type |

@@ -84,5 +84,5 @@ new id.
 ## Related docs
 
 - [api.md](./api.md) — backend JSON API.
-- [queryview.md](./queryview.md) — the single-prompt page concept.
+- [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [query.md](./query.md) — running queries: pagination, fields, order-by, CSV.

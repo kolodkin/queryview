@@ -113,6 +113,9 @@ def test_a_dashboard_runs_on_the_viewing_sessions_connection(seeded_test_db, pag
 
     page.get_by_test_id("session-switcher").click()
     page.get_by_test_id("session-new").click()
+    # The switch lands on the new session's page (disconnected: Connect); wait
+    # for it, or it would navigate away from a dashboard opened too early.
+    expect(page.get_by_test_id("connect-page")).to_be_visible()
     # Navigate inside the app: a reload would re-run the fixture's init script
     # and put the tab back on the original (connected) session.
     page.get_by_test_id("nav-dashboard").click()

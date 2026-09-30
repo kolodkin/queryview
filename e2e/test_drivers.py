@@ -1,5 +1,5 @@
 """The connect -> (pick db) -> query -> paginate -> CSV -> describe flow,
-parameterized across every driver. Each case names the driver's command, form
+parameterized across every driver. Each case names the driver (its id), form
 testids, seeding fixture, and whether it has a database picker. Driver-specific
 ClickHouse features (cell views, params, complex types) live in test_query.py."""
 
@@ -8,14 +8,13 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-from conftest import open_queries, open_query_panel
+from conftest import open_connect, open_query_panel, start_new_connection
 from playwright.sync_api import Page, expect
 
 
 @dataclasses.dataclass
 class DriverCase:
     id: str
-    command: str  # prompt command, e.g. "new postgres"
     form_testid: str  # connection form testid
     connect_testid: str  # the Connect button testid
     seed_fixture: str  # conftest fixture that seeds an `items` table
@@ -29,7 +28,6 @@ class DriverCase:
 CASES = [
     DriverCase(
         "clickhouse",
-        "new clickhouse",
         "clickhouse-form",
         "ch-connect",
         "seeded_test_db",
@@ -38,7 +36,6 @@ CASES = [
     ),
     DriverCase(
         "postgres",
-        "new postgres",
         "postgres-form",
         "pg-connect",
         "seeded_pg_db",
@@ -47,7 +44,6 @@ CASES = [
     ),
     DriverCase(
         "duckdb",
-        "new duckdb",
         "duckdb-form",
         "duck-connect",
         "seeded_duckdb",
@@ -58,9 +54,8 @@ CASES = [
 
 
 def _connect(page: Page, case: DriverCase, seed) -> None:
-    open_queries(page)
-    page.get_by_test_id("prompt-input").fill(case.command)
-    page.keyboard.press("Enter")
+    open_connect(page)
+    start_new_connection(page, case.id)
     expect(page.get_by_test_id(case.form_testid)).to_be_visible()
     if case.path_field:
         page.get_by_test_id(case.path_field).fill(seed)
@@ -68,7 +63,7 @@ def _connect(page: Page, case: DriverCase, seed) -> None:
     # The status pill can already read "connected" from the session the shell
     # auto-resumed on load (the previous test's saved connection), so wait for
     # the form to close: only the connect response's handler dismisses it, and
-    # that same handler resets the prompt.
+    # that same handler moves on to the picker or the explorer.
     expect(page.get_by_test_id(case.form_testid)).to_have_count(0)
     if case.db_option:
         expect(page.get_by_test_id("db-picker")).to_be_visible()

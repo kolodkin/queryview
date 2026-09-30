@@ -41,5 +41,5 @@ Small improvements noted in the git-sync final review, none blocking:
 - [api.md](./api.md) — backend JSON API.
 - [connect.md](./connect.md) — connecting, storage.
 - [session.md](./session.md) — sessions and what they remember.
-- [queryview.md](./queryview.md) — the single-prompt page concept.
+- [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [query.md](./query.md) — running queries: pagination, predefined queries, CSV.

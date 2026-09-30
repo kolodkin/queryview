@@ -156,7 +156,9 @@ export function releaseSession(): void {
   if (!tab) return
   clearTimeout(timer)
   const payload: Record<string, unknown> = { tab, ...pending }
-  if (state?.id && !taken) payload.session_id = state.id
+  // The URL goes along even when it isn't pending: a navigation's own PATCH
+  // may still be in flight, and the unload cancels it.
+  if (state?.id && !taken) Object.assign(payload, { session_id: state.id, url: state.url })
   pending = {}
   try {
     navigator.sendBeacon?.(

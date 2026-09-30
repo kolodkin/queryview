@@ -3,9 +3,9 @@
 A local SQL workbench for **ClickHouse**, **Postgres** and **DuckDB** — and a
 place to let an AI agent do the querying for you.
 
-Everything happens at one prompt: type `connect prod` to open a database,
-`query` to run SQL, `explorer` to click through tables, `dashboard` to open a
-saved dashboard. Saved queries and dashboards live in workspaces that can back
+Pick a saved connection from its card to open a database, then **Queries** to
+run SQL, **Explorer** to click through tables, **Dashboard** to open a saved
+dashboard. Saved queries and dashboards live in workspaces that can back
 themselves up to a git remote. A built-in MCP server lets an agent run
 read-only queries, push a query or a whole dashboard into your open browser tab,
 and snapshot your work to git.
@@ -43,17 +43,17 @@ workspaces are lost when the container is removed. See
 
 ## What you can do
 
-Open http://localhost:8000 and type into the prompt:
+Open http://localhost:8000 — it lands on the **Connect** page:
 
-| Command | What happens |
+| Page | What happens |
 |---|---|
-| `new clickhouse` / `new postgres` / `new duckdb` | Create a connection — host, port and credentials, or a file path for DuckDB. Passwords are encrypted at rest. |
-| `connect <name>` | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
-| `query` | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
-| `explorer` | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
-| `dashboard [name]` | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |
+| **Connect** → *New connection* card | Create a ClickHouse, Postgres or DuckDB connection — host, port and credentials, or a file path for DuckDB. Passwords are encrypted at rest. |
+| **Connect** → a saved card | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
+| **Queries** | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
+| **Explorer** | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
+| **Dashboard** | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |
 
-Beyond the prompt:
+Beyond those pages:
 
 - **Workspaces** group your saved queries and dashboards, and each can sync to
   its own git remote for backup, history and restore —
@@ -185,7 +185,7 @@ and let [git sync](docs/gitsync.md) do it.
 
 ## Documentation
 
-- [queryview.md](docs/queryview.md) — the single-prompt page.
+- [queryview.md](docs/queryview.md) — the Connect page and the app's pages.
 - [connect.md](docs/connect.md) — connections, drivers, storage.
 - [session.md](docs/session.md) — sessions: what a tab remembers, refresh and
   new-tab behaviour, the session switcher.

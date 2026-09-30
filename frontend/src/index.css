@@ -124,6 +124,45 @@
     cursor: not-allowed;
   }
 
+  /* Selectable card (Connect page): a glass panel that lifts on hover. */
+  .glass-card {
+    border-radius: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.035);
+    box-shadow:
+      0 12px 30px -18px rgba(0, 0, 0, 0.8),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+    transition:
+      background-color 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.15s ease;
+  }
+  .glass-card:hover:not(:disabled),
+  .glass-card:focus-visible {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(129, 140, 248, 0.55);
+    box-shadow:
+      0 18px 40px -18px rgba(79, 70, 229, 0.7),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.18);
+    transform: translateY(-2px);
+    outline: none;
+  }
+  .glass-card:disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
+  .glass-card.is-active {
+    border-color: rgba(52, 211, 153, 0.5); /* emerald-400 */
+  }
+  /* The card Enter opens from the search box. */
+  .glass-card.is-highlighted {
+    border-color: rgba(129, 140, 248, 0.8); /* indigo-400 */
+    box-shadow:
+      0 0 0 2px rgba(99, 102, 241, 0.35),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.18);
+  }
+
   /* Toggle buttons (size, db option, field, order-by). */
   .glass-toggle {
     border-radius: 0.6rem;

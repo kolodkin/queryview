@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 
 import {
   CellViewModal,
@@ -9,14 +8,12 @@ import {
   parseCellViewYaml,
   cellText,
   columnNames,
-  filterNames,
   columnTypes,
   parseQueryParams,
   presentationForSave,
   renderCell,
   shownColumnIndices,
   useCopy,
-  useDismiss,
   type CellViewMap,
   type Field,
   type OrderCol,
@@ -24,18 +21,13 @@ import {
   type ParamSpec,
   type QueryRows,
 } from '../core'
-import { isReady, type Connection } from './connection'
-import { DRIVERS, type DriverMeta } from './drivers'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { downloadText } from './yamlio'
-import { suggestCompletions, type Suggestion } from './promptSuggestions'
 import { postLock } from './sessionLock'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace, flushPatches, patchView, viewState } from './session'
-
-type TestResult = { ok: boolean; message: string }
 
 type PredefinedQuery = {
   query_name: string
@@ -62,527 +54,33 @@ export type QueryPush = {
 // Sentinel value for the predefined dropdown's "new name" item.
 const NEW_NAME_OPTION = '::new::'
 
-// The query workflow page (`/queries`). The App shell owns connection state;
-// this page owns the command prompt and the connect/pick-database/query UI.
-// `promptOnly` (`/prompt`) keeps the bare prompt even for a ready connection.
+// The query page (`/queries`), mounted by the App shell only for a ready
+// connection; picking one happens on the Connect page (ConnectView).
 function QueryView({
-  promptOnly = false,
-  connection,
-  setConnection,
+  connectionType,
   pushed,
   onPushConsumed,
   remoteId,
 }: {
-  connection: Connection | null
-  setConnection: (c: Connection | null) => void
+  connectionType: string
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
-  promptOnly?: boolean
 }) {
-  const navigate = useNavigate()
-  const [prompt, setPrompt] = useState('')
-  const [hint, setHint] = useState<string | null>(null)
-  // The driver whose connection form is open, or null when no form is shown.
-  const [formType, setFormType] = useState<string | null>(null)
-  // Command-prompt autocomplete: highlighted row, and whether Esc dismissed it.
-  const [acIndex, setAcIndex] = useState(0)
-  const [acDismissed, setAcDismissed] = useState(false)
-  const [connNames, setConnNames] = useState<string[]>([])
-  const promptRef = useRef<HTMLInputElement>(null)
-
-  // Saved connection names power `connect <name>` autocomplete; refresh on mount
-  // and whenever the set may have changed (new connection created).
-  const refreshConnections = useCallback(async () => {
-    try {
-      const res = await apiFetch('/api/db/connections')
-      const data = await res.json()
-      setConnNames(Array.isArray(data.names) ? (data.names as string[]) : [])
-    } catch {
-      /* leave the last known list in place on a failed refresh */
-    }
-  }, [])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refreshConnections()
-  }, [refreshConnections])
-
-  const ready = isReady(connection)
-
-  // Pushed query arrives via the shell's SSE listener; the panel is already up
-  // for a ready connection, so only a connection form covering it needs closing.
-  useEffect(() => {
-    if (pushed && ready) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setFormType(null)
-    }
-  }, [pushed, ready])
-
-  async function openSaved(name: string) {
-    try {
-      const res = await apiFetch('/api/db/open', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      })
-      const data = await res.json()
-      if (!data.ok) {
-        setHint(data.message ?? `no connection named “${name}”`)
-        return
-      }
-      setFormType(null)
-      setHint(null)
-      setConnection({
-        name: data.name,
-        type: (data.type ?? 'clickhouse') as string,
-        databases: (data.databases ?? []) as string[],
-        database: null,
-      })
-      setPrompt(`connect ${data.name}`)
-    } catch (err) {
-      setHint(err instanceof Error ? err.message : 'request failed')
-    }
-  }
-
-  function submitPrompt(e: React.FormEvent) {
-    e.preventDefault()
-    const raw = prompt.trim()
-    if (!raw) return
-    const lower = raw.toLowerCase()
-    if (lower.startsWith('new ')) {
-      const type = lower.slice('new '.length).trim()
-      if (DRIVERS[type]) {
-        setFormType(type)
-        setHint(null)
-      } else {
-        setHint(`Unknown driver “${type}”. Try: ${Object.keys(DRIVERS).join(', ')}.`)
-      }
-      return
-    }
-    if (lower === 'query') {
-      if (ready) {
-        // Already the default view for a ready connection; this closes a
-        // connection form opened over it.
-        setFormType(null)
-        setHint(null)
-        if (promptOnly) navigate('/queries')
-      } else {
-        setHint('Select a database first.')
-      }
-      return
-    }
-    if (lower === 'disconnect') {
-      void disconnect()
-      return
-    }
-    if (lower === 'explorer') {
-      navigate('/explorer')
-      return
-    }
-    if (lower === 'dashboard') {
-      navigate('/dashboard')
-      return
-    }
-    if (lower.startsWith('dashboard ')) {
-      const name = raw.slice('dashboard '.length).trim().split(/\s+/)[0]
-      if (name) {
-        navigate(`/dashboard?name=${encodeURIComponent(name)}`)
-        return
-      }
-    }
-    if (lower.startsWith('connect ')) {
-      const name = raw.slice('connect '.length).trim().split(/\s+/)[0]
-      if (name) {
-        void openSaved(name)
-        return
-      }
-    }
-    setFormType(null)
-    setHint(
-      `Unknown command “${raw}”. Try “new ${Object.keys(DRIVERS).join('|')}”, ` +
-        `“connect <name>”, “explorer”, “dashboard <name>” or “disconnect”.`,
-    )
-  }
-
-  function handleConnected(name: string, type: string, databases: string[]) {
-    const opened = { name, type, databases, database: null }
-    setConnection(opened)
-    setFormType(null)
-    setPrompt(`connect ${name}`)
-    void refreshConnections()
-    // A picker-less driver (DuckDB) is ready the moment it connects, so it
-    // goes straight to the tables; the rest stay here to pick a database.
-    if (isReady(opened)) navigate('/explorer')
-  }
-
-  // Drop the active connection both server- and client-side, returning to the
-  // bare command prompt. Saved connections survive — `connect <name>` reopens.
-  async function disconnect() {
-    try {
-      await apiFetch('/api/db/disconnect', { method: 'POST' })
-    } catch {
-      /* a failed disconnect still clears the UI; the session is best-effort */
-    }
-    setConnection(null)
-    setFormType(null)
-    setHint(null)
-    setPrompt('')
-  }
-
-  async function selectDatabase(database: string) {
-    if (!connection) return
-    const res = await apiFetch('/api/db/database', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ database }),
-    })
-    if (res.ok) {
-      setConnection({ ...connection, database })
-      // Clear the prompt: the query panel is what shows on the way back.
-      setPrompt('')
-      // The connection is live now: browse its tables (see
-      // docs/queryview.md#landing-page).
-      navigate('/explorer')
-    }
-  }
-
-  // The query panel is the view for a ready connection — reached by clicking
-  // Queries, or straight after connecting — unless a connection form covers it.
-  const inQueryMode = ready && !formType && !promptOnly
-
-  // Command-prompt autocomplete suggestions for the current input. Hidden when
-  // dismissed, empty, or the lone match already equals what's typed.
-  const suggestions = useMemo(
-    () =>
-      suggestCompletions(prompt, {
-        drivers: Object.keys(DRIVERS),
-        connections: connNames,
-        ready,
-        connected: !!connection,
-      }),
-    [prompt, ready, connection, connNames],
-  )
-  const showAc =
-    !acDismissed &&
-    prompt.trim() !== '' && // nothing typed yet → no unsolicited dropdown
-    suggestions.length > 0 &&
-    !(suggestions.length === 1 && suggestions[0].value === prompt)
-  const acActive = Math.min(acIndex, suggestions.length - 1)
-  const promptFormRef = useDismiss<HTMLFormElement>(showAc, () => setAcDismissed(true))
-
-  function acceptSuggestion(s: Suggestion) {
-    setPrompt(s.value)
-    setAcIndex(0)
-    setAcDismissed(false)
-    promptRef.current?.focus()
-  }
-
-  function onPromptKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!showAc) return
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      setAcIndex((i) => (Math.min(i, suggestions.length - 1) + 1) % suggestions.length)
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setAcIndex(
-        (i) =>
-          (Math.min(i, suggestions.length - 1) - 1 + suggestions.length) % suggestions.length,
-      )
-    } else if (e.key === 'Tab' || e.key === 'Enter') {
-      // Accept the highlighted row rather than completing/submitting.
-      e.preventDefault()
-      acceptSuggestion(suggestions[acActive])
-    }
-  }
-
-  // Command prompt. In query mode it joins the panel's top row to save space.
-  const promptInput = (
-    <form
-      ref={promptFormRef}
-      onSubmit={submitPrompt}
-      className={`relative ${inQueryMode ? 'min-w-0 flex-1' : ''}`}
-    >
-      <input
-        ref={promptRef}
-        type="text"
-        value={prompt}
-        onChange={(e) => {
-          setPrompt(e.target.value)
-          setAcIndex(0)
-          setAcDismissed(false)
-        }}
-        onKeyDown={onPromptKeyDown}
-        placeholder={inQueryMode ? 'query' : 'Type a command, e.g. new clickhouse'}
-        aria-label="Prompt"
-        data-testid="prompt-input"
-        autoFocus
-        autoComplete="off"
-        role="combobox"
-        aria-expanded={showAc}
-        aria-controls="prompt-suggestions"
-        aria-activedescendant={showAc ? `prompt-suggestion-${acActive}` : undefined}
-        className={
-          inQueryMode
-            ? 'glass-input w-full px-3 py-2 text-sm'
-            : 'glass-input w-full px-4 py-3 text-center'
-        }
-      />
-      {showAc && (
-        <ul
-          id="prompt-suggestions"
-          role="listbox"
-          data-testid="prompt-suggestions"
-          className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-lg border border-white/10 bg-slate-900/95 text-left shadow-xl backdrop-blur"
-        >
-          {suggestions.map((s, i) => (
-            <li
-              key={s.value}
-              id={`prompt-suggestion-${i}`}
-              role="option"
-              aria-selected={i === acActive}
-              data-testid={`suggestion-${s.label}`}
-              onMouseDown={(e) => {
-                // Keep focus on the input; mousedown beats the input's blur.
-                e.preventDefault()
-                acceptSuggestion(s)
-              }}
-              className={`flex cursor-pointer items-baseline justify-between px-3 py-2 text-sm ${
-                i === acActive ? 'bg-indigo-500/30 text-white' : 'text-slate-300 hover:bg-white/5'
-              }`}
-            >
-              <span className="font-medium">{s.label}</span>
-              <span className="ml-3 text-xs text-slate-500">{s.hint}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </form>
-  )
-
   return (
-    <div className={`w-full ${inQueryMode ? 'viewport-page flex max-w-[80vw] flex-col' : 'max-w-md'}`}>
+    <div className="viewport-page flex w-full max-w-[80vw] flex-col">
       <div className="mb-6 flex items-center justify-center">
         <h1 className="text-3xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           QueryView
         </h1>
       </div>
-
-      {!inQueryMode && promptInput}
-
-      {hint && (
-        <p className="mt-3 text-center text-sm text-slate-400" data-testid="prompt-hint">
-          {hint}
-        </p>
-      )}
-
-      {formType && DRIVERS[formType] && (
-        <ConnectionForm meta={DRIVERS[formType]} onConnected={handleConnected} />
-      )}
-
-      {!formType && connection && connection.database === null &&
-        connection.databases.length > 0 && (
-          <DatabasePicker connection={connection} onSelect={selectDatabase} />
-        )}
-
-      {inQueryMode && connection && (
-        <QueryPanel
-          connectionType={connection.type}
-          promptSlot={promptInput}
-          pushed={pushed}
-          onPushConsumed={onPushConsumed}
-          remoteId={remoteId}
-        />
-      )}
+      <QueryPanel
+        connectionType={connectionType}
+        pushed={pushed}
+        onPushConsumed={onPushConsumed}
+        remoteId={remoteId}
+      />
     </div>
-  )
-}
-
-function ConnectionForm({
-  meta,
-  onConnected,
-}: {
-  meta: DriverMeta
-  onConnected: (name: string, type: string, databases: string[]) => void
-}) {
-  const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(meta.fields.map((f) => [f.key, f.default])),
-  )
-  const [result, setResult] = useState<TestResult | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  function body() {
-    return JSON.stringify({ type: meta.type, ...values })
-  }
-
-  async function testConnection() {
-    setBusy(true)
-    setResult(null)
-    try {
-      const res = await apiFetch('/api/db/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body(),
-      })
-      setResult((await res.json()) as TestResult)
-    } catch (err) {
-      setResult({ ok: false, message: err instanceof Error ? err.message : 'request failed' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function connect() {
-    setBusy(true)
-    setResult(null)
-    try {
-      const res = await apiFetch('/api/db/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body(),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        onConnected(
-          data.name as string,
-          (data.type ?? meta.type) as string,
-          (data.databases ?? []) as string[],
-        )
-      } else {
-        setResult({ ok: false, message: data.message ?? 'connect failed' })
-      }
-    } catch (err) {
-      setResult({ ok: false, message: err instanceof Error ? err.message : 'request failed' })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const fieldClass = 'glass-input w-full px-3 py-2'
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault()
-        connect()
-      }}
-      data-testid={meta.formTestid}
-      className="glass-panel mt-6 space-y-4 p-6"
-    >
-      <h2 className="text-lg font-semibold">New {meta.label} connection</h2>
-
-      {meta.fields.map((f) => (
-        <label key={f.key} className="block text-sm font-medium text-slate-300">
-          {f.label}
-          <input
-            type={f.type}
-            value={values[f.key]}
-            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-            aria-label={f.label}
-            data-testid={f.testid}
-            className={`mt-1 ${fieldClass}`}
-          />
-        </label>
-      ))}
-
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={testConnection}
-          data-testid={meta.testTestid}
-          disabled={busy}
-          className="glass-btn flex-1 px-4 py-2 font-medium"
-        >
-          Test connection
-        </button>
-        <button
-          type="submit"
-          data-testid={meta.connectTestid}
-          disabled={busy}
-          className="glass-btn-primary flex-1 px-4 py-2 font-medium"
-        >
-          Connect
-        </button>
-      </div>
-
-      {result && (
-        <p
-          data-testid={meta.resultTestid}
-          data-ok={result.ok}
-          className={`text-sm ${result.ok ? 'text-emerald-300' : 'text-red-300'}`}
-        >
-          {result.message}
-        </p>
-      )}
-    </form>
-  )
-}
-
-function DatabasePicker({
-  connection,
-  onSelect,
-}: {
-  connection: Connection
-  onSelect: (database: string) => void
-}) {
-  const [filter, setFilter] = useState('')
-  const visible = useMemo(
-    () => filterNames(connection.databases, filter),
-    [connection.databases, filter],
-  )
-  return (
-    // Wider than the landing column (which stays prompt-sized) so long
-    // database names fit several per row; centred by shifting half its width.
-    <section
-      data-testid="db-picker"
-      className="glass-panel relative left-1/2 mt-6 w-[min(48rem,calc(100vw-2rem))] -translate-x-1/2 p-6"
-    >
-      <h2 className="text-sm font-medium text-slate-200">
-        Connected to {connection.name}. Select a database:
-      </h2>
-      <form
-        className="mt-3"
-        onSubmit={(e) => {
-          // Enter picks the first match so a typed prefix is enough to connect.
-          e.preventDefault()
-          if (visible.length > 0) onSelect(visible[0])
-        }}
-      >
-        <input
-          type="search"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder={`Filter ${connection.databases.length} databases…`}
-          aria-label="Filter databases"
-          data-testid="db-filter"
-          autoFocus
-          autoComplete="off"
-          className="glass-input w-full px-3 py-2 text-sm"
-        />
-      </form>
-      {visible.length === 0 && (
-        <p className="mt-3 text-sm text-slate-400" data-testid="db-filter-empty">
-          No databases match “{filter.trim()}”.
-        </p>
-      )}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {visible.map((db) => {
-          const selected = db === connection.database
-          return (
-            <button
-              key={db}
-              type="button"
-              onClick={() => onSelect(db)}
-              data-testid="db-option"
-              data-db={db}
-              className={`glass-toggle px-3 py-1.5 text-sm ${selected ? 'is-active' : ''}`}
-            >
-              {db}
-            </button>
-          )
-        })}
-      </div>
-    </section>
   )
 }
 
@@ -594,13 +92,11 @@ function firstColumn(rows: QueryRows): string[] {
 
 function QueryPanel({
   connectionType,
-  promptSlot,
   pushed,
   onPushConsumed,
   remoteId,
 }: {
   connectionType: string
-  promptSlot?: React.ReactNode
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
@@ -1065,7 +561,6 @@ function QueryPanel({
       className="glass-panel mt-6 flex grow flex-col gap-3 p-6"
     >
       <div className="flex items-center gap-2">
-        {promptSlot}
         <select
           data-testid="query-predefined-select"
           aria-label="Predefined queries"

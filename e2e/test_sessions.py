@@ -88,8 +88,8 @@ def test_the_switcher_opens_a_new_session(seeded_duckdb, page: Page) -> None:
 
     page.get_by_test_id("session-new").click()
 
-    # A brand-new session is disconnected, so it lands on the prompt.
-    expect(page.get_by_test_id("prompt-input")).to_be_visible()
+    # A brand-new session is disconnected, so it lands on Connect.
+    expect(page.get_by_test_id("connect-page")).to_be_visible()
     expect(page.get_by_test_id("connection-status")).to_have_count(0)
 
 

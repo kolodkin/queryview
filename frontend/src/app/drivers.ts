@@ -1,5 +1,5 @@
-// Frontend driver registry: drives the `new <type>` command and the connection
-// form. Plans 2 and 3 append a postgres / duckdb entry — no other UI changes.
+// Frontend driver registry: drives the Connect page's "new connection" cards,
+// the badge on each saved card, and the connection form.
 export type DriverField = {
   key: string
   label: string
@@ -11,6 +11,11 @@ export type DriverField = {
 export type DriverMeta = {
   type: string
   label: string
+  // One line under the driver's name on its "new connection" card.
+  blurb: string
+  // Two-letter monogram and its tint, shared by the new and saved cards.
+  mark: string
+  accent: string
   fields: DriverField[]
   formTestid: string
   testTestid: string
@@ -22,6 +27,9 @@ export const DRIVERS: Record<string, DriverMeta> = {
   clickhouse: {
     type: 'clickhouse',
     label: 'ClickHouse',
+    blurb: 'Columnar analytics over HTTP',
+    mark: 'CH',
+    accent: 'bg-amber-400/15 text-amber-200 ring-amber-300/30',
     formTestid: 'clickhouse-form',
     testTestid: 'ch-test',
     connectTestid: 'ch-connect',
@@ -37,6 +45,9 @@ export const DRIVERS: Record<string, DriverMeta> = {
   postgres: {
     type: 'postgres',
     label: 'Postgres',
+    blurb: 'Relational database server',
+    mark: 'PG',
+    accent: 'bg-sky-400/15 text-sky-200 ring-sky-300/30',
     formTestid: 'postgres-form',
     testTestid: 'pg-test',
     connectTestid: 'pg-connect',
@@ -52,6 +63,9 @@ export const DRIVERS: Record<string, DriverMeta> = {
   duckdb: {
     type: 'duckdb',
     label: 'DuckDB',
+    blurb: 'Local file or in-memory',
+    mark: 'DK',
+    accent: 'bg-lime-400/15 text-lime-200 ring-lime-300/30',
     formTestid: 'duckdb-form',
     testTestid: 'duck-test',
     connectTestid: 'duck-connect',

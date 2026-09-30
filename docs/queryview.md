@@ -1,50 +1,58 @@
-# QueryView — single-prompt page concept
+# QueryView — the Connect page
 
-QueryView's prompt page (`/prompt`) is one centered prompt — the user types a
-command and the page reacts to it inline; no sidebar, no toolbars. It is where
-a disconnected session lands, and stays reachable once connected (e.g. to
-connect elsewhere). Once a database is selected, `/queries` shows the query
-panel (the prompt joins its top row); before that it redirects to `/prompt`.
-Two more top-level pages exist: `/explorer`, the classical table navigator (see
-[explorer.md](./explorer.md)), and `/dashboard`, which renders agent-authored
-dashboards (see [dashboard.md](./dashboard.md)); a corner nav switches between
-them, and the connection status pill persists across all three. This doc
-describes the prompt page.
+The Connect page (`/connect`) is where a disconnected session lands: a card per
+saved connection and a "new connection" card per driver. The other pages are
+`/queries` (redirects here until a database is selected), `/explorer` (see
+[explorer.md](./explorer.md)) and `/dashboard` (see
+[dashboard.md](./dashboard.md)). The old `/prompt` URL redirects here.
 
 ## Layout
 
 ```
-┌─────────────────────────────────────────────┐
-│ 🟢 connected - default   ← connection status  │
-│                                               │
-│                  QueryView                    │
-│        ┌─────────────────────────────┐        │
-│        │  Type a command…            │  ← prompt
-│        └─────────────────────────────┘        │
-│                                               │
-│        (each mode renders its UI here)        │
-│                                               │
-└─────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│ 🟢 connected - default   ← connection status               │
+│                                                           │
+│                        QueryView                          │
+│                   Choose a connection                     │
+│  SAVED CONNECTIONS                          [Filter…]     │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐       │
+│  │ CH prod-ch 🟢 │ │ PG warehouse │ │ DK local     │       │
+│  │ default  2 h │ │ sales   3 d  │ │ —      just  │       │
+│  └──────────────┘ └──────────────┘ └──────────────┘       │
+│  NEW CONNECTION                                           │
+│  [CH ClickHouse +] [PG Postgres +] [DK DuckDB +]           │
+└───────────────────────────────────────────────────────────┘
 ```
 
-- **Heading** — `QueryView`, centered.
-- **Prompt** — a single centered, auto-focused text input. Enter interprets the
-  typed text as a command.
-- **Inline response** — each command renders its own UI directly under the
-  prompt (e.g. the connection form and database picker — see
-  [connect.md](./connect.md)). The prompt stays in place; the page does not
-  navigate.
-- **Connection status** — the one element that persists across every mode: a
+- **Saved connections** — most recent first: driver monogram, name, last
+  database, last used; the active one has a green dot. Clicking opens it: the
+  database picker (last-used database highlighted), or the explorer for a
+  picker-less driver (DuckDB).
+- **New connection** — a card per driver, and the same entries in the **+ New**
+  menu; either opens that driver's form in place (see
+  [connect.md](./connect.md)).
+- **Many connections** — past six, the page reorganizes
+  (`savedConnections.ts`):
+  - the three most recent sit in a **Recent** row; the rest scroll in a
+    height-capped **All connections** box, so the page never grows;
+  - a **search** box (`/` focuses it) matches every typed term against name,
+    driver and last database, with an "N of M" count; arrow keys move a
+    highlight across the results and Enter opens the highlighted card;
+  - **driver chips** (with counts) narrow to one driver;
+  - the new-connection cards are hidden; **+ New** remains.
+- **← Connections** — on the form and the picker; back to the cards.
+- **Connection status** — the one element that persists across every page: a
   pill in the **top-left** corner, hidden until a database is selected, then
   showing 🟢 `connected - <database>` (just the database below `md` width).
   Clicking it opens a searchable database switcher; each row's **copy** icon
   copies the name without switching, and **Disconnect** at the bottom drops the
-  connection and goes to `/prompt` (a picker-less driver's menu is just that). Next to it, an **agent icon** opens the
-  remote-control popover (opt-in "Allow remote control"); see
-  [remote.md](./remote.md).
-- **Narrow windows** — below `md` the session, workspace and page links
-  collapse into one **☰ &lt;page&gt;** menu, and full-height pages keep a 48rem
-  minimum width, scrolling sideways rather than squeezing.
+  connection and goes to `/connect` (a picker-less driver's menu is just that).
+  Next to it, an **agent icon** opens the remote-control popover (opt-in "Allow
+  remote control"); see [remote.md](./remote.md).
+- **Narrow windows** — below `md` the cards stack in one column, the session,
+  workspace and page links collapse into one **☰ &lt;page&gt;** menu, and
+  full-height pages keep a 48rem minimum width, scrolling sideways rather than
+  squeezing.
 - **Popovers** — dropdowns and their panels close on a click outside or on
   Escape. Panels holding unsaved input are the exception: the workspace manage
   form once edited, and the cell-view editor, close through their own buttons.
@@ -59,39 +67,23 @@ nav switches between them. See [session.md](./session.md).
 
 ## Landing page
 
-A live connection lands on the **explorer**, not the prompt — there are tables
+A live connection lands on the **explorer**, not the Connect page — there are tables
 to browse (see [explorer.md](./explorer.md)).
 
 - **Opening the app** (`/`) waits for the session to attach, then goes where
   that session left off. A session with no remembered URL lands on `/explorer`
-  for a ready connection and `/prompt` otherwise. Only `/` chooses: a deep link
+  for a ready connection and `/connect` otherwise. Only `/` chooses: a deep link
   to a page is honored as typed, and becomes the session's URL.
 - **Connecting** — picking a database (or connecting a picker-less driver)
   navigates from the connect handler itself. Nothing watches the connection, so
   the nav gets back to Queries, a pill database switch stays put, and an
   agent's query push is not pulled away.
 
-## Commands
-
-| Command          | Effect                                              |
-| ---------------- | --------------------------------------------------- |
-| `new clickhouse` | Reveals the form to create a new ClickHouse connection. |
-| `connect <name>` | Opens the saved connection `<name>` and shows its database picker. |
-| `query`          | Returns to the query panel from a connection form — a ready session shows it already: run SQL with pagination, save/load predefined queries, download CSV (see [query.md](./query.md)). |
-| `explorer`       | Once a database is selected, opens the table navigator (`/explorer`) — browse tables without typing SQL (see [explorer.md](./explorer.md)). |
-| `dashboard`           | Opens the dashboard page (`/dashboard`) — pick a saved dashboard from the dropdown. |
-| `dashboard <name>`    | Opens the dashboard page at that dashboard (`/dashboard?name=<name>`). See [dashboard.md](./dashboard.md). |
-
-Anything else shows a hint listing the commands above.
-
-Command matching is case-insensitive and trims surrounding whitespace. See
-[connect.md](./connect.md) for the full connection flow.
-
 ## Design principles
 
-- **One thing at a time.** The prompt is the only persistent control. Each
-  command owns the space beneath it.
-- **No dead ends.** Unknown input is guided, never punished.
+- **Click, don't type.** Every connection is a card; nothing needs a name
+  remembered or a command learned.
+- **One thing at a time.** The cards, a form or a picker — never two at once.
 - **State is visible.** Once a database is selected, the top-left indicator
   makes the active connection and database obvious from anywhere.
 - **Resumable.** A session restores where you left off — page, connection and
