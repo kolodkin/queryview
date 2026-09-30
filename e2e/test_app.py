@@ -1,5 +1,6 @@
 import re
 
+import httpx
 from conftest import open_connect, start_new_connection
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
@@ -142,40 +143,35 @@ def test_disconnected_lands_on_connect(page: Page) -> None:
     expect(page).to_have_url(re.compile(r"/connect$"))
 
 
-def _save_duckdb_connections(page: Page, names: list[str]) -> None:
-    """Save in-memory DuckDB connections through the app's own API, as the
-    page's session."""
-    page.evaluate(
-        """async (names) => {
-          const headers = {
-            'Content-Type': 'application/json',
-            'X-QV-Session': sessionStorage.getItem('qv_session'),
-          }
-          for (const name of names) {
-            const body = JSON.stringify({ type: 'duckdb', name, path: ':memory:' })
-            await fetch('/api/db/connect', { method: 'POST', headers, body })
-          }
-        }""",
-        names,
-    )
+def _save_connections(page: Page, base_url: str, configs: list[dict]) -> None:
+    """Save connections through the API as the page's session."""
+    sid = page.evaluate("() => sessionStorage.getItem('qv_session')")
+    for config in configs:
+        httpx.post(
+            f"{base_url}/api/db/connect", json=config, headers={"X-QV-Session": sid}, timeout=10.0
+        ).raise_for_status()
 
 
-def test_many_connections(page: Page) -> None:
+def test_many_connections(seeded_test_db, page: Page, base_url: str) -> None:
     """Past six saved connections: Recent row, a capped scrolling list, search
-    with a count and arrow-key highlight, driver chips, and a "+ New" menu."""
+    with a count and arrow-key highlight, driver chips, and "+ New" alone.
+    Self-contained: two drivers for the chips, and enough cards to scroll."""
     page.goto("/connect", wait_until="networkidle")
-    bulk = [f"bulk-{i:02d}" for i in range(10)]
-    _save_duckdb_connections(page, bulk)
+    bulk = [{"type": "duckdb", "name": f"bulk-{i:02d}", "path": ":memory:"} for i in range(14)]
+    ch = {"type": "clickhouse", "name": "bulk-ch", "host": "localhost", "port": "8123", "username": "default"}
+    # ClickHouse first: the last save becomes the session's connection, and a
+    # picker-less DuckDB keeps the cards up rather than a database picker.
+    _save_connections(page, base_url, [ch, *bulk])
     open_connect(page)
 
     # The most recent three get their own row; the rest scroll in a capped box.
     recent = page.get_by_test_id("conn-recent").get_by_test_id("conn-card")
     expect(recent).to_have_count(3)
-    expect(recent.first).to_have_attribute("data-conn", "bulk-09")
+    expect(recent.first).to_have_attribute("data-conn", "bulk-13")
     everything = page.get_by_test_id("conn-all")
     assert everything.evaluate("el => el.scrollHeight > el.clientHeight")
 
-    # New-connection cards live behind "+ New".
+    # Only "+ New" creates connections now; the cards are gone.
     expect(page.get_by_test_id("new-conn-duckdb")).to_have_count(0)
     page.get_by_test_id("new-menu-toggle").click()
     expect(page.get_by_test_id("new-menu")).to_be_visible()
@@ -183,11 +179,12 @@ def test_many_connections(page: Page) -> None:
     expect(page.get_by_test_id("new-menu")).to_have_count(0)
 
     # Driver chips narrow to one driver.
-    page.locator('[data-testid="driver-chip"][data-type="duckdb"]').click()
+    page.locator('[data-testid="driver-chip"][data-type="clickhouse"]').click()
     expect(page.get_by_test_id("conn-recent")).to_have_count(0)
     cards = page.get_by_test_id("conn-card")
+    expect(cards.first).to_be_visible()
     for i in range(cards.count()):
-        expect(cards.nth(i)).to_contain_text("DuckDB")
+        expect(cards.nth(i)).to_contain_text("ClickHouse")
     page.locator('[data-testid="driver-chip"][data-type=""]').click()
 
     # `/` focuses search, which matches the name and shows a count.

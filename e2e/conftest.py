@@ -20,19 +20,13 @@ def open_connect(page: Page) -> None:
     page.goto("/", wait_until="networkidle")
     page.get_by_test_id("nav-connect").click()
     expect(page.get_by_test_id("connect-page")).to_be_visible()
-    # The saved list has loaded: it decides whether "+ New" replaces the
-    # new-connection cards.
-    loaded = page.get_by_test_id("conn-card").or_(page.get_by_test_id("conn-empty"))
-    expect(loaded.first).to_be_visible()
 
 
 def start_new_connection(page: Page, driver: str) -> None:
-    """Open a driver's connection form from the Connect page: its card, or,
-    past six saved connections, its entry in the "+ New" menu."""
-    toggle = page.get_by_test_id("new-menu-toggle")
-    if toggle.is_visible():
-        toggle.click()
-    page.get_by_test_id(f"new-conn-{driver}").click()
+    """Open a driver's connection form through the Connect page's "+ New" menu,
+    present however many connections are saved."""
+    page.get_by_test_id("new-menu-toggle").click()
+    page.get_by_test_id("new-menu").get_by_test_id(f"new-conn-{driver}").click()
 
 
 def connect_clickhouse_test_db(page: Page) -> None:

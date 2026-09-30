@@ -14,9 +14,8 @@ const list = [
   conn('scratch', 'duckdb'),
   conn('analytics', 'clickhouse', 'events'),
 ]
-const labels: Record<string, string> = { clickhouse: 'ClickHouse', postgres: 'Postgres', duckdb: 'DuckDB' }
 const names = (q: string, type: string | null = null) =>
-  matchConnections(list, q, type, (t) => labels[t] ?? t).map((c) => c.name)
+  matchConnections(list, q, type).map((c) => c.name)
 
 describe('matchConnections', () => {
   test('an empty query keeps everything, in order', () => {

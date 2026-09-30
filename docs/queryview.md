@@ -28,7 +28,8 @@ saved connection and a "new connection" card per driver. The other pages are
   database, last used; the active one has a green dot. Clicking opens it: the
   database picker (last-used database highlighted), or the explorer for a
   picker-less driver (DuckDB).
-- **New connection** — opens that driver's form in place (see
+- **New connection** — a card per driver, and the same entries in the **+ New**
+  menu; either opens that driver's form in place (see
   [connect.md](./connect.md)).
 - **Many connections** — past six, the page reorganizes
   (`savedConnections.ts`):
@@ -38,7 +39,7 @@ saved connection and a "new connection" card per driver. The other pages are
     driver and last database, with an "N of M" count; arrow keys move a
     highlight across the results and Enter opens the highlighted card;
   - **driver chips** (with counts) narrow to one driver;
-  - the new-connection cards collapse into a **+ New** menu.
+  - the new-connection cards are hidden; **+ New** remains.
 - **← Connections** — on the form and the picker; back to the cards.
 - **Connection status** — the one element that persists across every page: a
   pill in the **top-left** corner, hidden until a database is selected, then

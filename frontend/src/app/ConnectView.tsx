@@ -10,6 +10,7 @@ import {
   MANY_THRESHOLD,
   RECENT_COUNT,
   driverCounts,
+  labelOf,
   matchConnections,
   type SavedConnection,
 } from './savedConnections'
@@ -17,7 +18,6 @@ import { apiFetch } from './api'
 
 type TestResult = { ok: boolean; message: string }
 
-const labelOf = (type: string) => DRIVERS[type]?.label ?? type
 const sectionLabel = 'text-xs font-semibold uppercase tracking-wider text-slate-400'
 const cardGrid = 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
 
@@ -33,8 +33,8 @@ function ConnectView({
   const navigate = useNavigate()
   const [saved, setSaved] = useState<SavedConnection[] | null>(null)
   const [filter, setFilter] = useState('')
-  // "Many" layout only: the driver chip, the keyboard-highlighted card, and
-  // the "+ New" menu that stands in for the new-connection cards.
+  // The "many" layout's driver chip and keyboard-highlighted card, and the
+  // "+ New" menu (the only new-connection entry once the cards are hidden).
   const [driver, setDriver] = useState<string | null>(null)
   const [highlight, setHighlight] = useState(0)
   const [newOpen, setNewOpen] = useState(false)
@@ -66,12 +66,12 @@ function ConnectView({
   const count = saved?.length ?? 0
   const many = count > MANY_THRESHOLD
   const visible = useMemo(
-    () => matchConnections(saved ?? [], filter, driver, labelOf),
+    () => matchConnections(saved ?? [], filter, driver),
     [saved, filter, driver],
   )
-  const searching = filter.trim() !== '' || driver !== null
+  const drivers = useMemo(() => (many ? driverCounts(saved ?? []) : []), [many, saved])
   // Unfiltered, the first (most recent) few form the Recent row: a split, not a copy.
-  const recentCount = many && !searching ? RECENT_COUNT : 0
+  const recentCount = many && !filter.trim() && !driver ? RECENT_COUNT : 0
   const current = Math.min(highlight, Math.max(visible.length - 1, 0))
 
   // `/` jumps to the search box from anywhere on the page but a text field.
@@ -87,12 +87,13 @@ function ConnectView({
     return () => window.removeEventListener('keydown', onKey)
   }, [many])
 
-  // Keep the highlighted card in view inside the scrolling list.
+  // Keep the highlighted card in view inside the scrolling list — also when a
+  // new search leaves it at index 0 while the list sits scrolled down.
   useEffect(() => {
     listRef.current
       ?.querySelector('[data-highlighted="true"]')
       ?.scrollIntoView({ block: 'nearest' })
-  }, [current])
+  }, [current, visible])
 
   function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
     const steps: Record<string, number> = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }
@@ -191,7 +192,6 @@ function ConnectView({
     </button>
   ))
 
-  const drivers = many ? driverCounts(saved ?? []) : []
 
   return (
     <div className={`w-full ${form ? 'max-w-md' : 'max-w-3xl'}`} data-testid="connect-page">
@@ -243,32 +243,32 @@ function ConnectView({
                       className="glass-input w-full px-3 py-1.5 text-sm"
                     />
                   </form>
-                  <div ref={newRef} className="relative">
-                    <button
-                      type="button"
-                      data-testid="new-menu-toggle"
-                      aria-expanded={newOpen}
-                      onClick={() => setNewOpen((o) => !o)}
-                      className="glass-btn-primary px-3 py-1.5 text-sm font-medium"
-                    >
-                      + New ▾
-                    </button>
-                    {newOpen && (
-                      <div
-                        data-testid="new-menu"
-                        className="glass-popover absolute right-0 top-full z-10 mt-2 flex w-72 flex-col gap-2 p-2"
-                      >
-                        {newCards}
-                      </div>
-                    )}
-                  </div>
                 </>
               )}
+              <div ref={newRef} className={`relative ${many ? '' : 'ml-auto'}`}>
+                <button
+                  type="button"
+                  data-testid="new-menu-toggle"
+                  aria-expanded={newOpen}
+                  onClick={() => setNewOpen((o) => !o)}
+                  className="glass-btn-primary px-3 py-1.5 text-sm font-medium"
+                >
+                  + New ▾
+                </button>
+                {newOpen && (
+                  <div
+                    data-testid="new-menu"
+                    className="glass-popover absolute right-0 top-full z-10 mt-2 flex w-72 flex-col gap-2 p-2"
+                  >
+                    {newCards}
+                  </div>
+                )}
+              </div>
             </div>
 
             {drivers.length > 1 && (
               <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter by driver">
-                {[null, ...drivers.map(([t]) => t)].map((t) => (
+                {[[null, count] as const, ...drivers].map(([t, n]) => (
                   <button
                     key={t ?? 'all'}
                     type="button"
@@ -281,9 +281,7 @@ function ConnectView({
                     }}
                     className={`glass-toggle px-3 py-1 text-xs ${driver === t ? 'is-active' : ''}`}
                   >
-                    {t === null
-                      ? `All ${count}`
-                      : `${labelOf(t)} ${drivers.find(([d]) => d === t)?.[1]}`}
+                    {t === null ? 'All' : labelOf(t)} {n}
                   </button>
                 ))}
               </div>

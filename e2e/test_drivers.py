@@ -1,5 +1,5 @@
 """The connect -> (pick db) -> query -> paginate -> CSV -> describe flow,
-parameterized across every driver. Each case names the driver's card, form
+parameterized across every driver. Each case names the driver (its id), form
 testids, seeding fixture, and whether it has a database picker. Driver-specific
 ClickHouse features (cell views, params, complex types) live in test_query.py."""
 
@@ -15,7 +15,6 @@ from playwright.sync_api import Page, expect
 @dataclasses.dataclass
 class DriverCase:
     id: str
-    driver: str  # the driver type, naming its "new connection" card
     form_testid: str  # connection form testid
     connect_testid: str  # the Connect button testid
     seed_fixture: str  # conftest fixture that seeds an `items` table
@@ -29,7 +28,6 @@ class DriverCase:
 CASES = [
     DriverCase(
         "clickhouse",
-        "clickhouse",
         "clickhouse-form",
         "ch-connect",
         "seeded_test_db",
@@ -38,7 +36,6 @@ CASES = [
     ),
     DriverCase(
         "postgres",
-        "postgres",
         "postgres-form",
         "pg-connect",
         "seeded_pg_db",
@@ -46,7 +43,6 @@ CASES = [
         db_option="qvtest",
     ),
     DriverCase(
-        "duckdb",
         "duckdb",
         "duckdb-form",
         "duck-connect",
@@ -59,7 +55,7 @@ CASES = [
 
 def _connect(page: Page, case: DriverCase, seed) -> None:
     open_connect(page)
-    start_new_connection(page, case.driver)
+    start_new_connection(page, case.id)
     expect(page.get_by_test_id(case.form_testid)).to_be_visible()
     if case.path_field:
         page.get_by_test_id(case.path_field).fill(seed)

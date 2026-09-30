@@ -1,5 +1,7 @@
 // The Connect page's saved-connection list logic, kept pure for tests.
 
+import { DRIVERS } from './drivers'
+
 // A saved connection's card data, from /api/db/connections.
 export type SavedConnection = {
   name: string
@@ -12,6 +14,8 @@ export type SavedConnection = {
 export const MANY_THRESHOLD = 6
 export const RECENT_COUNT = 3
 
+export const labelOf = (type: string) => DRIVERS[type]?.label ?? type
+
 // Every whitespace-separated term must appear (case-insensitively) in the
 // name, driver type, driver label or last database; `type` narrows to one
 // driver. Order is kept, so results stay most-recent first.
@@ -19,7 +23,6 @@ export function matchConnections(
   list: SavedConnection[],
   query: string,
   type: string | null,
-  labelOf: (type: string) => string,
 ): SavedConnection[] {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean)
   return list.filter((c) => {

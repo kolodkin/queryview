@@ -156,7 +156,9 @@ export function releaseSession(): void {
   if (!tab) return
   clearTimeout(timer)
   const payload: Record<string, unknown> = { tab, ...pending }
-  if (state?.id && !taken) payload.session_id = state.id
+  // The URL goes along even when it isn't pending: a navigation's own PATCH
+  // may still be in flight, and the unload cancels it.
+  if (state?.id && !taken) Object.assign(payload, { session_id: state.id, url: state.url })
   pending = {}
   try {
     navigator.sendBeacon?.(
@@ -184,14 +186,10 @@ export async function flushPatches(): Promise<void> {
   pending = {}
   if (!sid || taken || Object.keys(body).length === 0) return
   try {
-    // keepalive: a write in flight at unload (a reload right after navigating)
-    // has left `pending`, so only this lets it land. Capped by browsers at 64KB.
-    const json = JSON.stringify(body)
     const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
       method: 'PATCH',
-      keepalive: json.length < 60_000,
       headers: { 'Content-Type': 'application/json' },
-      body: json,
+      body: JSON.stringify(body),
     })
     const data = await res.json()
     if (data?.session) adopt(data.session as SessionState)
