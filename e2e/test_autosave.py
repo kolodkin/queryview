@@ -19,6 +19,15 @@ def _stored_sql(base_url: str, ws: str, name: str) -> str | None:
     return next((q["query"] for q in queries if q["query_name"] == name), None)
 
 
+def _wait_stored(page: Page, base_url: str, ws: str, name: str, sql: str) -> None:
+    """The save lands after the run renders, so poll the store briefly."""
+    for _ in range(50):
+        if _stored_sql(base_url, ws, name) == sql:
+            return
+        page.wait_for_timeout(100)
+    assert _stored_sql(base_url, ws, name) == sql
+
+
 def test_autosave_saves_successful_runs_and_hides_save(seeded_duckdb, page: Page, base_url: str, shot) -> None:
     ws = f"e2e-auto-{uuid.uuid4().hex[:6]}"
     httpx.post(f"{base_url}/api/workspaces", json={"name": ws, "autosave": True}).raise_for_status()
@@ -36,14 +45,27 @@ def test_autosave_saves_successful_runs_and_hides_save(seeded_duckdb, page: Page
     page.get_by_test_id("query-input").fill("SELECT id, name FROM items ORDER BY id")
     page.get_by_test_id("query-run").click()
     expect(page.get_by_test_id("query-output")).to_be_visible()
-    expect(page.get_by_test_id("query-predefined-select").locator('option[value="auto q"]')).to_have_count(1)
-    assert _stored_sql(base_url, ws, "auto q") == "SELECT id, name FROM items ORDER BY id"
+    _wait_stored(page, base_url, ws, "auto q", "SELECT id, name FROM items ORDER BY id")
     shot("autosave: saved after a successful run")
 
     # A failing run leaves the stored SQL alone.
     page.get_by_test_id("query-input").fill("SELEC nope")
     page.get_by_test_id("query-run").click()
     expect(page.get_by_test_id("query-error")).to_be_visible()
+    assert _stored_sql(base_url, ws, "auto q") == "SELECT id, name FROM items ORDER BY id"
+
+    # An unnamed agent push runs but never overwrites the selected query; a
+    # named one saves under its name.
+    page.get_by_test_id("agent-toggle").click()
+    page.get_by_test_id("remote-arm").check()
+    session_id = page.get_by_test_id("remote-session-id").inner_text().strip()
+    page.get_by_test_id("agent-toggle").click()
+    push = {"session_id": session_id, "query": "SELECT name FROM items"}
+    httpx.post(f"{base_url}/api/remote/push", json=push, timeout=10.0).raise_for_status()
+    expect(page.get_by_test_id("query-input")).to_have_value("SELECT name FROM items")
+    expect(page.get_by_test_id("query-output")).to_be_visible()
+    httpx.post(f"{base_url}/api/remote/push", json={**push, "name": "pushed q"}, timeout=10.0).raise_for_status()
+    _wait_stored(page, base_url, ws, "pushed q", "SELECT name FROM items")
     assert _stored_sql(base_url, ws, "auto q") == "SELECT id, name FROM items ORDER BY id"
 
     page.get_by_test_id("nav-dashboard").click()

@@ -122,9 +122,10 @@ function QueryPanel({
   const [busy, setBusy] = useState(false)
   const [predefined, setPredefined] = useState<PredefinedQuery[]>([])
   const [selectedName, setSelectedName] = useState('')
-  // The SQL of the last successful run, fresh object per run; autosave reacts
-  // to it once the run's state (a push's name and presentation) has committed.
-  const [lastOk, setLastOk] = useState<{ query: string } | null>(null)
+  // The last successful run — its SQL and the name it runs for, taken at start;
+  // a fresh object per run. Autosave reacts to it once the run's state (a
+  // push's name and presentation) has committed.
+  const [lastOk, setLastOk] = useState<{ query: string; name: string } | null>(null)
   const [fields, setFields] = useState<Field[]>([])
   const [visibleCols, setVisibleCols] = useState<string[]>(() =>
     Array.isArray(saved.visibleCols) ? (saved.visibleCols as string[]) : [],
@@ -362,7 +363,9 @@ function QueryPanel({
     // saved view, and Save all target it (selection only — nothing persisted).
     if (pushed.name != null) setSelectedName(pushed.name)
     /* eslint-enable react-hooks/set-state-in-effect */
-    void runWith(q, lim, off, ord, fld)
+    // An unnamed push runs for no name, so autosave never writes it over the
+    // selected query.
+    void runWith(q, lim, off, ord, fld, undefined, pushed.name ?? '')
     // Consume the push so re-mounting doesn't re-run a stale query.
     onPushConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -401,6 +404,8 @@ function QueryPanel({
     ord: OrderCol[],
     selectFields?: string[],
     paramOverride?: Record<string, string>,
+    // The query name this run saves under (autosave); defaults to the selection.
+    runFor: string = selectedName,
   ) {
     setBusy(true)
     setError(null)
@@ -418,7 +423,7 @@ function QueryPanel({
         const rows: QueryRows = { meta: data.meta ?? [], data: data.data ?? [] }
         setResult(rows)
         setOffset(off)
-        setLastOk({ query: q })
+        setLastOk({ query: q, name: runFor.trim() })
         // A pushed selection is authoritative: synthesize the field list from the
         // result columns so the visibility filter restricts the table to exactly
         // the pushed columns (empty/absent => show all).
@@ -554,8 +559,9 @@ function QueryPanel({
   // Autosave: persist a named query after each successful run — the SQL that ran,
   // never a half-typed edit — unless nothing differs from its stored row.
   useEffect(() => {
-    const name = selectedName.trim()
-    if (!autosave || !lastOk || !name) return
+    // Skip when the selection moved on mid-run: its presentation isn't this run's.
+    const name = lastOk?.name
+    if (!autosave || !lastOk || !name || name !== selectedName.trim()) return
     const next = {
       query: lastOk.query,
       cell_view: effectiveCellView,
