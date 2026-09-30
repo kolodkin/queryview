@@ -51,8 +51,9 @@ tools (among others):
   tables. A disconnected session fails with `not connected`.
 - `push_dashboard(session_id, name, html, queries, params?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
-  renders it. Only the user's **Save** persists it. Returns
-  `{ok, pushed, message, database}`; a disconnected session fails with
+  renders it. Only the user's **Save** persists it, unless the workspace has
+  [autosave](./workspace.md#autosave) on. Returns
+  `{ok, pushed, persisted, message, database}`; a disconnected session fails with
   `not connected`. See [dashboard.md](./dashboard.md).
 
 The pushed query runs through the normal `POST /api/db/query`, so all of

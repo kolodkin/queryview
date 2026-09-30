@@ -24,12 +24,28 @@ without a remote is a pure namespace: its git controls are disabled.
 Deleting a workspace requires it to be empty (409 otherwise); the git remote
 keeps its history either way.
 
+## Autosave
+
+Off by default. With `autosave` on, the workspace persists on update and the
+query and dashboard pages drop their **Save** button; **Commit** / **Restore**
+([gitsync.md](./gitsync.md)) remain the history:
+
+- **Queries** — a named query is saved after each *successful* run (its SQL,
+  order-by, fields and cell view), so a failing or half-typed edit never
+  overwrites it; a run that changes nothing writes nothing. Unnamed SQL isn't
+  saved. An agent `push_query` with a `name` auto-runs, so it saves the same way.
+- **Dashboards** — a delivered agent `push_dashboard` is persisted server-side
+  (`persisted: true`).
+
+Without a remote there is no history to go back to: each save overwrites the
+only copy. Toggle it in *Manage workspaces…*.
+
 ## API
 
-- `GET /api/workspaces` → `{workspaces: [{name, branch, configured, remote}]}`
-- `POST /api/workspaces` `{name, remote?, branch?}`
-- `PATCH /api/workspaces/{name}` `{name?, remote?, branch?}` — a null `remote`
-  clears it; an absent key leaves it unchanged
+- `GET /api/workspaces` → `{workspaces: [{name, branch, configured, remote, autosave}]}`
+- `POST /api/workspaces` `{name, remote?, branch?, autosave?}`
+- `PATCH /api/workspaces/{name}` `{name?, remote?, branch?, autosave?}` — a null
+  `remote` clears it; an absent key leaves it unchanged
 - `DELETE /api/workspaces/{name}`
 
 Scoped endpoints (predefined queries, dashboards, `/api/git/*`) accept an
@@ -38,7 +54,7 @@ optional `workspace` name, defaulting to the fallback workspace.
 ## UI
 
 The header shows a workspace switcher (dropdown + manage panel for
-create/rename/remote/branch/delete). The active workspace is session state
+create/rename/remote/branch/autosave/delete). The active workspace is session state
 (see [session.md](./session.md)); switching reloads the query and dashboard
 lists.
 

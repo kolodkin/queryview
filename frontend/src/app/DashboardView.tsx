@@ -16,6 +16,7 @@ import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace } from './session'
+import { useAutosave } from './autosave'
 
 // A dashboard names no connection: it runs on the viewing session's.
 export type DashboardPush = {
@@ -84,6 +85,8 @@ function DashboardView({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  // Autosave workspaces persist agent pushes server-side, so there's no Save.
+  const autosave = useAutosave()
   // Bumped after a git restore to re-trigger the load effect below without
   // otherwise changing its dependencies.
   const [reloadNonce, setReloadNonce] = useState(0)
@@ -277,15 +280,17 @@ function DashboardView({
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          data-testid="dashboard-save"
-          onClick={() => void save()}
-          disabled={!active || saving}
-          className="glass-btn min-w-[5rem] px-3 py-2 text-center text-sm font-medium"
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
+        {!autosave && (
+          <button
+            type="button"
+            data-testid="dashboard-save"
+            onClick={() => void save()}
+            disabled={!active || saving}
+            className="glass-btn min-w-[5rem] px-3 py-2 text-center text-sm font-medium"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        )}
         <GitSyncControls
           kind="dashboard"
           name={name}

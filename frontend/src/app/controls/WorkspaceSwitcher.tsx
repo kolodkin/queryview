@@ -16,6 +16,7 @@ import {
   updateWorkspace,
   type Workspace,
 } from '../workspace'
+import { announceWorkspacesChanged } from '../autosave'
 
 type Props = {
   workspace: string
@@ -39,12 +40,16 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [name, setName] = useState('')
   const [remote, setRemote] = useState('')
   const [branch, setBranch] = useState('')
+  const [autosave, setAutosave] = useState(false)
   const current = list.find((w) => w.name === workspace)
   // The manage panel light-dismisses only while untouched: once it holds
   // unsaved input (a new remote URL above all), it closes through its buttons.
   const dirty =
     manage &&
-    (name.trim() !== workspace || remote.trim() !== '' || branch.trim() !== (current?.branch ?? ''))
+    (name.trim() !== workspace ||
+      remote.trim() !== '' ||
+      branch.trim() !== (current?.branch ?? '') ||
+      autosave !== (current?.autosave ?? false))
   const rootRef = useDismiss<HTMLDivElement>(open || warnOpen || (manage && !dirty), () => {
     setOpen(false)
     setWarnOpen(false)
@@ -82,6 +87,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
     setName(workspace)
     setRemote('')
     setBranch(current?.branch ?? '')
+    setAutosave(current?.autosave ?? false)
     setError('')
     setSyncNote('')
   }
@@ -103,10 +109,12 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   }
 
   async function saveSettings() {
-    const changes: { name?: string; remote?: string | null; branch?: string } = {}
+    const changes: { name?: string; remote?: string | null; branch?: string; autosave?: boolean } =
+      {}
     if (name.trim() && name.trim() !== workspace) changes.name = name.trim()
     if (remote.trim()) changes.remote = remote.trim()
     if (branch.trim()) changes.branch = branch.trim()
+    if (autosave !== (current?.autosave ?? false)) changes.autosave = autosave
     const r = await updateWorkspace(workspace, changes)
     if (!r.ok) {
       setError(r.message ?? 'update failed')
@@ -114,6 +122,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
     }
     invalidateGitStatus()
     announceGitSync()
+    announceWorkspacesChanged()
     if (r.sync_error) {
       setError(`Saved, but syncing with the repo failed: ${r.sync_error}`)
       return
@@ -129,6 +138,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
       name.trim(),
       remote.trim() || undefined,
       branch.trim() || undefined,
+      autosave,
     )
     if (!r.ok) {
       setError(r.message ?? 'create failed')
@@ -265,6 +275,19 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
             placeholder="main"
             className="glass-input w-full px-2 py-1 text-slate-100"
           />
+          <label className="flex items-start gap-2 text-xs text-slate-300">
+            <input
+              type="checkbox"
+              data-testid="workspace-autosave-input"
+              checked={autosave}
+              onChange={(e) => setAutosave(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Autosave — save queries after each successful run and agent pushes as they arrive;
+              no Save button. Commit / Restore keep the history.
+            </span>
+          </label>
           {current?.configured && (
             <div className="flex items-center gap-2">
               <button
