@@ -1,25 +1,25 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { filterNames } from '../core'
+import { filterNames, useDismiss } from '../core'
 import { isReady, openSaved, selectDatabase, toConnection, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
 import { timeAgo } from './timeAgo'
+import {
+  MANY_THRESHOLD,
+  RECENT_COUNT,
+  driverCounts,
+  matchConnections,
+  type SavedConnection,
+} from './savedConnections'
 import { apiFetch } from './api'
 
 type TestResult = { ok: boolean; message: string }
 
-// A saved connection's card data, from /api/db/connections.
-type SavedConnection = {
-  name: string
-  type: string
-  database: string | null
-  last_active_at: number
-}
-
-// Past this many saved connections the cards get a filter box.
-const FILTER_THRESHOLD = 6
+const labelOf = (type: string) => DRIVERS[type]?.label ?? type
+const sectionLabel = 'text-xs font-semibold uppercase tracking-wider text-slate-400'
+const cardGrid = 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
 
 // The Connect page (`/connect`): saved-connection cards and a "new connection"
 // card per driver. See docs/queryview.md.
@@ -33,6 +33,14 @@ function ConnectView({
   const navigate = useNavigate()
   const [saved, setSaved] = useState<SavedConnection[] | null>(null)
   const [filter, setFilter] = useState('')
+  // "Many" layout only: the driver chip, the keyboard-highlighted card, and
+  // the "+ New" menu that stands in for the new-connection cards.
+  const [driver, setDriver] = useState<string | null>(null)
+  const [highlight, setHighlight] = useState(0)
+  const [newOpen, setNewOpen] = useState(false)
+  const newRef = useDismiss<HTMLDivElement>(newOpen, () => setNewOpen(false))
+  const searchRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   // The driver whose form is open, if any.
   const [formType, setFormType] = useState<string | null>(null)
   // Back from the picker to the cards; the opened connection stays.
@@ -55,10 +63,45 @@ function ConnectView({
     void refreshSaved()
   }, [refreshSaved])
 
+  const count = saved?.length ?? 0
+  const many = count > MANY_THRESHOLD
   const visible = useMemo(
-    () => filterNames(saved ?? [], filter, (c) => c.name),
-    [saved, filter],
+    () => matchConnections(saved ?? [], filter, driver, labelOf),
+    [saved, filter, driver],
   )
+  const searching = filter.trim() !== '' || driver !== null
+  // Unfiltered, the most recent few sit in their own row above the scrolling
+  // rest; the list is most-recent first, so that's a split, not a copy.
+  const recentCount = many && !searching ? RECENT_COUNT : 0
+  const current = Math.min(highlight, Math.max(visible.length - 1, 0))
+
+  // `/` jumps to the search box from anywhere on the page but a text field.
+  useEffect(() => {
+    if (!many) return
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      if (e.key !== '/' || el.closest('input, textarea, select')) return
+      e.preventDefault()
+      searchRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [many])
+
+  // Keep the highlighted card in view inside the scrolling list.
+  useEffect(() => {
+    listRef.current
+      ?.querySelector('[data-highlighted="true"]')
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [current])
+
+  function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    const steps: Record<string, number> = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }
+    const step = steps[e.key]
+    if (step === undefined || visible.length === 0) return
+    e.preventDefault()
+    setHighlight((current + step + visible.length) % visible.length)
+  }
 
   // Land where an opened connection belongs: a ready one browses its tables,
   // the rest stay here on the database picker (with the card list refreshed,
@@ -109,7 +152,47 @@ function ConnectView({
 
   const form = formType ? DRIVERS[formType] : undefined
   const active = connection?.name ?? null
-  const count = saved?.length ?? 0
+
+  function startNew(type: string) {
+    setFormType(type)
+    setNewOpen(false)
+    setError(null)
+  }
+
+  // Cards for visible[from..to), highlighted by their index in `visible`.
+  const cards = (from: number, to?: number) =>
+    visible.slice(from, to).map((c, i) => (
+      <SavedCard
+        key={c.name}
+        conn={c}
+        active={c.name === active}
+        highlighted={many && from + i === current}
+        busy={opening === c.name}
+        disabled={opening !== null}
+        onOpen={() => void open(c.name)}
+      />
+    ))
+
+  const newCards = Object.values(DRIVERS).map((d) => (
+    <button
+      key={d.type}
+      type="button"
+      data-testid={`new-conn-${d.type}`}
+      onClick={() => startNew(d.type)}
+      className="glass-card group flex items-center gap-3 p-4 text-left"
+    >
+      <DriverMark type={d.type} />
+      <span className="min-w-0">
+        <span className="block font-medium text-slate-100">{d.label}</span>
+        <span className="block text-xs text-slate-400">{d.blurb}</span>
+      </span>
+      <span className="ml-auto text-lg text-slate-500 group-hover:text-indigo-200" aria-hidden>
+        +
+      </span>
+    </button>
+  ))
+
+  const drivers = many ? driverCounts(saved ?? []) : []
 
   return (
     <div className={`w-full ${form ? 'max-w-md' : 'max-w-3xl'}`} data-testid="connect-page">
@@ -126,33 +209,85 @@ function ConnectView({
       ) : (
         <>
           <section aria-labelledby="saved-heading">
-            <div className="mb-3 flex items-center gap-3">
-              <h2 id="saved-heading" className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <h2 id="saved-heading" className={sectionLabel}>
                 Saved connections
               </h2>
-              {count > FILTER_THRESHOLD && (
-                <form
-                  className="ml-auto w-56"
-                  onSubmit={(e) => {
-                    // Enter opens the first match, so a typed prefix is enough.
-                    e.preventDefault()
-                    if (visible.length > 0) void open(visible[0].name)
-                  }}
-                >
-                  <input
-                    type="search"
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    placeholder={`Filter ${count} connections…`}
-                    aria-label="Filter connections"
-                    data-testid="conn-filter"
-                    autoFocus
-                    autoComplete="off"
-                    className="glass-input w-full px-3 py-1.5 text-sm"
-                  />
-                </form>
+              {many && (
+                <>
+                  <span data-testid="conn-count" className="text-xs text-slate-500">
+                    {visible.length} of {count}
+                  </span>
+                  <form
+                    className="ml-auto w-56"
+                    onSubmit={(e) => {
+                      // Enter opens the highlighted card (the first, until arrows move it).
+                      e.preventDefault()
+                      if (visible.length > 0) void open(visible[current].name)
+                    }}
+                  >
+                    <input
+                      ref={searchRef}
+                      type="search"
+                      value={filter}
+                      onChange={(e) => {
+                        setFilter(e.target.value)
+                        setHighlight(0)
+                      }}
+                      onKeyDown={onSearchKey}
+                      placeholder="Search name, driver, database…  /"
+                      aria-label="Search connections"
+                      data-testid="conn-filter"
+                      autoFocus
+                      autoComplete="off"
+                      className="glass-input w-full px-3 py-1.5 text-sm"
+                    />
+                  </form>
+                  <div ref={newRef} className="relative">
+                    <button
+                      type="button"
+                      data-testid="new-menu-toggle"
+                      aria-expanded={newOpen}
+                      onClick={() => setNewOpen((o) => !o)}
+                      className="glass-btn-primary px-3 py-1.5 text-sm font-medium"
+                    >
+                      + New ▾
+                    </button>
+                    {newOpen && (
+                      <div
+                        data-testid="new-menu"
+                        className="glass-popover absolute right-0 top-full z-10 mt-2 flex w-72 flex-col gap-2 p-2"
+                      >
+                        {newCards}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
+
+            {drivers.length > 1 && (
+              <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter by driver">
+                {[null, ...drivers.map(([t]) => t)].map((t) => (
+                  <button
+                    key={t ?? 'all'}
+                    type="button"
+                    data-testid="driver-chip"
+                    data-type={t ?? ''}
+                    aria-pressed={driver === t}
+                    onClick={() => {
+                      setDriver(t)
+                      setHighlight(0)
+                    }}
+                    className={`glass-toggle px-3 py-1 text-xs ${driver === t ? 'is-active' : ''}`}
+                  >
+                    {t === null
+                      ? `All ${count}`
+                      : `${labelOf(t)} ${drivers.find(([d]) => d === t)?.[1]}`}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {saved === null ? (
               <Loading label="Loading connections…" />
@@ -162,20 +297,29 @@ function ConnectView({
               </p>
             ) : visible.length === 0 ? (
               <p data-testid="conn-filter-empty" className="text-sm text-slate-400">
-                No connections match “{filter.trim()}”.
+                No connections match{filter.trim() ? ` “${filter.trim()}”` : ''}.
               </p>
             ) : (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {visible.map((c) => (
-                  <SavedCard
-                    key={c.name}
-                    conn={c}
-                    active={c.name === active}
-                    busy={opening === c.name}
-                    disabled={opening !== null}
-                    onOpen={() => void open(c.name)}
-                  />
-                ))}
+              <div ref={listRef}>
+                {recentCount > 0 && (
+                  <>
+                    <h3 className={`mb-2 ${sectionLabel}`}>Recent</h3>
+                    <div data-testid="conn-recent" className={cardGrid}>
+                      {cards(0, recentCount)}
+                    </div>
+                    <h3 className={`mb-2 mt-5 ${sectionLabel}`}>All connections</h3>
+                  </>
+                )}
+                {visible.length > recentCount && (
+                  // Capped and scrolling in the many layout, so the page never
+                  // grows past the fold; padding keeps the hover lift unclipped.
+                  <div
+                    data-testid="conn-all"
+                    className={many ? `-m-1 max-h-[22rem] overflow-y-auto p-1 ${cardGrid}` : cardGrid}
+                  >
+                    {cards(recentCount)}
+                  </div>
+                )}
               </div>
             )}
 
@@ -186,34 +330,14 @@ function ConnectView({
             )}
           </section>
 
-          <section aria-labelledby="new-heading" className="mt-8">
-            <h2 id="new-heading" className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              New connection
-            </h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {Object.values(DRIVERS).map((d) => (
-                <button
-                  key={d.type}
-                  type="button"
-                  data-testid={`new-conn-${d.type}`}
-                  onClick={() => {
-                    setFormType(d.type)
-                    setError(null)
-                  }}
-                  className="glass-card group flex items-center gap-3 p-4 text-left"
-                >
-                  <DriverMark type={d.type} />
-                  <span className="min-w-0">
-                    <span className="block font-medium text-slate-100">{d.label}</span>
-                    <span className="block text-xs text-slate-400">{d.blurb}</span>
-                  </span>
-                  <span className="ml-auto text-lg text-slate-500 group-hover:text-indigo-200" aria-hidden>
-                    +
-                  </span>
-                </button>
-              ))}
-            </div>
-          </section>
+          {!many && (
+            <section aria-labelledby="new-heading" className="mt-8">
+              <h2 id="new-heading" className={`mb-3 ${sectionLabel}`}>
+                New connection
+              </h2>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">{newCards}</div>
+            </section>
+          )}
         </>
       )}
     </div>
@@ -238,27 +362,32 @@ function DriverMark({ type }: { type: string }) {
 function SavedCard({
   conn,
   active,
+  highlighted,
   busy,
   disabled,
   onOpen,
 }: {
   conn: SavedConnection
   active: boolean
+  highlighted: boolean
   busy: boolean
   disabled: boolean
   onOpen: () => void
 }) {
-  const label = DRIVERS[conn.type]?.label ?? conn.type
+  const label = labelOf(conn.type)
   return (
     <button
       type="button"
       data-testid="conn-card"
       data-conn={conn.name}
       data-active={active}
+      data-highlighted={highlighted}
       onClick={onOpen}
       disabled={disabled}
       title={`Open ${conn.name}`}
-      className={`glass-card flex flex-col gap-3 p-4 text-left ${active ? 'is-active' : ''}`}
+      className={`glass-card flex flex-col gap-3 p-4 text-left ${active ? 'is-active' : ''} ${
+        highlighted ? 'is-highlighted' : ''
+      }`}
     >
       <span className="flex w-full items-center gap-3">
         <DriverMark type={conn.type} />

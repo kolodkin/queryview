@@ -1,6 +1,6 @@
 import re
 
-from conftest import open_connect
+from conftest import open_connect, start_new_connection
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -14,11 +14,11 @@ def test_queryview_e2e(page: Page) -> None:
     expect(page.locator("h1")).to_have_text("QueryView")
 
     # the ClickHouse "new connection" card opens its form, and Back returns
-    page.get_by_test_id("new-conn-clickhouse").click()
+    start_new_connection(page, "clickhouse")
     expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
     page.get_by_test_id("form-back").click()
     expect(page.get_by_test_id("clickhouse-form")).to_have_count(0)
-    page.get_by_test_id("new-conn-clickhouse").click()
+    start_new_connection(page, "clickhouse")
     expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
     for test_id in ("ch-name", "ch-host", "ch-port", "ch-username", "ch-password"):
         expect(page.get_by_test_id(test_id)).to_be_visible()
@@ -140,3 +140,72 @@ def test_disconnected_lands_on_connect(page: Page) -> None:
 
     page.goto("/prompt", wait_until="networkidle")
     expect(page).to_have_url(re.compile(r"/connect$"))
+
+
+def _save_duckdb_connections(page: Page, names: list[str]) -> None:
+    """Save in-memory DuckDB connections through the app's own API, as the
+    page's session."""
+    page.evaluate(
+        """async (names) => {
+          const headers = {
+            'Content-Type': 'application/json',
+            'X-QV-Session': sessionStorage.getItem('qv_session'),
+          }
+          for (const name of names) {
+            const body = JSON.stringify({ type: 'duckdb', name, path: ':memory:' })
+            await fetch('/api/db/connect', { method: 'POST', headers, body })
+          }
+        }""",
+        names,
+    )
+
+
+def test_many_connections(page: Page) -> None:
+    """Past six saved connections: Recent row, a capped scrolling list, search
+    with a count and arrow-key highlight, driver chips, and a "+ New" menu."""
+    page.goto("/connect", wait_until="networkidle")
+    bulk = [f"bulk-{i:02d}" for i in range(10)]
+    _save_duckdb_connections(page, bulk)
+    open_connect(page)
+
+    # The most recent three get their own row; the rest scroll in a capped box.
+    recent = page.get_by_test_id("conn-recent").get_by_test_id("conn-card")
+    expect(recent).to_have_count(3)
+    expect(recent.first).to_have_attribute("data-conn", "bulk-09")
+    everything = page.get_by_test_id("conn-all")
+    assert everything.evaluate("el => el.scrollHeight > el.clientHeight")
+
+    # New-connection cards live behind "+ New".
+    expect(page.get_by_test_id("new-conn-duckdb")).to_have_count(0)
+    page.get_by_test_id("new-menu-toggle").click()
+    expect(page.get_by_test_id("new-menu")).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(page.get_by_test_id("new-menu")).to_have_count(0)
+
+    # Driver chips narrow to one driver.
+    page.locator('[data-testid="driver-chip"][data-type="duckdb"]').click()
+    expect(page.get_by_test_id("conn-recent")).to_have_count(0)
+    cards = page.get_by_test_id("conn-card")
+    for i in range(cards.count()):
+        expect(cards.nth(i)).to_contain_text("DuckDB")
+    page.locator('[data-testid="driver-chip"][data-type=""]').click()
+
+    # `/` focuses search, which matches the name and shows a count.
+    page.locator("h1").click()
+    page.keyboard.press("/")
+    search = page.get_by_test_id("conn-filter")
+    expect(search).to_be_focused()
+    page.keyboard.type("bulk-0")
+    expect(cards).to_have_count(10)
+    expect(page.get_by_test_id("conn-count")).to_contain_text("10 of")
+
+    # Arrows move the highlight; Enter opens the highlighted card, and a
+    # picker-less DuckDB lands on the explorer.
+    expect(cards.first).to_have_attribute("data-highlighted", "true")
+    page.keyboard.press("ArrowDown")
+    second = cards.nth(1)
+    expect(second).to_have_attribute("data-highlighted", "true")
+    name = second.get_attribute("data-conn")
+    page.keyboard.press("Enter")
+    expect(page).to_have_url(re.compile(r"/explorer"))
+    expect(page.get_by_test_id("connection-status")).to_contain_text(f"connected - {name}")
