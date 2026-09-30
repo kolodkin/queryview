@@ -37,8 +37,10 @@ def test_queryview_e2e(page: Page) -> None:
     expect(page.locator('[data-db="default"]')).to_be_visible()
 
     # selecting a database shows the connected indicator and, because the
-    # connection is now ready, lands on the explorer
-    page.locator('[data-db="default"]').click()
+    # connection is now ready, lands on the explorer. The session's URL write is
+    # fire-and-forget; wait for it so the reload below resumes the explorer.
+    with page.expect_response(lambda r: r.request.method == "PATCH" and "/api/sessions/" in r.url):
+        page.locator('[data-db="default"]').click()
     expect(page.get_by_test_id("connection-indicator")).to_be_visible()
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - default")
     expect(page).to_have_url(re.compile(r"/explorer"))
