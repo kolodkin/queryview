@@ -9,7 +9,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from . import gitsync, remote, sessions
-from .dashboards import _push_dashboard, upsert_dashboard
+from .dashboards import _push_dashboard
 from .queries import list_predefined_queries_view
 from .validation import dashboard_params_error
 
@@ -48,7 +48,9 @@ async def push_query(
             Unlike the modal it isn't persisted — it rides with this one push and
             overrides any selected predefined query's saved cell_view.
         name: Optional predefined-query name to select in the dropdown (e.g.
-            "findings sources"). Selection only — nothing is persisted. When the
+            "findings sources"). Selection only — nothing is persisted, unless
+            the workspace has autosave on: then a successful auto-run saves it
+            under this name. When the
             name matches a saved query and no `cell_view` is given, the pushed
             result renders with that query's saved cell_view.
     """
@@ -228,16 +230,11 @@ async def push_dashboard(
     """
     rec = await sessions.get_session_rec(session_id) if session_id else None
     if rec is None or rec.connection_name is None:
-        return {"ok": False, "pushed": False, "persisted": False, "message": "not connected", "database": None}
+        return _push_failed("not connected")
     perr = dashboard_params_error(params)
     if perr is not None:
-        return {"ok": False, "pushed": False, "persisted": False, "message": perr, "database": None}
-    pushed, message = await _push_dashboard(name, html, queries, session_id, params)
-    # Autosave persists only a delivered push: a disarmed session grants nothing.
-    ws = await _session_workspace_rec(session_id)
-    persisted = pushed and ws.autosave
-    if persisted:
-        await upsert_dashboard(name, html, queries, params, workspace_id=ws.id)
+        return _push_failed(perr)
+    pushed, persisted, message = await _push_dashboard(name, html, queries, session_id, params, rec.workspace)
     return {
         "ok": pushed,
         "pushed": pushed,
@@ -245,6 +242,10 @@ async def push_dashboard(
         "message": message,
         "database": await sessions.database_of(session_id),
     }
+
+
+def _push_failed(message: str) -> dict[str, Any]:
+    return {"ok": False, "pushed": False, "persisted": False, "message": message, "database": None}
 
 
 async def _git_tool(coro) -> dict[str, Any]:

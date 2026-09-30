@@ -26,19 +26,16 @@ keeps its history either way.
 
 ## Autosave
 
-Off by default. With `autosave` on, the workspace persists on update and the
-query and dashboard pages drop their **Save** button; **Commit** / **Restore**
-([gitsync.md](./gitsync.md)) remain the history:
+Off by default; toggled in *Manage workspaces…*. When on, the query and
+dashboard pages have no **Save** button, and **Commit** / **Restore**
+([gitsync.md](./gitsync.md)) are the history:
 
-- **Queries** — a named query is saved after each *successful* run (its SQL,
-  order-by, fields and cell view), so a failing or half-typed edit never
-  overwrites it; a run that changes nothing writes nothing. Unnamed SQL isn't
-  saved. An agent `push_query` with a `name` auto-runs, so it saves the same way.
-- **Dashboards** — a delivered agent `push_dashboard` is persisted server-side
-  (`persisted: true`).
+- **Queries** — a named query saves after each *successful* run (SQL, order-by,
+  fields, cell view), so broken edits never overwrite it; unchanged runs write
+  nothing, unnamed SQL is never saved. A named `push_query` saves via its auto-run.
+- **Dashboards** — a delivered `push_dashboard` is persisted (`persisted: true`).
 
-Without a remote there is no history to go back to: each save overwrites the
-only copy. Toggle it in *Manage workspaces…*.
+Without a remote, each save overwrites the only copy.
 
 ## API
 

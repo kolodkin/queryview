@@ -12,7 +12,7 @@ from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from . import remote
+from . import remote, workspaces
 from .connect import _engine_for_db, _ensure_schema, _now_ms
 
 
@@ -135,14 +135,23 @@ async def _push_dashboard(
     queries: dict[str, str],
     session_id: str | None,
     params: list[dict[str, Any]] | None = None,
-) -> tuple[bool, str]:
-    """Push a dashboard to a live session as a DRAFT — no persistence. Only the
-    user's Save (POST /api/dashboards) writes it to the store, mirroring how
-    push_query drafts a query for the user to Save. Returns (pushed, message);
-    no session_id -> (False, "no session")."""
+    workspace: str | None = None,
+) -> tuple[bool, bool, str]:
+    """Push a dashboard to a live session. A DRAFT unless `workspace` (the
+    session's) has autosave on: then a delivered push is also persisted — only
+    once delivered, since a disarmed session grants nothing. Otherwise only the
+    user's Save (POST /api/dashboards) writes it. Returns (pushed, persisted,
+    message); no session_id -> (False, False, "no session")."""
     if not session_id:
-        return False, "no session"
-    return remote.push(session_id, _dashboard_event(name, html, queries, params))
+        return False, False, "no session"
+    pushed, message = remote.push(session_id, _dashboard_event(name, html, queries, params))
+    if not pushed:
+        return False, False, message
+    ws = await (workspaces.resolve(workspace) if workspace else workspaces.fallback())
+    if not ws.autosave:
+        return True, False, message
+    await upsert_dashboard(name, html, queries, params, workspace_id=ws.id)
+    return True, True, message
 
 
 async def _upsert_and_push(

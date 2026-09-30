@@ -28,7 +28,7 @@ import { postLock } from './sessionLock'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace, flushPatches, patchView, viewState } from './session'
-import { queryChanged, useAutosave } from './autosave'
+import { queryChanged } from './autosave'
 
 type PredefinedQuery = {
   query_name: string
@@ -62,11 +62,14 @@ function QueryView({
   pushed,
   onPushConsumed,
   remoteId,
+  autosave = false,
 }: {
   connectionType: string
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
+  // The workspace autosaves: no Save button; successful runs save instead.
+  autosave?: boolean
 }) {
   return (
     <div className="viewport-page flex w-full max-w-[80vw] flex-col">
@@ -80,6 +83,7 @@ function QueryView({
         pushed={pushed}
         onPushConsumed={onPushConsumed}
         remoteId={remoteId}
+        autosave={autosave}
       />
     </div>
   )
@@ -96,11 +100,14 @@ function QueryPanel({
   pushed,
   onPushConsumed,
   remoteId,
+  autosave = false,
 }: {
   connectionType: string
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
+  // The workspace autosaves: no Save button; successful runs save instead.
+  autosave?: boolean
 }) {
   // Restored from the session, inputs only: results are deliberately not, so a
   // reload can never re-fire an expensive query.
@@ -115,7 +122,6 @@ function QueryPanel({
   const [busy, setBusy] = useState(false)
   const [predefined, setPredefined] = useState<PredefinedQuery[]>([])
   const [selectedName, setSelectedName] = useState('')
-  const autosave = useAutosave()
   // The SQL of the last successful run, fresh object per run; autosave reacts
   // to it once the run's state (a push's name and presentation) has committed.
   const [lastOk, setLastOk] = useState<{ query: string } | null>(null)

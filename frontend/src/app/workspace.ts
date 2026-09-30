@@ -5,7 +5,7 @@
 import { apiFetch } from './api'
 
 // `remote` is the URL without any embedded credential; the token never comes back.
-// `autosave`: persist on update instead of an explicit Save (see autosave.ts).
+// `autosave`: persist on update instead of an explicit Save (docs/workspace.md#autosave).
 export type Workspace = {
   name: string
   branch: string
@@ -37,9 +37,16 @@ export async function createWorkspace(
   return res.json()
 }
 
+export type WorkspaceChanges = {
+  name?: string
+  remote?: string | null
+  branch?: string
+  autosave?: boolean
+}
+
 export async function updateWorkspace(
   name: string,
-  changes: { name?: string; remote?: string | null; branch?: string; autosave?: boolean },
+  changes: WorkspaceChanges,
 ): Promise<WorkspaceResult> {
   const res = await apiFetch(`/api/workspaces/${encodeURIComponent(name)}`, {
     method: 'PATCH',

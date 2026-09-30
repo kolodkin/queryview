@@ -37,8 +37,7 @@ class Workspace(SQLModel, table=True):
     name: str = Field(unique=True, index=True)
     remote: str | None = Field(default=None)  # base64(AES-GCM(url)) — never plaintext
     branch: str = Field(default="main")
-    # Persist queries/dashboards on update (including agent pushes) instead of
-    # waiting for the user's Save. Docs: docs/workspace.md#autosave.
+    # Save on update instead of an explicit Save; docs/workspace.md#autosave.
     autosave: bool = Field(default=False)
 
 

@@ -15,19 +15,21 @@ import {
   listWorkspaces,
   updateWorkspace,
   type Workspace,
+  type WorkspaceChanges,
 } from '../workspace'
-import { announceWorkspacesChanged } from '../autosave'
 
 type Props = {
   workspace: string
   onSwitch: (name: string) => void
+  // Settings saved (e.g. autosave toggled), so the shell re-reads them.
+  onSaved?: () => void
 }
 
 // Header dropdown for the active workspace plus a small manage panel
 // (create / rename / set-clear remote / delete), and a warning when the last
 // git sync kept local copies the repo disagrees with. Workspace settings are
 // admin config; a remote's token is write-only — the server never returns it.
-export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
+export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Props) {
   const [open, setOpen] = useState(false)
   const [manage, setManage] = useState(false)
   const [list, setList] = useState<Workspace[]>([])
@@ -42,6 +44,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [branch, setBranch] = useState('')
   const [autosave, setAutosave] = useState(false)
   const current = list.find((w) => w.name === workspace)
+  const savedAutosave = current?.autosave ?? false
   // The manage panel light-dismisses only while untouched: once it holds
   // unsaved input (a new remote URL above all), it closes through its buttons.
   const dirty =
@@ -49,7 +52,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
     (name.trim() !== workspace ||
       remote.trim() !== '' ||
       branch.trim() !== (current?.branch ?? '') ||
-      autosave !== (current?.autosave ?? false))
+      autosave !== savedAutosave)
   const rootRef = useDismiss<HTMLDivElement>(open || warnOpen || (manage && !dirty), () => {
     setOpen(false)
     setWarnOpen(false)
@@ -87,7 +90,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
     setName(workspace)
     setRemote('')
     setBranch(current?.branch ?? '')
-    setAutosave(current?.autosave ?? false)
+    setAutosave(savedAutosave)
     setError('')
     setSyncNote('')
   }
@@ -109,12 +112,11 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   }
 
   async function saveSettings() {
-    const changes: { name?: string; remote?: string | null; branch?: string; autosave?: boolean } =
-      {}
+    const changes: WorkspaceChanges = {}
     if (name.trim() && name.trim() !== workspace) changes.name = name.trim()
     if (remote.trim()) changes.remote = remote.trim()
     if (branch.trim()) changes.branch = branch.trim()
-    if (autosave !== (current?.autosave ?? false)) changes.autosave = autosave
+    if (autosave !== savedAutosave) changes.autosave = autosave
     const r = await updateWorkspace(workspace, changes)
     if (!r.ok) {
       setError(r.message ?? 'update failed')
@@ -122,7 +124,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
     }
     invalidateGitStatus()
     announceGitSync()
-    announceWorkspacesChanged()
+    onSaved?.()
     if (r.sync_error) {
       setError(`Saved, but syncing with the repo failed: ${r.sync_error}`)
       return

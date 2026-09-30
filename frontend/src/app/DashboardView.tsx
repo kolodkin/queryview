@@ -16,7 +16,6 @@ import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace } from './session'
-import { useAutosave } from './autosave'
 
 // A dashboard names no connection: it runs on the viewing session's.
 export type DashboardPush = {
@@ -63,6 +62,7 @@ function DashboardView({
   onPushConsumed,
   runOn,
   identQuote = '"',
+  autosave = false,
 }: {
   pushed?: DashboardPush | null
   onPushConsumed?: () => void
@@ -70,6 +70,8 @@ function DashboardView({
   runOn?: string | null
   // The connection's identifier quote, for `identifier` params.
   identQuote?: string
+  // The workspace autosaves: pushes persist server-side, so there's no Save.
+  autosave?: boolean
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const name = searchParams.get('name') ?? ''
@@ -85,8 +87,6 @@ function DashboardView({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  // Autosave workspaces persist agent pushes server-side, so there's no Save.
-  const autosave = useAutosave()
   // Bumped after a git restore to re-trigger the load effect below without
   // otherwise changing its dependencies.
   const [reloadNonce, setReloadNonce] = useState(0)
