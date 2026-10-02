@@ -26,10 +26,10 @@ SESSION_CLAIM_TTL_MS = 90_000
 
 DEFAULT_URL = "/connect"
 
-# Serializes the read-modify-write paths. Each handler awaits SQLite in several
-# steps, so without this a reload's `attach` can read the row between the
-# pagehide beacon's `release` reading it and committing its last patch, and
-# resume the session without what the beacon carried.
+# One lock for every read-modify-write: a reload's `attach` must not read a
+# session between the pagehide beacon's patch and its commit. Not per session,
+# since `attach` and `release` pick their rows inside the transaction, and
+# SQLite serializes writers anyway.
 _writes = asyncio.Lock()
 
 
