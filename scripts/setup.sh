@@ -9,7 +9,7 @@
 #   scripts/setup.sh
 #
 # All environment overrides documented in the scripts apply here too
-# (CLICKHOUSE_PORT, PGPORT, BACKEND_PORT, ...).
+# (CLICKHOUSE_PORT, PGPORT, E2E_WORKERS, ...).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

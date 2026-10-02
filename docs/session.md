@@ -135,6 +135,12 @@ alone.
 Writes are fire-and-forget — the page never waits on one, and a lost patch costs
 a remembered preference, never your work in the live tab.
 
+The beacon and the reloaded page's `attach` reach the server a few milliseconds
+apart, both for the same session. The server runs its session writes one at a
+time (`sessions._writes`), so the attach always reads the beacon's patch
+committed rather than the row as it was before it; otherwise a busy machine
+could restore the page without what was typed just before the reload.
+
 The `/api/sessions/*` shapes are in [api.md](./api.md). Connection and database
 are not among them — `/api/db/connect`, `/open` and `/database` write those
 through, so connection changes keep one path.

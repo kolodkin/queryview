@@ -7,12 +7,12 @@
 #   scripts/setup_browser.sh
 #
 # Environment overrides:
-#   BACKEND_PORT      backend / BASE_URL port            (default: a free port)
+#   E2E_WORKERS       pytest-xdist worker count            (default: auto)
 #   CLICKHOUSE_PORT   ClickHouse HTTP port               (default 8123)
 #   PGPORT            Postgres TCP port                  (default 5432)
 #
 # The ClickHouse and Postgres servers are owned by their setup scripts and left
-# running; the backend e2e.sh starts is stopped on exit.
+# running; the suite's own per-worker backends stop with it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

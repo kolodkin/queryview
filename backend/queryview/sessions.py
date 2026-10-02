@@ -5,6 +5,7 @@ concerns here. Docs: docs/session.md."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from dataclasses import dataclass
@@ -24,6 +25,10 @@ from .connect import _engine_for_db, _ensure_schema, _now_ms
 SESSION_CLAIM_TTL_MS = 90_000
 
 DEFAULT_URL = "/connect"
+
+# Session writes run one at a time, so a reload's `attach` sees the pagehide
+# beacon's patch committed. See docs/session.md, "How it is stored".
+_writes = asyncio.Lock()
 
 
 def _open() -> AsyncSession:
@@ -210,7 +215,7 @@ async def patch_session(
     comes back so callers see server-derived values (the label an empty `label`
     unpins). None if the session is unknown."""
     await _ensure_schema()
-    async with _open() as s:
+    async with _writes, _open() as s:
         row = await s.get(Session, sid)
         if row is None:
             return None
@@ -282,7 +287,7 @@ async def attach(
     """
     await _ensure_schema()
     now = _now_ms()
-    async with _open() as s:
+    async with _writes, _open() as s:
         row = None if force_new else await s.get(Session, session_id) if session_id else None
         if row is not None and (not _is_held(row, now) or row.claimed_by == tab):
             await _claim(s, row, tab, now)
@@ -313,7 +318,7 @@ async def select_session(tab: str, sid: str | None, force: bool = False) -> tupl
         return rec, ""
     await _ensure_schema()
     now = _now_ms()
-    async with _open() as s:
+    async with _writes, _open() as s:
         row = await s.get(Session, sid)
         if row is None:
             return None, "unknown"
@@ -328,7 +333,7 @@ async def release(tab: str) -> None:
     """Drop whatever this tab holds (the pagehide beacon). Idempotent; the TTL
     covers the tab that never got to send it."""
     await _ensure_schema()
-    async with _open() as s:
+    async with _writes, _open() as s:
         for row in (await s.exec(select(Session).where(Session.claimed_by == tab))).all():
             row.claimed_by = None
             row.claim_seen_at = None
