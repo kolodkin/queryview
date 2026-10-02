@@ -26,10 +26,8 @@ SESSION_CLAIM_TTL_MS = 90_000
 
 DEFAULT_URL = "/connect"
 
-# One lock for every read-modify-write: a reload's `attach` must not read a
-# session between the pagehide beacon's patch and its commit. Not per session,
-# since `attach` and `release` pick their rows inside the transaction, and
-# SQLite serializes writers anyway.
+# Session writes run one at a time, so a reload's `attach` sees the pagehide
+# beacon's patch committed. See docs/session.md, "How it is stored".
 _writes = asyncio.Lock()
 
 
