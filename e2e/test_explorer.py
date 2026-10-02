@@ -101,6 +101,12 @@ def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: 
         page.locator('[data-testid="orderby-add"][data-col="id"]').click()  # id ASC
     with page.expect_request("**/api/db/query"):
         chip.get_by_test_id("orderby-dir").click()  # flipped to id DESC
+    # The request fires before its route handler runs, so give the second hold
+    # a moment to land rather than unpacking a list of one.
+    for _ in range(100):
+        if len(held) == 2:
+            break
+        page.wait_for_timeout(50)
     asc, desc = held
 
     # The DESC run answers first and its rows land.

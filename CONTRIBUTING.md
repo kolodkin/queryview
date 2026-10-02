@@ -96,14 +96,18 @@ uv run --group test pytest backend/queryview
 ```
 
 The e2e suite is [pytest-playwright](https://playwright.dev/python/docs/test-runners),
-installed via the `test` dependency group and run through `uv`. Start the dev
-servers (`npm run dev`) in one terminal, then in another:
+installed via the `test` dependency group and run through `uv`. With the SPA
+built (`npm run build`) it starts its own backend on a throwaway `DATA_DIR`,
+one per worker when run in parallel:
 
 ```bash
-uv run --group test pytest
+uv run --group test pytest e2e -n auto
 ```
 
-Override the target URL with `BASE_URL=http://localhost:4173 uv run --group test pytest` (e.g. to test a built preview). To run the full suite against a real ClickHouse the way CI does, use `scripts/setup.sh`.
+To test a server you started yourself (e.g. `npm run dev`, or a built preview),
+point at it with `BASE_URL=http://localhost:5173 uv run --group test pytest e2e`;
+workers then share that one server, so run it serially. To run the full suite
+against real ClickHouse and Postgres the way CI does, use `scripts/setup.sh`.
 
 ## Lint & type-check
 

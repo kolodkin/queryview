@@ -1,6 +1,11 @@
 import os
 import re
+import socket
+import subprocess
+import sys
+import time
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 
 import httpx
@@ -82,10 +87,50 @@ def context(context, base_url: str):
 
 
 @pytest.fixture(scope="session")
-def base_url() -> str:
-    # The app under test is started separately (Vite dev server, or the FastAPI
-    # backend serving the built SPA); point at it with BASE_URL.
-    return os.environ.get("BASE_URL", "http://localhost:5173")
+def base_url(tmp_path_factory) -> Iterator[str]:
+    """The app under test. BASE_URL points at one started separately (a Vite
+    dev server, or a backend serving the built SPA). Unset, each pytest process
+    starts its own backend on a free port and a throwaway DATA_DIR, so under
+    pytest-xdist every worker has private connections, workspaces and sessions
+    and no test can see another's — only the database servers are shared.
+    The backend is the one installed in this interpreter's environment, so the
+    release gate's installed wheel is what runs when it is the thing in .venv."""
+    env_url = os.environ.get("BASE_URL")
+    if env_url:
+        yield env_url
+        return
+    with socket.socket() as s:
+        s.bind(("", 0))
+        port = s.getsockname()[1]
+    data_dir = tmp_path_factory.mktemp("data")
+    log = (data_dir / "backend.log").open("w")
+    proc = subprocess.Popen(
+        [str(Path(sys.executable).parent / "queryview-backend")],
+        env={**os.environ, "SERVE_STATIC": "1", "PORT": str(port), "DATA_DIR": str(data_dir)},
+        stdout=log,
+        stderr=subprocess.STDOUT,
+    )
+    url = f"http://localhost:{port}"
+    try:
+        deadline = time.monotonic() + 60
+        while True:
+            try:
+                if httpx.get(f"{url}/api/health", timeout=1.0).is_success:
+                    break
+            except httpx.HTTPError:
+                pass
+            if proc.poll() is not None or time.monotonic() > deadline:
+                log.close()
+                raise RuntimeError(f"backend did not come up:\n{(data_dir / 'backend.log').read_text()}")
+            time.sleep(0.1)
+        yield url
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        log.close()
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -140,8 +185,11 @@ CH_PORT = os.environ.get("CLICKHOUSE_PORT", "8123")
 CH_USER = os.environ.get("CLICKHOUSE_USER", "default")
 CH_PASSWORD = os.environ.get("CLICKHOUSE_PASSWORD", "")
 # Not `test`: a name that generic may already hold someone's data, and the
-# fixture drops it.
-CH_DB = "qvtest"
+# fixture drops it. Under pytest-xdist each worker seeds (and drops) its own
+# database, so one worker's module-scoped teardown can't pull the table out
+# from under another's running test.
+_WORKER_SUFFIX = os.environ.get("PYTEST_XDIST_WORKER", "")
+CH_DB = f"qvtest_{_WORKER_SUFFIX}" if _WORKER_SUFFIX else "qvtest"
 
 
 def _ch_exec(sql: str) -> None:
@@ -176,11 +224,12 @@ PG_HOST = os.environ.get("PG_HOST", "localhost")
 PG_PORT = int(os.environ.get("PG_PORT", "5432"))
 PG_USER = os.environ.get("PG_USER", "postgres")
 PG_PASSWORD = os.environ.get("PG_PASSWORD", "")
+PG_DB = CH_DB  # same per-worker name, for the same reason
 
 
 @pytest.fixture(scope="module")
 def seeded_pg_db():
-    """Create a `qvtest` database with a small `items` table; drop it after.
+    """Create a `PG_DB` database with a small `items` table; drop it after.
     Uses asyncpg (a project dependency). The async work runs in a worker thread
     because pytest-playwright's sync API keeps an event loop on the main thread,
     so asyncio.run() can't be called there directly."""
@@ -197,15 +246,15 @@ def seeded_pg_db():
             password=PG_PASSWORD or None,
             database="postgres",
         )
-        await sys.execute("DROP DATABASE IF EXISTS qvtest WITH (FORCE)")
-        await sys.execute("CREATE DATABASE qvtest")
+        await sys.execute(f"DROP DATABASE IF EXISTS {PG_DB} WITH (FORCE)")
+        await sys.execute(f"CREATE DATABASE {PG_DB}")
         await sys.close()
         db = await asyncpg.connect(
             host=PG_HOST,
             port=PG_PORT,
             user=PG_USER,
             password=PG_PASSWORD or None,
-            database="qvtest",
+            database=PG_DB,
         )
         await db.execute("CREATE TABLE items (id int, name text)")
         await db.execute("INSERT INTO items (id, name) VALUES (1,'alpha'),(2,'beta'),(3,'gamma')")
@@ -219,7 +268,7 @@ def seeded_pg_db():
             password=PG_PASSWORD or None,
             database="postgres",
         )
-        await sys.execute("DROP DATABASE IF EXISTS qvtest WITH (FORCE)")
+        await sys.execute(f"DROP DATABASE IF EXISTS {PG_DB} WITH (FORCE)")
         await sys.close()
 
     def _in_thread(make_coro):

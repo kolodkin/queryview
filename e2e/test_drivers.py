@@ -8,7 +8,7 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-from conftest import CH_DB, open_connect, open_query_panel, start_new_connection
+from conftest import CH_DB, PG_DB, open_connect, open_query_panel, start_new_connection
 from playwright.sync_api import Page, expect
 
 
@@ -39,8 +39,8 @@ CASES = [
         "postgres-form",
         "pg-connect",
         "seeded_pg_db",
-        "connected - qvtest",
-        db_option="qvtest",
+        f"connected - {PG_DB}",
+        db_option=PG_DB,
     ),
     DriverCase(
         "duckdb",

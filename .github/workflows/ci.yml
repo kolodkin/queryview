@@ -103,34 +103,15 @@ jobs:
       - name: Start git daemon
         uses: ./.github/actions/start-git-daemon
 
-      - name: Start backend (serving built SPA)
-        run: |
-          SERVE_STATIC=1 uv run --frozen queryview-backend > backend.log 2>&1 &
-          echo $! > backend.pid
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8000/api/health > /dev/null; then
-              echo "Backend is up"; exit 0
-            fi
-            sleep 1
-          done
-          echo "Backend failed to start"; cat backend.log; exit 1
-
+      # The suite starts a backend per worker (built SPA, throwaway DATA_DIR);
+      # see e2e/conftest.py.
       - name: Run Playwright e2e tests
         id: e2e
-        env:
-          BASE_URL: http://localhost:8000
         run: |
-          uv run --frozen --group test pytest e2e \
+          uv run --frozen --group test pytest e2e -n 4 \
             --tracing retain-on-failure \
             --output test-results \
             --html=report/index.html --self-contained-html
-
-      - name: Stop backend
-        if: always()
-        run: |
-          if [ -f backend.pid ]; then
-            kill "$(cat backend.pid)" 2>/dev/null || true
-          fi
 
       - name: Upload trace artifacts
         if: ${{ !cancelled() }}
