@@ -15,6 +15,7 @@ import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
+import { onAutosaveEnabled } from './autosave'
 import { activeWorkspace } from './session'
 
 // A dashboard names no connection: it runs on the viewing session's.
@@ -131,6 +132,14 @@ function DashboardView({
       setSaving(false)
     }
   }
+
+  // Turning autosave on keeps an unsaved push draft: its Save button is about
+  // to go. Resubscribed each render so the handler sees the current draft.
+  useEffect(() =>
+    onAutosaveEnabled(() => {
+      if (localPush && active?.name === localPush.name) void save()
+    }),
+  )
 
   // A git sync may have imported dashboards from the repo.
   useEffect(() => onGitSync(() => void loadDashboards()), [])

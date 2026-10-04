@@ -35,6 +35,9 @@ dashboard pages have no **Save** button, and **Commit** / **Restore**
   nothing, unnamed SQL is never saved. A named `push_query` saves via its auto-run.
 - **Dashboards** — a delivered `push_dashboard` is persisted (`persisted: true`).
 
+Turning it on saves the open view's unsaved work first (the last named run,
+or an agent's dashboard draft), since its Save button goes away.
+
 Without a remote, each save overwrites the only copy.
 
 ## API

@@ -3,6 +3,20 @@
 
 import type { OrderCol } from '../core'
 
+// Fired when the manage panel turns autosave on, so the open view saves what
+// it holds unsaved before its Save button disappears.
+const AUTOSAVE_ENABLED = 'qv:autosave-enabled'
+
+export function announceAutosaveEnabled(): void {
+  window.dispatchEvent(new Event(AUTOSAVE_ENABLED))
+}
+
+// Run `f` whenever autosave is turned on; returns the unsubscribe.
+export function onAutosaveEnabled(f: () => void): () => void {
+  window.addEventListener(AUTOSAVE_ENABLED, f)
+  return () => window.removeEventListener(AUTOSAVE_ENABLED, f)
+}
+
 type QueryContent = {
   query: string
   cell_view: string | null
