@@ -31,6 +31,7 @@ def test_create_list_update_delete_round_trip():
         "configured": True,
         # Shown without the credential, which never leaves the server.
         "remote": "https://example.test/r.git",
+        "autosave": False,
     }
     assert "tok" not in r.text and "tok" not in str(listed["t6-rt"])
 
@@ -49,3 +50,15 @@ def test_create_validation_and_conflict():
     assert c.post("/api/workspaces", json={}).status_code == 400
     c.post("/api/workspaces", json={"name": "t6-dup"})
     assert c.post("/api/workspaces", json={"name": "t6-dup"}).status_code == 409
+
+
+def test_autosave_set_on_create_and_toggled_by_patch():
+    c = TestClient(app)
+    assert c.post("/api/workspaces", json={"name": "t6-auto", "autosave": True}).json()["ok"] is True
+    listed = {w["name"]: w for w in c.get("/api/workspaces").json()["workspaces"]}
+    assert listed["t6-auto"]["autosave"] is True
+
+    assert c.patch("/api/workspaces/t6-auto", json={"autosave": False}).json() == {"ok": True}
+    listed = {w["name"]: w for w in c.get("/api/workspaces").json()["workspaces"]}
+    assert listed["t6-auto"]["autosave"] is False
+    assert c.delete("/api/workspaces/t6-auto").json()["ok"] is True

@@ -32,7 +32,9 @@ session id) exposes:
   dashboard **draft** to the browser identified by `session_id`, which navigates
   to `/dashboard?name=<name>` and renders it. It does **not** persist — only the
   user's **Save** button in the dashboard view writes it to the store (mirrors
-  `push_query`). Returns `{ok, pushed, message, database}`; an unknown/disarmed
+  `push_query`) — unless the session's workspace has
+  [autosave](./workspace.md#autosave) on, which persists each delivered push and
+  hides Save. Returns `{ok, pushed, persisted, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
 
 A dashboard never names a [connection](./connect.md): it runs on the

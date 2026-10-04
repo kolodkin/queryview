@@ -48,7 +48,9 @@ async def push_query(
             Unlike the modal it isn't persisted — it rides with this one push and
             overrides any selected predefined query's saved cell_view.
         name: Optional predefined-query name to select in the dropdown (e.g.
-            "findings sources"). Selection only — nothing is persisted. When the
+            "findings sources"). Selection only — nothing is persisted, unless
+            the workspace has autosave on: then a successful auto-run saves it
+            under this name. When the
             name matches a saved query and no `cell_view` is given, the pushed
             result renders with that query's saved cell_view.
     """
@@ -197,12 +199,13 @@ async def push_dashboard(
     queries: dict[str, str],
     params: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Push a dashboard DRAFT to a live QueryView session (does not persist).
+    """Push a dashboard to a live QueryView session.
 
-    The dashboard renders immediately in the browser, but nothing is written to
-    the store — only the user's **Save** button in the dashboard view persists
-    it, mirroring how push_query drafts a query for the user to Save. Re-push to
-    update the live draft. Its queries run on the viewing session's connection
+    The dashboard renders immediately in the browser. By default it is a DRAFT:
+    nothing is written to the store until the user's **Save** in the dashboard
+    view, mirroring how push_query drafts a query. When the session's workspace
+    has autosave on, a delivered push is also persisted (`persisted: true`).
+    Re-push to update it. Its queries run on the viewing session's connection
     and selected database — a dashboard never names a connection.
 
     The browser consumes the results, not the agent: the HTML reads them from a
@@ -222,22 +225,27 @@ async def push_dashboard(
         queries: Map of query name to SQL.
         params: Optional selector specs (see above).
 
-    Returns {ok, pushed, message, database}; "not connected" if the session
-    has no connection.
+    Returns {ok, pushed, persisted, message, database}; "not connected" if
+    the session has no connection.
     """
     rec = await sessions.get_session_rec(session_id) if session_id else None
     if rec is None or rec.connection_name is None:
-        return {"ok": False, "pushed": False, "message": "not connected", "database": None}
+        return _push_failed("not connected")
     perr = dashboard_params_error(params)
     if perr is not None:
-        return {"ok": False, "pushed": False, "message": perr, "database": None}
-    pushed, message = await _push_dashboard(name, html, queries, session_id, params)
+        return _push_failed(perr)
+    pushed, persisted, message = await _push_dashboard(name, html, queries, session_id, params, rec.workspace)
     return {
         "ok": pushed,
         "pushed": pushed,
+        "persisted": persisted,
         "message": message,
         "database": await sessions.database_of(session_id),
     }
+
+
+def _push_failed(message: str) -> dict[str, Any]:
+    return {"ok": False, "pushed": False, "persisted": False, "message": message, "database": None}
 
 
 async def _git_tool(coro) -> dict[str, Any]:

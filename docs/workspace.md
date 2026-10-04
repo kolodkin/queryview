@@ -24,12 +24,25 @@ without a remote is a pure namespace: its git controls are disabled.
 Deleting a workspace requires it to be empty (409 otherwise); the git remote
 keeps its history either way.
 
+## Autosave
+
+Off by default; toggled in *Manage workspaces…*. When on, the query and
+dashboard pages have no **Save** button, and **Commit** / **Restore**
+([gitsync.md](./gitsync.md)) are the history:
+
+- **Queries** — a named query saves after each *successful* run (SQL, order-by,
+  fields, cell view), so broken edits never overwrite it; unchanged runs write
+  nothing, unnamed SQL is never saved. A named `push_query` saves via its auto-run.
+- **Dashboards** — a delivered `push_dashboard` is persisted (`persisted: true`).
+
+Without a remote, each save overwrites the only copy.
+
 ## API
 
-- `GET /api/workspaces` → `{workspaces: [{name, branch, configured, remote}]}`
-- `POST /api/workspaces` `{name, remote?, branch?}`
-- `PATCH /api/workspaces/{name}` `{name?, remote?, branch?}` — a null `remote`
-  clears it; an absent key leaves it unchanged
+- `GET /api/workspaces` → `{workspaces: [{name, branch, configured, remote, autosave}]}`
+- `POST /api/workspaces` `{name, remote?, branch?, autosave?}`
+- `PATCH /api/workspaces/{name}` `{name?, remote?, branch?, autosave?}` — a null
+  `remote` clears it; an absent key leaves it unchanged
 - `DELETE /api/workspaces/{name}`
 
 Scoped endpoints (predefined queries, dashboards, `/api/git/*`) accept an
@@ -38,7 +51,7 @@ optional `workspace` name, defaulting to the fallback workspace.
 ## UI
 
 The header shows a workspace switcher (dropdown + manage panel for
-create/rename/remote/branch/delete). The active workspace is session state
+create/rename/remote/branch/autosave/delete). The active workspace is session state
 (see [session.md](./session.md)); switching reloads the query and dashboard
 lists.
 
