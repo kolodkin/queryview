@@ -28,7 +28,7 @@ import { postLock } from './sessionLock'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace, flushPatches, patchView, viewState } from './session'
-import { queryChanged } from './autosave'
+import { onAutosaveEnabled, queryChanged } from './autosave'
 
 type PredefinedQuery = {
   query_name: string
@@ -556,23 +556,31 @@ function QueryPanel({
     }
   }
 
-  // Autosave: persist a named query after each successful run — the SQL that ran,
+  // Autosave: persist a named query's last successful run — the SQL that ran,
   // never a half-typed edit — unless nothing differs from its stored row.
-  useEffect(() => {
+  function saveLastRun() {
     // Skip when the selection moved on mid-run: its presentation isn't this run's.
     const name = lastOk?.name
-    if (!autosave || !lastOk || !name || name !== selectedName.trim()) return
+    if (!lastOk || !name || name !== selectedName.trim()) return
     const next = {
       query: lastOk.query,
       cell_view: effectiveCellView,
       ...presentationForSave(orderBy, visibleCols),
     }
     if (queryChanged(predefined.find((p) => p.query_name === name), next)) {
-      void save(effectiveCellView, lastOk.query) // eslint-disable-line react-hooks/set-state-in-effect
+      void save(effectiveCellView, lastOk.query)
     }
+  }
+
+  useEffect(() => {
+    if (autosave) saveLastRun() // eslint-disable-line react-hooks/set-state-in-effect
     // Only a new successful run triggers it; the rest is read as of that run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastOk])
+
+  // Turning autosave on saves the last run right away: its Save button is
+  // about to go. Resubscribed each render so the handler sees current state.
+  useEffect(() => onAutosaveEnabled(saveLastRun))
 
   // Modal owns its draft state (seeded from effectiveCellView, so a pushed
   // draft is editable); we just toggle visibility and forward the saved value.

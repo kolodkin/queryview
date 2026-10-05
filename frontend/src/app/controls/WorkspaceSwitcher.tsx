@@ -17,6 +17,7 @@ import {
   type Workspace,
   type WorkspaceChanges,
 } from '../workspace'
+import { announceAutosaveEnabled } from '../autosave'
 
 type Props = {
   workspace: string
@@ -125,6 +126,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
     invalidateGitStatus()
     announceGitSync()
     onSaved?.()
+    if (changes.autosave) announceAutosaveEnabled()
     if (r.sync_error) {
       setError(`Saved, but syncing with the repo failed: ${r.sync_error}`)
       return
