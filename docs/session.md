@@ -135,11 +135,26 @@ alone.
 Writes are fire-and-forget — the page never waits on one, and a lost patch costs
 a remembered preference, never your work in the live tab.
 
-The beacon and the reloaded page's `attach` reach the server a few milliseconds
-apart, both for the same session. The server runs its session writes one at a
-time (`sessions._writes`), so the attach always reads the beacon's patch
-committed rather than the row as it was before it; otherwise a busy machine
-could restore the page without what was typed just before the reload.
+**A reload keeps what you typed just before it.** A reload sends the server two
+requests for the same session, milliseconds apart: the old page's `pagehide`
+beacon with its unsaved edits, then the new page's `attach`, which reads the
+session back. If `attach` read the row before the beacon's write was committed,
+the page would come back without those last edits. Session writes therefore run
+one at a time (the `_writes` lock in `sessions.py`), so `attach` waits for the
+beacon:
+
+```mermaid
+sequenceDiagram
+    participant Old as Old page
+    participant New as Reloaded page
+    participant Srv as Server
+    Old->>Srv: pagehide beacon (unsaved edits)
+    New->>Srv: attach
+    Note over Srv: _writes: one session write at a time
+    Srv->>Srv: beacon: save edits, release, commit
+    Srv->>Srv: attach: read row (edits included), claim
+    Srv-->>New: session state with your last edits
+```
 
 The `/api/sessions/*` shapes are in [api.md](./api.md). Connection and database
 are not among them — `/api/db/connect`, `/open` and `/database` write those
