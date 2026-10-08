@@ -95,3 +95,15 @@ def test_list_tables_parses_rows_and_bytes_with_nulls(monkeypatch):
     ]
     assert "system.tables" in seen["query"]
     assert seen["database"] == "db"
+
+
+def test_describe_query_unescapes_multiline_types(monkeypatch):
+    # DESCRIBE pretty-prints named tuples across lines; TabSeparated escapes
+    # the newlines, and a type must come back as ClickHouse wrote it.
+    d = ClickHouseDriver()
+    _capture(monkeypatch, {}, "tags\tArray(Tuple(\\n    id Int32,\\n    name String))\nnote\tString\n")
+    ok, cols = asyncio.run(d.describe_query(ChConfig("h", 1, "u", ""), "SELECT 1", "db"))
+    assert ok and cols == [
+        {"name": "tags", "type": "Array(Tuple(\n    id Int32,\n    name String))"},
+        {"name": "note", "type": "String"},
+    ]

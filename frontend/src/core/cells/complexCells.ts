@@ -22,7 +22,7 @@ function matchWrapper(type: string): { name: string; inner: string } | null {
 export function parseComplexType(type: string): ComplexType | null {
   // DESCRIBE pretty-prints complex types across indented lines; flatten any
   // whitespace (type strings never contain string literals).
-  const flat = type.replace(/\\[nt]/g, ' ').replace(/\s+/g, ' ')
+  const flat = type.replace(/\s+/g, ' ')
   const w = matchWrapper(flat)
   if (!w) return null
   if (w.name === 'Nullable' || w.name === 'LowCardinality') return parseComplexType(w.inner)

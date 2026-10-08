@@ -73,7 +73,9 @@ function FieldMenu({
               <span className={`truncate ${on ? 'text-indigo-100' : 'text-slate-300'}`}>
                 {f.name}
               </span>
-              <span className="ml-auto shrink-0 truncate font-mono text-[10px] text-slate-500">
+              {/* Gives way before the name does: a long type (a named Tuple
+                  runs to hundreds of characters) truncates, the name stays. */}
+              <span className="ml-auto min-w-0 shrink-[1000] truncate font-mono text-[10px] text-slate-500">
                 {f.type}
               </span>
             </>

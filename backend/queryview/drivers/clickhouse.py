@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from typing import Any, NamedTuple
 
@@ -74,15 +75,24 @@ def parse_ch_config(body: Any) -> tuple[ChConfig | None, str | None]:
     return ChConfig(**fields), None
 
 
+# TabSeparated escapes; `\N` (NULL) is left for callers to recognize.
+_TSV_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "b": "\b", "f": "\f", "\\": "\\", "'": "'"}
+_TSV_ESCAPE = re.compile(r"\\(.)")
+
+
+def _tsv_unescape(field: str) -> str:
+    return _TSV_ESCAPE.sub(lambda m: _TSV_ESCAPES.get(m[1], m[0]), field)
+
+
 def _tsv_rows(text: str, min_cols: int):
-    """Rows of a TabSeparated result: blank lines and rows with fewer than
-    `min_cols` columns are skipped."""
+    """Unescaped rows of a TabSeparated result: blank lines and rows with fewer
+    than `min_cols` columns are skipped."""
     for line in text.split("\n"):
         if not line.strip():
             continue
         cols = line.split("\t")
         if len(cols) >= min_cols:
-            yield cols
+            yield [_tsv_unescape(c) for c in cols]
 
 
 class ClickHouseDriver:
