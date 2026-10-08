@@ -13,6 +13,7 @@
 # Env:
 #   CLICKHOUSE_PORT   ClickHouse HTTP port (default 8123)
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/_guard.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CACHE="$ROOT/.cache"

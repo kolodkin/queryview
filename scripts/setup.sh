@@ -11,6 +11,7 @@
 # All environment overrides documented in the scripts apply here too
 # (CLICKHOUSE_PORT, PGPORT, E2E_WORKERS, ...).
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/_guard.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

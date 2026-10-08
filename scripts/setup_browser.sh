@@ -14,6 +14,7 @@
 # The ClickHouse and Postgres servers are owned by their setup scripts and left
 # running; the suite's own per-worker backends stop with it.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/_guard.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"

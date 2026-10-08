@@ -18,6 +18,7 @@
 #   PGPORT   Postgres TCP port           (default 5432)
 #   PGUSER   superuser role to create    (default postgres)
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/_guard.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CACHE="$ROOT/.cache"
