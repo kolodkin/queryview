@@ -61,6 +61,12 @@ with `keep`, see [api.md](./api.md)) gets a `409`: the tab greys out and stops
 writing until you pick **Use it here** (the other tab then greys out) or **New
 session**. Any session change re-syncs the whole shell.
 
+The row is also the truth for the connection and its database. Every row the tab
+adopts is checked against the connection it shows, so a switch made elsewhere
+(another tab, an API caller) reaches it within a beat, and every view follows —
+the explorer reloads its tables, the dashboard and the query panel re-run what
+is on screen.
+
 ## The session dropdown
 
 The top-right dropdown lists every session, most recently active first. A

@@ -291,4 +291,32 @@ describe('startHeartbeat', () => {
     expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ id: 's2' }))
     stop()
   })
+
+  it('hands every adopted row to onSessionRow, whatever brought it', async () => {
+    const { attachSession, startHeartbeat, onSessionRow, patchView, flushPatches } = await import('./session')
+    await attachSession()
+    const onRow = vi.fn()
+    const stopRows = onSessionRow(onRow)
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn() })
+
+    // A beat: the same session, switched to another database elsewhere.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, session: { ...SESSION, connection: 'c1', database: 'sales' } }),
+    })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(onRow).toHaveBeenCalledOnce()
+    expect(onRow).toHaveBeenCalledWith(expect.objectContaining({ connection: 'c1', database: 'sales' }))
+
+    // A queued write's response carries the row too.
+    patchView('query', { sql: 'SELECT 1' })
+    await flushPatches()
+    expect(onRow).toHaveBeenCalledTimes(2)
+
+    stopRows()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(onRow).toHaveBeenCalledTimes(2)
+    stop()
+  })
 })

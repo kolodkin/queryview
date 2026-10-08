@@ -47,6 +47,8 @@ let beating: Promise<void> | null = null
 let switching = false
 let pending: PendingPatch = {}
 let timer: ReturnType<typeof setTimeout> | undefined
+// Subscribers to every row the mirror adopts, whatever brought it.
+const rowListeners = new Set<(row: SessionState) => void>()
 
 function tabToken(): string {
   const existing = tabRead(TAB_KEY)
@@ -72,10 +74,19 @@ export function activeWorkspace(): string {
   return state?.workspace ?? ''
 }
 
+// Every server row lands here — attach, heartbeat, a patch response, a switch.
 function adopt(next: SessionState): SessionState {
   state = { ...next, ui: next.ui ?? {} }
   tabWrite(SESSION_KEY, state.id)
+  for (const f of rowListeners) f(state)
   return state
+}
+
+// Run `f` on every row adopted from here on; returns the unsubscribe. The
+// shell uses it to notice a connection or database switched elsewhere.
+export function onSessionRow(f: (row: SessionState) => void): () => void {
+  rowListeners.add(f)
+  return () => void rowListeners.delete(f)
 }
 
 export class SessionTakenError extends Error {}

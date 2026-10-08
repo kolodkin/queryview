@@ -20,6 +20,12 @@ export function isReady(connection: Connection | null): connection is Connection
 }
 
 // A Connection from an /api/session, /api/db/open or /api/db/connect response.
+// What a view's data depends on: the connection and its database together,
+// since another connection may select a database of the same name.
+export function connectionKey(c: Connection | null): string | null {
+  return c ? `${c.name}/${c.database ?? ''}` : null
+}
+
 export function toConnection(data: Record<string, unknown>): Connection {
   return {
     name: data.name as string,

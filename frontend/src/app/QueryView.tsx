@@ -59,12 +59,15 @@ const NEW_NAME_OPTION = '::new::'
 // connection; picking one happens on the Connect page (ConnectView).
 function QueryView({
   connectionType,
+  runOn,
   pushed,
   onPushConsumed,
   remoteId,
   autosave = false,
 }: {
   connectionType: string
+  // The session's connection and database; results follow it (see QueryPanel).
+  runOn?: string | null
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
@@ -80,6 +83,7 @@ function QueryView({
       </div>
       <QueryPanel
         connectionType={connectionType}
+        runOn={runOn}
         pushed={pushed}
         onPushConsumed={onPushConsumed}
         remoteId={remoteId}
@@ -97,12 +101,14 @@ function firstColumn(rows: QueryRows): string[] {
 
 function QueryPanel({
   connectionType,
+  runOn,
   pushed,
   onPushConsumed,
   remoteId,
   autosave = false,
 }: {
   connectionType: string
+  runOn?: string | null
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
@@ -126,6 +132,7 @@ function QueryPanel({
   // a fresh object per run. Autosave reacts to it once the run's state (a
   // push's name and presentation) has committed.
   const [lastOk, setLastOk] = useState<{ query: string; name: string } | null>(null)
+  const runSeq = useRef(0)
   const [fields, setFields] = useState<Field[]>([])
   const [visibleCols, setVisibleCols] = useState<string[]>(() =>
     Array.isArray(saved.visibleCols) ? (saved.visibleCols as string[]) : [],
@@ -279,7 +286,8 @@ function QueryPanel({
     return () => {
       cancelled = true
     }
-  }, [paramSpecs])
+    // The choices come from the session's database, so they follow it too.
+  }, [paramSpecs, runOn])
 
   // Specs with choices resolved to a concrete list: static `options` pass
   // through; `options_sql` params take fetched values (empty until ready).
@@ -365,7 +373,7 @@ function QueryPanel({
     /* eslint-enable react-hooks/set-state-in-effect */
     // An unnamed push runs for no name, so autosave never writes it over the
     // selected query.
-    void runWith(q, lim, off, ord, fld, undefined, pushed.name ?? '')
+    void runWith(q, lim, off, ord, { selectFields: fld, runFor: pushed.name ?? '' })
     // Consume the push so re-mounting doesn't re-run a stale query.
     onPushConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -402,11 +410,16 @@ function QueryPanel({
     lim: number,
     off: number,
     ord: OrderCol[],
-    selectFields?: string[],
-    paramOverride?: Record<string, string>,
-    // The query name this run saves under (autosave); defaults to the selection.
-    runFor: string = selectedName,
+    {
+      selectFields,
+      paramOverride,
+      // The query name this run saves under (autosave); defaults to the selection.
+      runFor = selectedName,
+    }: { selectFields?: string[]; paramOverride?: Record<string, string>; runFor?: string } = {},
   ) {
+    // Only the newest run lands: an older one still in flight (a slow query
+    // overtaken by a re-run) must not overwrite fresher results.
+    const ticket = ++runSeq.current
     setBusy(true)
     setError(null)
     try {
@@ -419,6 +432,7 @@ function QueryPanel({
         body: JSON.stringify({ query, limit: lim, offset: off, order_by: ord }),
       })
       const data = await res.json()
+      if (ticket !== runSeq.current) return
       if (data.ok) {
         const rows: QueryRows = { meta: data.meta ?? [], data: data.data ?? [] }
         setResult(rows)
@@ -438,9 +452,9 @@ function QueryPanel({
         setError(data.message ?? 'query failed')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'request failed')
+      if (ticket === runSeq.current) setError(err instanceof Error ? err.message : 'request failed')
     } finally {
-      setBusy(false)
+      if (ticket === runSeq.current) setBusy(false)
     }
   }
 
@@ -449,6 +463,18 @@ function QueryPanel({
     // review and Save it; it's only cleared on Save or a dropdown selection.
     void runWith(sql, limit, nextOffset, orderBy)
   }
+
+  // The session's database changed under the results: re-run the query that
+  // produced them (not the editor, which may hold an unrun edit) from the first
+  // page, so they never describe a database the pill no longer shows. An empty
+  // panel has nothing to refresh.
+  const runOnSeen = useRef(runOn)
+  useEffect(() => {
+    if (runOnSeen.current === runOn) return
+    runOnSeen.current = runOn
+    if (lastOk) void runWith(lastOk.query, limit, 0, orderBy, { runFor: lastOk.name })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runOn])
 
   async function downloadCsv() {
     setBusy(true)
@@ -686,7 +712,7 @@ function QueryPanel({
                   setParamValues(next)
                   // Pass new values directly: setParamValues hasn't committed.
                   // runWith resets offset to 0 when the query succeeds.
-                  if (optionsReady) void runWith(sql, limit, 0, orderBy, undefined, next)
+                  if (optionsReady) void runWith(sql, limit, 0, orderBy, { paramOverride: next })
                 }}
                 className={inputClass}
               >

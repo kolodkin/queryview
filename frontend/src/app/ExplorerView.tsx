@@ -12,7 +12,7 @@ import {
   type OrderCol,
   type QueryRows,
 } from '../core'
-import { isReady, type Connection } from './connection'
+import { connectionKey, isReady, type Connection } from './connection'
 import { formatBytes, formatCompact } from './compactNumber'
 import { Loading, Spinner } from './controls/Spinner'
 import { CopyName } from './controls/CopyName'
@@ -47,7 +47,7 @@ function tableMeta(t: TableInfo): string | null {
 // column visibility, order-by and pagination go to the server.
 function ExplorerView({ connection }: { connection: Connection | null }) {
   const ready = isReady(connection)
-  const database = connection?.database ?? null
+  const scope = connectionKey(connection)
   const [searchParams, setSearchParams] = useSearchParams()
   const table = searchParams.get('table') ?? ''
 
@@ -129,7 +129,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, database])
+  }, [ready, scope])
 
   const runQuery = useCallback(
     async (sql: string, lim: number, off: number, ord: OrderCol[]) => {

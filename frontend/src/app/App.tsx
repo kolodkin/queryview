@@ -10,7 +10,14 @@ import {
 } from 'react-router-dom'
 
 import { SearchPanel, useDismiss } from '../core'
-import { isReady, openSaved, selectDatabase, toConnection, type Connection } from './connection'
+import {
+  connectionKey,
+  isReady,
+  openSaved,
+  selectDatabase,
+  toConnection,
+  type Connection,
+} from './connection'
 import QueryView, { type QueryPush } from './QueryView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
@@ -23,6 +30,7 @@ import SessionSwitcher from './controls/SessionSwitcher'
 import {
   attachSession,
   currentSession,
+  onSessionRow,
   patchSession,
   releaseSession,
   selectSession,
@@ -162,25 +170,37 @@ function Shell() {
   async function refreshConnection() {
     try {
       const probe = await (await apiFetch('/api/session')).json()
-      if (!probe.connected) {
-        setConnection(null)
-        return
-      }
-      setConnection(toConnection(probe))
+      setConnection(probe.connected ? toConnection(probe) : null)
     } catch {
       /* leave the connection as-is */
     }
   }
 
+  // Views follow the session. Every row the tab adopts (a heartbeat, a patch
+  // response, a switch) is checked against the connection on screen, and one
+  // that disagrees — a switch made elsewhere — brings it in line. The row has
+  // the name and database; the same connection on another database needs no
+  // probe, anything else does. The ref keeps the check off the effect deps.
+  const connectionRef = useRef(connection)
+  useEffect(() => {
+    connectionRef.current = connection
+  }, [connection])
+  function followRow(row: SessionState) {
+    const c = connectionRef.current
+    if (row.connection === (c?.name ?? null) && row.database === (c?.database ?? null)) return
+    if (c && row.connection === c.name) setConnection({ ...c, database: row.database })
+    else void refreshConnection()
+  }
+
   // Make the whole shell match a session the tab just moved to: a switch, a
-  // take-over, or one the server handed over because the old one is gone.
+  // take-over, or one the server handed over because the old one is gone. Its
+  // connection arrives through the row (followRow).
   function applySession(next: SessionState) {
     setTaken(false)
     setWorkspace(next.workspace)
     setSessionLabel(next.label)
     setSessionKey(`${next.id}:${++adoptions.current}`)
     navigate(next.url || '/connect')
-    void refreshConnection()
   }
 
   // The session decides the landing page, the live connection and what the
@@ -188,6 +208,7 @@ function Shell() {
   // tab gets is the server's call — see attach() in backend/queryview/sessions.py.
   useEffect(() => {
     let stopHeartbeat = () => {}
+    let stopRows = () => {}
     void (async () => {
       try {
         const restored = await attachSession()
@@ -204,6 +225,7 @@ function Shell() {
         } else if (restored.connection) {
           await refreshConnection()
         }
+        stopRows = onSessionRow(followRow)
         stopHeartbeat = startHeartbeat({
           onChanged: applySession,
           onTaken: () => setTaken(true),
@@ -215,6 +237,7 @@ function Shell() {
     })()
     window.addEventListener('pagehide', releaseSession)
     return () => {
+      stopRows()
       stopHeartbeat()
       window.removeEventListener('pagehide', releaseSession)
     }
@@ -274,11 +297,11 @@ function Shell() {
     setArmed(e.target.checked)
   }
 
-  // Switch the active database for the current connection (via the pill dropdown).
+  // Switch the active database (via the pill dropdown). A failed switch leaves
+  // the connection as-is.
   async function switchDatabase(database: string) {
     setDbOpen(false)
     if (!connection || database === connection.database) return
-    // A failed switch leaves the connection as-is.
     if (await selectDatabase(database)) setConnection({ ...connection, database })
   }
 
@@ -482,6 +505,7 @@ function Shell() {
                 <QueryView
                   key={`${sessionKey}:${workspace}`}
                   connectionType={connection.type}
+                  runOn={connectionKey(connection)}
                   pushed={queryPush}
                   onPushConsumed={() => setQueryPush(null)}
                   remoteId={remoteId}
@@ -508,7 +532,7 @@ function Shell() {
                 key={`${sessionKey}:${workspace}`}
                 pushed={dashboardPush}
                 onPushConsumed={() => setDashboardPush(null)}
-                runOn={connection ? `${connection.name}/${connection.database ?? ''}` : null}
+                runOn={connectionKey(connection)}
                 identQuote={connection?.identQuote}
                 autosave={autosave}
               />

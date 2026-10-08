@@ -1,7 +1,18 @@
 import re
 
 import httpx
-from conftest import CH_HOST, CH_PASSWORD, CH_PORT, CH_USER, open_connect, start_new_connection
+from conftest import (
+    CH_DB,
+    CH_HOST,
+    CH_PASSWORD,
+    CH_PORT,
+    CH_USER,
+    author_params_yaml,
+    connect_clickhouse_test_db,
+    open_connect,
+    open_query_panel,
+    start_new_connection,
+)
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -93,6 +104,69 @@ def test_queryview_e2e(page: Page) -> None:
     expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_count(1)
     page.keyboard.press("Enter")
     expect(page.get_by_test_id("connection-status")).to_contain_text("connected - system")
+
+
+def test_a_database_switch_reruns_the_query_on_screen(seeded_test_db, page: Page) -> None:
+    """Switching the database from the pill re-runs the query on screen."""
+    connect_clickhouse_test_db(page)
+    open_query_panel(page)
+    page.get_by_test_id("query-input").fill("SELECT currentDatabase() AS db")
+    page.get_by_test_id("query-run").click()
+    output = page.get_by_test_id("query-output")
+    expect(output).to_contain_text(CH_DB)
+
+    # An edit since the run is not what produced the results: the re-run is of
+    # the run's own query, and the edit stays in the editor.
+    page.get_by_test_id("query-input").fill("SELECT 'edited'")
+    _switch_database_from_pill(page, "system")
+    expect(output).to_contain_text("system")
+    expect(output).not_to_contain_text(CH_DB)
+    expect(output).not_to_contain_text("edited")
+    expect(page.get_by_test_id("query-input")).to_have_value("SELECT 'edited'")
+
+
+def _switch_database_from_pill(page: Page, database: str) -> None:
+    page.get_by_test_id("connection-status").click()
+    page.get_by_test_id("db-select-filter").fill(database)
+    page.keyboard.press("Enter")
+    expect(page.get_by_test_id("connection-status")).to_contain_text(f"connected - {database}")
+
+
+def test_a_database_switch_refreshes_param_options(seeded_test_db, page: Page) -> None:
+    """`options_sql` choices are resolved on the session, so they follow its
+    database like the results do."""
+    connect_clickhouse_test_db(page)
+    open_query_panel(page)
+    author_params_yaml(
+        page,
+        "by-database",
+        "SELECT {db} AS picked",
+        "params:\n  - name: db\n    options_sql: SELECT currentDatabase()\n",
+    )
+    sel = page.locator('[data-testid="param-select"][data-param="db"]')
+    expect(sel.locator("option").first).to_have_text(CH_DB)
+
+    _switch_database_from_pill(page, "system")
+    expect(sel.locator("option").first).to_have_text("system")
+
+
+def test_a_database_switched_elsewhere_reaches_the_tab_on_its_heartbeat(
+    seeded_test_db, page: Page, base_url: str
+) -> None:
+    """A switch this tab did not make (an API caller here; another tab is the
+    same path) reaches its pill and views on the next heartbeat."""
+    connect_clickhouse_test_db(page)
+    expect(page.locator('[data-testid="explorer-table"][data-table="items"]')).to_be_visible()
+
+    sid = page.evaluate("() => sessionStorage.getItem('qv_session')")
+    r = httpx.post(f"{base_url}/api/db/database", json={"database": "system"}, headers={"X-QV-Session": sid})
+    assert r.json() == {"ok": True}
+
+    status = page.get_by_test_id("connection-status")
+    expect(status).to_contain_text("connected - system", timeout=15_000)
+    # The explorer reloads its sidebar for the new database.
+    expect(page.locator('[data-testid="explorer-table"][data-table="items"]')).to_have_count(0)
+    expect(page.locator('[data-testid="explorer-table"][data-table="databases"]')).to_be_visible()
 
 
 def test_ready_connection_shows_query_panel(seeded_duckdb, page: Page) -> None:

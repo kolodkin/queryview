@@ -1,4 +1,4 @@
-from conftest import connect_clickhouse_test_db, open_query_panel
+from conftest import author_params_yaml, connect_clickhouse_test_db, open_query_panel
 from playwright.sync_api import Page, expect
 
 # The generic connect -> query -> paginate -> CSV -> describe flow (including
@@ -249,25 +249,12 @@ def test_field_pickers_visibility_and_order_by(seeded_test_db, page: Page, shot)
     shot("ordered + limited results (order-by Run)")
 
 
-def _author_params_yaml(page: Page, name: str, sql: str, params_yaml: str) -> None:
-    """Fill the SQL, name the query, and author a `params:` block via the
-    cell-view modal, then Save. Shared by the query-param tests below."""
-    page.get_by_test_id("query-input").fill(sql)
-    page.once("dialog", lambda d: d.accept(name))
-    page.get_by_test_id("query-predefined-select").select_option("::new::")
-    page.get_by_test_id("cell-view-toggle").click()
-    expect(page.get_by_test_id("cell-view-modal")).to_be_visible()
-    page.get_by_test_id("cell-view-input").fill(params_yaml)
-    page.get_by_test_id("cell-view-save").click()
-    expect(page.get_by_test_id("cell-view-modal")).not_to_be_visible()
-
-
 def test_query_param_dropdown_substitutes_value(seeded_test_db, page: Page, shot) -> None:
     """A `params:` block in the cell_view YAML renders a dropdown per param; the
     selected value is substituted into the SQL via {name} (auto-quoted as a
     string) and the query re-runs immediately on change."""
     _open_query_panel(page)
-    _author_params_yaml(
+    author_params_yaml(
         page,
         "by-name",
         "SELECT name FROM items WHERE name = {sel} ORDER BY id",
@@ -303,7 +290,7 @@ def test_query_param_options_sql_populates_dropdown(seeded_test_db, page: Page, 
     the default; substituting it and running returns that row, and switching the
     selection re-runs with the new value."""
     _open_query_panel(page)
-    _author_params_yaml(
+    author_params_yaml(
         page,
         "by-options-sql",
         "SELECT name FROM items WHERE name = {sel} ORDER BY id",
@@ -359,7 +346,7 @@ def test_query_param_options_sql_no_rows_blocks_run(seeded_test_db, page: Page, 
     main query is blocked (Execute disabled) and the error banner names the
     param and the empty result."""
     _open_query_panel(page)
-    _author_params_yaml(
+    author_params_yaml(
         page,
         "empty-options",
         "SELECT name FROM items WHERE name = {sel}",
@@ -377,7 +364,7 @@ def test_query_param_options_sql_error_blocks_run(seeded_test_db, page: Page, sh
     """An `options_sql` that errors blocks the main query (Execute disabled) and
     surfaces the failure through the banner, prefixed with the param name."""
     _open_query_panel(page)
-    _author_params_yaml(
+    author_params_yaml(
         page,
         "bad-options",
         "SELECT name FROM items WHERE name = {sel}",
