@@ -103,7 +103,7 @@ shows "No databases match". Selecting a database:
 - sets the session's selected database,
 - persists it on the saved connection (`POST /api/db/database`),
 - collapses the picker and shows the top-left indicator `🟢 connected - <database>`,
-- makes the query panel available on Queries (see [query.md](./query.md)),
+- makes the query panel available on QueryView (see [query.md](./query.md)),
 - and lands on the explorer (see
   [queryview.md](./queryview.md#landing-page)).
 

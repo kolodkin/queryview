@@ -11,7 +11,7 @@ order-by select the query panel uses.
 
 ```
 ┌───────────────────────────────────────────────────┐
-│ 🟢 connected - test        Queries Explorer Dashboard │
+│ 🟢 connected - test      QueryView Explorer Dashboard │
 │                                                     │
 │ ┌────────┐ ┌─────────────────────────────────────┐ │
 │ │ Tables │ │ items      Limit [100] ← Prev Next → │ │
@@ -43,12 +43,12 @@ order-by select the query panel uses.
 - **Rows panel** — the selected table's rows. The selection lives in the URL
   (`/explorer?table=<name>`), so reloads and links land on the same table.
 - **Viewport height** — the page fills the window (min 30rem, then the page
-  scrolls), as the Queries page does; the table list and rows grid scroll
+  scrolls), as the QueryView page does; the table list and rows grid scroll
   internally, keeping the grid's horizontal scrollbar on screen.
 - **Loading** — panels show *Loading tables…* / *Loading rows…* rather than
   sitting empty. Re-running a loaded table (paging, a new order-by) keeps its
   rows on screen, dimmed, with a spinner by the table name.
-- Without a ready connection the page shows a hint to connect on the Queries
+- Without a ready connection the page shows a hint to connect on the QueryView
   page first; connection state is shared app-wide (see
   [queryview.md](./queryview.md)).
 

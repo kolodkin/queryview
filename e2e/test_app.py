@@ -171,7 +171,7 @@ def test_a_database_switched_elsewhere_reaches_the_tab_on_its_heartbeat(
 
 def test_ready_connection_shows_query_panel(seeded_duckdb, page: Page) -> None:
     """A ready connection never needs the `query` command: connecting lands on
-    the explorer, and Queries puts the panel up — first visit and after a
+    the explorer, and QueryView puts the panel up — first visit and after a
     detour alike."""
     _connect(page, _DUCKDB, seeded_duckdb)
     expect(page.get_by_test_id("explorer-tables")).to_be_visible()
@@ -206,7 +206,7 @@ def test_connect_page_and_disconnect(seeded_duckdb, page: Page) -> None:
 
 
 def test_disconnected_lands_on_connect(page: Page) -> None:
-    """A disconnected session opens on /connect, and Queries sends it there
+    """A disconnected session opens on /connect, and QueryView sends it there
     too: the query panel needs a database. The old /prompt URL redirects."""
     page.goto("/", wait_until="networkidle")
     expect(page).to_have_url(re.compile(r"/connect$"))

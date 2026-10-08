@@ -123,7 +123,7 @@ def test_turning_autosave_on_saves_open_drafts(seeded_duckdb, page: Page, base_u
         page.get_by_test_id("workspace-autosave-input").check()
         page.get_by_test_id("workspace-save").click()
 
-    # Queries: a named, successful run isn't saved until autosave goes on.
+    # QueryView: a named, successful run isn't saved until autosave goes on.
     open_query_panel(page)
     page.once("dialog", lambda d: d.accept("draft q"))
     page.get_by_test_id("query-predefined-select").select_option("::new::")
