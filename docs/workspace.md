@@ -30,7 +30,7 @@ Off by default; toggled in *Manage workspaces…*. When on, the query and
 dashboard pages have no **Save** button, and **Commit** / **Restore**
 ([gitsync.md](./gitsync.md)) are the history:
 
-- **Queries** — a named query saves after each *successful* run (SQL, order-by,
+- **QueryView** — a named query saves after each *successful* run (SQL, order-by,
   fields, cell view), so broken edits never overwrite it; unchanged runs write
   nothing, unnamed SQL is never saved. A named `push_query` saves via its auto-run.
 - **Dashboards** — a delivered `push_dashboard` is persisted (`persisted: true`).

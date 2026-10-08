@@ -469,7 +469,7 @@ function Shell() {
               onClick={() => setNavOpen(false)}
               className={navLinkClass('/queries')}
             >
-              Queries
+              QueryView
             </Link>
             <Link
               to="/explorer"
@@ -495,7 +495,7 @@ function Shell() {
           attach has answered. */}
       {sessionChecked ? (
         <Routes>
-          {/* The query panel needs a database; until then Queries is Connect. */}
+          {/* The query panel needs a database; until then QueryView is Connect. */}
           <Route
             path="/queries"
             element={
@@ -590,7 +590,7 @@ const NAV_ROW =
   'md:static md:mt-0 md:flex md:w-auto md:min-w-0 md:flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-filter-none'
 
 function pageTitle(path: string): string {
-  if (path.startsWith('/queries')) return 'Queries'
+  if (path.startsWith('/queries')) return 'QueryView'
   if (path.startsWith('/explorer')) return 'Explorer'
   if (path.startsWith('/dashboard')) return 'Dashboard'
   return 'Connect'

@@ -1,11 +1,11 @@
 # Querying
 
-The **query panel** is what a ready session shows on **Queries** — a database is
+The **query panel** is what a ready session shows on **QueryView** — a database is
 selected, or the driver has no picker — on the first visit and on every return.
 (Connecting itself lands on the explorer; see
 [queryview.md](./queryview.md#landing-page).) It runs SQL against the session's selected database, pages
 through results, saves/loads reusable queries, and exports the current page as
-CSV. Before a database is selected, Queries redirects to the Connect page.
+CSV. Before a database is selected, QueryView redirects to the Connect page.
 
 ## Panel
 
