@@ -47,8 +47,8 @@ let beating: Promise<void> | null = null
 let switching = false
 let pending: PendingPatch = {}
 let timer: ReturnType<typeof setTimeout> | undefined
-// The heartbeat's listeners, for adopt() to report a connection change.
-let listeners: HeartbeatEvents | null = null
+// Subscribers to every row the mirror adopts, whatever brought it.
+const rowListeners = new Set<(row: SessionState) => void>()
 
 function tabToken(): string {
   const existing = tabRead(TAB_KEY)
@@ -74,24 +74,19 @@ export function activeWorkspace(): string {
   return state?.workspace ?? ''
 }
 
-// Every server row lands here — attach, heartbeat, a patch response, a switch —
-// so this is the one place a connection or database change can be noticed.
+// Every server row lands here — attach, heartbeat, a patch response, a switch.
 function adopt(next: SessionState): SessionState {
-  const prev = state
   state = { ...next, ui: next.ui ?? {} }
   tabWrite(SESSION_KEY, state.id)
-  if (
-    prev?.id === next.id &&
-    (prev.connection !== next.connection || prev.database !== next.database)
-  )
-    listeners?.onConnectionChanged?.()
+  for (const f of rowListeners) f(state)
   return state
 }
 
-// A connection or database change this tab made itself, so the next row it
-// adopts is not reported as a change.
-export function noteConnection(connection: string | null, database: string | null): void {
-  if (state) state = { ...state, connection, database }
+// Run `f` on every row adopted from here on; returns the unsubscribe. The
+// shell uses it to notice a connection or database switched elsewhere.
+export function onSessionRow(f: (row: SessionState) => void): () => void {
+  rowListeners.add(f)
+  return () => void rowListeners.delete(f)
 }
 
 export class SessionTakenError extends Error {}
@@ -123,16 +118,12 @@ export type HeartbeatEvents = {
   onChanged: (next: SessionState) => void
   // Another tab took this session; the tab stops beating and writing.
   onTaken: () => void
-  // The same session moved to another connection or database: a switch this
-  // tab did not make (another tab, an API caller).
-  onConnectionChanged?: () => void
 }
 
 // Re-attaching is the heartbeat: it refreshes the claim without a second
 // endpoint. It also beats when the tab becomes visible, since a hidden tab's
 // timers are throttled and its claim may have lapsed meanwhile.
 export function startHeartbeat(events: HeartbeatEvents): () => void {
-  listeners = events
   let last = Date.now()
   const run = async () => {
     const before = state?.id
@@ -162,7 +153,6 @@ export function startHeartbeat(events: HeartbeatEvents): () => void {
   }
   document.addEventListener('visibilitychange', onVisible)
   return () => {
-    listeners = null
     clearInterval(handle)
     document.removeEventListener('visibilitychange', onVisible)
   }

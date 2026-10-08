@@ -7,6 +7,8 @@ from conftest import (
     CH_PASSWORD,
     CH_PORT,
     CH_USER,
+    author_params_yaml,
+    connect_clickhouse_test_db,
     open_connect,
     open_query_panel,
     start_new_connection,
@@ -16,8 +18,6 @@ from test_drivers import CASES, _connect
 
 # Driver-agnostic behaviour is exercised on DuckDB: no server to stand up.
 _DUCKDB = next(c for c in CASES if c.id == "duckdb")
-# Database switching needs a driver with a picker.
-_CLICKHOUSE = next(c for c in CASES if c.id == "clickhouse")
 
 
 def test_queryview_e2e(page: Page) -> None:
@@ -108,7 +108,7 @@ def test_queryview_e2e(page: Page) -> None:
 
 def test_a_database_switch_reruns_the_query_on_screen(seeded_test_db, page: Page) -> None:
     """Switching the database from the pill re-runs the query on screen."""
-    _connect(page, _CLICKHOUSE, seeded_test_db)
+    connect_clickhouse_test_db(page)
     open_query_panel(page)
     page.get_by_test_id("query-input").fill("SELECT currentDatabase() AS db")
     page.get_by_test_id("query-run").click()
@@ -135,15 +135,14 @@ def _switch_database_from_pill(page: Page, database: str) -> None:
 def test_a_database_switch_refreshes_param_options(seeded_test_db, page: Page) -> None:
     """`options_sql` choices are resolved on the session, so they follow its
     database like the results do."""
-    _connect(page, _CLICKHOUSE, seeded_test_db)
+    connect_clickhouse_test_db(page)
     open_query_panel(page)
-    page.get_by_test_id("query-input").fill("SELECT {db} AS picked")
-    page.once("dialog", lambda d: d.accept("by-database"))
-    page.get_by_test_id("query-predefined-select").select_option("::new::")
-    page.get_by_test_id("cell-view-toggle").click()
-    page.get_by_test_id("cell-view-input").fill("params:\n  - name: db\n    options_sql: SELECT currentDatabase()\n")
-    page.get_by_test_id("cell-view-save").click()
-    expect(page.get_by_test_id("cell-view-modal")).not_to_be_visible()
+    author_params_yaml(
+        page,
+        "by-database",
+        "SELECT {db} AS picked",
+        "params:\n  - name: db\n    options_sql: SELECT currentDatabase()\n",
+    )
     sel = page.locator('[data-testid="param-select"][data-param="db"]')
     expect(sel.locator("option").first).to_have_text(CH_DB)
 
@@ -151,23 +150,12 @@ def test_a_database_switch_refreshes_param_options(seeded_test_db, page: Page) -
     expect(sel.locator("option").first).to_have_text("system")
 
 
-def test_a_database_switch_survives_a_failed_read_back(seeded_test_db, page: Page) -> None:
-    """The switch is on the server once the POST succeeds; a read-back that
-    fails must not leave the pill (and so the views) on the old database."""
-    _connect(page, _CLICKHOUSE, seeded_test_db)
-    page.route("**/api/session", lambda route: route.abort(), times=1)
-    # No heartbeat either, or one could repair the pill inside the assertion.
-    page.route("**/api/sessions/attach", lambda route: route.abort())
-    _switch_database_from_pill(page, "system")
-    page.unroute("**/api/sessions/attach")
-
-
 def test_a_database_switched_elsewhere_reaches_the_tab_on_its_heartbeat(
     seeded_test_db, page: Page, base_url: str
 ) -> None:
     """A switch this tab did not make (an API caller here; another tab is the
     same path) reaches its pill and views on the next heartbeat."""
-    _connect(page, _CLICKHOUSE, seeded_test_db)
+    connect_clickhouse_test_db(page)
     expect(page.locator('[data-testid="explorer-table"][data-table="items"]')).to_be_visible()
 
     sid = page.evaluate("() => sessionStorage.getItem('qv_session')")

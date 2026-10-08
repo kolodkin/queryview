@@ -55,6 +55,19 @@ def connect_clickhouse_test_db(page: Page) -> None:
     expect(page.get_by_test_id("connection-status")).to_contain_text(f"connected - {CH_DB}")
 
 
+def author_params_yaml(page: Page, name: str, sql: str, params_yaml: str) -> None:
+    """Fill the SQL, name the query, and author a `params:` block via the
+    cell-view modal, then Save. Shared by the query-param tests."""
+    page.get_by_test_id("query-input").fill(sql)
+    page.once("dialog", lambda d: d.accept(name))
+    page.get_by_test_id("query-predefined-select").select_option("::new::")
+    page.get_by_test_id("cell-view-toggle").click()
+    expect(page.get_by_test_id("cell-view-modal")).to_be_visible()
+    page.get_by_test_id("cell-view-input").fill(params_yaml)
+    page.get_by_test_id("cell-view-save").click()
+    expect(page.get_by_test_id("cell-view-modal")).not_to_be_visible()
+
+
 def open_query_panel(page: Page) -> None:
     """Open the query panel from wherever the test is, via the Queries page."""
     page.get_by_test_id("nav-queries").click()

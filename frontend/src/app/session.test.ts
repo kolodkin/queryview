@@ -292,81 +292,31 @@ describe('startHeartbeat', () => {
     stop()
   })
 
-  it('reports a database switch on the same session to onConnectionChanged', async () => {
-    const { attachSession, startHeartbeat } = await import('./session')
+  it('hands every adopted row to onSessionRow, whatever brought it', async () => {
+    const { attachSession, startHeartbeat, onSessionRow, patchView, flushPatches } = await import('./session')
     await attachSession()
-    const onChanged = vi.fn()
-    const onConnectionChanged = vi.fn()
-    const stop = startHeartbeat({ onChanged, onTaken: vi.fn(), onConnectionChanged })
+    const onRow = vi.fn()
+    const stopRows = onSessionRow(onRow)
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn() })
 
-    // The same session, now on another database: a switch made elsewhere.
+    // A beat: the same session, switched to another database elsewhere.
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
       json: async () => ({ ok: true, session: { ...SESSION, connection: 'c1', database: 'sales' } }),
     })
     await vi.advanceTimersByTimeAsync(10_000)
-    expect(onConnectionChanged).toHaveBeenCalledOnce()
-    expect(onChanged).not.toHaveBeenCalled()
+    expect(onRow).toHaveBeenCalledOnce()
+    expect(onRow).toHaveBeenCalledWith(expect.objectContaining({ connection: 'c1', database: 'sales' }))
 
-    // An unchanged beat is quiet.
-    await vi.advanceTimersByTimeAsync(10_000)
-    expect(onConnectionChanged).toHaveBeenCalledOnce()
-    stop()
-  })
-
-  it('still reports a switch that a queued write brought back', async () => {
-    const { attachSession, startHeartbeat, patchView, flushPatches } = await import('./session')
-    await attachSession()
-    const onConnectionChanged = vi.fn()
-    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn(), onConnectionChanged })
-
-    // The PATCH response carries the row, switched elsewhere meanwhile. It must
-    // not slip into the mirror unreported, or the next beat sees no change.
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ ok: true, session: { ...SESSION, connection: 'c1', database: 'sales' } }),
-    })
+    // A queued write's response carries the row too.
     patchView('query', { sql: 'SELECT 1' })
     await flushPatches()
-    expect(onConnectionChanged).toHaveBeenCalledOnce()
+    expect(onRow).toHaveBeenCalledTimes(2)
 
+    stopRows()
     await vi.advanceTimersByTimeAsync(10_000)
-    expect(onConnectionChanged).toHaveBeenCalledOnce()
-    stop()
-  })
-
-  it('does not report a switch this tab made itself', async () => {
-    const { attachSession, startHeartbeat, noteConnection } = await import('./session')
-    await attachSession()
-    const onConnectionChanged = vi.fn()
-    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn(), onConnectionChanged })
-
-    noteConnection('c1', 'sales')
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ ok: true, session: { ...SESSION, connection: 'c1', database: 'sales' } }),
-    })
-    await vi.advanceTimersByTimeAsync(10_000)
-    expect(onConnectionChanged).not.toHaveBeenCalled()
-    stop()
-  })
-
-  it('does not report the connection when the session itself changed', async () => {
-    const { attachSession, startHeartbeat } = await import('./session')
-    await attachSession()
-    const onConnectionChanged = vi.fn()
-    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn(), onConnectionChanged })
-
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ ok: true, session: { ...SESSION, id: 's2', database: 'sales' } }),
-    })
-    await vi.advanceTimersByTimeAsync(10_000)
-    expect(onConnectionChanged).not.toHaveBeenCalled()
+    expect(onRow).toHaveBeenCalledTimes(2)
     stop()
   })
 })

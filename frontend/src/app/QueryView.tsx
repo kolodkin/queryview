@@ -373,7 +373,7 @@ function QueryPanel({
     /* eslint-enable react-hooks/set-state-in-effect */
     // An unnamed push runs for no name, so autosave never writes it over the
     // selected query.
-    void runWith(q, lim, off, ord, fld, undefined, pushed.name ?? '')
+    void runWith(q, lim, off, ord, { selectFields: fld, runFor: pushed.name ?? '' })
     // Consume the push so re-mounting doesn't re-run a stale query.
     onPushConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -410,10 +410,12 @@ function QueryPanel({
     lim: number,
     off: number,
     ord: OrderCol[],
-    selectFields?: string[],
-    paramOverride?: Record<string, string>,
-    // The query name this run saves under (autosave); defaults to the selection.
-    runFor: string = selectedName,
+    {
+      selectFields,
+      paramOverride,
+      // The query name this run saves under (autosave); defaults to the selection.
+      runFor = selectedName,
+    }: { selectFields?: string[]; paramOverride?: Record<string, string>; runFor?: string } = {},
   ) {
     // Only the newest run lands: an older one still in flight (a slow query
     // overtaken by a re-run) must not overwrite fresher results.
@@ -470,7 +472,7 @@ function QueryPanel({
   useEffect(() => {
     if (runOnSeen.current === runOn) return
     runOnSeen.current = runOn
-    if (lastOk) void runWith(lastOk.query, limit, 0, orderBy, undefined, undefined, lastOk.name)
+    if (lastOk) void runWith(lastOk.query, limit, 0, orderBy, { runFor: lastOk.name })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runOn])
 
@@ -710,7 +712,7 @@ function QueryPanel({
                   setParamValues(next)
                   // Pass new values directly: setParamValues hasn't committed.
                   // runWith resets offset to 0 when the query succeeds.
-                  if (optionsReady) void runWith(sql, limit, 0, orderBy, undefined, next)
+                  if (optionsReady) void runWith(sql, limit, 0, orderBy, { paramOverride: next })
                 }}
                 className={inputClass}
               >
