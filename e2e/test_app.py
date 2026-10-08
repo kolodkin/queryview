@@ -107,9 +107,7 @@ def test_queryview_e2e(page: Page) -> None:
 
 
 def test_a_database_switch_reruns_the_query_on_screen(seeded_test_db, page: Page) -> None:
-    """Results follow the session's database: switching it from the pill
-    re-runs the query that produced them, so they never describe a database
-    the pill no longer shows."""
+    """Switching the database from the pill re-runs the query on screen."""
     _connect(page, _CLICKHOUSE, seeded_test_db)
     open_query_panel(page)
     page.get_by_test_id("query-input").fill("SELECT currentDatabase() AS db")
@@ -117,20 +115,58 @@ def test_a_database_switch_reruns_the_query_on_screen(seeded_test_db, page: Page
     output = page.get_by_test_id("query-output")
     expect(output).to_contain_text(CH_DB)
 
-    page.get_by_test_id("connection-status").click()
-    page.get_by_test_id("db-select-filter").fill("system")
-    page.keyboard.press("Enter")
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - system")
+    # An edit since the run is not what produced the results: the re-run is of
+    # the run's own query, and the edit stays in the editor.
+    page.get_by_test_id("query-input").fill("SELECT 'edited'")
+    _switch_database_from_pill(page, "system")
     expect(output).to_contain_text("system")
     expect(output).not_to_contain_text(CH_DB)
+    expect(output).not_to_contain_text("edited")
+    expect(page.get_by_test_id("query-input")).to_have_value("SELECT 'edited'")
+
+
+def _switch_database_from_pill(page: Page, database: str) -> None:
+    page.get_by_test_id("connection-status").click()
+    page.get_by_test_id("db-select-filter").fill(database)
+    page.keyboard.press("Enter")
+    expect(page.get_by_test_id("connection-status")).to_contain_text(f"connected - {database}")
+
+
+def test_a_database_switch_refreshes_param_options(seeded_test_db, page: Page) -> None:
+    """`options_sql` choices are resolved on the session, so they follow its
+    database like the results do."""
+    _connect(page, _CLICKHOUSE, seeded_test_db)
+    open_query_panel(page)
+    page.get_by_test_id("query-input").fill("SELECT {db} AS picked")
+    page.once("dialog", lambda d: d.accept("by-database"))
+    page.get_by_test_id("query-predefined-select").select_option("::new::")
+    page.get_by_test_id("cell-view-toggle").click()
+    page.get_by_test_id("cell-view-input").fill("params:\n  - name: db\n    options_sql: SELECT currentDatabase()\n")
+    page.get_by_test_id("cell-view-save").click()
+    expect(page.get_by_test_id("cell-view-modal")).not_to_be_visible()
+    sel = page.locator('[data-testid="param-select"][data-param="db"]')
+    expect(sel.locator("option").first).to_have_text(CH_DB)
+
+    _switch_database_from_pill(page, "system")
+    expect(sel.locator("option").first).to_have_text("system")
+
+
+def test_a_database_switch_survives_a_failed_read_back(seeded_test_db, page: Page) -> None:
+    """The switch is on the server once the POST succeeds; a read-back that
+    fails must not leave the pill (and so the views) on the old database."""
+    _connect(page, _CLICKHOUSE, seeded_test_db)
+    page.route("**/api/session", lambda route: route.abort(), times=1)
+    # No heartbeat either, or one could repair the pill inside the assertion.
+    page.route("**/api/sessions/attach", lambda route: route.abort())
+    _switch_database_from_pill(page, "system")
+    page.unroute("**/api/sessions/attach")
 
 
 def test_a_database_switched_elsewhere_reaches_the_tab_on_its_heartbeat(
     seeded_test_db, page: Page, base_url: str
 ) -> None:
-    """The session row is the truth. A switch this tab did not make (an API
-    caller here; another tab is the same path) reaches its pill and views on
-    the next heartbeat, within the 10s beat interval."""
+    """A switch this tab did not make (an API caller here; another tab is the
+    same path) reaches its pill and views on the next heartbeat."""
     _connect(page, _CLICKHOUSE, seeded_test_db)
     expect(page.locator('[data-testid="explorer-table"][data-table="items"]')).to_be_visible()
 

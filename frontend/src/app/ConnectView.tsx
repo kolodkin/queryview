@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { filterNames, useDismiss } from '../core'
 import { isReady, openSaved, selectDatabase, toConnection, type Connection } from './connection'
+import { noteConnection } from './session'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
 import { timeAgo } from './timeAgo'
@@ -107,6 +108,7 @@ function ConnectView({
   // the rest stay here on the database picker (with the card list refreshed,
   // since a new connection isn't in it yet).
   function adopt(opened: Connection) {
+    noteConnection(opened.name, opened.database)
     setConnection(opened)
     setFormType(null)
     setBrowsing(false)
@@ -127,6 +129,7 @@ function ConnectView({
   async function pickDatabase(database: string) {
     if (!connection) return
     if (await selectDatabase(database)) {
+      noteConnection(connection.name, database)
       setConnection({ ...connection, database })
       navigate('/explorer')
     }

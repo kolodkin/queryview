@@ -47,6 +47,8 @@ let beating: Promise<void> | null = null
 let switching = false
 let pending: PendingPatch = {}
 let timer: ReturnType<typeof setTimeout> | undefined
+// The heartbeat's listeners, for adopt() to report a connection change.
+let listeners: HeartbeatEvents | null = null
 
 function tabToken(): string {
   const existing = tabRead(TAB_KEY)
@@ -72,10 +74,24 @@ export function activeWorkspace(): string {
   return state?.workspace ?? ''
 }
 
+// Every server row lands here — attach, heartbeat, a patch response, a switch —
+// so this is the one place a connection or database change can be noticed.
 function adopt(next: SessionState): SessionState {
+  const prev = state
   state = { ...next, ui: next.ui ?? {} }
   tabWrite(SESSION_KEY, state.id)
+  if (
+    prev?.id === next.id &&
+    (prev.connection !== next.connection || prev.database !== next.database)
+  )
+    listeners?.onConnectionChanged?.()
   return state
+}
+
+// A connection or database change this tab made itself, so the next row it
+// adopts is not reported as a change.
+export function noteConnection(connection: string | null, database: string | null): void {
+  if (state) state = { ...state, connection, database }
 }
 
 export class SessionTakenError extends Error {}
@@ -107,8 +123,8 @@ export type HeartbeatEvents = {
   onChanged: (next: SessionState) => void
   // Another tab took this session; the tab stops beating and writing.
   onTaken: () => void
-  // The same session is now on another connection or database: a switch made
-  // elsewhere (another tab, an API caller). The server's row is the truth.
+  // The same session moved to another connection or database: a switch this
+  // tab did not make (another tab, an API caller).
   onConnectionChanged?: () => void
 }
 
@@ -116,14 +132,13 @@ export type HeartbeatEvents = {
 // endpoint. It also beats when the tab becomes visible, since a hidden tab's
 // timers are throttled and its claim may have lapsed meanwhile.
 export function startHeartbeat(events: HeartbeatEvents): () => void {
+  listeners = events
   let last = Date.now()
   const run = async () => {
-    const before = state
+    const before = state?.id
     try {
       const next = await attachSession(true)
-      if (next.id !== before?.id) events.onChanged(next)
-      else if (next.connection !== before.connection || next.database !== before.database)
-        events.onConnectionChanged?.()
+      if (next.id !== before) events.onChanged(next)
     } catch (e) {
       if (!(e instanceof SessionTakenError)) return
       taken = true
@@ -147,6 +162,7 @@ export function startHeartbeat(events: HeartbeatEvents): () => void {
   }
   document.addEventListener('visibilitychange', onVisible)
   return () => {
+    listeners = null
     clearInterval(handle)
     document.removeEventListener('visibilitychange', onVisible)
   }

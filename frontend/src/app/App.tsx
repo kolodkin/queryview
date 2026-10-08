@@ -23,6 +23,7 @@ import SessionSwitcher from './controls/SessionSwitcher'
 import {
   attachSession,
   currentSession,
+  noteConnection,
   patchSession,
   releaseSession,
   selectSession,
@@ -158,17 +159,17 @@ function Shell() {
   }
 
   // The live connection for the attached session. `/api/session` reads that
-  // session's own row now, so this is a per-session question.
-  async function refreshConnection() {
+  // session's own row now, so this is a per-session question. False when the
+  // read failed and the connection was left as-is.
+  async function refreshConnection(): Promise<boolean> {
     try {
       const probe = await (await apiFetch('/api/session')).json()
-      if (!probe.connected) {
-        setConnection(null)
-        return
-      }
-      setConnection(toConnection(probe))
+      const next = probe.connected ? toConnection(probe) : null
+      noteConnection(next?.name ?? null, next?.database ?? null)
+      setConnection(next)
+      return true
     } catch {
-      /* leave the connection as-is */
+      return false
     }
   }
 
@@ -207,8 +208,7 @@ function Shell() {
         stopHeartbeat = startHeartbeat({
           onChanged: applySession,
           onTaken: () => setTaken(true),
-          // The session's connection or database moved under this tab: views
-          // follow the session, so the shell re-reads it and they re-fetch.
+          // Views follow the session, so a switch made elsewhere re-reads it.
           onConnectionChanged: () => void refreshConnection(),
         })
       } catch {
@@ -277,13 +277,17 @@ function Shell() {
     setArmed(e.target.checked)
   }
 
-  // Switch the active database for the current connection (via the pill
-  // dropdown). The session row is the truth, so a successful switch reads it
-  // back rather than patching the local copy; a failed one leaves it as-is.
+  // Switch the active database (via the pill dropdown). The session row is the
+  // truth: a successful switch reads it back (or, if that read fails, mirrors
+  // what the server now holds); a failed switch leaves everything as-is.
   async function switchDatabase(database: string) {
     setDbOpen(false)
     if (!connection || database === connection.database) return
-    if (await selectDatabase(database)) await refreshConnection()
+    if (!(await selectDatabase(database))) return
+    if (!(await refreshConnection())) {
+      noteConnection(connection.name, database)
+      setConnection({ ...connection, database })
+    }
   }
 
   // Drop the connection (saved connections survive) and go to the Connect
@@ -486,7 +490,7 @@ function Shell() {
                 <QueryView
                   key={`${sessionKey}:${workspace}`}
                   connectionType={connection.type}
-                  database={connection.database}
+                  runOn={`${connection.name}/${connection.database ?? ''}`}
                   pushed={queryPush}
                   onPushConsumed={() => setQueryPush(null)}
                   remoteId={remoteId}

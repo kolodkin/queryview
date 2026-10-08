@@ -47,7 +47,8 @@ function tableMeta(t: TableInfo): string | null {
 // column visibility, order-by and pagination go to the server.
 function ExplorerView({ connection }: { connection: Connection | null }) {
   const ready = isReady(connection)
-  const database = connection?.database ?? null
+  // Keyed on both: another connection may select a database of the same name.
+  const database = connection ? `${connection.name}/${connection.database ?? ''}` : null
   const [searchParams, setSearchParams] = useSearchParams()
   const table = searchParams.get('table') ?? ''
 
