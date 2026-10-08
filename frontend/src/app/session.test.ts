@@ -291,4 +291,43 @@ describe('startHeartbeat', () => {
     expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ id: 's2' }))
     stop()
   })
+
+  it('reports a database switch on the same session to onConnectionChanged', async () => {
+    const { attachSession, startHeartbeat } = await import('./session')
+    await attachSession()
+    const onChanged = vi.fn()
+    const onConnectionChanged = vi.fn()
+    const stop = startHeartbeat({ onChanged, onTaken: vi.fn(), onConnectionChanged })
+
+    // The same session, now on another database: a switch made elsewhere.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, session: { ...SESSION, connection: 'c1', database: 'sales' } }),
+    })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(onConnectionChanged).toHaveBeenCalledOnce()
+    expect(onChanged).not.toHaveBeenCalled()
+
+    // An unchanged beat is quiet.
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(onConnectionChanged).toHaveBeenCalledOnce()
+    stop()
+  })
+
+  it('does not report the connection when the session itself changed', async () => {
+    const { attachSession, startHeartbeat } = await import('./session')
+    await attachSession()
+    const onConnectionChanged = vi.fn()
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn(), onConnectionChanged })
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, session: { ...SESSION, id: 's2', database: 'sales' } }),
+    })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(onConnectionChanged).not.toHaveBeenCalled()
+    stop()
+  })
 })

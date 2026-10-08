@@ -61,6 +61,14 @@ with `keep`, see [api.md](./api.md)) gets a `409`: the tab greys out and stops
 writing until you pick **Use it here** (the other tab then greys out) or **New
 session**. Any session change re-syncs the whole shell.
 
+The session row is also the truth for the connection and its database. The pill's
+database switch writes the row, then reads it back rather than patching a local
+copy, and a heartbeat that comes back with the same session on another connection
+or database re-reads it too. So a switch made elsewhere — another tab on the same
+session, an API caller — reaches this tab within a beat, and every view follows:
+the explorer reloads its tables, the dashboard re-runs its queries, and the query
+panel re-runs the query whose results are on screen (an empty panel stays empty).
+
 ## The session dropdown
 
 The top-right dropdown lists every session, most recently active first. A

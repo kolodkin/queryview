@@ -107,6 +107,9 @@ export type HeartbeatEvents = {
   onChanged: (next: SessionState) => void
   // Another tab took this session; the tab stops beating and writing.
   onTaken: () => void
+  // The same session is now on another connection or database: a switch made
+  // elsewhere (another tab, an API caller). The server's row is the truth.
+  onConnectionChanged?: () => void
 }
 
 // Re-attaching is the heartbeat: it refreshes the claim without a second
@@ -115,10 +118,12 @@ export type HeartbeatEvents = {
 export function startHeartbeat(events: HeartbeatEvents): () => void {
   let last = Date.now()
   const run = async () => {
-    const before = state?.id
+    const before = state
     try {
       const next = await attachSession(true)
-      if (next.id !== before) events.onChanged(next)
+      if (next.id !== before?.id) events.onChanged(next)
+      else if (next.connection !== before.connection || next.database !== before.database)
+        events.onConnectionChanged?.()
     } catch (e) {
       if (!(e instanceof SessionTakenError)) return
       taken = true

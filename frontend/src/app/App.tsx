@@ -207,6 +207,9 @@ function Shell() {
         stopHeartbeat = startHeartbeat({
           onChanged: applySession,
           onTaken: () => setTaken(true),
+          // The session's connection or database moved under this tab: views
+          // follow the session, so the shell re-reads it and they re-fetch.
+          onConnectionChanged: () => void refreshConnection(),
         })
       } catch {
         /* no session: the app still runs, it just remembers nothing */
@@ -274,12 +277,13 @@ function Shell() {
     setArmed(e.target.checked)
   }
 
-  // Switch the active database for the current connection (via the pill dropdown).
+  // Switch the active database for the current connection (via the pill
+  // dropdown). The session row is the truth, so a successful switch reads it
+  // back rather than patching the local copy; a failed one leaves it as-is.
   async function switchDatabase(database: string) {
     setDbOpen(false)
     if (!connection || database === connection.database) return
-    // A failed switch leaves the connection as-is.
-    if (await selectDatabase(database)) setConnection({ ...connection, database })
+    if (await selectDatabase(database)) await refreshConnection()
   }
 
   // Drop the connection (saved connections survive) and go to the Connect
@@ -482,6 +486,7 @@ function Shell() {
                 <QueryView
                   key={`${sessionKey}:${workspace}`}
                   connectionType={connection.type}
+                  database={connection.database}
                   pushed={queryPush}
                   onPushConsumed={() => setQueryPush(null)}
                   remoteId={remoteId}

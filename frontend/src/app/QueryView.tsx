@@ -59,12 +59,15 @@ const NEW_NAME_OPTION = '::new::'
 // connection; picking one happens on the Connect page (ConnectView).
 function QueryView({
   connectionType,
+  database,
   pushed,
   onPushConsumed,
   remoteId,
   autosave = false,
 }: {
   connectionType: string
+  // The session's selected database; results follow it (see QueryPanel).
+  database?: string | null
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
@@ -80,6 +83,7 @@ function QueryView({
       </div>
       <QueryPanel
         connectionType={connectionType}
+        database={database}
         pushed={pushed}
         onPushConsumed={onPushConsumed}
         remoteId={remoteId}
@@ -97,12 +101,14 @@ function firstColumn(rows: QueryRows): string[] {
 
 function QueryPanel({
   connectionType,
+  database,
   pushed,
   onPushConsumed,
   remoteId,
   autosave = false,
 }: {
   connectionType: string
+  database?: string | null
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
@@ -449,6 +455,18 @@ function QueryPanel({
     // review and Save it; it's only cleared on Save or a dropdown selection.
     void runWith(sql, limit, nextOffset, orderBy)
   }
+
+  // The session's database moved under the results (the pill, another tab, an
+  // API caller): re-run the query that produced them, from the first page, so
+  // they never describe a database the pill no longer shows. An empty panel
+  // has nothing to refresh, and the editor is left exactly as it was.
+  const databaseSeen = useRef(database)
+  useEffect(() => {
+    if (databaseSeen.current === database) return
+    databaseSeen.current = database
+    if (result) run(0)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [database])
 
   async function downloadCsv() {
     setBusy(true)
