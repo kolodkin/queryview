@@ -1,5 +1,5 @@
-// The Queries page's plumbing: which statement the cursor is on, and the
-// one-line summary each statement's result shows.
+// The Queries page's plumbing: which statement the cursor is on, where a
+// failed one sits, and the one status line a run leaves.
 
 import type { ColumnMeta, Cell } from '../core'
 
@@ -63,7 +63,7 @@ function statementSpans(text: string): Span[] {
 // The statement the cursor is on: the one whose text contains it, else — in
 // the gap between two — the previous one while the cursor is still on its
 // line (just past the `;`), the next one from a blank line below. Trailing
-// whitespace belongs to the last statement. '' for a blank script.
+// whitespace belongs to the last statement. null for a blank script.
 export function statementRangeAt(text: string, cursor: number): Span | null {
   const spans = statementSpans(text)
   if (spans.length === 0) return null
@@ -73,11 +73,6 @@ export function statementRangeAt(text: string, cursor: number): Span | null {
   const next = spans[prevIdx + 1]
   const prev = spans[prevIdx]
   return prev && (!next || !text.slice(prev.end, cursor).includes('\n')) ? prev : next
-}
-
-export function statementAt(text: string, cursor: number): string {
-  const span = statementRangeAt(text, cursor)
-  return span ? text.slice(span.start, span.end) : ''
 }
 
 // Where the failing statement of a run sits in the script, for marking it in
@@ -93,14 +88,9 @@ export function failedSpan(ran: string, offset: number, results: StatementResult
 
 // What a successful statement left: its row count, or the driver's status.
 function rowsOrStatus(r: StatementResult): string {
-  if (r.data === null) return r.status || 'OK'
+  if (r.data === null) return r.status
   if (r.truncated) return `first ${r.data.length} rows, more exist`
   return `${r.data.length} ${r.data.length === 1 ? 'row' : 'rows'}`
-}
-
-export function resultSummary(r: StatementResult): string {
-  if (!r.ok) return r.message || 'failed'
-  return `${rowsOrStatus(r)} · ${r.elapsed_ms} ms`
 }
 
 // The one status line a run leaves under the buttons. The statements are
@@ -113,7 +103,7 @@ export function runSummary(results: StatementResult[]): { ok: boolean; text: str
   if (!last.ok) {
     return { ok: false, text: `Statement #${results.length} Failed - ${last.message || 'failed'}` }
   }
-  if (results.length === 1) return { ok: true, text: resultSummary(last) }
   const total = results.reduce((ms, r) => ms + r.elapsed_ms, 0)
-  return { ok: true, text: `${results.length} statements · ${rowsOrStatus(last)} · ${total} ms` }
+  const count = results.length > 1 ? `${results.length} statements · ` : ''
+  return { ok: true, text: `${count}${rowsOrStatus(last)} · ${total} ms` }
 }

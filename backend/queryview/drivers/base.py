@@ -8,7 +8,9 @@ import csv
 import datetime as dt
 import io
 import math
+import time
 import uuid
+from collections.abc import Awaitable, Callable
 from decimal import Decimal
 from typing import Any, NamedTuple, Protocol, TypeAlias, runtime_checkable
 
@@ -37,15 +39,15 @@ class TextResult(NamedTuple):
     value: str  # the text when ok; an error message otherwise
 
 
-# Row results on the Queries page are capped: the page has no pagination, so a
-# bare `SELECT *` must not pull a whole table into the browser.
+# Row results of a script are capped (docs/queries.md). A driver fetches at most
+# SCRIPT_ROW_CAP + 1 rows; run_script trims to the cap and flags `truncated`.
 SCRIPT_ROW_CAP = 100
 
 
 class StatementResult(NamedTuple):
-    """One statement of a script (the Queries page): its rows when it returned
-    any (capped at SCRIPT_ROW_CAP, `truncated` says so), else the driver's
-    status text (`OK`, Postgres's `INSERT 0 3`); `message` when it failed."""
+    """One statement of a script: its rows when it returned any, else the
+    driver's status text (`OK`, Postgres's `INSERT 0 3`); `message` when it
+    failed. `truncated` and `elapsed_ms` are filled in by run_script."""
 
     sql: str
     ok: bool
@@ -116,9 +118,8 @@ class Driver(Protocol):
         sql: str,
         database: str | None,
     ) -> tuple[bool, list[dict[str, str]] | str]: ...
-    # Run a `;`-separated script statement by statement on one connection, as
-    # written (no pagination wrapper, writes and DDL included), stopping at the
-    # first failure. One result per statement run.
+    # Run a `;`-separated script as written (no pagination wrapper, writes and
+    # DDL included) on one connection — see run_script for the shared policy.
     async def execute_script(
         self,
         config: DriverConfig,
@@ -242,9 +243,21 @@ def split_statements(sql: str) -> list[str]:
     return [s for s in (p.strip() for p in out) if s]
 
 
-def cap_rows(data: list[list[Any]]) -> tuple[list[list[Any]], bool]:
-    """The first SCRIPT_ROW_CAP rows and whether any were dropped."""
-    return data[:SCRIPT_ROW_CAP], len(data) > SCRIPT_ROW_CAP
+async def run_script(sql: str, run_one: Callable[[str], Awaitable[StatementResult]]) -> list[StatementResult]:
+    """The script policy every driver shares: split, run each statement in
+    order through `run_one`, time it, cap its rows, and stop at the first
+    failure. `run_one` returns the statement's rows (at most SCRIPT_ROW_CAP + 1
+    of them), status or error; it never raises."""
+    results: list[StatementResult] = []
+    for stmt in split_statements(sql):
+        started = time.monotonic()
+        r = await run_one(stmt)
+        if r.rows is not None and len(r.rows.data) > SCRIPT_ROW_CAP:
+            r = r._replace(rows=QueryRows(r.rows.meta, r.rows.data[:SCRIPT_ROW_CAP]), truncated=True)
+        results.append(r._replace(elapsed_ms=int((time.monotonic() - started) * 1000)))
+        if not r.ok:
+            break
+    return results
 
 
 # The largest integer a JS number holds exactly; beyond it values travel as strings.

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import time
 from dataclasses import asdict, dataclass
 from typing import Any, NamedTuple
 
@@ -17,9 +16,8 @@ from .base import (
     StatementResult,
     TextResult,
     build_order_by,
-    cap_rows,
     parse_host_port_config,
-    split_statements,
+    run_script,
     wrap_paginated,
 )
 
@@ -56,23 +54,33 @@ async def ch_query(
     database: str | None = None,
     fmt: str | None = None,
     settings: dict[str, str] | None = None,
-    post: bool = False,
+    write: bool = False,
+    client: httpx.AsyncClient | None = None,
 ) -> ChResult:
     """Run a query against the ClickHouse HTTP interface (Basic auth, 5s timeout).
     `database` scopes the query; `fmt` appends a ClickHouse `FORMAT` clause;
-    `settings` are passed as URL parameters. A GET is read-only in ClickHouse,
-    so `post` sends the query as the request body for statements that write."""
+    `settings` are passed as URL parameters. Queries go as a GET, which
+    ClickHouse treats as read-only — that is what keeps every other path from
+    writing; `write` sends the query as a POST body instead. `client` reuses a
+    caller's connection across several queries."""
     url = f"http://{c.host}:{c.port}/"
     q = f"{query}\nFORMAT {fmt}" if fmt else query
-    params = {**(settings or {})}
+    params = dict(settings or {})
     if database:
         params["database"] = database
+    auth = (c.username, c.password)
+
+    async def send(cl: httpx.AsyncClient) -> httpx.Response:
+        if write:
+            return await cl.post(url, params=params, content=q.encode(), auth=auth)
+        return await cl.get(url, params={"query": q, **params}, auth=auth)
+
     try:
-        async with httpx.AsyncClient(timeout=CH_TIMEOUT_SECONDS) as client:
-            if post:
-                res = await client.post(url, params=params, content=q.encode(), auth=(c.username, c.password))
-            else:
-                res = await client.get(url, params={"query": q, **params}, auth=(c.username, c.password))
+        if client is not None:
+            res = await send(client)
+        else:
+            async with httpx.AsyncClient(timeout=CH_TIMEOUT_SECONDS) as own:
+                res = await send(own)
     except httpx.TimeoutException:
         return ChResult(False, "connection timed out")
     except httpx.HTTPError as err:
@@ -104,8 +112,9 @@ def _tsv_rows(text: str, min_cols: int):
 
 
 # Script statements: JSONCompact unless the statement names its own FORMAT, and
-# the result stops filling past the row cap instead of failing (break may
-# overshoot by a block; cap_rows trims it).
+# the server stops filling the result past the row cap instead of failing. The
+# check runs between blocks, so up to a block (max_block_size, ~65k rows) can
+# still arrive; run_script trims it. Subqueries are not affected.
 SCRIPT_SETTINGS = {
     **JSON_COMPACT_SETTINGS,
     "default_format": "JSONCompact",
@@ -210,26 +219,20 @@ class ClickHouseDriver:
         return True, [{"name": cols[0], "type": cols[1]} for cols in _tsv_rows(r.value, 2)]
 
     async def execute_script(self, config: ChConfig, sql: str, database: str | None) -> list[StatementResult]:
-        results: list[StatementResult] = []
-        for stmt in split_statements(sql):
-            started = time.monotonic()
-            r = await ch_query(config, stmt, database=database, settings=SCRIPT_SETTINGS, post=True)
-            elapsed = int((time.monotonic() - started) * 1000)
-            if not r.ok:
-                results.append(StatementResult(stmt, False, message=r.value, elapsed_ms=elapsed))
-                break
-            if not r.value:
-                # DDL/DML: nothing comes back.
-                results.append(StatementResult(stmt, True, status="OK", elapsed_ms=elapsed))
-                continue
-            try:
-                rows = _parse_json_compact(r.value)
-            except (ValueError, KeyError, TypeError):
-                # The statement chose its own FORMAT: show its text as-is.
-                results.append(StatementResult(stmt, True, status=r.value, elapsed_ms=elapsed))
-                continue
-            data, truncated = cap_rows(rows.data)
-            results.append(
-                StatementResult(stmt, True, rows=QueryRows(rows.meta, data), truncated=truncated, elapsed_ms=elapsed)
-            )
-        return results
+        # One HTTP client for the whole script; each statement is still its
+        # own request, as ClickHouse's HTTP interface has no session.
+        async with httpx.AsyncClient(timeout=CH_TIMEOUT_SECONDS) as client:
+
+            async def run_one(stmt: str) -> StatementResult:
+                r = await ch_query(config, stmt, database=database, settings=SCRIPT_SETTINGS, write=True, client=client)
+                if not r.ok:
+                    return StatementResult(stmt, False, message=r.value)
+                if not r.value:  # DDL/DML: nothing comes back
+                    return StatementResult(stmt, True, status="OK")
+                try:
+                    return StatementResult(stmt, True, rows=_parse_json_compact(r.value))
+                except (ValueError, KeyError, TypeError):
+                    # The statement chose its own FORMAT: show its text as-is.
+                    return StatementResult(stmt, True, status=r.value)
+
+            return await run_script(sql, run_one)

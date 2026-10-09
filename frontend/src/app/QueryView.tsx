@@ -29,6 +29,7 @@ import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace, flushPatches, patchView, viewState } from './session'
 import { onAutosaveEnabled, queryChanged } from './autosave'
+import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
 type PredefinedQuery = {
   query_name: string
@@ -618,13 +619,6 @@ function QueryPanel({
   const resultRows = result ? result.data : []
   const shownIdx = shownColumnIndices(columns, fields, visibleCols)
 
-  const sizes: [string, number, string][] = [
-    ['Min', 0, 'query-size-min'],
-    ['S', 4, 'query-size-s'],
-    ['M', 8, 'query-size-m'],
-    ['L', 16, 'query-size-l'],
-    ['XL', 28, 'query-size-xl'],
-  ]
   const inputClass = 'glass-input px-3 py-2'
 
   return (
@@ -736,12 +730,12 @@ function QueryPanel({
         >
           Cell view
         </button>
-        {sizes.map(([label, n, testid]) => (
+        {TEXTAREA_SIZES.map(([label, n]) => (
           <button
-            key={testid}
+            key={label}
             type="button"
             onClick={() => setRows(n)}
-            data-testid={testid}
+            data-testid={`query-size-${label.toLowerCase()}`}
             className={`glass-toggle px-2 py-1 text-xs ${rows === n ? 'is-active' : ''}`}
           >
             {label}
@@ -756,9 +750,7 @@ function QueryPanel({
         data-testid="query-input"
         rows={rows || 1}
         placeholder="SELECT …"
-        className={`glass-input w-full px-3 font-mono text-sm ${
-          rows === 0 ? 'h-0 min-h-0 overflow-hidden border-transparent py-0' : 'py-2'
-        }`}
+        className={`glass-input w-full px-3 font-mono text-sm ${textareaSizeClass(rows)}`}
       />
 
       {cellViewModalOpen && (

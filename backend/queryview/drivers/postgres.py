@@ -3,7 +3,6 @@ lists real databases and the selected one is where queries run."""
 
 from __future__ import annotations
 
-import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -11,15 +10,15 @@ from typing import Any
 import asyncpg
 
 from .base import (
+    SCRIPT_ROW_CAP,
     Column,
     QueryResult,
     QueryRows,
     StatementResult,
     TextResult,
     build_order_by,
-    cap_rows,
     parse_host_port_config,
-    split_statements,
+    run_script,
     to_csv,
     to_json_value,
     wrap_paginated,
@@ -76,6 +75,12 @@ async def _connect(c: PgConfig, database: str | None):
         yield conn
     finally:
         await conn.close()
+
+
+def _to_rows(attrs: Any, records: list[Any]) -> QueryRows:
+    """asyncpg's statement attributes and records as the shared result shape."""
+    meta = [Column(a.name, a.type.name) for a in attrs]
+    return QueryRows(meta, [[to_json_value(v) for v in r] for r in records])
 
 
 @asynccontextmanager
@@ -154,9 +159,7 @@ class PostgresDriver:
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias="_qv")
         async with _connect(config, database) as conn:
             stmt = await conn.prepare(paginated)
-            meta = [Column(a.name, a.type.name) for a in stmt.get_attributes()]
-            records = await stmt.fetch()
-            return QueryRows(meta, [[to_json_value(v) for v in r] for r in records])
+            return _to_rows(stmt.get_attributes(), await stmt.fetch())
 
     async def run_query(
         self,
@@ -199,35 +202,22 @@ class PostgresDriver:
             return False, str(e) or "connection failed"
 
     async def execute_script(self, config: PgConfig, sql: str, database: str | None) -> list[StatementResult]:
-        results: list[StatementResult] = []
         try:
             async with _connect(config, database) as conn:
-                for stmt in split_statements(sql):
-                    started = time.monotonic()
+
+                async def run_one(stmt: str) -> StatementResult:
                     try:
                         prepared = await conn.prepare(stmt)
                         records = await prepared.fetch()
                         attrs = prepared.get_attributes()
                     except Exception as e:  # noqa: BLE001
-                        results.append(StatementResult(stmt, False, message=str(e), elapsed_ms=_ms(started)))
-                        break
+                        return StatementResult(stmt, False, message=str(e))
                     if not attrs:
-                        # No result columns: Postgres's command tag (`INSERT 0 3`) says what happened.
-                        status = prepared.get_statusmsg() or "OK"
-                        results.append(StatementResult(stmt, True, status=status, elapsed_ms=_ms(started)))
-                        continue
-                    meta = [Column(a.name, a.type.name) for a in attrs]
-                    data, truncated = cap_rows([[to_json_value(v) for v in r] for r in records])
-                    results.append(
-                        StatementResult(
-                            stmt, True, rows=QueryRows(meta, data), truncated=truncated, elapsed_ms=_ms(started)
-                        )
-                    )
+                        # No result columns: the command tag (`INSERT 0 3`) says what happened.
+                        return StatementResult(stmt, True, status=prepared.get_statusmsg() or "OK")
+                    return StatementResult(stmt, True, rows=_to_rows(attrs, records[: SCRIPT_ROW_CAP + 1]))
+
+                return await run_script(sql, run_one)
         except Exception as e:  # noqa: BLE001
             # The connection itself failed: report it against the whole script.
-            results.append(StatementResult(sql, False, message=str(e) or "connection failed"))
-        return results
-
-
-def _ms(started: float) -> int:
-    return int((time.monotonic() - started) * 1000)
+            return [StatementResult(sql, False, message=str(e) or "connection failed")]

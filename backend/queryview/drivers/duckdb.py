@@ -4,21 +4,20 @@ library is driven in a worker thread so the event loop is never blocked."""
 from __future__ import annotations
 
 import asyncio
-import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
 import duckdb
 
 from .base import (
+    SCRIPT_ROW_CAP,
     Column,
     QueryResult,
     QueryRows,
     StatementResult,
     TextResult,
     build_order_by,
-    cap_rows,
-    split_statements,
+    run_script,
     to_csv,
     to_json_value,
     wrap_paginated,
@@ -37,10 +36,17 @@ def parse_duck_config(body: Any) -> tuple[DuckConfig | None, str | None]:
     return DuckConfig(path=path or ":memory:"), None
 
 
-def _open(path: str):
+def _open(path: str, read_only: bool = True):
     # read_only avoids lock contention between concurrent describe/query opens;
     # :memory: cannot be read_only, so open it read-write.
-    return duckdb.connect(path, read_only=(path != ":memory:"))
+    return duckdb.connect(path, read_only=(read_only and path != ":memory:"))
+
+
+def _rel_rows(rel: duckdb.DuckDBPyRelation) -> QueryRows:
+    """A relation's rows as the shared result shape; it exposes DuckDB's own
+    type names alongside the rows."""
+    meta = [Column(name, str(t)) for name, t in zip(rel.columns, rel.types, strict=True)]
+    return QueryRows(meta, [[to_json_value(v) for v in row] for row in rel.fetchall()])
 
 
 def _scalar(con: duckdb.DuckDBPyConnection, sql: str) -> Any:
@@ -132,10 +138,7 @@ class DuckDBDriver:
         def _work() -> QueryRows:
             con = _open(config.path)
             try:
-                # A relation exposes DuckDB's own type names alongside the rows.
-                rel = con.sql(paginated)
-                meta = [Column(name, str(t)) for name, t in zip(rel.columns, rel.types, strict=True)]
-                return QueryRows(meta, [[to_json_value(v) for v in row] for row in rel.fetchall()])
+                return _rel_rows(con.sql(paginated))
             finally:
                 con.close()
 
@@ -191,45 +194,25 @@ class DuckDBDriver:
 
     async def execute_script(self, config: DuckConfig, sql: str, database: str | None) -> list[StatementResult]:
         # Read-write, unlike every other open: this is the one path that writes.
-        def _work() -> list[StatementResult]:
-            results: list[StatementResult] = []
-            con = duckdb.connect(config.path)
+        # Statements share the connection (temp tables, BEGIN/COMMIT), each run
+        # in the worker thread so the event loop never blocks.
+        def run_one_sync(con: duckdb.DuckDBPyConnection, stmt: str) -> StatementResult:
             try:
-                for stmt in split_statements(sql):
-                    started = time.monotonic()
-                    try:
-                        # sql() yields a relation for a row-returning statement
-                        # and None for DDL/DML, which it has already run.
-                        rel = con.sql(stmt)
-                        if rel is None:
-                            rows, truncated = None, False
-                        else:
-                            meta = [Column(name, str(t)) for name, t in zip(rel.columns, rel.types, strict=True)]
-                            data, truncated = cap_rows([[to_json_value(v) for v in row] for row in rel.fetchall()])
-                            rows = QueryRows(meta, data)
-                    except Exception as e:  # noqa: BLE001
-                        results.append(StatementResult(stmt, False, message=str(e), elapsed_ms=_ms(started)))
-                        break
-                    results.append(
-                        StatementResult(
-                            stmt,
-                            True,
-                            rows=rows,
-                            truncated=truncated,
-                            status="" if rows is not None else "OK",
-                            elapsed_ms=_ms(started),
-                        )
-                    )
-            finally:
-                con.close()
-            return results
+                # sql() yields a relation for a row-returning statement and
+                # None for DDL/DML, which it has already run.
+                rel = con.sql(stmt)
+            except Exception as e:  # noqa: BLE001
+                return StatementResult(stmt, False, message=str(e))
+            if rel is None:
+                return StatementResult(stmt, True, status="OK")
+            return StatementResult(stmt, True, rows=_rel_rows(rel.limit(SCRIPT_ROW_CAP + 1)))
 
         try:
-            return await asyncio.to_thread(_work)
+            con = await asyncio.to_thread(_open, config.path, False)
         except Exception as e:  # noqa: BLE001
             # The open itself failed: report it against the whole script.
             return [StatementResult(sql, False, message=str(e))]
-
-
-def _ms(started: float) -> int:
-    return int((time.monotonic() - started) * 1000)
+        try:
+            return await run_script(sql, lambda stmt: asyncio.to_thread(run_one_sync, con, stmt))
+        finally:
+            con.close()

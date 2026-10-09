@@ -1,17 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ResultsTable, columnNames, columnTypes, type QueryRows } from '../core'
 import { apiFetch } from './api'
 import { Spinner } from './controls/Spinner'
+import { loadIntoQueryView } from './queryPanel'
 import { flushPatches, patchView, viewState } from './session'
-import {
-  failedSpan,
-  runSummary,
-  statementRangeAt,
-  type Span,
-  type StatementResult,
-} from './queriesScript'
+import { failedSpan, runSummary, statementRangeAt, type Span, type StatementResult } from './queriesScript'
+import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
 // The Queries page (`/queries`), mounted by the App shell only for a ready
 // connection: one flat SQL textbox whose `;`-separated statements run as
@@ -19,59 +15,35 @@ import {
 // the statement under the cursor (or the selection), Run all the whole script.
 // A run leaves one status line; the last statement's rows, if any, are the
 // table below, and Open in QueryView carries that statement over (docs/queries.md).
-// The same height steps as QueryView's textarea.
-const SIZES: [string, number, string][] = [
-  ['Min', 0, 'queries-size-min'],
-  ['S', 4, 'queries-size-s'],
-  ['M', 8, 'queries-size-m'],
-  ['L', 16, 'queries-size-l'],
-  ['XL', 28, 'queries-size-xl'],
-]
-
-function QueriesView({ runOn }: { runOn?: string | null }) {
+function QueriesView() {
   const navigate = useNavigate()
   // The text is restored from the session; results never are (docs/session.md).
-  const saved = viewState('queries')
-  const [sql, setSql] = useState(() => (typeof saved.sql === 'string' ? saved.sql : ''))
+  const [sql, setSql] = useState(() => {
+    const saved = viewState('queries').sql
+    return typeof saved === 'string' ? saved : ''
+  })
   const [results, setResults] = useState<StatementResult[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  // Textarea height in rows; Min collapses it so the rows below get the room.
   const [rows, setRows] = useState(8)
-  // The failing statement of the last run, marked red in the textbox until
-  // the textbox is focused or edited — the status line then needn't repeat it.
-  const [failed, setFailed] = useState<Span | null>(null)
+  // The failing statement of the last run, marked red in the textbox until the
+  // textbox is clicked into — so the status line needn't repeat it. Kept with
+  // the script it was found in: an edit moves the offsets, so the mark only
+  // shows while the text is still what ran.
+  const [failed, setFailed] = useState<{ script: string; span: Span } | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const markRef = useRef<HTMLPreElement>(null)
   const runSeq = useRef(0)
 
-  // Queue the text for the session; the write lands when the textbox is left.
-  // The first run is skipped: it would patch the row with what it just read.
-  const restored = useRef(true)
-  useEffect(() => {
-    if (restored.current) {
-      restored.current = false
-      return
-    }
-    patchView('queries', { sql })
-  }, [sql])
-
-  // A database switch invalidates what is on screen: the rows came from
-  // somewhere else now. The text stays — it is the user's.
-  const firstScope = useRef(true)
-  useEffect(() => {
-    if (firstScope.current) {
-      firstScope.current = false
-      return
-    }
-    setResults(null)
-    setError(null)
-  }, [runOn])
+  function edit(next: string) {
+    setSql(next)
+    // Queued for the session; the write lands when the textbox is left.
+    patchView('queries', { sql: next })
+  }
 
   // The selection when there is one, else the statement under the cursor.
   function currentStatement(): Span {
-    const el = inputRef.current
-    if (!el) return { start: 0, end: sql.length }
+    const el = inputRef.current!
     if (sql.slice(el.selectionStart, el.selectionEnd).trim()) {
       return { start: el.selectionStart, end: el.selectionEnd }
     }
@@ -97,8 +69,8 @@ function QueriesView({ runOn }: { runOn?: string | null }) {
       if (data.ok) {
         const results = (data.results ?? []) as StatementResult[]
         setResults(results)
-        // Only while the script is still what ran: an edit moved the offsets.
-        if (inputRef.current?.value === sql) setFailed(failedSpan(text, start, results))
+        const span = failedSpan(text, start, results)
+        setFailed(span && { script: sql, span })
       } else {
         setError((data.message as string) ?? 'request failed')
       }
@@ -117,26 +89,30 @@ function QueriesView({ runOn }: { runOn?: string | null }) {
     }
   }
 
+  const summary = runSummary(results ?? [])
   // The last statement run, when it returned rows: the table below, and what
-  // Open in QueryView carries over.
-  const last = results && results.length > 0 ? results[results.length - 1] : null
+  // Open in QueryView carries over. A failed statement has no meta.
+  const last = results?.at(-1) ?? null
   const lastRows: QueryRows | null = useMemo(
-    () => (last && last.ok && last.meta && last.data ? { meta: last.meta, data: last.data } : null),
+    () => (last?.meta && last.data ? { meta: last.meta, data: last.data } : null),
     [last],
   )
-  const summary = useMemo(() => runSummary(results ?? []), [results])
-  const columns = useMemo(() => (lastRows ? columnNames(lastRows) : []), [lastRows])
-  const types = useMemo(() => (lastRows ? columnTypes(lastRows) : {}), [lastRows])
-  const shownIdx = useMemo(() => columns.map((_, i) => i), [columns])
-
-  // QueryView hydrates its SQL from the session on mount, so write the
-  // statement there first and then go.
-  async function openInQueryView() {
-    if (!last || !lastRows) return
-    patchView('query', { sql: last.sql })
-    await flushPatches()
-    navigate('/queryview')
-  }
+  // Memoized so typing in the textbox doesn't re-render the grid.
+  const table = useMemo(
+    () =>
+      lastRows && (
+        <ResultsTable
+          columns={columnNames(lastRows)}
+          rows={lastRows.data}
+          types={columnTypes(lastRows)}
+          shownIdx={lastRows.meta.map((_, i) => i)}
+          testid="queries-output"
+          dimmed={busy}
+        />
+      ),
+    [lastRows, busy],
+  )
+  const mark = failed && failed.script === sql && rows > 0 ? failed.span : null
 
   return (
     <div data-testid="queries-page" className="viewport-page flex w-full max-w-[80vw] flex-col">
@@ -147,12 +123,12 @@ function QueriesView({ runOn }: { runOn?: string | null }) {
       </div>
       <section className="glass-panel flex grow flex-col gap-3 p-6">
         <div className="flex items-center justify-end gap-1">
-          {SIZES.map(([label, n, testid]) => (
+          {TEXTAREA_SIZES.map(([label, n]) => (
             <button
-              key={testid}
+              key={label}
               type="button"
               onClick={() => setRows(n)}
-              data-testid={testid}
+              data-testid={`queries-size-${label.toLowerCase()}`}
               className={`glass-toggle px-2 py-1 text-xs ${rows === n ? 'is-active' : ''}`}
             >
               {label}
@@ -166,10 +142,7 @@ function QueriesView({ runOn }: { runOn?: string | null }) {
           <textarea
             ref={inputRef}
             value={sql}
-            onChange={(e) => {
-              setFailed(null)
-              setSql(e.target.value)
-            }}
+            onChange={(e) => edit(e.target.value)}
             onFocus={() => setFailed(null)}
             onClick={() => setFailed(null)}
             onKeyDown={onKeyDown}
@@ -182,21 +155,19 @@ function QueriesView({ runOn }: { runOn?: string | null }) {
             rows={rows || 1}
             spellCheck={false}
             placeholder={'CREATE TABLE …;\nINSERT INTO …;\nSELECT …'}
-            className={`glass-input w-full px-3 font-mono text-sm ${
-              rows === 0 ? 'h-0 min-h-0 overflow-hidden border-transparent py-0' : 'py-2'
-            }`}
+            className={`glass-input w-full px-3 font-mono text-sm ${textareaSizeClass(rows)}`}
           />
-          {failed && rows > 0 && (
+          {mark && (
             <pre
               ref={markRef}
               aria-hidden="true"
               className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words border border-transparent px-3 py-2 font-mono text-sm text-transparent"
             >
-              {sql.slice(0, failed.start)}
+              {sql.slice(0, mark.start)}
               <mark data-testid="queries-failed-mark" className="rounded bg-red-500/15 text-red-300">
-                {sql.slice(failed.start, failed.end)}
+                {sql.slice(mark.start, mark.end)}
               </mark>
-              {sql.slice(failed.end)}
+              {sql.slice(mark.end)}
             </pre>
           )}
         </div>
@@ -223,7 +194,11 @@ function QueriesView({ runOn }: { runOn?: string | null }) {
           </button>
           <button
             type="button"
-            onClick={() => void openInQueryView()}
+            onClick={() => {
+              if (!last) return
+              loadIntoQueryView(last.sql)
+              navigate('/queryview')
+            }}
             disabled={!lastRows}
             data-testid="queries-open-queryview"
             title="Load the last statement's SQL into QueryView for paging, saving and presentation"
@@ -255,16 +230,7 @@ function QueriesView({ runOn }: { runOn?: string | null }) {
             {summary.text}
           </p>
         )}
-        {lastRows && (
-          <ResultsTable
-            columns={columns}
-            rows={lastRows.data}
-            types={types}
-            shownIdx={shownIdx}
-            testid="queries-output"
-            dimmed={busy}
-          />
-        )}
+        {table}
       </section>
     </div>
   )

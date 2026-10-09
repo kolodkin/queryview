@@ -323,6 +323,10 @@ function Shell() {
   const remoteId = channelOpen ? sessionId() : null
   const agentCommand = `Use the queryview mcp to connect to session "${remoteId ?? ''}"`
 
+  // The pages that query a database are Connect until there is one.
+  const withDatabase = (page: React.ReactNode) =>
+    isReady(connection) ? page : <Navigate to="/connect" replace />
+
   const navLinkClass = (path: string) =>
     `glass-toggle shrink-0 px-2 py-1.5 text-sm sm:px-3 ${
       location.pathname.startsWith(path) ? 'is-active' : ''
@@ -504,13 +508,10 @@ function Shell() {
           attach has answered. */}
       {sessionChecked ? (
         <Routes>
-          {/* The query panel needs a database; until then QueryView is Connect. */}
           <Route
             path="/queryview"
-            element={
-              !isReady(connection) ? (
-                <Navigate to="/connect" replace />
-              ) : (
+            element={withDatabase(
+              connection && (
                 <QueryView
                   key={`${sessionKey}:${workspace}`}
                   connectionType={connection.type}
@@ -520,19 +521,17 @@ function Shell() {
                   remoteId={remoteId}
                   autosave={autosave}
                 />
-              )
-            }
+              ),
+            )}
           />
-          {/* The Queries page runs against a database too. */}
+          {/* Keyed by the connection too: a database switch remounts the page,
+              which drops the rows on screen (they came from somewhere else
+              now) and brings the text back from the session. */}
           <Route
             path="/queries"
-            element={
-              !isReady(connection) ? (
-                <Navigate to="/connect" replace />
-              ) : (
-                <QueriesView key={sessionKey} runOn={connectionKey(connection)} />
-              )
-            }
+            element={withDatabase(
+              <QueriesView key={`${sessionKey}:${connectionKey(connection)}`} />,
+            )}
           />
           <Route
             path="/connect"

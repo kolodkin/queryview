@@ -98,16 +98,18 @@ def test_list_tables_parses_rows_and_bytes_with_nulls(monkeypatch):
 
 
 def test_execute_script_posts_each_statement_as_written(monkeypatch):
-    """The Queries page: no pagination wrapper, HTTP POST (a GET is read-only in
-    ClickHouse, so writes would be refused), JSONCompact via default_format so a
-    statement with no result set simply comes back empty."""
+    """The Queries page: no pagination wrapper, a write (HTTP POST — a GET is
+    read-only in ClickHouse), JSONCompact via default_format so a statement
+    with no result set simply comes back empty, one client for the script."""
     d = ClickHouseDriver()
     calls = []
 
-    async def fake_ch_query(c, query, database=None, fmt=None, settings=None, post=False):
+    async def fake_ch_query(c, query, database=None, fmt=None, settings=None, write=False, client=None):
         from queryview.drivers.clickhouse import ChResult
 
-        calls.append({"query": query, "database": database, "fmt": fmt, "settings": settings, "post": post})
+        calls.append(
+            {"query": query, "database": database, "fmt": fmt, "settings": settings, "write": write, "client": client}
+        )
         return ChResult(True, "" if query.startswith("INSERT") else JSON_COMPACT)
 
     monkeypatch.setattr("queryview.drivers.clickhouse.ch_query", fake_ch_query)
@@ -115,7 +117,8 @@ def test_execute_script_posts_each_statement_as_written(monkeypatch):
         d.execute_script(ChConfig("h", 1, "u", ""), "INSERT INTO t VALUES (1); SELECT id, tags FROM t;", "db")
     )
     assert [c["query"] for c in calls] == ["INSERT INTO t VALUES (1)", "SELECT id, tags FROM t"]
-    assert all(c["post"] and c["fmt"] is None and c["database"] == "db" for c in calls)
+    assert all(c["write"] and c["fmt"] is None and c["database"] == "db" for c in calls)
+    assert calls[0]["client"] is not None and calls[0]["client"] is calls[1]["client"]
     assert calls[0]["settings"]["default_format"] == "JSONCompact"
     assert calls[0]["settings"]["output_format_json_quote_64bit_integers"] == "1"
     assert [r.ok for r in results] == [True, True]
@@ -128,7 +131,7 @@ def test_execute_script_stops_at_the_first_error(monkeypatch):
     d = ClickHouseDriver()
     calls = []
 
-    async def fake_ch_query(c, query, database=None, fmt=None, settings=None, post=False):
+    async def fake_ch_query(c, query, database=None, fmt=None, settings=None, write=False, client=None):
         from queryview.drivers.clickhouse import ChResult
 
         calls.append(query)
@@ -148,7 +151,7 @@ def test_execute_script_shows_non_json_output_as_status(monkeypatch):
     is shown rather than failing on the JSON parse."""
     d = ClickHouseDriver()
 
-    async def fake_ch_query(c, query, database=None, fmt=None, settings=None, post=False):
+    async def fake_ch_query(c, query, database=None, fmt=None, settings=None, write=False, client=None):
         from queryview.drivers.clickhouse import ChResult
 
         return ChResult(True, "1,a\n2,b")

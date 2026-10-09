@@ -1,13 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  failedSpan,
-  resultSummary,
-  runSummary,
-  statementAt,
-  statementRangeAt,
-  type StatementResult,
-} from './queriesScript'
+import { failedSpan, runSummary, statementRangeAt, type StatementResult } from './queriesScript'
 
 const base: StatementResult = {
   ok: true,
@@ -20,46 +13,45 @@ const base: StatementResult = {
   sql: '',
 }
 
-describe('statementAt', () => {
+describe('statementRangeAt', () => {
   const text = 'SELECT 1;\n\nSELECT \'a;b\' -- c;\n  ;SELECT 3'
+  const at = (cursor: number) => {
+    const span = statementRangeAt(text, cursor)
+    return span && text.slice(span.start, span.end)
+  }
   it('picks the statement the cursor is inside', () => {
-    expect(statementAt(text, 3)).toBe('SELECT 1')
-    expect(statementAt(text, 15)).toBe("SELECT 'a;b' -- c;")
-    expect(statementAt(text, text.length)).toBe('SELECT 3')
+    expect(at(3)).toBe('SELECT 1')
+    expect(at(15)).toBe("SELECT 'a;b' -- c;")
+    expect(at(text.length)).toBe('SELECT 3')
   })
   it('keeps the statement when the cursor sits right after its semicolon', () => {
-    expect(statementAt(text, 9)).toBe('SELECT 1')
+    expect(at(9)).toBe('SELECT 1')
   })
   it('moves to the next statement from a blank line between two', () => {
-    expect(statementAt(text, 10)).toBe("SELECT 'a;b' -- c;")
+    expect(at(10)).toBe("SELECT 'a;b' -- c;")
   })
   it('falls back to the last statement after trailing whitespace', () => {
-    expect(statementAt('SELECT 1;\n\n', 11)).toBe('SELECT 1')
-    expect(statementAt('   ', 1)).toBe('')
-  })
-})
-
-describe('resultSummary', () => {
-  it('counts rows', () => {
-    expect(resultSummary({ ...base, data: [[1], [2]], elapsed_ms: 12 })).toBe('2 rows · 12 ms')
-    expect(resultSummary({ ...base, data: [[1]] })).toBe('1 row · 0 ms')
-  })
-  it('says when the rows were capped', () => {
-    expect(resultSummary({ ...base, data: Array(100).fill([1]), truncated: true, elapsed_ms: 5 })).toBe(
-      'first 100 rows, more exist · 5 ms',
-    )
-  })
-  it('shows the driver status for statements without rows', () => {
-    expect(resultSummary({ ...base, meta: null, status: 'INSERT 0 3', elapsed_ms: 3 })).toBe('INSERT 0 3 · 3 ms')
-  })
-  it('shows the error for a failed statement', () => {
-    expect(resultSummary({ ...base, ok: false, meta: null, message: 'boom' })).toBe('boom')
+    expect(statementRangeAt('SELECT 1;\n\n', 11)).toEqual({ start: 0, end: 8 })
+    expect(statementRangeAt('   ', 1)).toBeNull()
   })
 })
 
 describe('runSummary', () => {
-  it('is the statement summary for a single statement', () => {
+  it('counts the rows of a single statement', () => {
     expect(runSummary([{ ...base, data: [[1], [2]], elapsed_ms: 2 }])).toEqual({ ok: true, text: '2 rows · 2 ms' })
+    expect(runSummary([{ ...base, data: [[1]] }])).toEqual({ ok: true, text: '1 row · 0 ms' })
+  })
+  it('says when the rows were capped', () => {
+    expect(runSummary([{ ...base, data: Array(100).fill([1]), truncated: true, elapsed_ms: 5 }])).toEqual({
+      ok: true,
+      text: 'first 100 rows, more exist · 5 ms',
+    })
+  })
+  it('shows the driver status for a statement without rows', () => {
+    expect(runSummary([{ ...base, meta: null, status: 'INSERT 0 3', elapsed_ms: 3 }])).toEqual({
+      ok: true,
+      text: 'INSERT 0 3 · 3 ms',
+    })
   })
   it('counts the statements and the total time, with the last rows', () => {
     const run = [
@@ -79,13 +71,6 @@ describe('runSummary', () => {
   })
   it('handles an empty run', () => {
     expect(runSummary([])).toEqual({ ok: true, text: 'Nothing to run' })
-  })
-})
-
-describe('statementRangeAt', () => {
-  it('returns where the cursor statement sits in the script', () => {
-    expect(statementRangeAt('SELECT 1;\n  SELECT 2  ', 14)).toEqual({ start: 12, end: 20 })
-    expect(statementRangeAt('   ', 1)).toBeNull()
   })
 })
 
