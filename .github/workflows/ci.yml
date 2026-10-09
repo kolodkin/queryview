@@ -20,6 +20,8 @@ jobs:
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       # pre-commit's pyright hook resolves imports from the project's .venv
       # (see pyrightconfig.json), so sync it first.
@@ -37,6 +39,8 @@ jobs:
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Install backend + test dependencies
         run: uv sync --frozen --group test
@@ -87,6 +91,8 @@ jobs:
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Install backend + test dependencies
         run: uv sync --frozen --group test
@@ -94,8 +100,24 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Get Playwright version
+        id: pw
+        run: echo "version=$(uv run --frozen --group test python -c 'import playwright; print(playwright.__version__)')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
       - name: Install Playwright browser
+        if: steps.pw-cache.outputs.cache-hit != 'true'
         run: uv run --frozen --group test playwright install --with-deps chromium
+
+      - name: Install Playwright OS dependencies
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: uv run --frozen --group test playwright install-deps chromium
 
       - name: Build frontend
         run: npm run build -w frontend
