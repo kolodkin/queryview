@@ -150,6 +150,26 @@ def test_a_database_switch_refreshes_param_options(seeded_test_db, page: Page) -
     expect(sel.locator("option").first).to_have_text("system")
 
 
+def test_a_database_switch_reruns_with_the_new_database_param_options(seeded_test_db, page: Page) -> None:
+    """The re-run a database switch triggers substitutes `options_sql` values
+    resolved on the new database, not the ones the old database produced."""
+    connect_clickhouse_test_db(page)
+    open_query_panel(page)
+    author_params_yaml(
+        page,
+        "by-database-run",
+        "SELECT {db} AS picked",
+        "params:\n  - name: db\n    options_sql: SELECT currentDatabase()\n",
+    )
+    page.get_by_test_id("query-run").click()
+    output = page.get_by_test_id("query-output")
+    expect(output).to_contain_text(CH_DB)
+
+    _switch_database_from_pill(page, "system")
+    expect(output).to_contain_text("system")
+    expect(output).not_to_contain_text(CH_DB)
+
+
 def test_a_database_switched_elsewhere_reaches_the_tab_on_its_heartbeat(
     seeded_test_db, page: Page, base_url: str
 ) -> None:

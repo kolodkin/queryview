@@ -41,10 +41,10 @@ type PendingPatch = SessionPatch & { ui?: Record<string, Record<string, unknown>
 let state: SessionState | null = null
 // Another tab took this session: stop writing to it until the user picks one.
 let taken = false
-// The heartbeat in flight, if any. A switch waits it out, and no beat starts
-// mid-switch: a beat carrying the old id would claim it back.
+// The heartbeat in flight, if any, and the switches in flight that hold the
+// next one off (withoutHeartbeat).
 let beating: Promise<void> | null = null
-let switching = false
+let holds = 0
 let pending: PendingPatch = {}
 let timer: ReturnType<typeof setTimeout> | undefined
 // Subscribers to every row the mirror adopts, whatever brought it.
@@ -139,7 +139,7 @@ export function startHeartbeat(events: HeartbeatEvents): () => void {
     }
   }
   const beat = async () => {
-    if (taken || beating || switching) return
+    if (taken || beating || holds > 0) return
     last = Date.now()
     beating = run().finally(() => {
       beating = null
@@ -209,6 +209,20 @@ export async function flushPatches(): Promise<void> {
   }
 }
 
+// Runs a switch of session, connection or database with no heartbeat
+// overlapping it: the beat in flight lands first, none starts until `f`
+// settles. A beat straddling the switch would adopt the row from before it —
+// claiming the old session back, or handing the shell the old database.
+export async function withoutHeartbeat<T>(f: () => Promise<T>): Promise<T> {
+  holds++
+  try {
+    await beating
+    return await f()
+  } finally {
+    holds--
+  }
+}
+
 export function viewState(view: string): Record<string, unknown> {
   return state?.ui?.[view] ?? {}
 }
@@ -239,10 +253,8 @@ export async function listSessions(): Promise<SessionSummary[]> {
 // id === null asks for a brand-new session. Returns null when the target is
 // open in another tab, which the switcher reports rather than stealing it —
 // unless `force` takes it over (the other tab then finds it taken).
-export async function selectSession(id: string | null, force = false): Promise<SessionState | null> {
-  switching = true
-  try {
-    await beating
+export function selectSession(id: string | null, force = false): Promise<SessionState | null> {
+  return withoutHeartbeat(async () => {
     await flushPatches()
     const res = await apiFetch('/api/sessions/select', {
       method: 'POST',
@@ -253,9 +265,7 @@ export async function selectSession(id: string | null, force = false): Promise<S
     if (!data.ok) return null
     taken = false
     return adopt(data.session as SessionState)
-  } finally {
-    switching = false
-  }
+  })
 }
 
 export async function removeSession(id: string): Promise<{ ok: boolean; message?: string }> {

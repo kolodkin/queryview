@@ -1,4 +1,5 @@
 import { apiFetch } from './api'
+import { withoutHeartbeat } from './session'
 
 // The active connection as reported by /api/session.
 
@@ -59,11 +60,14 @@ export async function openSaved(
   }
 }
 
-// Select this session's database; false when the switch failed.
-export async function selectDatabase(database: string): Promise<boolean> {
-  try {
-    return (await postJson('/api/db/database', { database })).ok
-  } catch {
-    return false
-  }
+// Select this session's database; false when the switch failed. Held off the
+// heartbeat, since the shell follows the row's database (withoutHeartbeat).
+export function selectDatabase(database: string): Promise<boolean> {
+  return withoutHeartbeat(async () => {
+    try {
+      return (await postJson('/api/db/database', { database })).ok
+    } catch {
+      return false
+    }
+  })
 }

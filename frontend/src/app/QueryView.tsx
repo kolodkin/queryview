@@ -100,6 +100,16 @@ function firstColumn(rows: QueryRows): string[] {
   return rows.data.map((r) => cellText(r[0]))
 }
 
+// Each param's value given its resolved choices: a still-valid selection stays,
+// anything else falls to the first choice.
+function seedParamValues(defs: ParamDef[], prev: Record<string, string>): Record<string, string> {
+  const next: Record<string, string> = {}
+  for (const d of defs) {
+    next[d.name] = d.options.includes(prev[d.name]) ? prev[d.name] : d.options[0]
+  }
+  return next
+}
+
 function QueryPanel({
   connectionType,
   runOn,
@@ -237,6 +247,9 @@ function QueryPanel({
   // param-prefixed) blocks the main query.
   const [sqlOptions, setSqlOptions] = useState<Record<string, string[]>>({})
   const [optionsError, setOptionsError] = useState<string | null>(null)
+  // The `runOn` the choices were resolved for: after a database switch they
+  // lag it until the re-fetch lands, and the switch's re-run (below) waits.
+  const [optionsFor, setOptionsFor] = useState<string | null | undefined>(undefined)
 
   // Resolve every `options_sql` param's choices via the panel's query endpoint;
   // cached until the specs change. A failed/empty result records a blocking error.
@@ -246,6 +259,7 @@ function QueryPanel({
       /* eslint-disable react-hooks/set-state-in-effect */
       setSqlOptions({})
       setOptionsError(null)
+      setOptionsFor(runOn)
       /* eslint-enable react-hooks/set-state-in-effect */
       return
     }
@@ -283,6 +297,7 @@ function QueryPanel({
       }
       setSqlOptions(resolved)
       setOptionsError(err)
+      setOptionsFor(runOn)
     })()
     return () => {
       cancelled = true
@@ -314,13 +329,7 @@ function QueryPanel({
   // Re-runs when the resolved defs change, without clobbering live picks.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setParamValues((prev) => {
-      const next: Record<string, string> = {}
-      for (const d of paramDefs) {
-        next[d.name] = d.options.includes(prev[d.name]) ? prev[d.name] : d.options[0]
-      }
-      return next
-    })
+    setParamValues((prev) => seedParamValues(paramDefs, prev))
   }, [paramDefs])
 
   // Returns the fetched list (not just the state setter) so a caller that needs
@@ -468,14 +477,26 @@ function QueryPanel({
   // The session's database changed under the results: re-run the query that
   // produced them (not the editor, which may hold an unrun edit) from the first
   // page, so they never describe a database the pill no longer shows. An empty
-  // panel has nothing to refresh.
+  // panel has nothing to refresh. The run waits for the `options_sql` choices
+  // of the new database and substitutes those, seeded as the dropdowns are
+  // about to be (their state is a render behind). Choices that fail to resolve
+  // block it, as everywhere; the banner says why.
   const runOnSeen = useRef(runOn)
+  const rerunPending = useRef(false)
   useEffect(() => {
-    if (runOnSeen.current === runOn) return
-    runOnSeen.current = runOn
-    if (lastOk) void runWith(lastOk.query, limit, 0, orderBy, { runFor: lastOk.name })
+    if (runOnSeen.current !== runOn) {
+      runOnSeen.current = runOn
+      rerunPending.current = lastOk !== null
+    }
+    if (!rerunPending.current || optionsFor !== runOn) return
+    rerunPending.current = false
+    if (!optionsReady || !lastOk) return
+    void runWith(lastOk.query, limit, 0, orderBy, {
+      runFor: lastOk.name,
+      paramOverride: seedParamValues(paramDefs, paramValues),
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runOn])
+  }, [runOn, optionsFor, optionsReady, paramDefs])
 
   async function downloadCsv() {
     setBusy(true)

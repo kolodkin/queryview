@@ -243,6 +243,8 @@ doubled — write the placeholder where a value goes, no quotes of your own. A
 appears in the query is harmless.
 
 **Changing a dropdown re-runs the query immediately** (resetting to offset 0).
+A database switch re-runs it too, once the `options_sql` choices have been
+resolved on the new database, with those values.
 Substitution applies everywhere the query runs — **Execute**, **Previous** /
 **Next**, **Fields** (`DESCRIBE`), and **Download CSV**. The first option is the
 default.

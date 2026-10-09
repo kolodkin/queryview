@@ -279,6 +279,53 @@ describe('startHeartbeat', () => {
     stop()
   })
 
+  it('makes a database switch wait out a beat in flight and holds the next one', async () => {
+    const { attachSession, startHeartbeat, onSessionRow } = await import('./session')
+    const { selectDatabase } = await import('./connection')
+    await attachSession()
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn() })
+    const onRow = vi.fn()
+    onSessionRow(onRow)
+    // A beat that read the row before the switch: it must land before the
+    // switch starts, never after it, or the shell would follow its stale database.
+    let answerBeat!: () => void
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerBeat = () =>
+            resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: { ...SESSION, database: 'old' } }) })
+        }),
+    )
+    await vi.advanceTimersByTimeAsync(10_000)
+    let answerSwitch!: () => void
+    fetchMock.mockImplementation((url: string) =>
+      String(url).includes('/api/db/database')
+        ? new Promise((resolve) => {
+            answerSwitch = () => resolve({ ok: true, status: 200, json: async () => ({ ok: true }) })
+          })
+        : Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) }),
+    )
+
+    const switched = selectDatabase('new')
+    await vi.advanceTimersByTimeAsync(0)
+    const urls = () => fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls().some((u) => u.includes('/api/db/database'))).toBe(false)
+
+    answerBeat()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onRow).toHaveBeenCalledWith(expect.objectContaining({ database: 'old' }))
+    expect(urls().at(-1)).toContain('/api/db/database')
+    // No beat starts while the switch is in flight, however long it takes.
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(urls().filter((u) => u.includes('/attach'))).toHaveLength(2)
+
+    answerSwitch()
+    expect(await switched).toBe(true)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(urls().filter((u) => u.includes('/attach'))).toHaveLength(3)
+    stop()
+  })
+
   it('hands a different session to onChanged', async () => {
     const { attachSession, startHeartbeat } = await import('./session')
     await attachSession()
