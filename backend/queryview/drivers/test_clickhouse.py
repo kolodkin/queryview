@@ -5,6 +5,9 @@ config round-trip, and validation are covered by test_driver_contract."""
 from __future__ import annotations
 
 import asyncio
+import json
+
+import pytest
 
 from queryview.drivers.base import Column
 from queryview.drivers.clickhouse import ChConfig, ClickHouseDriver
@@ -75,19 +78,30 @@ def test_export_csv_requests_csv_with_names(monkeypatch):
     assert seen["query"] == "SELECT * FROM (\nSELECT 1\n) LIMIT 5 OFFSET 0"
 
 
+def _json_compact(names, rows):
+    meta = ",".join(f'{{"name":"{n}","type":"String"}}' for n in names)
+    return json.dumps({"meta": json.loads(f"[{meta}]"), "data": rows, "rows": len(rows)})
+
+
+def test_list_databases_reads_json_compact_rows(monkeypatch):
+    d = ClickHouseDriver()
+    seen = {}
+    _capture(monkeypatch, seen, _json_compact(["name"], [["db1"], ["db2"]]))
+    ok, dbs = asyncio.run(d.list_databases(ChConfig("h", 1, "u", "")))
+    assert ok and dbs == ["db1", "db2"]
+    assert seen["query"] == "SHOW DATABASES" and seen["fmt"] == "JSONCompact"
+
+
 def test_list_tables_parses_rows_and_bytes_with_nulls(monkeypatch):
     d = ClickHouseDriver()
     seen = {}
-
-    async def fake_ch_query(c, query, database=None, fmt=None):
-        from queryview.drivers.clickhouse import ChResult
-
-        seen["query"] = query
-        seen["database"] = database
-        # A MergeTree table with stats and a view (\N for both counters).
-        return ChResult(True, "items\t3\t245\nv_items\t\\N\t\\N")
-
-    monkeypatch.setattr("queryview.drivers.clickhouse.ch_query", fake_ch_query)
+    # A MergeTree table with stats (UInt64 counters arrive quoted) and a view
+    # (NULL for both counters).
+    _capture(
+        monkeypatch,
+        seen,
+        _json_compact(["name", "total_rows", "total_bytes"], [["items", "3", "245"], ["v_items", None, None]]),
+    )
     ok, tables = asyncio.run(d.list_tables(ChConfig("h", 1, "u", ""), "db"))
     assert ok and tables == [
         {"name": "items", "rows": 3, "bytes": 245},
@@ -95,15 +109,39 @@ def test_list_tables_parses_rows_and_bytes_with_nulls(monkeypatch):
     ]
     assert "system.tables" in seen["query"]
     assert seen["database"] == "db"
+    assert seen["fmt"] == "JSONCompact"
 
 
-def test_describe_query_unescapes_multiline_types(monkeypatch):
-    # DESCRIBE pretty-prints named tuples across lines; TabSeparated escapes
-    # the newlines, and a type must come back as ClickHouse wrote it.
+def test_describe_query_keeps_multiline_types(monkeypatch):
+    # DESCRIBE pretty-prints named tuples across lines; a type must come back
+    # as ClickHouse wrote it, which JSON decoding gives for free.
     d = ClickHouseDriver()
-    _capture(monkeypatch, {}, "tags\tArray(Tuple(\\n    id Int32,\\n    name String))\nnote\tString\n")
+    _capture(
+        monkeypatch,
+        {},
+        _json_compact(
+            ["name", "type", "default_type"],
+            [["tags", "Array(Tuple(\n    id Int32,\n    name String))", ""], ["note", "String", ""]],
+        ),
+    )
     ok, cols = asyncio.run(d.describe_query(ChConfig("h", 1, "u", ""), "SELECT 1", "db"))
     assert ok and cols == [
         {"name": "tags", "type": "Array(Tuple(\n    id Int32,\n    name String))"},
         {"name": "note", "type": "String"},
     ]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "not json",
+        _json_compact(["name"], [["only_one_column"]]),  # fewer columns than DESCRIBE selects
+        _json_compact(["name", "type"], [["x"]]),  # a row shorter than meta
+        _json_compact(["name", "type"], ["xy"]),  # a row that isn't a list
+    ],
+)
+def test_describe_query_rejects_unexpected_bodies(monkeypatch, body):
+    d = ClickHouseDriver()
+    _capture(monkeypatch, {}, body)
+    ok, err = asyncio.run(d.describe_query(ChConfig("h", 1, "u", ""), "SELECT 1", "db"))
+    assert ok is False and "JSON" in err

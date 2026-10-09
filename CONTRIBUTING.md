@@ -108,6 +108,8 @@ To test a server you started yourself (e.g. `npm run dev`, or a built preview),
 point at it with `BASE_URL=http://localhost:5173 uv run --group test pytest e2e`;
 workers then share that one server, so run it serially. To run the full suite
 against real ClickHouse and Postgres the way CI does, use `scripts/setup.sh`.
+It installs and starts throwaway servers under `.cache/`, so it refuses to run
+outside the Claude Code web environment unless `CLAUDEAI_ALLOW_LOCAL=1` is set.
 
 ## Lint & type-check
 

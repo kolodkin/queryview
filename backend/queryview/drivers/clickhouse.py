@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import asdict, dataclass
 from typing import Any, NamedTuple
 
@@ -75,24 +74,29 @@ def parse_ch_config(body: Any) -> tuple[ChConfig | None, str | None]:
     return ChConfig(**fields), None
 
 
-# TabSeparated escapes; `\N` (NULL) is left for callers to recognize.
-_TSV_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "b": "\b", "f": "\f", "\\": "\\", "'": "'"}
-_TSV_ESCAPE = re.compile(r"\\(.)")
-
-
-def _tsv_unescape(field: str) -> str:
-    return _TSV_ESCAPE.sub(lambda m: _TSV_ESCAPES.get(m[1], m[0]), field)
-
-
-def _tsv_rows(text: str, min_cols: int):
-    """Unescaped rows of a TabSeparated result: blank lines and rows with fewer
-    than `min_cols` columns are skipped."""
-    for line in text.split("\n"):
-        if not line.strip():
-            continue
-        cols = line.split("\t")
-        if len(cols) >= min_cols:
-            yield [_tsv_unescape(c) for c in cols]
+async def ch_json(
+    c: ChConfig,
+    query: str,
+    database: str | None = None,
+    settings: dict[str, str] | None = None,
+    cols: int = 0,
+) -> QueryRows | str:
+    """A query's JSONCompact result (values decoded: NULL as None, 64-bit
+    integers as strings, a pretty-printed type keeps its newlines), or an error
+    message. Every row has one cell per `meta` column and at least `cols` cells,
+    so callers can index the columns they selected."""
+    r = await ch_query(c, query, database=database, fmt="JSONCompact", settings=settings)
+    if not r.ok:
+        return r.value
+    try:
+        doc = json.loads(r.value)
+        meta = [Column(str(m["name"]), str(m["type"])) for m in doc["meta"]]
+        data = [list(row) for row in doc["data"] if isinstance(row, list)]
+        if len(data) != len(doc["data"]) or len(meta) < cols or any(len(row) != len(meta) for row in data):
+            raise ValueError("rows don't match meta")
+    except (ValueError, KeyError, TypeError) as err:
+        return f"unexpected JSON from ClickHouse: {err}"
+    return QueryRows(meta, data)
 
 
 class ClickHouseDriver:
@@ -116,29 +120,29 @@ class ClickHouseDriver:
         return {"ok": False, "message": r.value}
 
     async def list_databases(self, config: ChConfig) -> tuple[bool, list[str] | str]:
-        r = await ch_query(config, "SHOW DATABASES")
-        if not r.ok:
-            return False, r.value
-        return True, [s.strip() for s in r.value.split("\n") if s.strip()]
+        res = await ch_json(config, "SHOW DATABASES", cols=1)
+        if isinstance(res, str):
+            return False, res
+        return True, [row[0] for row in res.data]
 
     async def list_tables(self, config: ChConfig, database: str | None) -> tuple[bool, list[dict[str, Any]] | str]:
         # Same set SHOW TABLES yields, plus the engine's stored row/byte counts
-        # (NULL — serialized as \N — for views and engines that don't track them).
-        r = await ch_query(
+        # (NULL for views and engines that don't track them).
+        res = await ch_json(
             config,
             "SELECT name, total_rows, total_bytes FROM system.tables WHERE database = currentDatabase() ORDER BY name",
             database=database,
-            fmt="TabSeparated",
+            cols=3,
         )
-        if not r.ok:
-            return False, r.value
+        if isinstance(res, str):
+            return False, res
         return True, [
             {
-                "name": cols[0],
-                "rows": None if cols[1] == "\\N" else int(cols[1]),
-                "bytes": None if cols[2] == "\\N" else int(cols[2]),
+                "name": row[0],
+                "rows": None if row[1] is None else int(row[1]),
+                "bytes": None if row[2] is None else int(row[2]),
             }
-            for cols in _tsv_rows(r.value, 3)
+            for row in res.data
         ]
 
     async def run_query(
@@ -152,16 +156,10 @@ class ClickHouseDriver:
     ) -> QueryResult:
         order_clause = build_order_by(order_by, "`")
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias=None)
-        r = await ch_query(config, paginated, database=database, fmt="JSONCompact", settings=JSON_COMPACT_SETTINGS)
-        if not r.ok:
-            return QueryResult(False, None, r.value)
-        try:
-            doc = json.loads(r.value)
-            meta = [Column(str(m["name"]), str(m["type"])) for m in doc["meta"]]
-            data = [list(row) for row in doc["data"]]
-        except (ValueError, KeyError, TypeError) as err:
-            return QueryResult(False, None, f"unexpected JSON from ClickHouse: {err}")
-        return QueryResult(True, QueryRows(meta, data))
+        res = await ch_json(config, paginated, database=database, settings=JSON_COMPACT_SETTINGS)
+        if isinstance(res, str):
+            return QueryResult(False, None, res)
+        return QueryResult(True, res)
 
     async def export_csv(
         self,
@@ -181,7 +179,7 @@ class ClickHouseDriver:
         self, config: ChConfig, sql: str, database: str | None
     ) -> tuple[bool, list[dict[str, str]] | str]:
         inner = sql.rstrip().rstrip(";")
-        r = await ch_query(config, f"DESCRIBE (\n{inner}\n)", database=database, fmt="TabSeparated")
-        if not r.ok:
-            return False, r.value
-        return True, [{"name": cols[0], "type": cols[1]} for cols in _tsv_rows(r.value, 2)]
+        res = await ch_json(config, f"DESCRIBE (\n{inner}\n)", database=database, cols=2)
+        if isinstance(res, str):
+            return False, res
+        return True, [{"name": row[0], "type": row[1]} for row in res.data]

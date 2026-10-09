@@ -1,3 +1,5 @@
+import re
+
 from conftest import connect_clickhouse_test_db, open_query_panel
 from playwright.sync_api import Page, expect
 
@@ -474,9 +476,8 @@ def test_a_native_map_cell_is_labelled_by_its_column_type(seeded_test_db, page: 
 
 
 def test_field_menu_keeps_names_beside_long_types(seeded_test_db, page: Page) -> None:
-    """A named Tuple's type runs long and DESCRIBE spreads it over lines: the
-    Fields menu still shows the column's name, and the type arrives with real
-    newlines rather than TabSeparated's escaped `\\n`."""
+    """DESCRIBE spreads a named Tuple's long type over lines: the Fields menu
+    still shows the column's name, and the type keeps its real newlines."""
     _open_query_panel(page)
     page.get_by_test_id("query-input").fill(
         "SELECT 1 AS id, CAST([('d1', 'v1', 'repo', 42)], "
@@ -488,5 +489,5 @@ def test_field_menu_keeps_names_beside_long_types(seeded_test_db, page: Page) ->
 
     row = page.locator('[data-testid="field-toggle"][data-col="artifacts"]')
     expect(row.get_by_text("artifacts", exact=True)).to_be_visible()
-    title = row.get_attribute("title") or ""
-    assert "\n" in title and "\\n" not in title, title
+    expect(row).to_have_attribute("title", re.compile(r"\n"))
+    expect(row).not_to_have_attribute("title", re.compile(r"\\n"))
