@@ -1,5 +1,5 @@
 """The Queries page (`/sql`): a flat SQL textbox that runs a `;`-separated
-script as written — writes included — a log line per statement and, when the
+script as written — writes included — leaving one status line and, when the
 last statement returned rows, a results table and an Open-in-QueryView button,
 parameterized across every driver (same seeds as test_drivers)."""
 
@@ -44,13 +44,11 @@ def test_run_all_writes_and_shows_the_last_select(case: DriverCase, request, pag
     shot(f"{case.id} script typed")
     page.get_by_test_id("sql-run-all").click()
 
-    # One log line per statement; DDL/DML carry a status, the SELECT its count.
-    results = page.get_by_test_id("sql-result")
-    expect(results).to_have_count(3)
-    expect(results.nth(0)).to_contain_text("CREATE TABLE")
-    expect(results.nth(0).get_by_test_id("sql-result-status")).to_contain_text("ms")
-    expect(results.nth(1).get_by_test_id("sql-result-status")).to_contain_text("ms")
-    expect(results.nth(2).get_by_test_id("sql-result-status")).to_contain_text("2 rows")
+    # One status line for the run: how much ran, what the last statement left.
+    status = page.get_by_test_id("sql-status")
+    expect(status).to_contain_text("3 statements")
+    expect(status).to_contain_text("2 rows")
+    expect(status).to_contain_text("ms")
     # The last statement returned rows: they're the table below the textbox.
     output = page.get_by_test_id("sql-output")
     expect(output.locator("table thead th")).to_contain_text(["id", "name"])
@@ -73,8 +71,8 @@ def test_run_all_writes_and_shows_the_last_select(case: DriverCase, request, pag
     textarea.press("Control+End")
     textarea.type(f";\nDROP TABLE {table}")
     page.get_by_test_id("sql-run-current").click()
-    expect(results).to_have_count(1)
-    expect(results.nth(0)).to_contain_text("DROP TABLE")
+    expect(status).not_to_contain_text("statements")
+    expect(status).to_contain_text("ms")
     expect(page.get_by_test_id("sql-output")).to_have_count(0)
 
 
@@ -85,10 +83,12 @@ def test_run_all_stops_at_the_first_failing_statement(seeded_duckdb, page: Page,
     page.get_by_test_id("sql-input").fill("SELECT 1 AS a; SELECT * FROM no_such_table; SELECT 2 AS b")
     page.get_by_test_id("sql-input").press("ControlOrMeta+Shift+Enter")
 
-    results = page.get_by_test_id("sql-result")
-    expect(results).to_have_count(2)
-    expect(results.nth(0).get_by_test_id("sql-result-status")).to_contain_text("1 row")
-    expect(results.nth(1).get_by_test_id("sql-result-error")).to_contain_text("no_such_table")
+    # The second statement failed: the line says which, why, and shows it.
+    status = page.get_by_test_id("sql-status")
+    expect(status).to_have_attribute("data-ok", "false")
+    expect(status).to_contain_text("Statement 2 failed")
+    expect(status).to_contain_text("no_such_table")
+    expect(status).to_contain_text("SELECT * FROM no_such_table")
     # The last statement run failed, so there is no table to show.
     expect(page.get_by_test_id("sql-output")).to_have_count(0)
     expect(page.get_by_test_id("sql-open-queryview")).to_be_disabled()
@@ -104,16 +104,14 @@ def test_run_current_runs_the_statement_under_the_cursor(seeded_duckdb, page: Pa
     # Put the cursor inside the last statement and run it alone.
     textarea.evaluate("el => el.setSelectionRange(el.value.length - 3, el.value.length - 3)")
     textarea.press("ControlOrMeta+Enter")
-    results = page.get_by_test_id("sql-result")
-    expect(results).to_have_count(1)
-    expect(results.nth(0)).to_contain_text("SELECT 2 AS b")
+    status = page.get_by_test_id("sql-status")
+    expect(status).to_contain_text("1 row")
     expect(page.get_by_test_id("sql-output").locator("table thead th")).to_contain_text(["b"])
 
     # A selection wins over the cursor.
     textarea.evaluate("el => el.setSelectionRange(0, el.value.indexOf(';'))")
     page.get_by_test_id("sql-run-current").click()
-    expect(results).to_have_count(1)
-    expect(results.nth(0)).to_contain_text("SELECT 1 AS a")
+    expect(page.get_by_test_id("sql-output").locator("table thead th")).to_contain_text(["a"])
 
 
 def test_sql_text_is_remembered_and_results_are_not(seeded_duckdb, page: Page) -> None:
@@ -124,9 +122,10 @@ def test_sql_text_is_remembered_and_results_are_not(seeded_duckdb, page: Page) -
     textarea = page.get_by_test_id("sql-input")
     textarea.fill(script)
     page.get_by_test_id("sql-run-all").click()
-    expect(page.get_by_test_id("sql-result")).to_have_count(2)
+    expect(page.get_by_test_id("sql-status")).to_contain_text("2 statements")
 
     textarea.blur()
     page.reload(wait_until="networkidle")
     expect(page.get_by_test_id("sql-input")).to_have_value(script)
-    expect(page.get_by_test_id("sql-result")).to_have_count(0)
+    expect(page.get_by_test_id("sql-status")).to_have_count(0)
+    expect(page.get_by_test_id("sql-output")).to_have_count(0)

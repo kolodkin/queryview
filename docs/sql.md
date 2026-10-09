@@ -20,10 +20,7 @@ Before a database is selected the page redirects to Connect, like QueryView.
 │ │ SELECT * FROM t|                                      │ │
 │ └───────────────────────────────────────────────────────┘ │
 │ [▶ Run] [▶▶ Run all] [Open in QueryView]                  │
-│ ┌ CREATE TABLE t (id INTEGER)            OK · 3 ms ─────┐ │  ← a log line
-│ ├ INSERT INTO t VALUES (1), (2)          INSERT 0 2 · 1 ms │     per statement
-│ ├ SELECT * FROM t                        2 rows · 2 ms ──┤ │
-│ └───────────────────────────────────────────────────────┘ │
+│ 3 statements · 2 rows · 6 ms                              │  ← the status line
 │ ┌───────────────────────────────────────────────────────┐ │
 │ │ id                                                    │ │  ← the last
 │ │ 1                                                     │ │     statement's rows
@@ -38,8 +35,10 @@ Before a database is selected the page redirects to Connect, like QueryView.
   text contains it; just past a `;` on the same line still counts as that
   statement, a blank line below belongs to the next one.
 - **▶▶ Run all** (**Ctrl/⌘+Shift+Enter**) — runs the whole script.
-- **Log** — one line per statement that ran, in order: the statement (full text
-  on hover) and a summary. A failed statement's line is red.
+- **Status line** — one line per run, nothing more: the statements are already
+  in the textbox. `2 rows · 2 ms` for a single statement; `3 statements ·
+  2 rows · 6 ms` for a script (what the last one left, total time). A failed run
+  shows in red which statement failed, the error, and a snippet of it.
 - **Results table** — the rows of the **last statement run**, when it returned
   any (the same grid as QueryView and the explorer, with the cell popup for
   long values). A run whose last statement was DDL, DML or a failure shows no
@@ -56,18 +55,20 @@ comments; blank statements are dropped. An unterminated quote keeps the rest of
 the script in one statement, so the database reports the real syntax error.
 
 Statements run **in order on one connection** and **stop at the first
-failure**: the failing statement's log line shows the error in red, and anything
-after it is not run. Nothing is rolled back — a statement that succeeded before
+failure**: the status line names it in red, and anything after it is not run. Nothing is rolled back — a statement that succeeded before
 the failure stays applied (write `BEGIN; …; COMMIT;` yourself on a driver that
 supports it).
 
-## What a log line shows
+## What the status line shows
 
-| Statement | Summary |
+| Last statement run | Status line |
 | --- | --- |
-| Returned rows | `N rows · T ms`; when the result was cut at **100 rows**, `first 100 rows, more exist · T ms` |
-| No rows (DDL, DML) | the driver's own status — ClickHouse `OK`, Postgres's command tag (`INSERT 0 3`), DuckDB `OK` — `· T ms` |
-| Failed | the driver's error message |
+| Returned rows | `N rows`; when the result was cut at **100 rows**, `first 100 rows, more exist` |
+| No rows (DDL, DML) | the driver's own status — ClickHouse `OK`, Postgres's command tag (`INSERT 0 3`), DuckDB `OK` |
+| Failed | `Statement k failed: <the driver's error> — <the statement>` |
+
+A single statement's line ends with its time; a script's starts with how many
+statements ran and ends with the total.
 
 The 100-row cap is there because the page has no pagination: a bare
 `SELECT *` must not pull a whole table into the browser. Page it with your own
@@ -91,8 +92,8 @@ quoted strings and collections render with their default views.
 
 ## Session
 
-The textbox's text is session state — a reload brings it back — but the log and
-the table are not, like every other view ([session.md](./session.md)); a reload
+The textbox's text is session state — a reload brings it back — but the status line
+and the table are not, like every other view ([session.md](./session.md)); a reload
 never re-runs a script. Switching database clears them (the rows came from
 somewhere else now) and keeps the text. **Open in QueryView** writes the
 statement into the query panel's own session state, which is how QueryView

@@ -76,13 +76,34 @@ export function statementAt(text: string, cursor: number): string {
   return text.slice(pick.start, pick.end)
 }
 
+// What a successful statement left: its row count, or the driver's status.
+function rowsOrStatus(r: StatementResult): string {
+  if (r.data === null) return r.status || 'OK'
+  if (r.truncated) return `first ${r.data.length} rows, more exist`
+  return `${r.data.length} ${r.data.length === 1 ? 'row' : 'rows'}`
+}
+
 export function resultSummary(r: StatementResult): string {
   if (!r.ok) return r.message || 'failed'
-  const what =
-    r.data !== null
-      ? r.truncated
-        ? `first ${r.data.length} rows, more exist`
-        : `${r.data.length} ${r.data.length === 1 ? 'row' : 'rows'}`
-      : r.status || 'OK'
-  return `${what} · ${r.elapsed_ms} ms`
+  return `${rowsOrStatus(r)} · ${r.elapsed_ms} ms`
+}
+
+// The one status line a run leaves under the buttons. The statements are
+// already in the textbox, so a run that worked says only how much ran and what
+// the last statement left; a run that failed says which statement, why, and
+// enough of it to find it.
+export function runSummary(results: StatementResult[]): { ok: boolean; text: string } {
+  if (results.length === 0) return { ok: true, text: 'Nothing to run' }
+  const last = results[results.length - 1]
+  if (!last.ok) {
+    const snippet = last.sql.replace(/\s+/g, ' ').trim()
+    const short = snippet.length > 80 ? `${snippet.slice(0, 80)}…` : snippet
+    return {
+      ok: false,
+      text: `Statement ${results.length} failed: ${last.message || 'failed'} — ${short}`,
+    }
+  }
+  if (results.length === 1) return { ok: true, text: resultSummary(last) }
+  const total = results.reduce((ms, r) => ms + r.elapsed_ms, 0)
+  return { ok: true, text: `${results.length} statements · ${rowsOrStatus(last)} · ${total} ms` }
 }

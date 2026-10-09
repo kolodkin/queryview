@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { resultSummary, statementAt, type StatementResult } from './sqlScript'
+import { resultSummary, runSummary, statementAt, type StatementResult } from './sqlScript'
 
 const base: StatementResult = {
   ok: true,
@@ -47,5 +47,33 @@ describe('resultSummary', () => {
   })
   it('shows the error for a failed statement', () => {
     expect(resultSummary({ ...base, ok: false, meta: null, message: 'boom' })).toBe('boom')
+  })
+})
+
+describe('runSummary', () => {
+  it('is the statement summary for a single statement', () => {
+    expect(runSummary([{ ...base, data: [[1], [2]], elapsed_ms: 2 }])).toEqual({ ok: true, text: '2 rows · 2 ms' })
+  })
+  it('counts the statements and the total time, with the last rows', () => {
+    const run = [
+      { ...base, meta: null, status: 'OK', elapsed_ms: 3 },
+      { ...base, meta: null, status: 'INSERT 0 2', elapsed_ms: 1 },
+      { ...base, data: [[1], [2]], elapsed_ms: 2 },
+    ]
+    expect(runSummary(run)).toEqual({ ok: true, text: '3 statements · 2 rows · 6 ms' })
+    expect(runSummary(run.slice(0, 2))).toEqual({ ok: true, text: '2 statements · INSERT 0 2 · 4 ms' })
+  })
+  it('names the failing statement, its error and a snippet of it', () => {
+    const run = [
+      { ...base, meta: null, status: 'OK', elapsed_ms: 3 },
+      { ...base, ok: false, meta: null, message: 'no such table', sql: 'SELECT *\n  FROM nope' },
+    ]
+    expect(runSummary(run)).toEqual({
+      ok: false,
+      text: 'Statement 2 failed: no such table — SELECT * FROM nope',
+    })
+  })
+  it('handles an empty run', () => {
+    expect(runSummary([])).toEqual({ ok: true, text: 'Nothing to run' })
   })
 })

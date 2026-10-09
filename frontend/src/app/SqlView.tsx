@@ -5,14 +5,14 @@ import { ResultsTable, columnNames, columnTypes, type QueryRows } from '../core'
 import { apiFetch } from './api'
 import { Spinner } from './controls/Spinner'
 import { flushPatches, patchView, viewState } from './session'
-import { resultSummary, statementAt, type StatementResult } from './sqlScript'
+import { runSummary, statementAt, type StatementResult } from './sqlScript'
 
 // The Queries page (`/sql`), mounted by the App shell only for a ready
 // connection: one flat SQL textbox whose `;`-separated statements run as
 // written — writes and DDL included, no pagination, nothing saved. Run runs
 // the statement under the cursor (or the selection), Run all the whole script.
-// Every statement gets a log line; the last one's rows, if any, are the table
-// below, and Open in QueryView carries that statement over (docs/sql.md).
+// A run leaves one status line; the last statement's rows, if any, are the
+// table below, and Open in QueryView carries that statement over (docs/sql.md).
 function SqlView({ runOn }: { runOn?: string | null }) {
   const navigate = useNavigate()
   // The text is restored from the session; results never are (docs/session.md).
@@ -95,6 +95,7 @@ function SqlView({ runOn }: { runOn?: string | null }) {
     () => (last && last.ok && last.meta && last.data ? { meta: last.meta, data: last.data } : null),
     [last],
   )
+  const summary = useMemo(() => runSummary(results ?? []), [results])
   const columns = useMemo(() => (lastRows ? columnNames(lastRows) : []), [lastRows])
   const types = useMemo(() => (lastRows ? columnTypes(lastRows) : {}), [lastRows])
   const shownIdx = useMemo(() => columns.map((_, i) => i), [columns])
@@ -176,38 +177,13 @@ function SqlView({ runOn }: { runOn?: string | null }) {
           </p>
         )}
         {results !== null && (
-          <ol data-testid="sql-results" className="flex flex-col gap-1">
-            {results.map((r, i) => (
-              <li
-                key={i}
-                data-testid="sql-result"
-                data-ok={r.ok}
-                className={`flex flex-wrap items-baseline gap-x-3 rounded-lg border px-3 py-1.5 ${
-                  r.ok ? 'border-white/10 bg-white/[0.02]' : 'border-red-400/40 bg-red-500/5'
-                }`}
-              >
-                <code
-                  data-testid="sql-result-sql"
-                  title={r.sql}
-                  className="min-w-0 max-w-full truncate font-mono text-xs text-slate-300"
-                >
-                  {r.sql.replace(/\s+/g, ' ')}
-                </code>
-                {r.ok ? (
-                  <span
-                    data-testid="sql-result-status"
-                    className="shrink-0 text-xs text-slate-400"
-                  >
-                    {resultSummary(r)}
-                  </span>
-                ) : (
-                  <span data-testid="sql-result-error" className="text-sm text-red-300">
-                    {resultSummary(r)}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ol>
+          <p
+            data-testid="sql-status"
+            data-ok={summary.ok}
+            className={`text-sm ${summary.ok ? 'text-slate-400' : 'text-red-300'}`}
+          >
+            {summary.text}
+          </p>
         )}
         {lastRows && (
           <ResultsTable
