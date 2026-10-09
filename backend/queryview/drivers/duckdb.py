@@ -4,12 +4,25 @@ library is driven in a worker thread so the event loop is never blocked."""
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
 import duckdb
 
-from .base import Column, QueryResult, QueryRows, TextResult, build_order_by, to_csv, to_json_value, wrap_paginated
+from .base import (
+    Column,
+    QueryResult,
+    QueryRows,
+    StatementResult,
+    TextResult,
+    build_order_by,
+    cap_rows,
+    split_statements,
+    to_csv,
+    to_json_value,
+    wrap_paginated,
+)
 
 
 @dataclass(frozen=True)
@@ -175,3 +188,48 @@ class DuckDBDriver:
             return True, [{"name": r[0], "type": r[1]} for r in rows]
         except Exception as e:  # noqa: BLE001
             return False, str(e)
+
+    async def execute_script(self, config: DuckConfig, sql: str, database: str | None) -> list[StatementResult]:
+        # Read-write, unlike every other open: this is the one path that writes.
+        def _work() -> list[StatementResult]:
+            results: list[StatementResult] = []
+            con = duckdb.connect(config.path)
+            try:
+                for stmt in split_statements(sql):
+                    started = time.monotonic()
+                    try:
+                        # sql() yields a relation for a row-returning statement
+                        # and None for DDL/DML, which it has already run.
+                        rel = con.sql(stmt)
+                        if rel is None:
+                            rows, truncated = None, False
+                        else:
+                            meta = [Column(name, str(t)) for name, t in zip(rel.columns, rel.types, strict=True)]
+                            data, truncated = cap_rows([[to_json_value(v) for v in row] for row in rel.fetchall()])
+                            rows = QueryRows(meta, data)
+                    except Exception as e:  # noqa: BLE001
+                        results.append(StatementResult(stmt, False, message=str(e), elapsed_ms=_ms(started)))
+                        break
+                    results.append(
+                        StatementResult(
+                            stmt,
+                            True,
+                            rows=rows,
+                            truncated=truncated,
+                            status="" if rows is not None else "OK",
+                            elapsed_ms=_ms(started),
+                        )
+                    )
+            finally:
+                con.close()
+            return results
+
+        try:
+            return await asyncio.to_thread(_work)
+        except Exception as e:  # noqa: BLE001
+            # The open itself failed: report it against the whole script.
+            return [StatementResult(sql, False, message=str(e))]
+
+
+def _ms(started: float) -> int:
+    return int((time.monotonic() - started) * 1000)

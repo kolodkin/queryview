@@ -3,12 +3,25 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import asdict, dataclass
 from typing import Any, NamedTuple
 
 import httpx
 
-from .base import Column, QueryResult, QueryRows, TextResult, build_order_by, parse_host_port_config, wrap_paginated
+from .base import (
+    SCRIPT_ROW_CAP,
+    Column,
+    QueryResult,
+    QueryRows,
+    StatementResult,
+    TextResult,
+    build_order_by,
+    cap_rows,
+    parse_host_port_config,
+    split_statements,
+    wrap_paginated,
+)
 
 CH_TIMEOUT_SECONDS = 5.0
 
@@ -43,18 +56,23 @@ async def ch_query(
     database: str | None = None,
     fmt: str | None = None,
     settings: dict[str, str] | None = None,
+    post: bool = False,
 ) -> ChResult:
     """Run a query against the ClickHouse HTTP interface (Basic auth, 5s timeout).
     `database` scopes the query; `fmt` appends a ClickHouse `FORMAT` clause;
-    `settings` are passed as URL parameters."""
+    `settings` are passed as URL parameters. A GET is read-only in ClickHouse,
+    so `post` sends the query as the request body for statements that write."""
     url = f"http://{c.host}:{c.port}/"
     q = f"{query}\nFORMAT {fmt}" if fmt else query
-    params = {"query": q, **(settings or {})}
+    params = {**(settings or {})}
     if database:
         params["database"] = database
     try:
         async with httpx.AsyncClient(timeout=CH_TIMEOUT_SECONDS) as client:
-            res = await client.get(url, params=params, auth=(c.username, c.password))
+            if post:
+                res = await client.post(url, params=params, content=q.encode(), auth=(c.username, c.password))
+            else:
+                res = await client.get(url, params={"query": q, **params}, auth=(c.username, c.password))
     except httpx.TimeoutException:
         return ChResult(False, "connection timed out")
     except httpx.HTTPError as err:
@@ -83,6 +101,23 @@ def _tsv_rows(text: str, min_cols: int):
         cols = line.split("\t")
         if len(cols) >= min_cols:
             yield cols
+
+
+# Script statements: JSONCompact unless the statement names its own FORMAT, and
+# the result stops filling past the row cap instead of failing (break may
+# overshoot by a block; cap_rows trims it).
+SCRIPT_SETTINGS = {
+    **JSON_COMPACT_SETTINGS,
+    "default_format": "JSONCompact",
+    "max_result_rows": str(SCRIPT_ROW_CAP + 1),
+    "result_overflow_mode": "break",
+}
+
+
+def _parse_json_compact(text: str) -> QueryRows:
+    doc = json.loads(text)
+    meta = [Column(str(m["name"]), str(m["type"])) for m in doc["meta"]]
+    return QueryRows(meta, [list(row) for row in doc["data"]])
 
 
 class ClickHouseDriver:
@@ -146,12 +181,10 @@ class ClickHouseDriver:
         if not r.ok:
             return QueryResult(False, None, r.value)
         try:
-            doc = json.loads(r.value)
-            meta = [Column(str(m["name"]), str(m["type"])) for m in doc["meta"]]
-            data = [list(row) for row in doc["data"]]
+            rows = _parse_json_compact(r.value)
         except (ValueError, KeyError, TypeError) as err:
             return QueryResult(False, None, f"unexpected JSON from ClickHouse: {err}")
-        return QueryResult(True, QueryRows(meta, data))
+        return QueryResult(True, rows)
 
     async def export_csv(
         self,
@@ -175,3 +208,28 @@ class ClickHouseDriver:
         if not r.ok:
             return False, r.value
         return True, [{"name": cols[0], "type": cols[1]} for cols in _tsv_rows(r.value, 2)]
+
+    async def execute_script(self, config: ChConfig, sql: str, database: str | None) -> list[StatementResult]:
+        results: list[StatementResult] = []
+        for stmt in split_statements(sql):
+            started = time.monotonic()
+            r = await ch_query(config, stmt, database=database, settings=SCRIPT_SETTINGS, post=True)
+            elapsed = int((time.monotonic() - started) * 1000)
+            if not r.ok:
+                results.append(StatementResult(stmt, False, message=r.value, elapsed_ms=elapsed))
+                break
+            if not r.value:
+                # DDL/DML: nothing comes back.
+                results.append(StatementResult(stmt, True, status="OK", elapsed_ms=elapsed))
+                continue
+            try:
+                rows = _parse_json_compact(r.value)
+            except (ValueError, KeyError, TypeError):
+                # The statement chose its own FORMAT: show its text as-is.
+                results.append(StatementResult(stmt, True, status=r.value, elapsed_ms=elapsed))
+                continue
+            data, truncated = cap_rows(rows.data)
+            results.append(
+                StatementResult(stmt, True, rows=QueryRows(rows.meta, data), truncated=truncated, elapsed_ms=elapsed)
+            )
+        return results

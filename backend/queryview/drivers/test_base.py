@@ -12,6 +12,7 @@ from queryview.drivers.base import (
     build_order_by,
     rows_to_columns,
     select_all_sql,
+    split_statements,
     to_csv,
     to_json_value,
     wrap_paginated,
@@ -83,3 +84,27 @@ def test_rows_to_columns_is_column_oriented_and_ordered():
     rows = QueryRows([Column("a", "Int32"), Column("b", "String")], [[1, "x"], [2, "y"]])
     assert rows_to_columns(rows) == {"a": [1, 2], "b": ["x", "y"]}
     assert rows_to_columns(QueryRows([Column("a", "Int32")], [])) == {"a": []}
+
+
+def test_split_statements_splits_on_semicolons_and_drops_blanks():
+    assert split_statements("SELECT 1; SELECT 2;\n\n;  ") == ["SELECT 1", "SELECT 2"]
+    assert split_statements("SELECT 1") == ["SELECT 1"]
+    assert split_statements("  ;; \n") == []
+
+
+def test_split_statements_ignores_semicolons_inside_quotes_and_comments():
+    sql = (
+        "INSERT INTO t VALUES ('a;b', \"c;d\", `e;f`); -- trailing; comment\n"
+        "/* block; comment */ SELECT 'it''s; here';\n"
+        "SELECT $$dollar; quoted$$"
+    )
+    assert split_statements(sql) == [
+        "INSERT INTO t VALUES ('a;b', \"c;d\", `e;f`)",
+        "-- trailing; comment\n/* block; comment */ SELECT 'it''s; here'",
+        "SELECT $$dollar; quoted$$",
+    ]
+
+
+def test_split_statements_keeps_an_unterminated_quote_in_one_statement():
+    # A broken statement reaches the database whole, so its own parser reports it.
+    assert split_statements("SELECT 'open; SELECT 2") == ["SELECT 'open; SELECT 2"]

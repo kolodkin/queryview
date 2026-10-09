@@ -2,7 +2,8 @@
 
 The Connect page (`/connect`) is where a disconnected session lands: a card per
 saved connection and a "new connection" card per driver. The other pages are
-`/queries` (redirects here until a database is selected), `/explorer` (see
+`/queries` (redirects here until a database is selected), `/sql` (the SQL
+scratchpad, see [sql.md](./sql.md); same redirect), `/explorer` (see
 [explorer.md](./explorer.md)) and `/dashboard` (see
 [dashboard.md](./dashboard.md)). The old `/prompt` URL redirects here.
 

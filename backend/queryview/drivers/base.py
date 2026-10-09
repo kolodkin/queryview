@@ -37,6 +37,25 @@ class TextResult(NamedTuple):
     value: str  # the text when ok; an error message otherwise
 
 
+# Row results on the Queries page are capped: the page has no pagination, so a
+# bare `SELECT *` must not pull a whole table into the browser.
+SCRIPT_ROW_CAP = 1000
+
+
+class StatementResult(NamedTuple):
+    """One statement of a script (the Queries page): its rows when it returned
+    any (capped at SCRIPT_ROW_CAP, `truncated` says so), else the driver's
+    status text (`OK`, Postgres's `INSERT 0 3`); `message` when it failed."""
+
+    sql: str
+    ok: bool
+    rows: QueryRows | None = None
+    truncated: bool = False
+    status: str = ""
+    message: str = ""
+    elapsed_ms: int = 0
+
+
 # A driver's own config object (ChConfig, PgConfig, DuckConfig, …). Opaque to
 # everything outside the driver that produced it: the storage and session layers
 # only ever round-trip it back through the same driver's methods, so they must
@@ -97,6 +116,15 @@ class Driver(Protocol):
         sql: str,
         database: str | None,
     ) -> tuple[bool, list[dict[str, str]] | str]: ...
+    # Run a `;`-separated script statement by statement on one connection, as
+    # written (no pagination wrapper, writes and DDL included), stopping at the
+    # first failure. One result per statement run.
+    async def execute_script(
+        self,
+        config: DriverConfig,
+        sql: str,
+        database: str | None,
+    ) -> list[StatementResult]: ...
 
 
 def _parse_port(raw: Any) -> int | None:
@@ -179,6 +207,44 @@ def wrap_paginated(
         clauses.append(order_clause)
     clauses.append(f"LIMIT {int(limit)} OFFSET {int(offset)}")
     return " ".join(clauses)
+
+
+def split_statements(sql: str) -> list[str]:
+    """Split a script on the `;` that end statements, skipping those inside
+    single/double/backtick quotes, `$$` bodies, and `--` or `/* */` comments.
+    Blank statements are dropped. An unterminated quote swallows the rest, so a
+    broken statement reaches the database whole and its own parser reports it."""
+    out: list[str] = []
+    start = 0
+    i = 0
+    n = len(sql)
+    while i < n:
+        ch = sql[i]
+        if ch in ("'", '"', "`"):
+            end = sql.find(ch, i + 1)
+            i = n if end < 0 else end + 1
+        elif sql.startswith("$$", i):
+            end = sql.find("$$", i + 2)
+            i = n if end < 0 else end + 2
+        elif sql.startswith("--", i):
+            end = sql.find("\n", i)
+            i = n if end < 0 else end + 1
+        elif sql.startswith("/*", i):
+            end = sql.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+        elif ch == ";":
+            out.append(sql[start:i])
+            start = i + 1
+            i += 1
+        else:
+            i += 1
+    out.append(sql[start:])
+    return [s for s in (p.strip() for p in out) if s]
+
+
+def cap_rows(data: list[list[Any]]) -> tuple[list[list[Any]], bool]:
+    """The first SCRIPT_ROW_CAP rows and whether any were dropped."""
+    return data[:SCRIPT_ROW_CAP], len(data) > SCRIPT_ROW_CAP
 
 
 # The largest integer a JS number holds exactly; beyond it values travel as strings.

@@ -4,8 +4,8 @@ A local SQL workbench for **ClickHouse**, **Postgres** and **DuckDB** — and a
 place to let an AI agent do the querying for you.
 
 Pick a saved connection from its card to open a database, then **QueryView** to
-run SQL, **Explorer** to click through tables, **Dashboard** to open a saved
-dashboard. Saved queries and dashboards live in workspaces that can back
+run SQL, **Queries** to run a script of statements as written, **Explorer** to
+click through tables, **Dashboard** to open a saved dashboard. Saved queries and dashboards live in workspaces that can back
 themselves up to a git remote. A built-in MCP server lets an agent run
 read-only queries, push a query or a whole dashboard into your open browser tab,
 and snapshot your work to git.
@@ -50,6 +50,7 @@ Open http://localhost:8000 — it lands on the **Connect** page:
 | **Connect** → *New connection* card | Create a ClickHouse, Postgres or DuckDB connection — host, port and credentials, or a file path for DuckDB. Passwords are encrypted at rest. |
 | **Connect** → a saved card | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
 | **QueryView** | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
+| **Queries** | A flat SQL scratchpad: `;`-separated statements run in order as written — writes and DDL included — one result block each. |
 | **Explorer** | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
 | **Dashboard** | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |
 

@@ -3,6 +3,7 @@ lists real databases and the selected one is where queries run."""
 
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -13,9 +14,12 @@ from .base import (
     Column,
     QueryResult,
     QueryRows,
+    StatementResult,
     TextResult,
     build_order_by,
+    cap_rows,
     parse_host_port_config,
+    split_statements,
     to_csv,
     to_json_value,
     wrap_paginated,
@@ -193,3 +197,37 @@ class PostgresDriver:
                 return True, [{"name": a.name, "type": a.type.name} for a in stmt.get_attributes()]
         except Exception as e:  # noqa: BLE001
             return False, str(e) or "connection failed"
+
+    async def execute_script(self, config: PgConfig, sql: str, database: str | None) -> list[StatementResult]:
+        results: list[StatementResult] = []
+        try:
+            async with _connect(config, database) as conn:
+                for stmt in split_statements(sql):
+                    started = time.monotonic()
+                    try:
+                        prepared = await conn.prepare(stmt)
+                        records = await prepared.fetch()
+                        attrs = prepared.get_attributes()
+                    except Exception as e:  # noqa: BLE001
+                        results.append(StatementResult(stmt, False, message=str(e), elapsed_ms=_ms(started)))
+                        break
+                    if not attrs:
+                        # No result columns: Postgres's command tag (`INSERT 0 3`) says what happened.
+                        status = prepared.get_statusmsg() or "OK"
+                        results.append(StatementResult(stmt, True, status=status, elapsed_ms=_ms(started)))
+                        continue
+                    meta = [Column(a.name, a.type.name) for a in attrs]
+                    data, truncated = cap_rows([[to_json_value(v) for v in r] for r in records])
+                    results.append(
+                        StatementResult(
+                            stmt, True, rows=QueryRows(meta, data), truncated=truncated, elapsed_ms=_ms(started)
+                        )
+                    )
+        except Exception as e:  # noqa: BLE001
+            # The connection itself failed: report it against the whole script.
+            results.append(StatementResult(sql, False, message=str(e) or "connection failed"))
+        return results
+
+
+def _ms(started: float) -> int:
+    return int((time.monotonic() - started) * 1000)

@@ -22,6 +22,7 @@ import QueryView, { type QueryPush } from './QueryView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
+import SqlView from './SqlView'
 import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
 import { CopyName } from './controls/CopyName'
@@ -97,7 +98,7 @@ function DatabaseMenu({
 
 // App shell: routing, shared connection state, the connection pill + agent
 // popover, and the armed/SSE remote-control channel. Pages: /connect, /queries,
-// /explorer, /dashboard.
+// /sql, /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -472,6 +473,14 @@ function Shell() {
               QueryView
             </Link>
             <Link
+              to={ready ? '/sql' : '/connect'}
+              data-testid="nav-sql"
+              onClick={() => setNavOpen(false)}
+              className={navLinkClass('/sql')}
+            >
+              Queries
+            </Link>
+            <Link
               to="/explorer"
               data-testid="nav-explorer"
               onClick={() => setNavOpen(false)}
@@ -511,6 +520,17 @@ function Shell() {
                   remoteId={remoteId}
                   autosave={autosave}
                 />
+              )
+            }
+          />
+          {/* The Queries page runs against a database too. */}
+          <Route
+            path="/sql"
+            element={
+              !isReady(connection) ? (
+                <Navigate to="/connect" replace />
+              ) : (
+                <SqlView key={sessionKey} runOn={connectionKey(connection)} />
               )
             }
           />
@@ -591,6 +611,7 @@ const NAV_ROW =
 
 function pageTitle(path: string): string {
   if (path.startsWith('/queries')) return 'QueryView'
+  if (path.startsWith('/sql')) return 'Queries'
   if (path.startsWith('/explorer')) return 'Explorer'
   if (path.startsWith('/dashboard')) return 'Dashboard'
   return 'Connect'
