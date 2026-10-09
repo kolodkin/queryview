@@ -58,10 +58,19 @@ Statements are separated by `;`. The split skips semicolons inside `'…'`,
 comments; blank statements are dropped. An unterminated quote keeps the rest of
 the script in one statement, so the database reports the real syntax error.
 
-Statements run **in order on one connection** and **stop at the first
-failure**: the status line names it in red, and anything after it is not run. Nothing is rolled back — a statement that succeeded before
-the failure stays applied (write `BEGIN; …; COMMIT;` yourself on a driver that
-supports it).
+Statements run **in order on one connection**.
+
+## An error stops the run
+
+**Run all** stops at the first statement that fails. Nothing after it runs: the
+status line says `Statement #k Failed - <error>` in red, that statement is
+marked red in the textbox, and statements `k+1` onward are not sent.
+
+Nothing is rolled back either — statements `1 … k-1` succeeded and stay
+applied. Fix the failing statement, then run the rest: put the cursor on the
+next one and use **▶ Run**, or select from it to the end. Wrap the script in
+`BEGIN; …; COMMIT;` yourself on a driver that supports transactions if partial
+application is not acceptable.
 
 ## What the status line shows
 
