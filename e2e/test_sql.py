@@ -143,7 +143,8 @@ def test_textarea_sizes_collapse_and_expand(seeded_duckdb, page: Page, shot) -> 
     expect(page.get_by_test_id("sql-output")).to_be_visible()
 
     page.get_by_test_id("sql-size-min").click()
-    assert textarea.bounding_box()["height"] < 4  # just its (transparent) border
+    box = textarea.bounding_box()
+    assert box is not None and box["height"] < 4  # just its (transparent) border
     expect(page.get_by_test_id("sql-output")).to_be_visible()
     shot("textbox collapsed")
 
