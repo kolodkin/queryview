@@ -83,16 +83,23 @@ def test_run_all_stops_at_the_first_failing_statement(seeded_duckdb, page: Page,
     page.get_by_test_id("sql-input").fill("SELECT 1 AS a; SELECT * FROM no_such_table; SELECT 2 AS b")
     page.get_by_test_id("sql-input").press("ControlOrMeta+Shift+Enter")
 
-    # The second statement failed: the line says which, why, and shows it.
+    # The second statement failed: the line says which and why, and the
+    # statement itself is marked red in the textbox.
     status = page.get_by_test_id("sql-status")
     expect(status).to_have_attribute("data-ok", "false")
-    expect(status).to_contain_text("Statement #2 Failed - SELECT * FROM no_such_table - ")
+    expect(status).to_contain_text("Statement #2 Failed - ")
     expect(status).to_contain_text("no_such_table")
-    expect(status).to_contain_text("SELECT * FROM no_such_table")
+    expect(status).not_to_contain_text("SELECT * FROM no_such_table")
+    mark = page.get_by_test_id("sql-failed-mark")
+    expect(mark).to_have_text("SELECT * FROM no_such_table")
+    shot("failing statement marked")
+    # Clicking into the textbox (to fix it) clears the mark — a keyboard run
+    # leaves the focus there, so a click or a keystroke is what clears it.
+    page.get_by_test_id("sql-input").click()
+    expect(mark).to_have_count(0)
     # The last statement run failed, so there is no table to show.
     expect(page.get_by_test_id("sql-output")).to_have_count(0)
     expect(page.get_by_test_id("sql-open-queryview")).to_be_disabled()
-    shot("error stops the script")
 
 
 def test_run_current_runs_the_statement_under_the_cursor(seeded_duckdb, page: Page) -> None:

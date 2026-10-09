@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { resultSummary, runSummary, statementAt, type StatementResult } from './sqlScript'
+import {
+  failedSpan,
+  resultSummary,
+  runSummary,
+  statementAt,
+  statementRangeAt,
+  type StatementResult,
+} from './sqlScript'
 
 const base: StatementResult = {
   ok: true,
@@ -63,17 +70,40 @@ describe('runSummary', () => {
     expect(runSummary(run)).toEqual({ ok: true, text: '3 statements · 2 rows · 6 ms' })
     expect(runSummary(run.slice(0, 2))).toEqual({ ok: true, text: '2 statements · INSERT 0 2 · 4 ms' })
   })
-  it('names the failing statement, its error and a snippet of it', () => {
+  it('names the failing statement and its error, nothing else', () => {
     const run = [
       { ...base, meta: null, status: 'OK', elapsed_ms: 3 },
       { ...base, ok: false, meta: null, message: 'no such table', sql: 'SELECT *\n  FROM nope' },
     ]
-    expect(runSummary(run)).toEqual({
-      ok: false,
-      text: 'Statement #2 Failed - SELECT * FROM nope - no such table',
-    })
+    expect(runSummary(run)).toEqual({ ok: false, text: 'Statement #2 Failed - no such table' })
   })
   it('handles an empty run', () => {
     expect(runSummary([])).toEqual({ ok: true, text: 'Nothing to run' })
+  })
+})
+
+describe('statementRangeAt', () => {
+  it('returns where the cursor statement sits in the script', () => {
+    expect(statementRangeAt('SELECT 1;\n  SELECT 2  ', 14)).toEqual({ start: 12, end: 20 })
+    expect(statementRangeAt('   ', 1)).toBeNull()
+  })
+})
+
+describe('failedSpan', () => {
+  const script = 'SELECT 1;\nSELECT * FROM nope;\nSELECT 2'
+  const failed = (n: number) => [
+    ...Array.from({ length: n - 1 }, () => ({ ...base, meta: null, status: 'OK' })),
+    { ...base, ok: false, meta: null, message: 'boom', sql: 'SELECT * FROM nope' },
+  ]
+  it('locates the failing statement of a whole-script run', () => {
+    expect(failedSpan(script, 0, failed(2))).toEqual({ start: 10, end: 28 })
+  })
+  it('offsets into the script when only part of it ran', () => {
+    const part = script.slice(10)
+    expect(failedSpan(part, 10, failed(1))).toEqual({ start: 10, end: 28 })
+  })
+  it('is null when nothing failed', () => {
+    expect(failedSpan(script, 0, [{ ...base, data: [[1]] }])).toBeNull()
+    expect(failedSpan(script, 0, [])).toBeNull()
   })
 })

@@ -17,7 +17,7 @@ export type StatementResult = {
   elapsed_ms: number
 }
 
-type Span = { start: number; end: number } // the trimmed statement's [start, end)
+export type Span = { start: number; end: number } // the trimmed statement's [start, end)
 
 // The non-blank statements of a script as character spans — the same split the
 // backend makes (quotes, `$$` bodies and comments hide their semicolons), so
@@ -64,16 +64,31 @@ function statementSpans(text: string): Span[] {
 // the gap between two — the previous one while the cursor is still on its
 // line (just past the `;`), the next one from a blank line below. Trailing
 // whitespace belongs to the last statement. '' for a blank script.
-export function statementAt(text: string, cursor: number): string {
+export function statementRangeAt(text: string, cursor: number): Span | null {
   const spans = statementSpans(text)
-  if (spans.length === 0) return ''
+  if (spans.length === 0) return null
   const inside = spans.find((s) => s.start <= cursor && cursor <= s.end)
-  if (inside) return text.slice(inside.start, inside.end)
+  if (inside) return inside
   const prevIdx = spans.findLastIndex((s) => s.end < cursor)
   const next = spans[prevIdx + 1]
   const prev = spans[prevIdx]
-  const pick = prev && (!next || !text.slice(prev.end, cursor).includes('\n')) ? prev : next
-  return text.slice(pick.start, pick.end)
+  return prev && (!next || !text.slice(prev.end, cursor).includes('\n')) ? prev : next
+}
+
+export function statementAt(text: string, cursor: number): string {
+  const span = statementRangeAt(text, cursor)
+  return span ? text.slice(span.start, span.end) : ''
+}
+
+// Where the failing statement of a run sits in the script, for marking it in
+// the textbox: `ran` is the text that was sent, starting at `offset` in the
+// script, and the server split it exactly as statementSpans does, so the k-th
+// result is the k-th span. null when nothing failed.
+export function failedSpan(ran: string, offset: number, results: StatementResult[]): Span | null {
+  const last = results[results.length - 1]
+  if (!last || last.ok) return null
+  const span = statementSpans(ran)[results.length - 1]
+  return span ? { start: offset + span.start, end: offset + span.end } : null
 }
 
 // What a successful statement left: its row count, or the driver's status.
@@ -90,18 +105,13 @@ export function resultSummary(r: StatementResult): string {
 
 // The one status line a run leaves under the buttons. The statements are
 // already in the textbox, so a run that worked says only how much ran and what
-// the last statement left; a run that failed says which statement, why, and
-// enough of it to find it.
+// the last statement left; a run that failed says which statement and why (the
+// statement itself is marked in the textbox, see failedSpan).
 export function runSummary(results: StatementResult[]): { ok: boolean; text: string } {
   if (results.length === 0) return { ok: true, text: 'Nothing to run' }
   const last = results[results.length - 1]
   if (!last.ok) {
-    const snippet = last.sql.replace(/\s+/g, ' ').trim()
-    const short = snippet.length > 80 ? `${snippet.slice(0, 80)}…` : snippet
-    return {
-      ok: false,
-      text: `Statement #${results.length} Failed - ${short} - ${last.message || 'failed'}`,
-    }
+    return { ok: false, text: `Statement #${results.length} Failed - ${last.message || 'failed'}` }
   }
   if (results.length === 1) return { ok: true, text: resultSummary(last) }
   const total = results.reduce((ms, r) => ms + r.elapsed_ms, 0)

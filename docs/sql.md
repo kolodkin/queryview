@@ -41,7 +41,8 @@ Before a database is selected the page redirects to Connect, like QueryView.
 - **Status line** — one line per run, nothing more: the statements are already
   in the textbox. `2 rows · 2 ms` for a single statement; `3 statements ·
   2 rows · 6 ms` for a script (what the last one left, total time). A failed run
-  shows in red which statement failed, the error, and a snippet of it.
+  shows in red which statement failed and the error; the statement itself is
+  marked red in the textbox until you click into it.
 - **Results table** — the rows of the **last statement run**, when it returned
   any (the same grid as QueryView and the explorer, with the cell popup for
   long values). A run whose last statement was DDL, DML or a failure shows no
@@ -68,7 +69,7 @@ supports it).
 | --- | --- |
 | Returned rows | `N rows`; when the result was cut at **100 rows**, `first 100 rows, more exist` |
 | No rows (DDL, DML) | the driver's own status — ClickHouse `OK`, Postgres's command tag (`INSERT 0 3`), DuckDB `OK` |
-| Failed | `Statement #k Failed - <the statement> - <the driver's error>` |
+| Failed | `Statement #k Failed - <the driver's error>`; the statement itself is **marked red in the textbox** until you focus or edit it |
 
 A single statement's line ends with its time; a script's starts with how many
 statements ran and ends with the total.

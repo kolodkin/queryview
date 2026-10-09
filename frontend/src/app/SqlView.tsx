@@ -5,7 +5,13 @@ import { ResultsTable, columnNames, columnTypes, type QueryRows } from '../core'
 import { apiFetch } from './api'
 import { Spinner } from './controls/Spinner'
 import { flushPatches, patchView, viewState } from './session'
-import { runSummary, statementAt, type StatementResult } from './sqlScript'
+import {
+  failedSpan,
+  runSummary,
+  statementRangeAt,
+  type Span,
+  type StatementResult,
+} from './sqlScript'
 
 // The Queries page (`/sql`), mounted by the App shell only for a ready
 // connection: one flat SQL textbox whose `;`-separated statements run as
@@ -32,7 +38,11 @@ function SqlView({ runOn }: { runOn?: string | null }) {
   const [busy, setBusy] = useState(false)
   // Textarea height in rows; Min collapses it so the rows below get the room.
   const [rows, setRows] = useState(8)
+  // The failing statement of the last run, marked red in the textbox until
+  // the textbox is focused or edited — the status line then needn't repeat it.
+  const [failed, setFailed] = useState<Span | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const markRef = useRef<HTMLPreElement>(null)
   const runSeq = useRef(0)
 
   // Queue the text for the session; the write lands when the textbox is left.
@@ -59,18 +69,23 @@ function SqlView({ runOn }: { runOn?: string | null }) {
   }, [runOn])
 
   // The selection when there is one, else the statement under the cursor.
-  function currentStatement(): string {
+  function currentStatement(): Span {
     const el = inputRef.current
-    if (!el) return sql
-    const selected = sql.slice(el.selectionStart, el.selectionEnd)
-    return selected.trim() ? selected : statementAt(sql, el.selectionStart)
+    if (!el) return { start: 0, end: sql.length }
+    if (sql.slice(el.selectionStart, el.selectionEnd).trim()) {
+      return { start: el.selectionStart, end: el.selectionEnd }
+    }
+    return statementRangeAt(sql, el.selectionStart) ?? { start: 0, end: 0 }
   }
 
-  async function run(text: string) {
+  // Runs the script's [start, end) slice.
+  async function run({ start, end }: Span) {
+    const text = sql.slice(start, end)
     if (!text.trim() || busy) return
     const ticket = ++runSeq.current
     setBusy(true)
     setError(null)
+    setFailed(null)
     try {
       const res = await apiFetch('/api/db/execute', {
         method: 'POST',
@@ -80,7 +95,10 @@ function SqlView({ runOn }: { runOn?: string | null }) {
       const data = await res.json()
       if (ticket !== runSeq.current) return
       if (data.ok) {
-        setResults((data.results ?? []) as StatementResult[])
+        const results = (data.results ?? []) as StatementResult[]
+        setResults(results)
+        // Only while the script is still what ran: an edit moved the offsets.
+        if (inputRef.current?.value === sql) setFailed(failedSpan(text, start, results))
       } else {
         setError((data.message as string) ?? 'request failed')
       }
@@ -95,7 +113,7 @@ function SqlView({ runOn }: { runOn?: string | null }) {
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
-      void run(e.shiftKey ? sql : currentStatement())
+      void run(e.shiftKey ? { start: 0, end: sql.length } : currentStatement())
     }
   }
 
@@ -141,21 +159,47 @@ function SqlView({ runOn }: { runOn?: string | null }) {
             </button>
           ))}
         </div>
-        <textarea
-          ref={inputRef}
-          value={sql}
-          onChange={(e) => setSql(e.target.value)}
-          onKeyDown={onKeyDown}
-          onBlur={() => void flushPatches()}
-          aria-label="SQL script"
-          data-testid="sql-input"
-          rows={rows || 1}
-          spellCheck={false}
-          placeholder={'CREATE TABLE …;\nINSERT INTO …;\nSELECT …'}
-          className={`glass-input w-full px-3 font-mono text-sm ${
-            rows === 0 ? 'h-0 min-h-0 overflow-hidden border-transparent py-0' : 'py-2'
-          }`}
-        />
+        {/* The mark is a transparent twin of the textarea laid over it — same
+            font, padding, border and wrapping, scrolled in step — with only
+            the failing statement painted, so it lands on the same glyphs. */}
+        <div className="relative">
+          <textarea
+            ref={inputRef}
+            value={sql}
+            onChange={(e) => {
+              setFailed(null)
+              setSql(e.target.value)
+            }}
+            onFocus={() => setFailed(null)}
+            onClick={() => setFailed(null)}
+            onKeyDown={onKeyDown}
+            onBlur={() => void flushPatches()}
+            onScroll={(e) => {
+              if (markRef.current) markRef.current.scrollTop = e.currentTarget.scrollTop
+            }}
+            aria-label="SQL script"
+            data-testid="sql-input"
+            rows={rows || 1}
+            spellCheck={false}
+            placeholder={'CREATE TABLE …;\nINSERT INTO …;\nSELECT …'}
+            className={`glass-input w-full px-3 font-mono text-sm ${
+              rows === 0 ? 'h-0 min-h-0 overflow-hidden border-transparent py-0' : 'py-2'
+            }`}
+          />
+          {failed && rows > 0 && (
+            <pre
+              ref={markRef}
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words border border-transparent px-3 py-2 font-mono text-sm text-transparent"
+            >
+              {sql.slice(0, failed.start)}
+              <mark data-testid="sql-failed-mark" className="rounded bg-red-500/15 text-red-300">
+                {sql.slice(failed.start, failed.end)}
+              </mark>
+              {sql.slice(failed.end)}
+            </pre>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -169,7 +213,7 @@ function SqlView({ runOn }: { runOn?: string | null }) {
           </button>
           <button
             type="button"
-            onClick={() => void run(sql)}
+            onClick={() => void run({ start: 0, end: sql.length })}
             disabled={busy || !sql.trim()}
             data-testid="sql-run-all"
             title="Run every statement, in order (Ctrl/⌘+Shift+Enter)"
