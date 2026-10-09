@@ -39,7 +39,7 @@ class TextResult(NamedTuple):
 
 # Row results on the Queries page are capped: the page has no pagination, so a
 # bare `SELECT *` must not pull a whole table into the browser.
-SCRIPT_ROW_CAP = 1000
+SCRIPT_ROW_CAP = 100
 
 
 class StatementResult(NamedTuple):

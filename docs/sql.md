@@ -17,29 +17,36 @@ Before a database is selected the page redirects to Connect, like QueryView.
 │ ┌───────────────────────────────────────────────────────┐ │
 │ │ CREATE TABLE t (id INTEGER);                          │ │  ← SQL textarea
 │ │ INSERT INTO t VALUES (1), (2);                        │ │
-│ │ SELECT * FROM t;                                      │ │
+│ │ SELECT * FROM t|                                      │ │
 │ └───────────────────────────────────────────────────────┘ │
-│ [Run]  Separate statements with ; …                       │
-│ ┌ CREATE TABLE t (id INTEGER) ──────────────────────────┐ │
-│ │ OK · 3 ms                                             │ │  ← one block per
-│ ├ INSERT INTO t VALUES (1), (2) ────────────────────────┤ │     statement
-│ │ INSERT 0 2 · 1 ms                                     │ │
-│ ├ SELECT * FROM t ──────────────────────────────────────┤ │
-│ │ 2 rows · 2 ms                                         │ │
-│ │ id                                                    │ │
-│ │ 1                                                     │ │
+│ [▶ Run] [▶▶ Run all] [Open in QueryView]                  │
+│ ┌ CREATE TABLE t (id INTEGER)            OK · 3 ms ─────┐ │  ← a log line
+│ ├ INSERT INTO t VALUES (1), (2)          INSERT 0 2 · 1 ms │     per statement
+│ ├ SELECT * FROM t                        2 rows · 2 ms ──┤ │
+│ └───────────────────────────────────────────────────────┘ │
+│ ┌───────────────────────────────────────────────────────┐ │
+│ │ id                                                    │ │  ← the last
+│ │ 1                                                     │ │     statement's rows
 │ │ 2                                                     │ │
 │ └───────────────────────────────────────────────────────┘ │
 └───────────────────────────────────────────────────────────┘
 ```
 
 - **SQL textarea** — the script. Drag its corner to resize.
-- **Run** (or **Ctrl/⌘+Enter** in the textarea) — runs the script. If some text
-  is **selected**, only the selection runs, so a page of statements can be run
-  one at a time.
-- **Result blocks** — one per statement that ran, in order: the statement, a
-  summary line, and the rows when it returned any (the same grid as QueryView
-  and the explorer, with the cell popup for long values).
+- **▶ Run** (**Ctrl/⌘+Enter**) — runs the **statement under the cursor**, or
+  the **selection** when there is one. The cursor's statement is the one whose
+  text contains it; just past a `;` on the same line still counts as that
+  statement, a blank line below belongs to the next one.
+- **▶▶ Run all** (**Ctrl/⌘+Shift+Enter**) — runs the whole script.
+- **Log** — one line per statement that ran, in order: the statement (full text
+  on hover) and a summary. A failed statement's line is red.
+- **Results table** — the rows of the **last statement run**, when it returned
+  any (the same grid as QueryView and the explorer, with the cell popup for
+  long values). A run whose last statement was DDL, DML or a failure shows no
+  table.
+- **Open in QueryView** — enabled while that table is showing: loads the last
+  statement's SQL into [QueryView](./query.md) for paging, column pickers,
+  saving and CSV. Nothing runs until you click Execute there.
 
 ## Multiple statements
 
@@ -49,22 +56,22 @@ comments; blank statements are dropped. An unterminated quote keeps the rest of
 the script in one statement, so the database reports the real syntax error.
 
 Statements run **in order on one connection** and **stop at the first
-failure**: the failing statement's block shows the error in red, and anything
+failure**: the failing statement's log line shows the error in red, and anything
 after it is not run. Nothing is rolled back — a statement that succeeded before
 the failure stays applied (write `BEGIN; …; COMMIT;` yourself on a driver that
 supports it).
 
-## What a block shows
+## What a log line shows
 
 | Statement | Summary |
 | --- | --- |
-| Returned rows | `N rows · T ms`; when the result was cut at **1000 rows**, `first 1000 rows, more exist · T ms` |
+| Returned rows | `N rows · T ms`; when the result was cut at **100 rows**, `first 100 rows, more exist · T ms` |
 | No rows (DDL, DML) | the driver's own status — ClickHouse `OK`, Postgres's command tag (`INSERT 0 3`), DuckDB `OK` — `· T ms` |
 | Failed | the driver's error message |
 
-The 1000-row cap is there because the page has no pagination: a bare
+The 100-row cap is there because the page has no pagination: a bare
 `SELECT *` must not pull a whole table into the browser. Page it with your own
-`LIMIT`/`OFFSET`, or use QueryView.
+`LIMIT`/`OFFSET`, or hand the statement to QueryView with **Open in QueryView**.
 
 Values arrive in the same JSON shape as every other result
 ([Results & CSV](./query.md#results--csv)), so 64-bit integers and decimals are
@@ -84,16 +91,18 @@ quoted strings and collections render with their default views.
 
 ## Session
 
-The textbox's text is session state — a reload brings it back — but the result
-blocks are not, like every other view ([session.md](./session.md)); a reload
-never re-runs a script. Switching database clears the blocks on screen (they
-came from somewhere else now) and keeps the text.
+The textbox's text is session state — a reload brings it back — but the log and
+the table are not, like every other view ([session.md](./session.md)); a reload
+never re-runs a script. Switching database clears them (the rows came from
+somewhere else now) and keeps the text. **Open in QueryView** writes the
+statement into the query panel's own session state, which is how QueryView
+finds it on arrival.
 
 ## API
 
 | Method | Path              | Body    | Result |
 | ------ | ----------------- | ------- | ------ |
-| POST   | `/api/db/execute` | `{sql}` | `{ok, results:[{sql, ok, meta, data, truncated, status, message, elapsed_ms}]}` — one entry per statement run (the list ends with the failing one, if any). `meta`/`data` are set for a row-returning statement (`data` capped at 1000 rows, `truncated` says so) and `null` otherwise, when `status` carries the driver's word. `ok` on the envelope is about the request; a failed statement is `ok:false` in its own entry. Empty `sql` → `400`; no session / no database → `409`. |
+| POST   | `/api/db/execute` | `{sql}` | `{ok, results:[{sql, ok, meta, data, truncated, status, message, elapsed_ms}]}` — one entry per statement run (the list ends with the failing one, if any). `meta`/`data` are set for a row-returning statement (`data` capped at 100 rows, `truncated` says so) and `null` otherwise, when `status` carries the driver's word. `ok` on the envelope is about the request; a failed statement is `ok:false` in its own entry. Empty `sql` → `400`; no session / no database → `409`. |
 
 ## Related docs
 
