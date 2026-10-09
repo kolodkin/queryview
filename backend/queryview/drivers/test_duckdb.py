@@ -85,3 +85,52 @@ def test_run_query_error_is_reported(duck_path):
     d = DuckDBDriver()
     r = _run(d.run_query(DuckConfig(duck_path), "SELECT * FROM no_such", None, 10, 0, None))
     assert r.ok is False and r.rows is None and "no_such" in r.message
+
+
+def test_execute_script_runs_statements_in_order_on_one_connection(duck_path):
+    d = DuckDBDriver()
+    results = _run(
+        d.execute_script(
+            DuckConfig(duck_path),
+            "CREATE TABLE extra (id INTEGER); INSERT INTO extra VALUES (7); SELECT id FROM extra",
+            None,
+        )
+    )
+    assert [r.ok for r in results] == [True, True, True]
+    assert [r.sql for r in results] == [
+        "CREATE TABLE extra (id INTEGER)",
+        "INSERT INTO extra VALUES (7)",
+        "SELECT id FROM extra",
+    ]
+    # Statements without a result set report a status; row-returning ones carry rows.
+    assert results[0].rows is None and results[0].status == "OK"
+    assert results[2].rows is not None and results[2].rows.data == [[7]]
+    assert [c.name for c in results[2].rows.meta] == ["id"]
+    assert all(r.elapsed_ms >= 0 for r in results)
+    # The write landed in the file.
+    assert duckdb.connect(duck_path, read_only=True).execute("SELECT count(*) FROM extra").fetchone() == (1,)
+
+
+def test_execute_script_stops_at_the_first_failing_statement(duck_path):
+    d = DuckDBDriver()
+    results = _run(d.execute_script(DuckConfig(duck_path), "SELECT 1; SELECT * FROM no_such; SELECT 2", None))
+    assert len(results) == 2
+    assert results[0].ok
+    assert results[1].ok is False and "no_such" in results[1].message and results[1].sql == "SELECT * FROM no_such"
+
+
+def test_execute_script_caps_rows_and_flags_truncation(duck_path):
+    d = DuckDBDriver()
+    results = _run(d.execute_script(DuckConfig(duck_path), "SELECT * FROM range(1500)", None))
+    assert results[0].ok and results[0].rows is not None
+    assert len(results[0].rows.data) == 100 and results[0].truncated is True
+    results = _run(d.execute_script(DuckConfig(duck_path), "SELECT * FROM range(3)", None))
+    assert results[0].truncated is False
+
+
+def test_execute_script_reports_a_runtime_error_as_a_failed_statement(duck_path):
+    # A relation binds lazily: the cast only fails when the rows are fetched.
+    d = DuckDBDriver()
+    results = _run(d.execute_script(DuckConfig(duck_path), "SELECT 1 AS a; SELECT 'abc'::INTEGER AS b; SELECT 2", None))
+    assert [r.ok for r in results] == [True, False]
+    assert "abc" in results[1].message

@@ -25,6 +25,7 @@ from .connect import (
     connect_new,
     describe_query,
     disconnect,
+    execute_script,
     export_csv,
     get_session,
     list_connections,
@@ -364,6 +365,20 @@ async def db_query(request: Request):
     if not r["ok"]:
         return _gate_error(r, ("no-session",))
     return {"ok": True, "meta": r["meta"], "data": r["data"]}
+
+
+# Run a script as written, one result per statement (the Queries page).
+@app.post("/api/db/execute")
+async def db_execute(request: Request):
+    body = await _read_json(request)
+    b = body if isinstance(body, dict) else {}
+    sql = _clean_str(b.get("sql"))
+    if not sql:
+        return JSONResponse({"ok": False, "message": "sql required"}, status_code=400)
+    r = await execute_script(request.state.sid, sql)
+    if not r["ok"]:
+        return _gate_error(r, ("no-session", "no-database"))
+    return r
 
 
 # Tables of this session's selected database (the Explorer page's sidebar).

@@ -19,6 +19,7 @@ close a tab and the next one you open picks its session back up.
 | Connection | the connection this session is on, and its selected database |
 | Workspace | which workspace scopes its queries, dashboards and git sync |
 | Query panel | SQL text, page size, visible columns, sort |
+| Queries | the script text |
 | Explorer | the Tables sidebar width |
 
 **Results are not remembered** — a reload restores the SQL you were writing,
@@ -117,6 +118,7 @@ a view can remember a new setting without a migration.
 
 ```json
 {"query": {"sql": "…", "limit": 100, "visibleCols": [], "orderBy": []},
+ "queries": {"sql": "…"},
  "explorer": {"sidebarWidth": 256}}
 ```
 
