@@ -325,7 +325,7 @@ scoped to the session's selected database.
 
 ## Related docs
 
-- [sql.md](./sql.md) — the Queries page: a `;`-separated script run as written, writes included.
+- [queries.md](./queries.md) — the Queries page: a `;`-separated script run as written, writes included.
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [connect.md](./connect.md) — connecting, storage, sessions.
 - [api.md](./api.md) — the full backend JSON API.

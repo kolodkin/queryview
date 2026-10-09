@@ -18,7 +18,7 @@ import {
 // written — writes and DDL included, no pagination, nothing saved. Run runs
 // the statement under the cursor (or the selection), Run all the whole script.
 // A run leaves one status line; the last statement's rows, if any, are the
-// table below, and Open in QueryView carries that statement over (docs/sql.md).
+// table below, and Open in QueryView carries that statement over (docs/queries.md).
 // The same height steps as QueryView's textarea.
 const SIZES: [string, number, string][] = [
   ['Min', 0, 'sql-size-min'],
