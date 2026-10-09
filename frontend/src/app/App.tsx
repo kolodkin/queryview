@@ -22,7 +22,7 @@ import QueryView, { type QueryPush } from './QueryView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
-import SqlView from './SqlView'
+import QueriesView from './QueriesView'
 import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
 import { CopyName } from './controls/CopyName'
@@ -97,8 +97,8 @@ function DatabaseMenu({
 }
 
 // App shell: routing, shared connection state, the connection pill + agent
-// popover, and the armed/SSE remote-control channel. Pages: /connect, /queries,
-// /sql, /explorer, /dashboard.
+// popover, and the armed/SSE remote-control channel. Pages: /connect,
+// /queryview, /queries, /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -272,7 +272,7 @@ function Shell() {
       try {
         setQueryPush(JSON.parse((e as MessageEvent).data) as QueryPush)
         setToast('Agent updated the query')
-        navigate('/queries')
+        navigate('/queryview')
       } catch {
         /* ignore malformed event */
       }
@@ -463,20 +463,20 @@ function Shell() {
               Connect
             </Link>
             {/* Straight to Connect until there's a database: a round trip
-                through the /queries redirect would remount it. */}
+                through the /queryview redirect would remount it. */}
+            <Link
+              to={ready ? '/queryview' : '/connect'}
+              data-testid="nav-queryview"
+              onClick={() => setNavOpen(false)}
+              className={navLinkClass('/queryview')}
+            >
+              QueryView
+            </Link>
             <Link
               to={ready ? '/queries' : '/connect'}
               data-testid="nav-queries"
               onClick={() => setNavOpen(false)}
               className={navLinkClass('/queries')}
-            >
-              QueryView
-            </Link>
-            <Link
-              to={ready ? '/sql' : '/connect'}
-              data-testid="nav-sql"
-              onClick={() => setNavOpen(false)}
-              className={navLinkClass('/sql')}
             >
               Queries
             </Link>
@@ -506,7 +506,7 @@ function Shell() {
         <Routes>
           {/* The query panel needs a database; until then QueryView is Connect. */}
           <Route
-            path="/queries"
+            path="/queryview"
             element={
               !isReady(connection) ? (
                 <Navigate to="/connect" replace />
@@ -525,12 +525,12 @@ function Shell() {
           />
           {/* The Queries page runs against a database too. */}
           <Route
-            path="/sql"
+            path="/queries"
             element={
               !isReady(connection) ? (
                 <Navigate to="/connect" replace />
               ) : (
-                <SqlView key={sessionKey} runOn={connectionKey(connection)} />
+                <QueriesView key={sessionKey} runOn={connectionKey(connection)} />
               )
             }
           />
@@ -610,8 +610,8 @@ const NAV_ROW =
   'md:static md:mt-0 md:flex md:w-auto md:min-w-0 md:flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-filter-none'
 
 function pageTitle(path: string): string {
-  if (path.startsWith('/queries')) return 'QueryView'
-  if (path.startsWith('/sql')) return 'Queries'
+  if (path.startsWith('/queryview')) return 'QueryView'
+  if (path.startsWith('/queries')) return 'Queries'
   if (path.startsWith('/explorer')) return 'Explorer'
   if (path.startsWith('/dashboard')) return 'Dashboard'
   return 'Connect'

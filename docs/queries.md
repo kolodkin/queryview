@@ -1,6 +1,6 @@
 # Queries — the SQL scratchpad
 
-The **Queries** page (`/sql`) is a flat SQL textbox for exploring and for
+The **Queries** page (`/queries`) is a flat SQL textbox for exploring and for
 writing: whatever you type runs **as written** against the session's selected
 database — `CREATE`, `INSERT`, `ALTER`, `DROP` included — with no pagination
 wrapper, no saved names, no column pickers. It complements

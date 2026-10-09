@@ -19,7 +19,7 @@ const SESSION = {
   connection: null,
   database: null,
   workspace: 'default',
-  url: '/queries',
+  url: '/queryview',
   ui: {},
 }
 

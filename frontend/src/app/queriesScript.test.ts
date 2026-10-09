@@ -7,7 +7,7 @@ import {
   statementAt,
   statementRangeAt,
   type StatementResult,
-} from './sqlScript'
+} from './queriesScript'
 
 const base: StatementResult = {
   ok: true,

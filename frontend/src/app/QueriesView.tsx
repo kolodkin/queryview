@@ -11,9 +11,9 @@ import {
   statementRangeAt,
   type Span,
   type StatementResult,
-} from './sqlScript'
+} from './queriesScript'
 
-// The Queries page (`/sql`), mounted by the App shell only for a ready
+// The Queries page (`/queries`), mounted by the App shell only for a ready
 // connection: one flat SQL textbox whose `;`-separated statements run as
 // written — writes and DDL included, no pagination, nothing saved. Run runs
 // the statement under the cursor (or the selection), Run all the whole script.
@@ -21,17 +21,17 @@ import {
 // table below, and Open in QueryView carries that statement over (docs/queries.md).
 // The same height steps as QueryView's textarea.
 const SIZES: [string, number, string][] = [
-  ['Min', 0, 'sql-size-min'],
-  ['S', 4, 'sql-size-s'],
-  ['M', 8, 'sql-size-m'],
-  ['L', 16, 'sql-size-l'],
-  ['XL', 28, 'sql-size-xl'],
+  ['Min', 0, 'queries-size-min'],
+  ['S', 4, 'queries-size-s'],
+  ['M', 8, 'queries-size-m'],
+  ['L', 16, 'queries-size-l'],
+  ['XL', 28, 'queries-size-xl'],
 ]
 
-function SqlView({ runOn }: { runOn?: string | null }) {
+function QueriesView({ runOn }: { runOn?: string | null }) {
   const navigate = useNavigate()
   // The text is restored from the session; results never are (docs/session.md).
-  const saved = viewState('sql')
+  const saved = viewState('queries')
   const [sql, setSql] = useState(() => (typeof saved.sql === 'string' ? saved.sql : ''))
   const [results, setResults] = useState<StatementResult[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -53,7 +53,7 @@ function SqlView({ runOn }: { runOn?: string | null }) {
       restored.current = false
       return
     }
-    patchView('sql', { sql })
+    patchView('queries', { sql })
   }, [sql])
 
   // A database switch invalidates what is on screen: the rows came from
@@ -135,11 +135,11 @@ function SqlView({ runOn }: { runOn?: string | null }) {
     if (!last || !lastRows) return
     patchView('query', { sql: last.sql })
     await flushPatches()
-    navigate('/queries')
+    navigate('/queryview')
   }
 
   return (
-    <div data-testid="sql-page" className="viewport-page flex w-full max-w-[80vw] flex-col">
+    <div data-testid="queries-page" className="viewport-page flex w-full max-w-[80vw] flex-col">
       <div className="mb-6 flex items-center justify-center">
         <h1 className="text-3xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           Queries
@@ -178,7 +178,7 @@ function SqlView({ runOn }: { runOn?: string | null }) {
               if (markRef.current) markRef.current.scrollTop = e.currentTarget.scrollTop
             }}
             aria-label="SQL script"
-            data-testid="sql-input"
+            data-testid="queries-input"
             rows={rows || 1}
             spellCheck={false}
             placeholder={'CREATE TABLE …;\nINSERT INTO …;\nSELECT …'}
@@ -193,7 +193,7 @@ function SqlView({ runOn }: { runOn?: string | null }) {
               className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words border border-transparent px-3 py-2 font-mono text-sm text-transparent"
             >
               {sql.slice(0, failed.start)}
-              <mark data-testid="sql-failed-mark" className="rounded bg-red-500/15 text-red-300">
+              <mark data-testid="queries-failed-mark" className="rounded bg-red-500/15 text-red-300">
                 {sql.slice(failed.start, failed.end)}
               </mark>
               {sql.slice(failed.end)}
@@ -205,7 +205,7 @@ function SqlView({ runOn }: { runOn?: string | null }) {
             type="button"
             onClick={() => void run(currentStatement())}
             disabled={busy || !sql.trim()}
-            data-testid="sql-run-current"
+            data-testid="queries-run-current"
             title="Run the statement under the cursor, or the selection (Ctrl/⌘+Enter)"
             className="glass-btn-primary px-4 py-2 font-semibold"
           >
@@ -215,7 +215,7 @@ function SqlView({ runOn }: { runOn?: string | null }) {
             type="button"
             onClick={() => void run({ start: 0, end: sql.length })}
             disabled={busy || !sql.trim()}
-            data-testid="sql-run-all"
+            data-testid="queries-run-all"
             title="Run every statement, in order (Ctrl/⌘+Shift+Enter)"
             className="glass-btn px-3 py-2 text-sm font-medium"
           >
@@ -225,14 +225,14 @@ function SqlView({ runOn }: { runOn?: string | null }) {
             type="button"
             onClick={() => void openInQueryView()}
             disabled={!lastRows}
-            data-testid="sql-open-queryview"
+            data-testid="queries-open-queryview"
             title="Load the last statement's SQL into QueryView for paging, saving and presentation"
             className="glass-btn px-3 py-2 text-sm font-medium"
           >
             Open in QueryView
           </button>
           {busy && (
-            <span data-testid="sql-busy" role="status" aria-label="Running">
+            <span data-testid="queries-busy" role="status" aria-label="Running">
               <Spinner />
             </span>
           )}
@@ -242,13 +242,13 @@ function SqlView({ runOn }: { runOn?: string | null }) {
           </span>
         </div>
         {error && (
-          <p data-testid="sql-error" className="text-sm text-red-300">
+          <p data-testid="queries-error" className="text-sm text-red-300">
             {error}
           </p>
         )}
         {results !== null && (
           <p
-            data-testid="sql-status"
+            data-testid="queries-status"
             data-ok={summary.ok}
             className={`text-sm ${summary.ok ? 'text-slate-400' : 'text-red-300'}`}
           >
@@ -261,7 +261,7 @@ function SqlView({ runOn }: { runOn?: string | null }) {
             rows={lastRows.data}
             types={types}
             shownIdx={shownIdx}
-            testid="sql-output"
+            testid="queries-output"
             dimmed={busy}
           />
         )}
@@ -270,4 +270,4 @@ function SqlView({ runOn }: { runOn?: string | null }) {
   )
 }
 
-export default SqlView
+export default QueriesView

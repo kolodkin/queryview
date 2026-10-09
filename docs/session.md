@@ -118,7 +118,7 @@ a view can remember a new setting without a migration.
 
 ```json
 {"query": {"sql": "…", "limit": 100, "visibleCols": [], "orderBy": []},
- "sql": {"sql": "…"},
+ "queries": {"sql": "…"},
  "explorer": {"sidebarWidth": 256}}
 ```
 

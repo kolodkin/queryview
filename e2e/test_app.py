@@ -176,12 +176,12 @@ def test_ready_connection_shows_query_panel(seeded_duckdb, page: Page) -> None:
     _connect(page, _DUCKDB, seeded_duckdb)
     expect(page.get_by_test_id("explorer-tables")).to_be_visible()
 
-    page.get_by_test_id("nav-queries").click()
+    page.get_by_test_id("nav-queryview").click()
     expect(page.get_by_test_id("query-panel")).to_be_visible()
 
     page.get_by_test_id("nav-explorer").click()
     expect(page.get_by_test_id("explorer-tables")).to_be_visible()
-    page.get_by_test_id("nav-queries").click()
+    page.get_by_test_id("nav-queryview").click()
     expect(page.get_by_test_id("query-panel")).to_be_visible()
 
 
@@ -212,7 +212,7 @@ def test_disconnected_lands_on_connect(page: Page) -> None:
     expect(page).to_have_url(re.compile(r"/connect$"))
     expect(page.get_by_test_id("connect-page")).to_be_visible()
 
-    page.get_by_test_id("nav-queries").click()
+    page.get_by_test_id("nav-queryview").click()
     expect(page).to_have_url(re.compile(r"/connect$"))
 
     page.goto("/prompt", wait_until="networkidle")

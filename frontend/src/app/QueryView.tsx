@@ -55,7 +55,7 @@ export type QueryPush = {
 // Sentinel value for the predefined dropdown's "new name" item.
 const NEW_NAME_OPTION = '::new::'
 
-// The query page (`/queries`), mounted by the App shell only for a ready
+// The query page (`/queryview`), mounted by the App shell only for a ready
 // connection; picking one happens on the Connect page (ConnectView).
 function QueryView({
   connectionType,
