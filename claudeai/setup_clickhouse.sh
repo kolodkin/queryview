@@ -7,14 +7,15 @@
 # use it. Safe to run repeatedly.
 #
 # Usage:
-#   scripts/setup_clickhouse.sh          # ensure a server is running
-#   scripts/setup_clickhouse.sh stop     # stop the server this script started
+#   claudeai/setup_clickhouse.sh          # ensure a server is running
+#   claudeai/setup_clickhouse.sh stop     # stop the server this script started
 #
 # Env:
 #   CLICKHOUSE_PORT   ClickHouse HTTP port (default 8123)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$ROOT/claudeai/_guard.sh"
 CACHE="$ROOT/.cache"
 CLICKHOUSE_PORT="${CLICKHOUSE_PORT:-8123}"
 PIDFILE="$CACHE/clickhouse.pid"
@@ -57,10 +58,16 @@ fi
 log "starting server on :$CLICKHOUSE_PORT"
 # Run inside $CACHE so data/log dirs land there. Disable the watchdog so the
 # server doesn't fork — then the recorded pid is the server itself and `stop`
-# can kill it directly. disown keeps it running after this script exits.
-( cd "$CACHE" && CLICKHOUSE_WATCHDOG_ENABLE=0 \
-    ./clickhouse server -- --http_port="$CLICKHOUSE_PORT" \
-    > clickhouse.log 2>&1 & echo $! > "$PIDFILE"; disown 2>/dev/null || true )
+# can kill it directly. setsid detaches it from this shell's session and the
+# stdio redirects drop every inherited fd, so the server survives this script
+# exiting and never holds open a pipe the caller is reading from.
+(
+  cd "$CACHE"
+  CLICKHOUSE_WATCHDOG_ENABLE=0 exec setsid ./clickhouse server -- --http_port="$CLICKHOUSE_PORT" \
+    </dev/null >clickhouse.log 2>&1
+) &
+echo $! > "$PIDFILE"
+disown 2>/dev/null || true
 
 for _ in $(seq 1 60); do
   if curl -sf "http://localhost:$CLICKHOUSE_PORT/ping" >/dev/null 2>&1; then

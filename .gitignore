@@ -15,8 +15,8 @@ __pycache__/
 /test-results/
 /report/
 
-# Local browser-e2e helper (scripts/browser_local.sh): clickhouse binary,
-# data, logs, screenshots.
+# Local e2e backing services (claudeai/*.sh): clickhouse binary + data,
+# postgres cluster, logs.
 .cache/
 
 # SPA bundle copied into the package by the release build (see publish.yaml)
