@@ -247,9 +247,8 @@ function QueryPanel({
   // param-prefixed) blocks the main query.
   const [sqlOptions, setSqlOptions] = useState<Record<string, string[]>>({})
   const [optionsError, setOptionsError] = useState<string | null>(null)
-  // The `runOn` the choices on hand were resolved for. After a database switch
-  // they lag it until the re-fetch lands, and the switch's own re-run (below)
-  // waits for that rather than substituting the old database's values.
+  // The `runOn` the choices were resolved for: after a database switch they
+  // lag it until the re-fetch lands, and the switch's re-run (below) waits.
   const [optionsFor, setOptionsFor] = useState<string | null | undefined>(undefined)
 
   // Resolve every `options_sql` param's choices via the panel's query endpoint;
@@ -479,10 +478,9 @@ function QueryPanel({
   // produced them (not the editor, which may hold an unrun edit) from the first
   // page, so they never describe a database the pill no longer shows. An empty
   // panel has nothing to refresh. The run waits for the `options_sql` choices
-  // resolved on the new database and substitutes those — seeded the way the
-  // dropdowns are about to be, since their state is a render behind — rather
-  // than the values the old database produced. Choices that fail to resolve
-  // block the run, as they do everywhere; the banner says why.
+  // of the new database and substitutes those, seeded as the dropdowns are
+  // about to be (their state is a render behind). Choices that fail to resolve
+  // block it, as everywhere; the banner says why.
   const runOnSeen = useRef(runOn)
   const rerunPending = useRef(false)
   useEffect(() => {

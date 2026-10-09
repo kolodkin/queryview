@@ -41,10 +41,8 @@ type PendingPatch = SessionPatch & { ui?: Record<string, Record<string, unknown>
 let state: SessionState | null = null
 // Another tab took this session: stop writing to it until the user picks one.
 let taken = false
-// The heartbeat in flight, if any. A switch waits it out, and no beat starts
-// mid-switch (`holds` counts the switches in flight): a beat carrying the old
-// id would claim it back, and one that read the row before a database switch
-// would hand the shell the old database after it.
+// The heartbeat in flight, if any, and the switches in flight that hold the
+// next one off (withoutHeartbeat).
 let beating: Promise<void> | null = null
 let holds = 0
 let pending: PendingPatch = {}
@@ -211,10 +209,10 @@ export async function flushPatches(): Promise<void> {
   }
 }
 
-// Runs a change to this session's row made through another endpoint — a
-// switch of session, connection or database — with no heartbeat overlapping
-// it: the beat in flight lands first, and none starts until `f` settles. A
-// beat straddling the change would adopt the row as it was before it.
+// Runs a switch of session, connection or database with no heartbeat
+// overlapping it: the beat in flight lands first, none starts until `f`
+// settles. A beat straddling the switch would adopt the row from before it —
+// claiming the old session back, or handing the shell the old database.
 export async function withoutHeartbeat<T>(f: () => Promise<T>): Promise<T> {
   holds++
   try {

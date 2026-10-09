@@ -60,9 +60,8 @@ export async function openSaved(
   }
 }
 
-// Select this session's database; false when the switch failed. The shell
-// follows the session row's database, so no heartbeat may straddle the switch:
-// a beat that read the row before it would bring the old database back.
+// Select this session's database; false when the switch failed. Held off the
+// heartbeat, since the shell follows the row's database (withoutHeartbeat).
 export function selectDatabase(database: string): Promise<boolean> {
   return withoutHeartbeat(async () => {
     try {
