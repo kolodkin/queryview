@@ -66,7 +66,9 @@ The row is also the truth for the connection and its database. Every row the tab
 adopts is checked against the connection it shows, so a switch made elsewhere
 (another tab, an API caller) reaches it within a beat, and every view follows —
 the explorer reloads its tables, the dashboard and the query panel re-run what
-is on screen.
+is on screen. A switch the tab makes itself holds the heartbeat while it is in
+flight: a beat that read the row before the switch must not land after it and
+hand the old database back.
 
 ## The session dropdown
 
