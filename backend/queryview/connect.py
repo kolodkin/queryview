@@ -457,9 +457,8 @@ async def run_query(
 
 
 async def execute_script(sid: str, sql: str) -> dict[str, Any]:
-    """Run a `;`-separated script as written (the Queries page) on this session's
-    selected database: `{ok, results: [{sql, ok, meta, data, truncated, status,
-    message, elapsed_ms}]}`, one entry per statement run."""
+    """Run a script as written on this session's selected database (the Queries
+    page): `{ok, results}`, one entry per statement run — see docs/api.md."""
     s, err = await _gated_session(sid)
     if s is None:
         return err  # type: ignore[return-value]

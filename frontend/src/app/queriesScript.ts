@@ -19,9 +19,9 @@ export type StatementResult = {
 
 export type Span = { start: number; end: number } // the trimmed statement's [start, end)
 
-// The non-blank statements of a script as character spans — the same split the
-// backend makes (quotes, `$$` bodies and comments hide their semicolons), so
-// "the statement under the cursor" is exactly what the server would run alone.
+// The non-blank statements of a script as character spans — the same split as
+// the backend's split_statements, so the statement under the cursor is exactly
+// what the server would run alone and the k-th result is the k-th span.
 function statementSpans(text: string): Span[] {
   const spans: Span[] = []
   let start = 0
@@ -76,9 +76,8 @@ export function statementRangeAt(text: string, cursor: number): Span | null {
 }
 
 // Where the failing statement of a run sits in the script, for marking it in
-// the textbox: `ran` is the text that was sent, starting at `offset` in the
-// script, and the server split it exactly as statementSpans does, so the k-th
-// result is the k-th span. null when nothing failed.
+// the textbox: `ran` is the text that was sent, starting at `offset`. null when
+// nothing failed.
 export function failedSpan(ran: string, offset: number, results: StatementResult[]): Span | null {
   const last = results[results.length - 1]
   if (!last || last.ok) return null

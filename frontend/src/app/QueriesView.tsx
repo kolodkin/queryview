@@ -9,12 +9,10 @@ import { flushPatches, patchView, viewState } from './session'
 import { failedSpan, runSummary, statementRangeAt, type Span, type StatementResult } from './queriesScript'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
-// The Queries page (`/queries`), mounted by the App shell only for a ready
-// connection: one flat SQL textbox whose `;`-separated statements run as
-// written — writes and DDL included, no pagination, nothing saved. Run runs
-// the statement under the cursor (or the selection), Run all the whole script.
-// A run leaves one status line; the last statement's rows, if any, are the
-// table below, and Open in QueryView carries that statement over (docs/queries.md).
+// The Queries page (`/queries`, docs/queries.md), mounted by the App shell only
+// for a ready connection: a flat SQL textbox whose statements run as written.
+// Run takes the statement under the cursor (or the selection), Run all the
+// whole script; a run leaves one status line and the last statement's rows.
 function QueriesView() {
   const navigate = useNavigate()
   // The text is restored from the session; results never are (docs/session.md).
@@ -26,10 +24,9 @@ function QueriesView() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [rows, setRows] = useState(8)
-  // The failing statement of the last run, marked red in the textbox until the
-  // textbox is clicked into — so the status line needn't repeat it. Kept with
-  // the script it was found in: an edit moves the offsets, so the mark only
-  // shows while the text is still what ran.
+  // The failing statement of the last run, marked red in the textbox until it
+  // is clicked into. Kept with the script it was found in: an edit moves the
+  // offsets, so the mark only shows while the text is still what ran.
   const [failed, setFailed] = useState<{ script: string; span: Span } | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const markRef = useRef<HTMLPreElement>(null)
@@ -135,9 +132,9 @@ function QueriesView() {
             </button>
           ))}
         </div>
-        {/* The mark is a transparent twin of the textarea laid over it — same
-            font, padding, border and wrapping, scrolled in step — with only
-            the failing statement painted, so it lands on the same glyphs. */}
+        {/* The mark is a transparent twin of the textarea laid over it (same
+            font, padding, border, wrapping, scroll) with only the failing
+            statement painted, so it lands on the same glyphs. */}
         <div className="relative">
           <textarea
             ref={inputRef}

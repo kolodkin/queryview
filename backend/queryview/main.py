@@ -367,8 +367,7 @@ async def db_query(request: Request):
     return {"ok": True, "meta": r["meta"], "data": r["data"]}
 
 
-# Run a `;`-separated script as written — writes and DDL included, no
-# pagination — one result per statement (the Queries page).
+# Run a script as written, one result per statement (the Queries page).
 @app.post("/api/db/execute")
 async def db_execute(request: Request):
     body = await _read_json(request)
