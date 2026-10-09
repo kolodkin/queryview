@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 
-from queryview.drivers.base import Column
+from queryview.drivers.base import SCRIPT_TIMEOUT_SECONDS, Column
 from queryview.drivers.clickhouse import ChConfig, ClickHouseDriver
 
 JSON_COMPACT = (
@@ -119,6 +119,11 @@ def test_execute_script_posts_each_statement_as_written(monkeypatch):
     assert [c["query"] for c in calls] == ["INSERT INTO t VALUES (1)", "SELECT id, tags FROM t"]
     assert all(c["write"] and c["fmt"] is None and c["database"] == "db" for c in calls)
     assert calls[0]["client"] is not None and calls[0]["client"] is calls[1]["client"]
+    # Statements share one server session (SET, temporary tables), and a
+    # statement may run far longer than a read-only probe.
+    sid = calls[0]["settings"]["session_id"]
+    assert sid and calls[1]["settings"]["session_id"] == sid
+    assert calls[0]["client"].timeout.read == SCRIPT_TIMEOUT_SECONDS
     assert calls[0]["settings"]["default_format"] == "JSONCompact"
     assert calls[0]["settings"]["output_format_json_quote_64bit_integers"] == "1"
     assert [r.ok for r in results] == [True, True]

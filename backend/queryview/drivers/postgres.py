@@ -11,6 +11,7 @@ import asyncpg
 
 from .base import (
     SCRIPT_ROW_CAP,
+    SCRIPT_TIMEOUT_SECONDS,
     Column,
     QueryResult,
     QueryRows,
@@ -43,7 +44,7 @@ def parse_pg_config(body: Any) -> tuple[PgConfig | None, str | None]:
     return PgConfig(**fields), None
 
 
-async def _raw_connect(c: PgConfig, database: str | None):
+async def _raw_connect(c: PgConfig, database: str | None, command_timeout: float = PG_TIMEOUT_SECONDS):
     return await asyncpg.connect(
         host=c.host,
         port=c.port,
@@ -51,7 +52,7 @@ async def _raw_connect(c: PgConfig, database: str | None):
         password=c.password or None,
         database=database,
         timeout=PG_TIMEOUT_SECONDS,
-        command_timeout=PG_TIMEOUT_SECONDS,
+        command_timeout=command_timeout,
     )
 
 
@@ -68,9 +69,9 @@ async def _raw_connect_bootstrap(c: PgConfig):
 
 
 @asynccontextmanager
-async def _connect(c: PgConfig, database: str | None):
+async def _connect(c: PgConfig, database: str | None, command_timeout: float = PG_TIMEOUT_SECONDS):
     """Short-lived connection to a specific database, closed on exit."""
-    conn = await _raw_connect(c, database)
+    conn = await _raw_connect(c, database, command_timeout)
     try:
         yield conn
     finally:
@@ -203,19 +204,28 @@ class PostgresDriver:
 
     async def execute_script(self, config: PgConfig, sql: str, database: str | None) -> list[StatementResult]:
         try:
-            async with _connect(config, database) as conn:
+            async with _connect(config, database, SCRIPT_TIMEOUT_SECONDS) as conn:
 
                 async def run_one(stmt: str) -> StatementResult:
                     try:
                         prepared = await conn.prepare(stmt)
-                        records = await prepared.fetch()
                         attrs = prepared.get_attributes()
+                        if not attrs:
+                            # No result columns: the command tag (`INSERT 0 3`) says what happened.
+                            await prepared.fetch()
+                            return StatementResult(stmt, True, status=prepared.get_statusmsg() or "OK")
+                        # Rows come through a cursor, so only the cap crosses
+                        # the wire. A cursor needs a transaction: the script's
+                        # own (BEGIN) if it opened one, else one around this
+                        # statement.
+                        if conn.is_in_transaction():
+                            records = await (await prepared.cursor()).fetch(SCRIPT_ROW_CAP + 1)
+                        else:
+                            async with conn.transaction():
+                                records = await (await prepared.cursor()).fetch(SCRIPT_ROW_CAP + 1)
                     except Exception as e:  # noqa: BLE001
                         return StatementResult(stmt, False, message=str(e))
-                    if not attrs:
-                        # No result columns: the command tag (`INSERT 0 3`) says what happened.
-                        return StatementResult(stmt, True, status=prepared.get_statusmsg() or "OK")
-                    return StatementResult(stmt, True, rows=_to_rows(attrs, records[: SCRIPT_ROW_CAP + 1]))
+                    return StatementResult(stmt, True, rows=_to_rows(attrs, records))
 
                 return await run_script(sql, run_one)
         except Exception as e:  # noqa: BLE001

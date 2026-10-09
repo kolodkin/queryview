@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import asdict, dataclass
 from typing import Any, NamedTuple
 
@@ -10,6 +11,7 @@ import httpx
 
 from .base import (
     SCRIPT_ROW_CAP,
+    SCRIPT_TIMEOUT_SECONDS,
     Column,
     QueryResult,
     QueryRows,
@@ -219,12 +221,15 @@ class ClickHouseDriver:
         return True, [{"name": cols[0], "type": cols[1]} for cols in _tsv_rows(r.value, 2)]
 
     async def execute_script(self, config: ChConfig, sql: str, database: str | None) -> list[StatementResult]:
-        # One HTTP client for the whole script; each statement is still its
-        # own request, as ClickHouse's HTTP interface has no session.
-        async with httpx.AsyncClient(timeout=CH_TIMEOUT_SECONDS) as client:
+        # One HTTP client for the script, and one server session so SET and
+        # temporary tables carry from statement to statement; a statement may
+        # run far longer than a read-only probe before it is given up on.
+        settings = {**SCRIPT_SETTINGS, "session_id": uuid.uuid4().hex, "session_timeout": str(SCRIPT_TIMEOUT_SECONDS)}
+        timeout = httpx.Timeout(CH_TIMEOUT_SECONDS, read=SCRIPT_TIMEOUT_SECONDS)
+        async with httpx.AsyncClient(timeout=timeout) as client:
 
             async def run_one(stmt: str) -> StatementResult:
-                r = await ch_query(config, stmt, database=database, settings=SCRIPT_SETTINGS, write=True, client=client)
+                r = await ch_query(config, stmt, database=database, settings=settings, write=True, client=client)
                 if not r.ok:
                     return StatementResult(stmt, False, message=r.value)
                 if not r.value:  # DDL/DML: nothing comes back

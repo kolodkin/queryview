@@ -30,6 +30,14 @@ describe('statementRangeAt', () => {
   it('moves to the next statement from a blank line between two', () => {
     expect(at(10)).toBe("SELECT 'a;b' -- c;")
   })
+  it('skips semicolons in tagged dollar quotes and backslash-escaped quotes', () => {
+    const fn = 'CREATE FUNCTION f() AS $body$ BEGIN RETURN 1; END $body$ LANGUAGE plpgsql'
+    const script = `${fn}; SELECT E'it\\'s; here'; SELECT 2`
+    const first = statementRangeAt(script, 5)!
+    expect(script.slice(first.start, first.end)).toBe(fn)
+    const second = statementRangeAt(script, fn.length + 10)!
+    expect(script.slice(second.start, second.end)).toBe("SELECT E'it\\'s; here'")
+  })
   it('falls back to the last statement after trailing whitespace', () => {
     expect(statementRangeAt('SELECT 1;\n\n', 11)).toEqual({ start: 0, end: 8 })
     expect(statementRangeAt('   ', 1)).toBeNull()

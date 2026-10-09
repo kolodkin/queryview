@@ -19,9 +19,22 @@ export type StatementResult = {
 
 export type Span = { start: number; end: number } // the trimmed statement's [start, end)
 
+const DOLLAR_TAG = /\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$/y
+
+// The index just past the single-quoted string opening at `i` (a backslash
+// escapes the next character), or the end when it never closes.
+function skipSingleQuoted(text: string, i: number): number {
+  for (i += 1; i < text.length; i += 1) {
+    if (text[i] === '\\') i += 1
+    else if (text[i] === "'") return i + 1
+  }
+  return text.length
+}
+
 // The non-blank statements of a script as character spans — the same split as
-// the backend's split_statements, so the statement under the cursor is exactly
-// what the server would run alone and the k-th result is the k-th span.
+// the backend's split_statements (keep the two in step), so the statement under
+// the cursor is exactly what the server would run alone and the k-th result is
+// the k-th span.
 function statementSpans(text: string): Span[] {
   const spans: Span[] = []
   let start = 0
@@ -36,12 +49,16 @@ function statementSpans(text: string): Span[] {
   }
   while (i < n) {
     const ch = text[i]
-    if (ch === "'" || ch === '"' || ch === '`') {
+    DOLLAR_TAG.lastIndex = i
+    let tag: RegExpExecArray | null
+    if (ch === "'") {
+      i = skipSingleQuoted(text, i)
+    } else if (ch === '"' || ch === '`') {
       const end = text.indexOf(ch, i + 1)
       i = end < 0 ? n : end + 1
-    } else if (text.startsWith('$$', i)) {
-      const end = text.indexOf('$$', i + 2)
-      i = end < 0 ? n : end + 2
+    } else if ((tag = DOLLAR_TAG.exec(text)) !== null) {
+      const end = text.indexOf(tag[0], i + tag[0].length)
+      i = end < 0 ? n : end + tag[0].length
     } else if (text.startsWith('--', i)) {
       const end = text.indexOf('\n', i)
       i = end < 0 ? n : end + 1

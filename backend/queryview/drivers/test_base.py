@@ -108,3 +108,15 @@ def test_split_statements_ignores_semicolons_inside_quotes_and_comments():
 def test_split_statements_keeps_an_unterminated_quote_in_one_statement():
     # A broken statement reaches the database whole, so its own parser reports it.
     assert split_statements("SELECT 'open; SELECT 2") == ["SELECT 'open; SELECT 2"]
+
+
+def test_split_statements_handles_tagged_dollar_quotes_and_backslash_escapes():
+    fn = "CREATE FUNCTION f() RETURNS int AS $body$ BEGIN RETURN 1; END $body$ LANGUAGE plpgsql"
+    assert split_statements(f"{fn}; SELECT f()") == [fn, "SELECT f()"]
+    # A backslash escapes the next character inside a single-quoted string
+    # (ClickHouse strings, Postgres E'' strings).
+    assert split_statements("SELECT E'it\\'s; here'; SELECT 'a\\'b;c'; SELECT 2") == [
+        "SELECT E'it\\'s; here'",
+        "SELECT 'a\\'b;c'",
+        "SELECT 2",
+    ]

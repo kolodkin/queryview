@@ -8,18 +8,57 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from conftest import CH_DB, PG_DB, PG_HOST, PG_PASSWORD, PG_PORT, PG_USER, _ch_exec
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, DriverCase, _connect
 
 # A table the write round-trip creates: unique per run, so parallel workers
-# sharing one database server never collide; the test drops it at the end.
+# sharing one database server never collide; _drop_table cleans it up.
 _DDL = {
     "clickhouse": "CREATE TABLE {t} (id UInt32, name String) ENGINE = MergeTree ORDER BY id",
     "postgres": "CREATE TABLE {t} (id integer, name text)",
     "duckdb": "CREATE TABLE {t} (id INTEGER, name TEXT)",
 }
+# A temporary table: it lives on the run's connection (ClickHouse: its session).
+_TEMP_DDL = {
+    "clickhouse": "CREATE TEMPORARY TABLE {t} (x UInt8)",
+    "postgres": "CREATE TEMP TABLE {t} (x integer)",
+    "duckdb": "CREATE TEMP TABLE {t} (x INTEGER)",
+}
 
 DUCK = next(c for c in CASES if c.id == "duckdb")
+
+
+def _drop_table(case: DriverCase, seed: str, table: str) -> None:
+    """Drop a table the test created, straight on the server, whatever state
+    the UI was left in."""
+    if case.id == "clickhouse":
+        _ch_exec(f"DROP TABLE IF EXISTS {CH_DB}.{table}")
+    elif case.id == "postgres":
+        import asyncio
+        import concurrent.futures
+
+        import asyncpg
+
+        async def _go():
+            conn = await asyncpg.connect(
+                host=PG_HOST, port=PG_PORT, user=PG_USER, password=PG_PASSWORD or None, database=PG_DB
+            )
+            try:
+                await conn.execute(f"DROP TABLE IF EXISTS {table}")
+            finally:
+                await conn.close()
+
+        with concurrent.futures.ThreadPoolExecutor(1) as pool:
+            pool.submit(asyncio.run, _go()).result()
+    else:
+        import duckdb
+
+        con = duckdb.connect(seed)
+        try:
+            con.execute(f"DROP TABLE IF EXISTS {table}")
+        finally:
+            con.close()
 
 
 def _open_queries_page(page: Page) -> None:
@@ -30,10 +69,11 @@ def _open_queries_page(page: Page) -> None:
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_run_all_writes_and_shows_the_last_select(case: DriverCase, request, page: Page, shot) -> None:
     seed = request.getfixturevalue(case.seed_fixture)
+    table = f"qv_sql_{uuid.uuid4().hex[:8]}"
+    request.addfinalizer(lambda: _drop_table(case, seed, table))
     _connect(page, case, seed)
     _open_queries_page(page)
 
-    table = f"qv_sql_{uuid.uuid4().hex[:8]}"
     select = f"SELECT id, name FROM {table} ORDER BY id"
     script = (
         f"{_DDL[case.id].format(t=table)};\nINSERT INTO {table} (id, name) VALUES (1, 'one'), (2, 'two');\n{select}"
@@ -74,6 +114,34 @@ def test_run_all_writes_and_shows_the_last_select(case: DriverCase, request, pag
     expect(status).not_to_contain_text("statements")
     expect(status).to_contain_text("ms")
     expect(page.get_by_test_id("queries-output")).to_have_count(0)
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
+def test_statements_share_the_runs_connection(case: DriverCase, request, page: Page) -> None:
+    """A temporary table made by one statement is there for the next: the run
+    is one connection (one server session on ClickHouse)."""
+    seed = request.getfixturevalue(case.seed_fixture)
+    _connect(page, case, seed)
+    _open_queries_page(page)
+
+    table = f"qv_tmp_{uuid.uuid4().hex[:8]}"
+    page.get_by_test_id("queries-input").fill(
+        f"{_TEMP_DDL[case.id].format(t=table)}; INSERT INTO {table} VALUES (7); SELECT x FROM {table}"
+    )
+    page.get_by_test_id("queries-run-all").click()
+    expect(page.get_by_test_id("queries-status")).to_contain_text("3 statements · 1 row")
+    expect(page.get_by_test_id("queries-output")).to_contain_text("7")
+
+
+def test_clickhouse_row_cap_leaves_subqueries_alone(seeded_test_db, page: Page) -> None:
+    """The cap is a setting on the ClickHouse session; it must bound only the
+    statement's own result, never what a subquery feeds it."""
+    _connect(page, CASES[0], seeded_test_db)
+    _open_queries_page(page)
+
+    page.get_by_test_id("queries-input").fill("SELECT count() AS n FROM (SELECT number FROM numbers(200000))")
+    page.get_by_test_id("queries-run-all").click()
+    expect(page.get_by_test_id("queries-output")).to_contain_text("200000")
 
 
 def test_run_all_stops_at_the_first_failing_statement(seeded_duckdb, page: Page, shot) -> None:

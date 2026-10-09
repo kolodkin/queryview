@@ -126,3 +126,11 @@ def test_execute_script_caps_rows_and_flags_truncation(duck_path):
     assert len(results[0].rows.data) == 100 and results[0].truncated is True
     results = _run(d.execute_script(DuckConfig(duck_path), "SELECT * FROM range(3)", None))
     assert results[0].truncated is False
+
+
+def test_execute_script_reports_a_runtime_error_as_a_failed_statement(duck_path):
+    # A relation binds lazily: the cast only fails when the rows are fetched.
+    d = DuckDBDriver()
+    results = _run(d.execute_script(DuckConfig(duck_path), "SELECT 1 AS a; SELECT 'abc'::INTEGER AS b; SELECT 2", None))
+    assert [r.ok for r in results] == [True, False]
+    assert "abc" in results[1].message

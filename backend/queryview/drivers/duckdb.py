@@ -199,13 +199,14 @@ class DuckDBDriver:
         def run_one_sync(con: duckdb.DuckDBPyConnection, stmt: str) -> StatementResult:
             try:
                 # sql() yields a relation for a row-returning statement and
-                # None for DDL/DML, which it has already run.
+                # None for DDL/DML, which it has already run. The relation is
+                # lazy: it runs on fetch, so that stays inside the try too.
                 rel = con.sql(stmt)
+                if rel is None:
+                    return StatementResult(stmt, True, status="OK")
+                return StatementResult(stmt, True, rows=_rel_rows(rel.limit(SCRIPT_ROW_CAP + 1)))
             except Exception as e:  # noqa: BLE001
                 return StatementResult(stmt, False, message=str(e))
-            if rel is None:
-                return StatementResult(stmt, True, status="OK")
-            return StatementResult(stmt, True, rows=_rel_rows(rel.limit(SCRIPT_ROW_CAP + 1)))
 
         try:
             con = await asyncio.to_thread(_open, config.path, False)

@@ -46,14 +46,17 @@ database is selected the page redirects to Connect.
 
 ## Statements
 
-Statements are separated by `;`. The split skips semicolons inside `'…'`,
-`"…"`, `` `…` ``, `$$…$$` bodies, `-- …` line comments and `/* … */` block
-comments; blank statements are dropped. An unterminated quote keeps the rest of
+Statements are separated by `;`. The split skips semicolons inside `'…'` (a
+backslash escapes the next character, as in ClickHouse and Postgres `E''`
+strings), `"…"`, `` `…` ``, `$$…$$` and `$tag$…$tag$` bodies, `-- …` line
+comments and `/* … */` block comments; blank statements are dropped. An unterminated quote keeps the rest of
 the script in one statement, so the database reports the real syntax error.
 
-A run opens **one connection** and runs its statements **in order** on it, so
-`BEGIN; …; COMMIT;`, `SET` and temp tables carry across statements of the same
-run but not from one Run to the next.
+A run opens **one connection** (one server session on ClickHouse) and runs
+its statements **in order** on it, so `BEGIN; …; COMMIT;`, `SET` and temporary
+tables carry across statements of the same run but not from one Run to the
+next. A statement may run for up to **10 minutes** before it is given up on,
+unlike the 5-second limit of the other pages.
 
 **An error stops the run.** Nothing after the failing statement is sent, and
 nothing before it is rolled back — statements `1 … k-1` stay applied. Fix the
@@ -84,7 +87,8 @@ same JSON shape as every other result
   `default_format=JSONCompact`. A statement with its own `FORMAT` clause is
   shown as text in the status line instead of rows.
 - **Postgres** — each statement is prepared and executed on the run's
-  connection; a statement with no result columns reports its command tag.
+  connection; rows are read through a cursor up to the cap, and a statement
+  with no result columns reports its command tag.
 - **DuckDB** — the file is opened **read-write** for the run, while every other
   page opens it read-only. DuckDB refuses a second open of one file with a
   different mode in the same process, so the explorer and QueryView error on
