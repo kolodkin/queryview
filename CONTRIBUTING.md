@@ -106,8 +106,18 @@ uv run --group test pytest e2e -n auto
 
 To test a server you started yourself (e.g. `npm run dev`, or a built preview),
 point at it with `BASE_URL=http://localhost:5173 uv run --group test pytest e2e`;
-workers then share that one server, so run it serially. To run the full suite
-against real ClickHouse and Postgres the way CI does, use `scripts/setup.sh`.
+workers then share that one server, so run it serially.
+
+The suite needs a real ClickHouse (`:8123`) and Postgres (`:5432`), the way CI
+has them. The scripts under `claudeai/` install and run both locally (standalone
+ClickHouse binary and a Postgres cluster under `.cache/`); they are written for
+the Claude Code web container and refuse to run elsewhere unless you opt in:
+
+```bash
+CLAUDEAI_ALLOW_LOCAL=1 claudeai/setup.sh    # once: deps, browser, both databases
+CLAUDEAI_ALLOW_LOCAL=1 claudeai/run.sh      # later: restart the databases
+CLAUDEAI_ALLOW_LOCAL=1 claudeai/run.sh stop
+```
 
 ## Lint & type-check
 
