@@ -456,6 +456,31 @@ async def run_query(
     return {"ok": True, "database": s.database, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
 
 
+async def execute_script(sid: str, sql: str) -> dict[str, Any]:
+    """Run a script as written on this session's selected database (the Queries
+    page): `{ok, results}`, one entry per statement run — see docs/api.md."""
+    s, err = await _gated_session(sid)
+    if s is None:
+        return err  # type: ignore[return-value]
+    results = await DRIVERS[s.type].execute_script(s.config, sql, s.database)
+    return {
+        "ok": True,
+        "results": [
+            {
+                "sql": r.sql,
+                "ok": r.ok,
+                "meta": [c._asdict() for c in r.rows.meta] if r.rows is not None else None,
+                "data": r.rows.data if r.rows is not None else None,
+                "truncated": r.truncated,
+                "status": r.status,
+                "message": r.message,
+                "elapsed_ms": r.elapsed_ms,
+            }
+            for r in results
+        ],
+    }
+
+
 async def export_csv(
     sid: str,
     sql: str,

@@ -10,12 +10,16 @@ from typing import Any
 import asyncpg
 
 from .base import (
+    SCRIPT_ROW_CAP,
+    SCRIPT_TIMEOUT_SECONDS,
     Column,
     QueryResult,
     QueryRows,
+    StatementResult,
     TextResult,
     build_order_by,
     parse_host_port_config,
+    run_script,
     to_csv,
     to_json_value,
     wrap_paginated,
@@ -40,7 +44,7 @@ def parse_pg_config(body: Any) -> tuple[PgConfig | None, str | None]:
     return PgConfig(**fields), None
 
 
-async def _raw_connect(c: PgConfig, database: str | None):
+async def _raw_connect(c: PgConfig, database: str | None, command_timeout: float = PG_TIMEOUT_SECONDS):
     return await asyncpg.connect(
         host=c.host,
         port=c.port,
@@ -48,7 +52,7 @@ async def _raw_connect(c: PgConfig, database: str | None):
         password=c.password or None,
         database=database,
         timeout=PG_TIMEOUT_SECONDS,
-        command_timeout=PG_TIMEOUT_SECONDS,
+        command_timeout=command_timeout,
     )
 
 
@@ -65,13 +69,19 @@ async def _raw_connect_bootstrap(c: PgConfig):
 
 
 @asynccontextmanager
-async def _connect(c: PgConfig, database: str | None):
+async def _connect(c: PgConfig, database: str | None, command_timeout: float = PG_TIMEOUT_SECONDS):
     """Short-lived connection to a specific database, closed on exit."""
-    conn = await _raw_connect(c, database)
+    conn = await _raw_connect(c, database, command_timeout)
     try:
         yield conn
     finally:
         await conn.close()
+
+
+def _to_rows(attrs: Any, records: list[Any]) -> QueryRows:
+    """asyncpg's statement attributes and records as the shared result shape."""
+    meta = [Column(a.name, a.type.name) for a in attrs]
+    return QueryRows(meta, [[to_json_value(v) for v in r] for r in records])
 
 
 @asynccontextmanager
@@ -150,9 +160,7 @@ class PostgresDriver:
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias="_qv")
         async with _connect(config, database) as conn:
             stmt = await conn.prepare(paginated)
-            meta = [Column(a.name, a.type.name) for a in stmt.get_attributes()]
-            records = await stmt.fetch()
-            return QueryRows(meta, [[to_json_value(v) for v in r] for r in records])
+            return _to_rows(stmt.get_attributes(), await stmt.fetch())
 
     async def run_query(
         self,
@@ -193,3 +201,33 @@ class PostgresDriver:
                 return True, [{"name": a.name, "type": a.type.name} for a in stmt.get_attributes()]
         except Exception as e:  # noqa: BLE001
             return False, str(e) or "connection failed"
+
+    async def execute_script(self, config: PgConfig, sql: str, database: str | None) -> list[StatementResult]:
+        try:
+            async with _connect(config, database, SCRIPT_TIMEOUT_SECONDS) as conn:
+
+                async def run_one(stmt: str) -> StatementResult:
+                    try:
+                        prepared = await conn.prepare(stmt)
+                        attrs = prepared.get_attributes()
+                        if not attrs:
+                            # No result columns: the command tag (`INSERT 0 3`) says what happened.
+                            await prepared.fetch()
+                            return StatementResult(stmt, True, status=prepared.get_statusmsg() or "OK")
+                        # Rows come through a cursor, so only the cap crosses
+                        # the wire. A cursor needs a transaction: the script's
+                        # own (BEGIN) if it opened one, else one around this
+                        # statement.
+                        if conn.is_in_transaction():
+                            records = await (await prepared.cursor()).fetch(SCRIPT_ROW_CAP + 1)
+                        else:
+                            async with conn.transaction():
+                                records = await (await prepared.cursor()).fetch(SCRIPT_ROW_CAP + 1)
+                    except Exception as e:  # noqa: BLE001
+                        return StatementResult(stmt, False, message=str(e))
+                    return StatementResult(stmt, True, rows=_to_rows(attrs, records))
+
+                return await run_script(sql, run_one)
+        except Exception as e:  # noqa: BLE001
+            # The connection itself failed: report it against the whole script.
+            return [StatementResult(sql, False, message=str(e) or "connection failed")]
