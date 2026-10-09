@@ -86,7 +86,7 @@ def test_run_all_stops_at_the_first_failing_statement(seeded_duckdb, page: Page,
     # The second statement failed: the line says which, why, and shows it.
     status = page.get_by_test_id("sql-status")
     expect(status).to_have_attribute("data-ok", "false")
-    expect(status).to_contain_text("Statement 2 failed")
+    expect(status).to_contain_text("Statement #2 Failed - SELECT * FROM no_such_table - ")
     expect(status).to_contain_text("no_such_table")
     expect(status).to_contain_text("SELECT * FROM no_such_table")
     # The last statement run failed, so there is no table to show.

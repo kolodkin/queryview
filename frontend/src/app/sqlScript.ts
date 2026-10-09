@@ -100,7 +100,7 @@ export function runSummary(results: StatementResult[]): { ok: boolean; text: str
     const short = snippet.length > 80 ? `${snippet.slice(0, 80)}…` : snippet
     return {
       ok: false,
-      text: `Statement ${results.length} failed: ${last.message || 'failed'} — ${short}`,
+      text: `Statement #${results.length} Failed - ${short} - ${last.message || 'failed'}`,
     }
   }
   if (results.length === 1) return { ok: true, text: resultSummary(last) }

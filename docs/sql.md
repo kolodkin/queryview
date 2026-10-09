@@ -68,7 +68,7 @@ supports it).
 | --- | --- |
 | Returned rows | `N rows`; when the result was cut at **100 rows**, `first 100 rows, more exist` |
 | No rows (DDL, DML) | the driver's own status — ClickHouse `OK`, Postgres's command tag (`INSERT 0 3`), DuckDB `OK` |
-| Failed | `Statement k failed: <the driver's error> — <the statement>` |
+| Failed | `Statement #k Failed - <the statement> - <the driver's error>` |
 
 A single statement's line ends with its time; a script's starts with how many
 statements ran and ends with the total.

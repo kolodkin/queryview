@@ -70,7 +70,7 @@ describe('runSummary', () => {
     ]
     expect(runSummary(run)).toEqual({
       ok: false,
-      text: 'Statement 2 failed: no such table — SELECT * FROM nope',
+      text: 'Statement #2 Failed - SELECT * FROM nope - no such table',
     })
   })
   it('handles an empty run', () => {
