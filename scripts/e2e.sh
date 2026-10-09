@@ -4,7 +4,8 @@
 # cleans up), so it never touches a real ~/.queryview.
 #
 # Assumes deps, the Playwright browser and the databases are set up
-# (scripts/setup_browser.sh does that, then calls this).
+# (claudeai/setup.sh does the one-time install; claudeai/run.sh restarts the
+# databases in a later session).
 #
 # Usage:
 #   scripts/e2e.sh [pytest args...]      e.g. scripts/e2e.sh -k workspaces

@@ -1,6 +1,6 @@
 ---
 name: claudeai-run
-description: Start the local backing services (ClickHouse, PostgreSQL, dbmate pipeline db, Airflow) needed for the e2e suite by running claudeai/run.sh. Use at the start of a new session, or whenever the services are down (e.g. after a container suspend/resume) and tests or DAGs need them up.
+description: Start the local backing services (ClickHouse, PostgreSQL) needed for the e2e suite by running claudeai/run.sh. Use at the start of a new session, or whenever the services are down (e.g. after a container suspend/resume) and tests need them up.
 disable-model-invocation: true
 ---
 
@@ -32,13 +32,13 @@ claudeai/run.sh
 
 Idempotently starts (reusing anything already up):
 
-1. **ClickHouse** — `:8123`
-2. **PostgreSQL** — `:5432` (ensures db + password)
-3. **dbmate** — creates the pipeline db if missing, applies migrations
-4. **Airflow** scheduler + webserver — `:8080` (login `admin`/`admin`)
+1. **ClickHouse** — `:8123` (standalone binary in `.cache/clickhouse`, user `default`, no password)
+2. **PostgreSQL** — `:5432` (cluster in `.cache/pgdata`, trust auth, superuser `postgres`)
 
 Prints `[run] all services up` on success. A failure exits non-zero with a
 `[<svc>] error:` line pointing at its log under `.cache/`.
+
+Then run the suite with `npm run e2e` (or `scripts/e2e.sh -k <expr>`).
 
 ## Stop
 
@@ -55,5 +55,4 @@ claudeai/setup_<svc>.sh first" error means the install is gone (fresh container)
 claudeai/setup.sh   # then re-run claudeai/run.sh
 ```
 
-Per-service logs: `.cache/clickhouse.log`, `.cache/postgres.log`,
-`.cache/airflow-webserver.log`.
+Per-service logs: `.cache/clickhouse.log`, `.cache/postgres.log`.
