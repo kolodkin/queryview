@@ -14,6 +14,7 @@ Before a database is selected the page redirects to Connect, like QueryView.
 ```
 ┌───────────────────────────────────────────────────────────┐
 │                         Queries                           │
+│                                    [Min] [S] [M] [L] [XL]  │
 │ ┌───────────────────────────────────────────────────────┐ │
 │ │ CREATE TABLE t (id INTEGER);                          │ │  ← SQL textarea
 │ │ INSERT INTO t VALUES (1), (2);                        │ │
@@ -29,7 +30,9 @@ Before a database is selected the page redirects to Connect, like QueryView.
 └───────────────────────────────────────────────────────────┘
 ```
 
-- **SQL textarea** — the script. Drag its corner to resize.
+- **SQL textarea** — the script. **Min / S / M / L / XL** set its height, as on
+  QueryView; **Min** collapses it so the results table gets the room (the text
+  is kept).
 - **▶ Run** (**Ctrl/⌘+Enter**) — runs the **statement under the cursor**, or
   the **selection** when there is one. The cursor's statement is the one whose
   text contains it; just past a `;` on the same line still counts as that

@@ -13,6 +13,15 @@ import { runSummary, statementAt, type StatementResult } from './sqlScript'
 // the statement under the cursor (or the selection), Run all the whole script.
 // A run leaves one status line; the last statement's rows, if any, are the
 // table below, and Open in QueryView carries that statement over (docs/sql.md).
+// The same height steps as QueryView's textarea.
+const SIZES: [string, number, string][] = [
+  ['Min', 0, 'sql-size-min'],
+  ['S', 4, 'sql-size-s'],
+  ['M', 8, 'sql-size-m'],
+  ['L', 16, 'sql-size-l'],
+  ['XL', 28, 'sql-size-xl'],
+]
+
 function SqlView({ runOn }: { runOn?: string | null }) {
   const navigate = useNavigate()
   // The text is restored from the session; results never are (docs/session.md).
@@ -21,6 +30,8 @@ function SqlView({ runOn }: { runOn?: string | null }) {
   const [results, setResults] = useState<StatementResult[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Textarea height in rows; Min collapses it so the rows below get the room.
+  const [rows, setRows] = useState(8)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const runSeq = useRef(0)
 
@@ -117,6 +128,19 @@ function SqlView({ runOn }: { runOn?: string | null }) {
         </h1>
       </div>
       <section className="glass-panel flex grow flex-col gap-3 p-6">
+        <div className="flex items-center justify-end gap-1">
+          {SIZES.map(([label, n, testid]) => (
+            <button
+              key={testid}
+              type="button"
+              onClick={() => setRows(n)}
+              data-testid={testid}
+              className={`glass-toggle px-2 py-1 text-xs ${rows === n ? 'is-active' : ''}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <textarea
           ref={inputRef}
           value={sql}
@@ -125,10 +149,12 @@ function SqlView({ runOn }: { runOn?: string | null }) {
           onBlur={() => void flushPatches()}
           aria-label="SQL script"
           data-testid="sql-input"
-          rows={10}
+          rows={rows || 1}
           spellCheck={false}
           placeholder={'CREATE TABLE …;\nINSERT INTO …;\nSELECT …'}
-          className="glass-input w-full resize-y px-3 py-2 font-mono text-sm"
+          className={`glass-input w-full px-3 font-mono text-sm ${
+            rows === 0 ? 'h-0 min-h-0 overflow-hidden border-transparent py-0' : 'py-2'
+          }`}
         />
         <div className="flex flex-wrap items-center gap-2">
           <button

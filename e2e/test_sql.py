@@ -129,3 +129,24 @@ def test_sql_text_is_remembered_and_results_are_not(seeded_duckdb, page: Page) -
     expect(page.get_by_test_id("sql-input")).to_have_value(script)
     expect(page.get_by_test_id("sql-status")).to_have_count(0)
     expect(page.get_by_test_id("sql-output")).to_have_count(0)
+
+
+def test_textarea_sizes_collapse_and_expand(seeded_duckdb, page: Page, shot) -> None:
+    """Min collapses the textbox so the results get the room; the other steps
+    set its height in rows. The text survives every step."""
+    _connect(page, DUCK, seeded_duckdb)
+    _open_sql_page(page)
+
+    textarea = page.get_by_test_id("sql-input")
+    textarea.fill("SELECT 1 AS a")
+    page.get_by_test_id("sql-run-all").click()
+    expect(page.get_by_test_id("sql-output")).to_be_visible()
+
+    page.get_by_test_id("sql-size-min").click()
+    assert textarea.bounding_box()["height"] < 4  # just its (transparent) border
+    expect(page.get_by_test_id("sql-output")).to_be_visible()
+    shot("textbox collapsed")
+
+    page.get_by_test_id("sql-size-xl").click()
+    expect(textarea).to_have_attribute("rows", "28")
+    expect(textarea).to_have_value("SELECT 1 AS a")
