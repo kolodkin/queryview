@@ -38,7 +38,13 @@ from .dashboard_queries import run_dashboard_queries
 from .dashboards import _upsert_and_push, get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
-from .queries import list_predefined_queries_view, save_predefined_query
+from .queries import (
+    PredefinedQueryError,
+    delete_predefined_query,
+    list_predefined_queries_view,
+    rename_predefined_query,
+    save_predefined_query,
+)
 from .validation import cell_view_error, dashboard_params_error, presentation_error
 
 # SPA bundle shipped inside the wheel (release CI copies frontend/dist here);
@@ -459,6 +465,49 @@ async def predefined_queries_save(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     await save_predefined_query(name, conn_type, query, cell_view, order_by, fields, workspace_id=ws.id)
+    return {"ok": True}
+
+
+def _predefined_error(e: PredefinedQueryError) -> JSONResponse:
+    return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
+
+
+@app.patch("/api/predefined-queries")
+async def predefined_queries_rename(request: Request):
+    b = await _read_json(request)
+    b = b if isinstance(b, dict) else {}
+    name = _clean_str(b.get("query_name"))
+    conn_type = _clean_str(b.get("type"))
+    new_name = _clean_str(b.get("new_name"))
+    if not name or not conn_type or not new_name:
+        return JSONResponse(
+            {"ok": False, "message": "query_name, type and new_name are required"},
+            status_code=400,
+        )
+    ws = await _resolve_workspace(b.get("workspace"))
+    if isinstance(ws, JSONResponse):
+        return ws
+    try:
+        await rename_predefined_query(conn_type, name, new_name, workspace_id=ws.id)
+    except PredefinedQueryError as e:
+        return _predefined_error(e)
+    return {"ok": True}
+
+
+@app.delete("/api/predefined-queries")
+async def predefined_queries_delete(request: Request):
+    q = request.query_params
+    name = _clean_str(q.get("query_name"))
+    conn_type = _clean_str(q.get("type"))
+    if not name or not conn_type:
+        return JSONResponse({"ok": False, "message": "query_name and type are required"}, status_code=400)
+    ws = await _resolve_workspace(q.get("workspace"))
+    if isinstance(ws, JSONResponse):
+        return ws
+    try:
+        await delete_predefined_query(conn_type, name, workspace_id=ws.id)
+    except PredefinedQueryError as e:
+        return _predefined_error(e)
     return {"ok": True}
 
 

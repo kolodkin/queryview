@@ -604,6 +604,55 @@ function QueryPanel({
     }
   }
 
+  // Rename or delete the selected saved query. Both leave the editor's SQL as
+  // it is; a delete clears the selection, so nothing saves under the old name.
+  const savedSelected = predefined.some((p) => p.query_name === selectedName)
+
+  async function mutateSelected(
+    method: 'PATCH' | 'DELETE',
+    newName?: string,
+  ): Promise<boolean> {
+    setBusy(true)
+    setError(null)
+    try {
+      const target = { query_name: selectedName, type: connectionType, workspace: activeWorkspace() }
+      const res =
+        method === 'PATCH'
+          ? await apiFetch('/api/predefined-queries', {
+              method,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...target, new_name: newName }),
+            })
+          : await apiFetch(`/api/predefined-queries?${new URLSearchParams(target)}`, { method })
+      const data = await res.json()
+      if (!data.ok) {
+        setError(data.message ?? `${method === 'PATCH' ? 'rename' : 'delete'} failed`)
+        return false
+      }
+      await loadPredefined()
+      return true
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'request failed')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function renameSelected() {
+    const name = window.prompt('Rename query to:', selectedName)?.trim()
+    if (!name || name === selectedName) return
+    if (await mutateSelected('PATCH', name)) setSelectedName(name)
+  }
+
+  async function deleteSelected() {
+    if (!window.confirm(`Delete query '${selectedName}'?`)) return
+    if (await mutateSelected('DELETE')) {
+      setSelectedName('')
+      setPushedCellView(null)
+    }
+  }
+
   // Autosave: persist a named query's last successful run — the SQL that ran,
   // never a half-typed edit — unless nothing differs from its stored row.
   function saveLastRun() {
@@ -678,6 +727,26 @@ function QueryPanel({
           className="glass-btn min-w-[4.5rem] px-3 py-2 text-center font-medium"
         >
           {copiedName ? 'Copied' : 'Copy'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void renameSelected()}
+          disabled={busy || !savedSelected}
+          data-testid="query-rename"
+          title="Rename saved query"
+          className="glass-btn px-3 py-2 font-medium"
+        >
+          Rename
+        </button>
+        <button
+          type="button"
+          onClick={() => void deleteSelected()}
+          disabled={busy || !savedSelected}
+          data-testid="query-delete"
+          title="Delete saved query"
+          className="glass-btn px-3 py-2 font-medium"
+        >
+          Delete
         </button>
         {!autosave && (
           <button

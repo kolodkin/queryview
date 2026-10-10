@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 from sqlalchemy import UniqueConstraint
-from sqlmodel import Field, SQLModel, select
+from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .connect import _engine_for_db, _ensure_schema
@@ -157,3 +157,56 @@ async def save_predefined_query(
         ],
         workspace_id=workspace_id,
     )
+
+
+class PredefinedQueryError(Exception):
+    """A rename/delete that can't apply; `status` is the HTTP code to answer."""
+
+    def __init__(self, message: str, status: int) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+async def rename_predefined_query(conn_type: str, query_name: str, new_name: str, *, workspace_id: int) -> None:
+    """Rename one saved query within its workspace and type. 404 when it doesn't
+    exist, 409 when `new_name` is already taken."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        found = (
+            await s.exec(
+                select(PredefinedQuery).where(
+                    PredefinedQuery.type == conn_type,
+                    col(PredefinedQuery.query_name).in_([query_name, new_name]),
+                    PredefinedQuery.workspace_id == workspace_id,
+                )
+            )
+        ).all()
+        row = next((r for r in found if r.query_name == query_name), None)
+        if row is None:
+            raise PredefinedQueryError(f"query {query_name!r} not found", status=404)
+        if new_name == query_name:
+            return
+        if any(r.query_name == new_name for r in found):
+            raise PredefinedQueryError(f"query {new_name!r} already exists", status=409)
+        row.query_name = new_name
+        s.add(row)
+        await s.commit()
+
+
+async def delete_predefined_query(conn_type: str, query_name: str, *, workspace_id: int) -> None:
+    """Delete one saved query; 404 when it doesn't exist."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = (
+            await s.exec(
+                select(PredefinedQuery).where(
+                    PredefinedQuery.type == conn_type,
+                    PredefinedQuery.query_name == query_name,
+                    PredefinedQuery.workspace_id == workspace_id,
+                )
+            )
+        ).first()
+        if row is None:
+            raise PredefinedQueryError(f"query {query_name!r} not found", status=404)
+        await s.delete(row)
+        await s.commit()

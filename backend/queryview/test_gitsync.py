@@ -560,3 +560,49 @@ def test_dashboard_params_round_trip_through_meta_yaml():
 def test_malformed_dashboard_params_are_rejected():
     with pytest.raises(GitSyncError):
         dashboard_from_files({"meta.yaml": "name: p\nparams:\n- name: x\n  kind: nope\n"})
+
+
+def test_a_query_deleted_here_is_not_reimported(git_env):
+    from queryview.queries import delete_predefined_query, get_predefined_query, save_predefined_query
+
+    _run(save_predefined_query("gs gone", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "query", "gs gone", "clickhouse"))
+    _run(delete_predefined_query("clickhouse", "gs gone", workspace_id=_default_ws_id()))
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert all(e["name"] != "gs gone" for e in r["imported"] + r["conflicts"])
+    assert _run(get_predefined_query("clickhouse", "gs gone", _default_ws_id())) is None
+    # The repo keeps it as a backup: Restore brings it back.
+    _run(gitsync.restore(_default_ws(), "query", "gs gone", "clickhouse"))
+    restored = _run(get_predefined_query("clickhouse", "gs gone", _default_ws_id()))
+    assert restored is not None and restored["query"] == "SELECT 1"
+
+
+def test_a_renamed_query_leaves_no_copy_under_its_old_name(git_env):
+    from queryview.queries import get_predefined_query, rename_predefined_query, save_predefined_query
+
+    _run(save_predefined_query("gs before", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "query", "gs before", "clickhouse"))
+    _run(rename_predefined_query("clickhouse", "gs before", "gs after", workspace_id=_default_ws_id()))
+
+    _run(gitsync.sync(_default_ws()))
+
+    assert _run(get_predefined_query("clickhouse", "gs before", _default_ws_id())) is None
+    assert _run(get_predefined_query("clickhouse", "gs after", _default_ws_id())) is not None
+
+
+def test_a_deleted_query_changed_elsewhere_comes_back(other_instance):
+    from queryview.queries import delete_predefined_query, get_predefined_query, save_predefined_query
+
+    _run(save_predefined_query("gs revived", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "query", "gs revived", "clickhouse"))
+    _run(delete_predefined_query("clickhouse", "gs revived", workspace_id=_default_ws_id()))
+    _run(save_predefined_query("gs revived", "clickhouse", "SELECT 2", workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "query", "gs revived", "clickhouse"))
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert {"kind": "query", "name": "gs revived", "conn_type": "clickhouse"} in r["imported"]
+    q = _run(get_predefined_query("clickhouse", "gs revived", _default_ws_id()))
+    assert q is not None and q["query"] == "SELECT 2"

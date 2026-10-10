@@ -155,3 +155,95 @@ def test_mcp_list_queries_parses_presentation(default_ws_id):
     assert row["order_by"] == [{"name": "id", "dir": "ASC"}]
     assert row["fields"] == ["id"]
     assert row["query"] == "SELECT 1"
+
+
+def test_rename_moves_the_row_and_keeps_its_content(default_ws_id):
+    from queryview.queries import rename_predefined_query
+
+    _run(
+        save_predefined_query(
+            "rn old", "clickhouse", "SELECT 7", cell_view="a: {type: link, value: x}", workspace_id=default_ws_id
+        )
+    )
+    _run(rename_predefined_query("clickhouse", "rn old", "rn new", workspace_id=default_ws_id))
+    assert _run(get_predefined_query("clickhouse", "rn old", default_ws_id)) is None
+    row = _run(get_predefined_query("clickhouse", "rn new", default_ws_id))
+    assert row is not None and row["query"] == "SELECT 7" and row["cell_view"] == "a: {type: link, value: x}"
+
+
+def test_rename_refuses_missing_and_taken_names(default_ws_id):
+    import pytest
+
+    from queryview.queries import PredefinedQueryError, rename_predefined_query
+
+    _run(save_predefined_query("rn a", "clickhouse", "SELECT 1", workspace_id=default_ws_id))
+    _run(save_predefined_query("rn b", "clickhouse", "SELECT 2", workspace_id=default_ws_id))
+    with pytest.raises(PredefinedQueryError) as missing:
+        _run(rename_predefined_query("clickhouse", "rn nope", "rn c", workspace_id=default_ws_id))
+    assert missing.value.status == 404
+    with pytest.raises(PredefinedQueryError) as taken:
+        _run(rename_predefined_query("clickhouse", "rn a", "rn b", workspace_id=default_ws_id))
+    assert taken.value.status == 409
+    b = _run(get_predefined_query("clickhouse", "rn b", default_ws_id))
+    assert b is not None and b["query"] == "SELECT 2"  # untouched
+    # Renaming to its own name is a no-op, not a clash.
+    _run(rename_predefined_query("clickhouse", "rn a", "rn a", workspace_id=default_ws_id))
+
+
+def test_delete_removes_only_that_row(default_ws_id):
+    import pytest
+
+    from queryview.queries import PredefinedQueryError, delete_predefined_query
+    from queryview.workspaces import create_workspace, resolve
+
+    _run(create_workspace("del-iso"))
+    other = _run(resolve("del-iso")).id
+    _run(save_predefined_query("del q", "clickhouse", "SELECT 1", workspace_id=default_ws_id))
+    _run(save_predefined_query("del q", "clickhouse", "SELECT 2", workspace_id=other))
+    _run(delete_predefined_query("clickhouse", "del q", workspace_id=default_ws_id))
+    assert _run(get_predefined_query("clickhouse", "del q", default_ws_id)) is None
+    assert _run(get_predefined_query("clickhouse", "del q", other)) is not None
+    with pytest.raises(PredefinedQueryError) as missing:
+        _run(delete_predefined_query("clickhouse", "del q", workspace_id=default_ws_id))
+    assert missing.value.status == 404
+
+
+def test_api_rename_and_delete(default_ws_id):
+    from fastapi.testclient import TestClient
+
+    from queryview.main import app
+
+    c = TestClient(app)
+    c.post("/api/predefined-queries", json={"query_name": "api rn", "type": "clickhouse", "query": "SELECT 1"})
+    c.post("/api/predefined-queries", json={"query_name": "api taken", "type": "clickhouse", "query": "SELECT 2"})
+
+    def names() -> list[str]:
+        r = c.get("/api/predefined-queries", params={"type": "clickhouse"})
+        return [q["query_name"] for q in r.json()["queries"]]
+
+    r = c.patch("/api/predefined-queries", json={"query_name": "api rn", "type": "clickhouse"})
+    assert r.status_code == 400
+    r = c.patch(
+        "/api/predefined-queries",
+        json={"query_name": "api rn", "type": "clickhouse", "new_name": "api taken"},
+    )
+    assert r.status_code == 409
+    r = c.patch(
+        "/api/predefined-queries",
+        json={"query_name": "api rn", "type": "clickhouse", "new_name": "  api renamed  "},
+    )
+    assert r.json() == {"ok": True}
+    assert "api renamed" in names() and "api rn" not in names()
+
+    r = c.delete("/api/predefined-queries", params={"type": "clickhouse"})
+    assert r.status_code == 400
+    r = c.delete("/api/predefined-queries", params={"query_name": "api renamed", "type": "clickhouse"})
+    assert r.json() == {"ok": True}
+    assert "api renamed" not in names()
+    r = c.delete("/api/predefined-queries", params={"query_name": "api renamed", "type": "clickhouse"})
+    assert r.status_code == 404
+    r = c.delete(
+        "/api/predefined-queries",
+        params={"query_name": "api taken", "type": "clickhouse", "workspace": "nope-del"},
+    )
+    assert r.status_code == 404

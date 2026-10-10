@@ -97,9 +97,13 @@ CREATE TABLE predefined_queries (
   **currently selected name** and refreshes the selector. Saving an existing name
   **upserts** (overwrites) it. In an [autosave](./workspace.md#autosave)
   workspace there is no Save button: each successful run saves instead.
-
-Renaming and deleting predefined queries are not yet supported — see
-[future.md](./future.md).
+- **Rename** and **Delete** (next to **Copy**) act on the selected saved query;
+  both are disabled until the selected name has been saved. Rename prompts for
+  the new name, which must not already exist. Delete asks for confirmation,
+  then clears the selection and leaves the SQL in the editor. In a
+  [git-synced](./gitsync.md#merge-in) workspace both are local changes: the
+  repo keeps the old copy: pick its name again with **+ New name…** and
+  **Restore** brings it back.
 
 ## Cell views
 

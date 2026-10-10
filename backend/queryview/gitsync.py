@@ -275,8 +275,9 @@ async def _load_entity(ws: WorkspaceRec, kind: str, name: str, conn_type: str | 
 
 # --- Merge-in --------------------------------------------------------------
 # Every sync (attaching a remote, Commit, Restore, opening history) first
-# merges the repo head into the DB: entities missing locally are imported,
-# nothing local is ever overwritten. An entity is a *conflict* when the repo's
+# merges the repo head into the DB: entities missing locally are imported
+# (unless deleted here after we last agreed on the repo's copy), nothing local
+# is ever overwritten. An entity is a *conflict* when the repo's
 # copy changed since this workspace last agreed with it and differs from the
 # local one; a local edit on top of an unchanged repo copy is not.
 #
@@ -370,6 +371,8 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
             same = local is not None and dashboard_to_files(local) == dashboard_to_files(repo)
         key = _key(kind, name, conn_type)
         entry = {"kind": kind, "name": name, "conn_type": conn_type}
+        if local is None and agreed.get(key) == e["oid"]:
+            continue  # deleted or renamed here since we last agreed: a local change
         if local is None:
             if kind == "query":
                 await save_predefined_query(

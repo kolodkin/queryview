@@ -54,7 +54,9 @@ Opening or refreshing the app never syncs.
 
 The merge only adds, never overwrites:
 
-- in the repo, not here → **imported**;
+- in the repo, not here → **imported**, unless it was deleted or renamed here
+  since the last agreement and the repo's copy hasn't changed since (a local
+  change, like an edit); a repo copy changed elsewhere is imported again;
 - the same on both sides → nothing to do;
 - different, and the repo's copy changed since this workspace last agreed with
   it → a **conflict**: the local copy is kept and the entity is listed under a
@@ -63,9 +65,11 @@ The merge only adds, never overwrites:
 - different, but only because you edited it locally → just an uncommitted
   change, not a conflict.
 
-Nothing is ever deleted by a sync. "Last agreed" is the repo object id each
-entity had when it was imported, committed, restored or found identical, kept
-with the conflict list in `{data dir}/gitsync/{workspace id}.sync.json`.
+Nothing is ever deleted by a sync, and deleting or renaming locally never
+removes the repo's copy: it stays as a backup that **Restore** can bring back.
+"Last agreed" is the repo object id each entity had when it was imported,
+committed, restored or found identical, kept with the conflict list in
+`{data dir}/gitsync/{workspace id}.sync.json`.
 Changing a workspace's remote or branch drops its clone and that file.
 
 ## Versioning
