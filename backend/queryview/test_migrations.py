@@ -107,3 +107,13 @@ def test_workspaces_has_autosave_column():
         con.close()
     assert "autosave" in cols, f"missing column, got {sorted(cols)}"
     assert seeded == 0  # existing workspaces keep today's explicit Save
+
+
+def test_predefined_queries_has_deleted_at_column():
+    _run(_ensure_schema())
+    con = sqlite3.connect(_db_path())
+    try:
+        cols = {r[1] for r in con.execute("PRAGMA table_info(predefined_queries)")}
+    finally:
+        con.close()
+    assert "deleted_at" in cols, f"missing column, got {sorted(cols)}"

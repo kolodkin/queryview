@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from sqlalchemy import column, table, text, update
+from sqlalchemy import column, delete, table, text, update
 from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -75,6 +75,8 @@ def _valid_name(name: str) -> str:
 # Sessions name their workspace. This module can't import sessions (sessions ->
 # connect -> here), so it reaches the table through a bare table clause.
 _sessions_table = table("sessions", column("workspace"))
+# Deleted queries (docs/query.md) don't keep a workspace alive; they go with it.
+_queries_table = table("predefined_queries", column("workspace_id"))
 
 
 def _move_sessions(old: str, new: str):
@@ -193,7 +195,7 @@ async def _entity_count(workspace_id: int) -> int:
         n = (
             await conn.execute(
                 text(
-                    "SELECT (SELECT COUNT(*) FROM predefined_queries WHERE workspace_id = :w)"
+                    "SELECT (SELECT COUNT(*) FROM predefined_queries WHERE workspace_id = :w AND deleted_at IS NULL)"
                     " + (SELECT COUNT(*) FROM dashboards WHERE workspace_id = :w)"
                 ),
                 {"w": workspace_id},
@@ -224,6 +226,7 @@ async def delete_workspace(name: str) -> str:
             raise WorkspaceError("can't delete the last workspace", status=409)
         moved_to = others.name  # read before the commit expires it
         await s.exec(_move_sessions(name, moved_to))
+        await s.exec(delete(_queries_table).where(_queries_table.c.workspace_id == row.id))
         await s.delete(row)
         await s.commit()
         return moved_to

@@ -33,6 +33,7 @@ for that case is in the README's [Run with Docker](../README.md#run-with-docker)
 
 ```
 queries/{type}/{name}.yaml         # query, cell_view, order_by, fields
+queries/{type}/{name}.deleted      # a deleted query: same content, marked deleted
 dashboards/{name}/meta.yaml        # name, params (when declared)
 dashboards/{name}/dashboard.html   # the HTML, verbatim
 dashboards/{name}/queries.yaml     # {query_name: SQL}
@@ -54,23 +55,36 @@ Opening or refreshing the app never syncs.
 
 The merge only adds, never overwrites:
 
-- in the repo, not here → **imported**, unless it was deleted or renamed here
-  since the last agreement and the repo's copy hasn't changed since (a local
-  change, like an edit); a repo copy changed elsewhere is imported again;
+- in the repo, not here → **imported** (a `.deleted` marker lands among the
+  [deleted queries](./query.md#deleted-queries)), unless it was renamed here
+  since the last agreement and the repo's copy hasn't changed since;
 - the same on both sides → nothing to do;
 - different, and the repo's copy changed since this workspace last agreed with
   it → a **conflict**: the local copy is kept and the entity is listed under a
   ⚠ next to the workspace switcher until you **Commit** (push yours) or
   **Restore** (take the repo's);
-- different, but only because you edited it locally → just an uncommitted
-  change, not a conflict.
+- different, but only because you edited, deleted or undeleted it locally →
+  just an uncommitted change, not a conflict;
+- deleted or undeleted in the repo since, with the same content here → the
+  local copy follows (reported under `deleted` or `imported`).
 
-Nothing is ever deleted by a sync, and deleting or renaming locally never
-removes the repo's copy: it stays as a backup that **Restore** can bring back.
-"Last agreed" is the repo object id each entity had when it was imported,
+A sync never removes a row: a deletion it applies is the same soft delete,
+undoable with **Undelete**. "Last agreed" is the repo object id each entity had when it was imported,
 committed, restored or found identical, kept with the conflict list in
 `{data dir}/gitsync/{workspace id}.sync.json`.
 Changing a workspace's remote or branch drops its clone and that file.
+
+## Deleted queries
+
+**Commit** on a [deleted query](./query.md#deleted-queries) replaces its
+`.yaml` with a `.deleted` marker holding the same content, in a commit named
+`delete query {type}/{name}`; committing it again once undeleted swaps the
+marker back. Another instance syncing that repo deletes its own copy, unless
+it changed the query locally — then it is a conflict, and **Restore** takes
+the deletion. A query's history spans both paths: restoring a revision before
+the deletion brings it back live, restoring the marker brings it back
+deleted. Renaming is local only: committing the new name adds a file, and the
+old name's file stays in the repo.
 
 ## Versioning
 
@@ -91,10 +105,10 @@ are disabled when the active workspace has no remote configured.
 ## API
 
 - `GET /api/git/status?workspace=` → `{configured, conflicts}`
-- `POST /api/git/sync` `{workspace?}` → `{ok, imported, conflicts}`
-- `POST /api/git/store` `{kind, name, conn_type?, message?, workspace?}` → `{ok, committed, sha, message, imported, conflicts}`
+- `POST /api/git/sync` `{workspace?}` → `{ok, imported, deleted, conflicts}`
+- `POST /api/git/store` `{kind, name, conn_type?, message?, workspace?}` → `{ok, committed, sha, message, imported, deleted, conflicts}`
 - `GET /api/git/history?kind=&name=&conn_type=&before=&limit=10&workspace=` → `{ok, revisions: [{sha, date, message}], has_more}`
-- `POST /api/git/restore` `{kind, name, conn_type?, ref?, workspace?}` → `{ok, restored, sha, imported, conflicts}`
+- `POST /api/git/restore` `{kind, name, conn_type?, ref?, workspace?}` → `{ok, restored, sha, imported, deleted, conflicts}`
 
 `kind` is `"query"` or `"dashboard"`; `conn_type` is required for queries;
 `workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_store`, `git_history`,

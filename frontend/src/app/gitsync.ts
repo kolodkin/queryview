@@ -62,6 +62,8 @@ export async function gitConflicts(workspace: string): Promise<GitConflict[]> {
 export type GitSyncResult = {
   ok: boolean
   imported?: GitConflict[]
+  // Queries deleted here because the repo deleted them.
+  deleted?: GitConflict[]
   conflicts?: GitConflict[]
   message?: string
 }

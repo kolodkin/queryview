@@ -1,4 +1,5 @@
-"""Renaming and deleting a saved (predefined) query from the query panel.
+"""Renaming, deleting and undeleting a saved (predefined) query from the
+query panel.
 Uses DuckDB and a uniquely-named workspace per run."""
 
 import uuid
@@ -11,12 +12,13 @@ from test_drivers import CASES, _connect
 DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
-def _names(base_url: str, ws: str) -> list[str]:
-    r = httpx.get(f"{base_url}/api/predefined-queries", params={"type": "duckdb", "workspace": ws})
+def _names(base_url: str, ws: str, deleted: bool = False) -> list[str]:
+    params = {"type": "duckdb", "workspace": ws, **({"deleted": "1"} if deleted else {})}
+    r = httpx.get(f"{base_url}/api/predefined-queries", params=params)
     return [q["query_name"] for q in r.json()["queries"]]
 
 
-def test_rename_and_delete_a_saved_query(seeded_duckdb, page: Page, base_url: str, shot) -> None:
+def test_rename_delete_and_undelete_a_saved_query(seeded_duckdb, page: Page, base_url: str, shot) -> None:
     ws = f"e2e-pq-{uuid.uuid4().hex[:6]}"
     httpx.post(f"{base_url}/api/workspaces", json={"name": ws}).raise_for_status()
 
@@ -56,8 +58,29 @@ def test_rename_and_delete_a_saved_query(seeded_duckdb, page: Page, base_url: st
 
     page.once("dialog", lambda d: d.accept())
     delete.click()
-    expect(select).to_have_value("")
-    expect(select.locator('option[value="pq renamed"]')).to_have_count(0)
+    # Deleted, it stays selected (for Commit or Undelete) and keeps its SQL.
+    expect(select).to_have_value("pq renamed")
+    expect(select.locator("option:checked")).to_have_text("pq renamed (deleted)")
     expect(page.get_by_test_id("query-input")).to_have_value("SELECT id FROM items ORDER BY id")
+    expect(page.get_by_test_id("query-undelete")).to_be_visible()
+    expect(rename).to_be_disabled()
     assert _names(base_url, ws) == []
-    shot("deleted: selection cleared, SQL kept")
+    assert _names(base_url, ws, deleted=True) == ["pq renamed"]
+    shot("deleted: still selected, Undelete offered")
+
+    # Show deleted lists it in its own group; picking it loads its SQL.
+    select.select_option("")
+    page.get_by_test_id("query-input").fill("")
+    select.select_option("::deleted::")
+    group = page.get_by_test_id("query-deleted-group")
+    expect(group.locator("option")).to_have_text(["pq renamed"])
+    select.select_option("pq renamed")
+    expect(page.get_by_test_id("query-input")).to_have_value("SELECT id FROM items ORDER BY id")
+    shot("show deleted: deleted group")
+
+    page.get_by_test_id("query-undelete").click()
+    expect(delete).to_be_enabled()
+    expect(group).to_have_count(0)
+    assert _names(base_url, ws) == ["pq renamed"]
+    assert _names(base_url, ws, deleted=True) == []
+    shot("undeleted")

@@ -40,10 +40,10 @@ from .drivers import DRIVERS
 from .mcp_server import mcp
 from .queries import (
     PredefinedQueryError,
-    delete_predefined_query,
     list_predefined_queries_view,
     rename_predefined_query,
     save_predefined_query,
+    set_predefined_query_deleted,
 )
 from .validation import cell_view_error, dashboard_params_error, presentation_error
 
@@ -428,7 +428,8 @@ async def predefined_queries_list(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    return {"queries": await list_predefined_queries_view(conn_type, ws.id)}
+    deleted = request.query_params.get("deleted") in ("1", "true")
+    return {"queries": await list_predefined_queries_view(conn_type, ws.id, deleted=deleted)}
 
 
 @app.post("/api/predefined-queries")
@@ -479,16 +480,20 @@ async def predefined_queries_rename(request: Request):
     name = _clean_str(b.get("query_name"))
     conn_type = _clean_str(b.get("type"))
     new_name = _clean_str(b.get("new_name"))
-    if not name or not conn_type or not new_name:
+    undelete = b.get("deleted") is False
+    if not name or not conn_type or bool(new_name) == undelete:
         return JSONResponse(
-            {"ok": False, "message": "query_name, type and new_name are required"},
+            {"ok": False, "message": "query_name, type and one of new_name or deleted: false are required"},
             status_code=400,
         )
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
     try:
-        await rename_predefined_query(conn_type, name, new_name, workspace_id=ws.id)
+        if undelete:
+            await set_predefined_query_deleted(conn_type, name, False, workspace_id=ws.id)
+        else:
+            await rename_predefined_query(conn_type, name, new_name, workspace_id=ws.id)
     except PredefinedQueryError as e:
         return _predefined_error(e)
     return {"ok": True}
@@ -505,7 +510,7 @@ async def predefined_queries_delete(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     try:
-        await delete_predefined_query(conn_type, name, workspace_id=ws.id)
+        await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
     except PredefinedQueryError as e:
         return _predefined_error(e)
     return {"ok": True}
