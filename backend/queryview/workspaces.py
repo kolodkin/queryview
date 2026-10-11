@@ -191,9 +191,8 @@ async def update_workspace(
 
 
 def _owned(workspace_id: int):
-    """What keeps a workspace alive, one WHERE clause per entity kind: its
-    live queries and its dashboards. Through the bare table clauses, so this
-    module doesn't import the entity modules (which import nothing from here)."""
+    """What keeps a workspace alive: a WHERE clause each for its live queries
+    and its dashboards. Bare table clauses, so no entity-module imports."""
     q, d = _queries_table.c, _dashboards_table.c
     return and_(q.workspace_id == workspace_id, q.deleted_at.is_(None)), d.workspace_id == workspace_id
 
@@ -226,10 +225,9 @@ async def delete_workspace(name: str) -> str:
         if others is None:
             raise WorkspaceError("can't delete the last workspace", status=409)
         moved_to = others.name  # read before the commit expires it
-        # Purge the deleted queries, then delete the workspace row only if it is
-        # still empty, in one transaction: the count above ran before the
-        # transaction's first write, so an entity saved since must keep the
-        # workspace, not go with it. Live queries are never purged here.
+        # Purge deleted queries, then delete the row only if still empty, in one
+        # transaction: the count above ran before the first write, so an entity
+        # saved since keeps the workspace. Live queries are never purged.
         await s.exec(
             delete(_queries_table).where(
                 _queries_table.c.workspace_id == row.id, _queries_table.c.deleted_at.is_not(None)

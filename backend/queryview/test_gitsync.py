@@ -716,9 +716,8 @@ def test_a_marker_for_an_unknown_query_imports_it_deleted(other_instance):
 
 
 def test_a_delete_through_the_api_during_a_sync_is_not_an_error(other_instance, monkeypatch):
-    """The merge reads the local copy, then writes its deleted flag in a second
-    DB session. A delete through the API landing in between leaves the row
-    already deleted: the sync must treat that as done, not fail."""
+    """An API delete between the merge's read and its write leaves the row
+    already deleted: the sync treats that as done, not as an error."""
     from queryview import queries
     from queryview.queries import save_predefined_query
 

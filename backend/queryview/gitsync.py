@@ -429,9 +429,8 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
         elif same_content and key in agreed:
             # Deleted or undeleted elsewhere since we last agreed, untouched
             # here: follow the repo. Without an agreement we can't tell which
-            # side changed, so that stays a conflict. Not strict: a delete or
-            # undelete through the API since the read above is no error, and a
-            # rename since is a local change, left alone like any other.
+            # side changed, so that stays a conflict. Not strict: an API delete
+            # or undelete since the read is no error; a rename since is a local change.
             try:
                 await update_predefined_query(conn_type, name, workspace_id=ws.id, deleted=repo_deleted, strict=False)
             except PredefinedQueryError:

@@ -201,9 +201,8 @@ async def update_predefined_query(
     query, all or nothing in one transaction. Renaming applies to a live
     query: an undelete happens before it, a delete after. 404 when the query
     doesn't exist in the state the change needs, 409 when `new_name` is taken,
-    by a live or a deleted query. With `strict=False` a query already in the
-    `deleted` state is left as is, not a 404: for a git sync, whose earlier
-    read a delete or undelete through the API may have overtaken."""
+    by a live or a deleted query. `strict=False` turns "already in the
+    `deleted` state" into a no-op, for a git sync acting on an earlier read."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         row = await _find(s, conn_type, query_name, workspace_id)
