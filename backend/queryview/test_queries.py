@@ -299,6 +299,10 @@ def test_api_rename_delete_and_undelete(default_ws_id):
     assert c.patch("/api/predefined-queries", json=delete).json() == {"ok": True}
     live = c.get("/api/predefined-queries", params={"type": "clickhouse"}).json()["queries"]
     assert all(q["query_name"] != "api renamed" for q in live)
+    # Undelete + rename is all or nothing: a taken name leaves it deleted.
+    r = c.patch("/api/predefined-queries", json={**undelete, "new_name": "api taken"})
+    assert r.status_code == 409
+    assert "api renamed" in names(deleted=True)
 
     r = c.delete(
         "/api/predefined-queries",

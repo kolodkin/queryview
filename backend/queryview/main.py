@@ -41,9 +41,9 @@ from .mcp_server import mcp
 from .queries import (
     PredefinedQueryError,
     list_predefined_queries_view,
-    rename_predefined_query,
     save_predefined_query,
     set_predefined_query_deleted,
+    update_predefined_query,
 )
 from .validation import cell_view_error, dashboard_params_error, presentation_error
 
@@ -496,14 +496,7 @@ async def predefined_queries_update(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     try:
-        # Renaming applies to a live query: undelete before, delete after.
-        if deleted is False:
-            await set_predefined_query_deleted(conn_type, name, False, workspace_id=ws.id)
-        if new_name:
-            await rename_predefined_query(conn_type, name, new_name, workspace_id=ws.id)
-            name = new_name
-        if deleted is True:
-            await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
+        await update_predefined_query(conn_type, name, workspace_id=ws.id, new_name=new_name or None, deleted=deleted)
     except PredefinedQueryError as e:
         return _status_error(e)
     return {"ok": True}

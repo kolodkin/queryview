@@ -145,7 +145,8 @@ async def save_predefined_queries(rows: list[dict[str, Any]], *, workspace_id: i
             row.cell_view = r.get("cell_view")
             row.order_by = r.get("order_by")
             row.fields = r.get("fields")
-            row.deleted_at = _now_ms() if r.get("deleted") else None
+            # A deleted row saved deleted again keeps its original deletion time.
+            row.deleted_at = (row.deleted_at or _now_ms()) if r.get("deleted") else None
             s.add(row)
         await s.commit()
 
@@ -187,35 +188,45 @@ class PredefinedQueryError(Exception):
         self.status = status
 
 
-async def rename_predefined_query(conn_type: str, query_name: str, new_name: str, *, workspace_id: int) -> None:
-    """Rename one live saved query within its workspace and type. 404 when it
-    doesn't exist (or is deleted), 409 when `new_name` is taken, by a live or
-    a deleted query."""
+async def update_predefined_query(
+    conn_type: str,
+    query_name: str,
+    *,
+    workspace_id: int,
+    new_name: str | None = None,
+    deleted: bool | None = None,
+) -> None:
+    """Rename (`new_name`) and/or delete or undelete (`deleted`) one saved
+    query, all or nothing in one transaction. Renaming applies to a live
+    query: an undelete happens before it, a delete after. 404 when the query
+    doesn't exist in the state the change needs, 409 when `new_name` is taken,
+    by a live or a deleted query."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         row = await _find(s, conn_type, query_name, workspace_id)
-        if row is None or row.deleted_at is not None:
-            raise PredefinedQueryError(f"query {query_name!r} not found", status=404)
-        if new_name == query_name:
-            return
-        taken = await _find(s, conn_type, new_name, workspace_id)
-        if taken is not None:
-            what = "a deleted query" if taken.deleted_at is not None else "a query"
-            raise PredefinedQueryError(f"{what} named {new_name!r} already exists", status=409)
-        row.query_name = new_name
+        was_deleted = row is not None and row.deleted_at is not None
+        live_after_undelete = not was_deleted or deleted is False
+        if row is None or (deleted is not None and was_deleted == deleted) or (new_name and not live_after_undelete):
+            what = "deleted query" if deleted is False else "query"
+            raise PredefinedQueryError(f"{what} {query_name!r} not found", status=404)
+        if new_name and new_name != query_name:
+            taken = await _find(s, conn_type, new_name, workspace_id)
+            if taken is not None:
+                what = "a deleted query" if taken.deleted_at is not None else "a query"
+                raise PredefinedQueryError(f"{what} named {new_name!r} already exists", status=409)
+            row.query_name = new_name
+        if deleted is not None:
+            row.deleted_at = _now_ms() if deleted else None
         s.add(row)
         await s.commit()
+
+
+async def rename_predefined_query(conn_type: str, query_name: str, new_name: str, *, workspace_id: int) -> None:
+    """Rename one live saved query (see update_predefined_query)."""
+    await update_predefined_query(conn_type, query_name, workspace_id=workspace_id, new_name=new_name)
 
 
 async def set_predefined_query_deleted(conn_type: str, query_name: str, deleted: bool, *, workspace_id: int) -> None:
     """Delete (soft) or undelete one saved query. 404 unless it exists in the
     other state."""
-    await _ensure_schema()
-    async with AsyncSession(_engine_for_db()) as s:
-        row = await _find(s, conn_type, query_name, workspace_id)
-        if row is None or (row.deleted_at is not None) == deleted:
-            what = "query" if deleted else "deleted query"
-            raise PredefinedQueryError(f"{what} {query_name!r} not found", status=404)
-        row.deleted_at = _now_ms() if deleted else None
-        s.add(row)
-        await s.commit()
+    await update_predefined_query(conn_type, query_name, workspace_id=workspace_id, deleted=deleted)

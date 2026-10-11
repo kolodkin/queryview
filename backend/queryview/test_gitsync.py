@@ -687,6 +687,21 @@ def test_a_deletion_committed_elsewhere_conflicts_with_a_local_edit(other_instan
     assert "gs edited away" in _deleted_names(_default_ws_id())
 
 
+def test_a_marker_never_agreed_on_conflicts_instead_of_deleting(other_instance):
+    from queryview.queries import get_predefined_query, save_predefined_query
+
+    _run(save_predefined_query("gs unagreed", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
+    _delete("gs unagreed", other_instance.id)
+    _run(gitsync.store(other_instance, "query", "gs unagreed", "clickhouse"))
+    # The same query, live here, never synced with the repo.
+    _run(save_predefined_query("gs unagreed", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert {"kind": "query", "name": "gs unagreed", "conn_type": "clickhouse"} in r["conflicts"]
+    assert _run(get_predefined_query("clickhouse", "gs unagreed", _default_ws_id())) is not None
+
+
 def test_a_marker_for_an_unknown_query_imports_it_deleted(other_instance):
     from queryview.queries import save_predefined_query
 

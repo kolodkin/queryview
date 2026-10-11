@@ -426,8 +426,10 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
             agreed[key] = e["oid"]
         elif agreed.get(key) == e["oid"]:
             pass  # only changed here: an uncommitted local change
-        elif same_content:
-            # Deleted or undeleted elsewhere, untouched here: follow the repo.
+        elif same_content and key in agreed:
+            # Deleted or undeleted elsewhere since we last agreed, untouched
+            # here: follow the repo. Without an agreement we can't tell which
+            # side changed, so that stays a conflict.
             await set_predefined_query_deleted(conn_type, name, repo_deleted, workspace_id=ws.id)
             (deleted if repo_deleted else imported).append(entry)
             agreed[key] = e["oid"]
