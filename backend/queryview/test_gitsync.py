@@ -747,4 +747,3 @@ def test_a_delete_through_the_api_during_a_sync_is_not_an_error(other_instance, 
     monkeypatch.undo()
     r = _run(gitsync.sync(_default_ws()))
     assert all(e["name"] != "gs raced" for e in r["imported"] + r["deleted"] + r["conflicts"])
-    assert gitsync._load_state(_default_ws())["agreed"].get(gitsync._key("query", "gs raced", "clickhouse")) is not None

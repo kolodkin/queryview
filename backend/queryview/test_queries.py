@@ -230,20 +230,23 @@ def test_delete_is_soft_and_undelete_brings_it_back(default_ws_id):
     assert live.value.status == 404
 
 
-def test_ensure_deleted_is_idempotent_where_set_is_strict(default_ws_id):
+def test_a_non_strict_delete_or_undelete_of_a_query_already_there_is_a_no_op(default_ws_id):
     import pytest
 
-    from queryview.queries import PredefinedQueryError, ensure_predefined_query_deleted
+    from queryview.queries import PredefinedQueryError, update_predefined_query
 
-    _run(save_predefined_query("ens q", "clickhouse", "SELECT 1", workspace_id=default_ws_id))
-    assert _run(ensure_predefined_query_deleted("clickhouse", "ens q", True, workspace_id=default_ws_id)) is True
-    assert _run(ensure_predefined_query_deleted("clickhouse", "ens q", True, workspace_id=default_ws_id)) is False
-    assert _run(get_predefined_query("clickhouse", "ens q", default_ws_id)) is None
-    assert _run(ensure_predefined_query_deleted("clickhouse", "ens q", False, workspace_id=default_ws_id)) is True
-    assert _run(ensure_predefined_query_deleted("clickhouse", "ens q", False, workspace_id=default_ws_id)) is False
-    assert _run(get_predefined_query("clickhouse", "ens q", default_ws_id)) is not None
+    def mark(name: str, deleted: bool) -> None:
+        _run(update_predefined_query("clickhouse", name, workspace_id=default_ws_id, deleted=deleted, strict=False))
+
+    _run(save_predefined_query("lax q", "clickhouse", "SELECT 1", workspace_id=default_ws_id))
+    mark("lax q", False)  # already live
+    assert _run(get_predefined_query("clickhouse", "lax q", default_ws_id)) is not None
+    mark("lax q", True)
+    stamped = _run(get_predefined_query("clickhouse", "lax q", default_ws_id, include_deleted=True))
+    mark("lax q", True)  # already deleted: keeps its deletion time
+    assert _run(get_predefined_query("clickhouse", "lax q", default_ws_id, include_deleted=True)) == stamped
     with pytest.raises(PredefinedQueryError) as missing:
-        _run(ensure_predefined_query_deleted("clickhouse", "ens nope", True, workspace_id=default_ws_id))
+        mark("lax nope", True)
     assert missing.value.status == 404
 
 

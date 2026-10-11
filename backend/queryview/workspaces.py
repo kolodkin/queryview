@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from sqlalchemy import column, delete, exists, table, text, update
+from sqlalchemy import and_, column, delete, exists, func, table, update
+from sqlalchemy import select as sa_select
 from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -189,20 +190,19 @@ async def update_workspace(
         await s.commit()
 
 
+def _owned(workspace_id: int):
+    """What keeps a workspace alive, one WHERE clause per entity kind: its
+    live queries and its dashboards. Through the bare table clauses, so this
+    module doesn't import the entity modules (which import nothing from here)."""
+    q, d = _queries_table.c, _dashboards_table.c
+    return and_(q.workspace_id == workspace_id, q.deleted_at.is_(None)), d.workspace_id == workspace_id
+
+
 async def _entity_count(s: AsyncSession, workspace_id: int) -> int:
-    """How many entities the workspace still owns. Raw SQL so this module
-    doesn't import the entity modules (which import nothing from here either)."""
+    """How many entities the workspace still owns."""
+    queries, dashboards = (sa_select(func.count()).where(c).scalar_subquery() for c in _owned(workspace_id))
     conn = await s.connection()  # the session's own transaction
-    n = (
-        await conn.execute(
-            text(
-                "SELECT (SELECT COUNT(*) FROM predefined_queries WHERE workspace_id = :w AND deleted_at IS NULL)"
-                " + (SELECT COUNT(*) FROM dashboards WHERE workspace_id = :w)"
-            ),
-            {"w": workspace_id},
-        )
-    ).scalar()
-    return int(n or 0)
+    return int((await conn.execute(sa_select(queries + dashboards))).scalar() or 0)
 
 
 async def delete_workspace(name: str) -> str:
@@ -235,11 +235,9 @@ async def delete_workspace(name: str) -> str:
                 _queries_table.c.workspace_id == row.id, _queries_table.c.deleted_at.is_not(None)
             )
         )
-        live_query = exists().where(_queries_table.c.workspace_id == row.id, _queries_table.c.deleted_at.is_(None))
-        dashboard = exists().where(_dashboards_table.c.workspace_id == row.id)
-        gone = await s.exec(delete(Workspace).where(col(Workspace.id) == row.id, ~live_query, ~dashboard))
-        if gone.rowcount != 1:
-            await s.rollback()
+        still_empty = [~exists().where(c) for c in _owned(row.id)]  # type: ignore[arg-type]
+        gone = await s.exec(delete(Workspace).where(col(Workspace.id) == row.id, *still_empty))
+        if gone.rowcount != 1:  # the purge rolls back with the session
             raise WorkspaceError(f"workspace {name!r} is no longer empty; delete its entities first", status=409)
         await s.exec(_move_sessions(name, moved_to))
         await s.commit()

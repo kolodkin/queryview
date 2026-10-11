@@ -25,6 +25,26 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+def _sql(statement: str, *params) -> int:
+    """Run one statement on the DB file directly, outside the app's engine;
+    returns the first column of the first row (0 when there is none)."""
+    con = sqlite3.connect(_db_path())
+    try:
+        row = con.execute(statement, params).fetchone()
+        con.commit()
+    finally:
+        con.close()
+    return row[0] if row else 0
+
+
+def _add_live_query(workspace_id: int, name: str) -> None:
+    _sql(
+        "INSERT INTO predefined_queries (query_name, type, query, workspace_id) VALUES (?, 'clickhouse', 'SELECT 1', ?)",
+        name,
+        workspace_id,
+    )
+
+
 def test_default_workspace_is_seeded():
     rec = _run(resolve(DEFAULT_WORKSPACE))
     assert rec.name == "default"
@@ -104,26 +124,12 @@ def test_autosave_defaults_off_and_is_set_on_create_or_update():
 def test_delete_refuses_non_empty_then_deletes_empty():
     _run(create_workspace("t2-del"))
     rec = _run(resolve("t2-del"))
-    con = sqlite3.connect(_db_path())
-    try:
-        con.execute(
-            "INSERT INTO predefined_queries (query_name, type, query, workspace_id) "
-            "VALUES ('held', 'clickhouse', 'SELECT 1', ?)",
-            (rec.id,),
-        )
-        con.commit()
-    finally:
-        con.close()
+    _add_live_query(rec.id, "held")
     with pytest.raises(WorkspaceError) as e:
         _run(delete_workspace("t2-del"))
     assert e.value.status == 409
 
-    con = sqlite3.connect(_db_path())
-    try:
-        con.execute("DELETE FROM predefined_queries WHERE workspace_id=?", (rec.id,))
-        con.commit()
-    finally:
-        con.close()
+    _sql("DELETE FROM predefined_queries WHERE workspace_id=?", rec.id)
     _run(delete_workspace("t2-del"))
     with pytest.raises(WorkspaceError):
         _run(resolve("t2-del"))
@@ -172,16 +178,7 @@ def test_delete_refuses_a_query_saved_after_the_emptiness_check(monkeypatch):
 
     async def count_then_save(*args):
         n = await real_count(*args)
-        con = sqlite3.connect(_db_path())
-        try:
-            con.execute(
-                "INSERT INTO predefined_queries (query_name, type, query, workspace_id) "
-                "VALUES ('late', 'clickhouse', 'SELECT 1', ?)",
-                (rec.id,),
-            )
-            con.commit()
-        finally:
-            con.close()
+        _add_live_query(rec.id, "late")
         return n
 
     monkeypatch.setattr(workspaces, "_entity_count", count_then_save)
@@ -191,11 +188,6 @@ def test_delete_refuses_a_query_saved_after_the_emptiness_check(monkeypatch):
     monkeypatch.undo()
 
     assert _run(resolve("t2-race")).id == rec.id
-    con = sqlite3.connect(_db_path())
-    try:
-        assert con.execute("SELECT COUNT(*) FROM predefined_queries WHERE workspace_id=?", (rec.id,)).fetchone()[0] == 1
-        con.execute("DELETE FROM predefined_queries WHERE workspace_id=?", (rec.id,))
-        con.commit()
-    finally:
-        con.close()
+    assert _sql("SELECT COUNT(*) FROM predefined_queries WHERE workspace_id=?", rec.id) == 1
+    _sql("DELETE FROM predefined_queries WHERE workspace_id=?", rec.id)
     _run(delete_workspace("t2-race"))
