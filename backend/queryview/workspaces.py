@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from sqlalchemy import column, delete, table, text, update
+from sqlalchemy import column, delete, exists, table, text, update
 from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -76,7 +76,8 @@ def _valid_name(name: str) -> str:
 # connect -> here), so it reaches the table through a bare table clause.
 _sessions_table = table("sessions", column("workspace"))
 # Deleted queries (docs/query.md) don't keep a workspace alive; they go with it.
-_queries_table = table("predefined_queries", column("workspace_id"))
+_queries_table = table("predefined_queries", column("workspace_id"), column("deleted_at"))
+_dashboards_table = table("dashboards", column("workspace_id"))
 
 
 def _move_sessions(old: str, new: str):
@@ -188,19 +189,19 @@ async def update_workspace(
         await s.commit()
 
 
-async def _entity_count(workspace_id: int) -> int:
+async def _entity_count(s: AsyncSession, workspace_id: int) -> int:
     """How many entities the workspace still owns. Raw SQL so this module
     doesn't import the entity modules (which import nothing from here either)."""
-    async with _engine_for_db().connect() as conn:
-        n = (
-            await conn.execute(
-                text(
-                    "SELECT (SELECT COUNT(*) FROM predefined_queries WHERE workspace_id = :w AND deleted_at IS NULL)"
-                    " + (SELECT COUNT(*) FROM dashboards WHERE workspace_id = :w)"
-                ),
-                {"w": workspace_id},
-            )
-        ).scalar()
+    conn = await s.connection()  # the session's own transaction
+    n = (
+        await conn.execute(
+            text(
+                "SELECT (SELECT COUNT(*) FROM predefined_queries WHERE workspace_id = :w AND deleted_at IS NULL)"
+                " + (SELECT COUNT(*) FROM dashboards WHERE workspace_id = :w)"
+            ),
+            {"w": workspace_id},
+        )
+    ).scalar()
     return int(n or 0)
 
 
@@ -213,7 +214,7 @@ async def delete_workspace(name: str) -> str:
         row = (await s.exec(select(Workspace).where(Workspace.name == name))).first()
         if row is None:
             raise WorkspaceError(f"unknown workspace {name!r}", status=404)
-        count = await _entity_count(row.id)  # type: ignore[arg-type]
+        count = await _entity_count(s, row.id)  # type: ignore[arg-type]
         if count:
             raise WorkspaceError(
                 f"workspace {name!r} still contains {count} entities; delete them first",
@@ -225,9 +226,22 @@ async def delete_workspace(name: str) -> str:
         if others is None:
             raise WorkspaceError("can't delete the last workspace", status=409)
         moved_to = others.name  # read before the commit expires it
+        # Purge the deleted queries, then delete the workspace row only if it is
+        # still empty, in one transaction: the count above ran before the
+        # transaction's first write, so an entity saved since must keep the
+        # workspace, not go with it. Live queries are never purged here.
+        await s.exec(
+            delete(_queries_table).where(
+                _queries_table.c.workspace_id == row.id, _queries_table.c.deleted_at.is_not(None)
+            )
+        )
+        live_query = exists().where(_queries_table.c.workspace_id == row.id, _queries_table.c.deleted_at.is_(None))
+        dashboard = exists().where(_dashboards_table.c.workspace_id == row.id)
+        gone = await s.exec(delete(Workspace).where(col(Workspace.id) == row.id, ~live_query, ~dashboard))
+        if gone.rowcount != 1:
+            await s.rollback()
+            raise WorkspaceError(f"workspace {name!r} is no longer empty; delete its entities first", status=409)
         await s.exec(_move_sessions(name, moved_to))
-        await s.exec(delete(_queries_table).where(_queries_table.c.workspace_id == row.id))
-        await s.delete(row)
         await s.commit()
         return moved_to
 

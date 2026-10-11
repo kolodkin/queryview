@@ -230,6 +230,23 @@ def test_delete_is_soft_and_undelete_brings_it_back(default_ws_id):
     assert live.value.status == 404
 
 
+def test_ensure_deleted_is_idempotent_where_set_is_strict(default_ws_id):
+    import pytest
+
+    from queryview.queries import PredefinedQueryError, ensure_predefined_query_deleted
+
+    _run(save_predefined_query("ens q", "clickhouse", "SELECT 1", workspace_id=default_ws_id))
+    assert _run(ensure_predefined_query_deleted("clickhouse", "ens q", True, workspace_id=default_ws_id)) is True
+    assert _run(ensure_predefined_query_deleted("clickhouse", "ens q", True, workspace_id=default_ws_id)) is False
+    assert _run(get_predefined_query("clickhouse", "ens q", default_ws_id)) is None
+    assert _run(ensure_predefined_query_deleted("clickhouse", "ens q", False, workspace_id=default_ws_id)) is True
+    assert _run(ensure_predefined_query_deleted("clickhouse", "ens q", False, workspace_id=default_ws_id)) is False
+    assert _run(get_predefined_query("clickhouse", "ens q", default_ws_id)) is not None
+    with pytest.raises(PredefinedQueryError) as missing:
+        _run(ensure_predefined_query_deleted("clickhouse", "ens nope", True, workspace_id=default_ws_id))
+    assert missing.value.status == 404
+
+
 def test_saving_over_a_deleted_query_brings_it_back(default_ws_id):
     from queryview.queries import set_predefined_query_deleted
 

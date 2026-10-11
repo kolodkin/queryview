@@ -230,3 +230,22 @@ async def set_predefined_query_deleted(conn_type: str, query_name: str, deleted:
     """Delete (soft) or undelete one saved query. 404 unless it exists in the
     other state."""
     await update_predefined_query(conn_type, query_name, workspace_id=workspace_id, deleted=deleted)
+
+
+async def ensure_predefined_query_deleted(conn_type: str, query_name: str, deleted: bool, *, workspace_id: int) -> bool:
+    """Put one saved query in the `deleted` state, whatever state it is in
+    now: True when that changed it, False when it already was there. For a
+    caller that decided on the state from an earlier read (a git sync) and may
+    have been overtaken by a delete or undelete through the API meanwhile.
+    404 only when there is no such query at all."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = await _find(s, conn_type, query_name, workspace_id)
+        if row is None:
+            raise PredefinedQueryError(f"query {query_name!r} not found", status=404)
+        if (row.deleted_at is not None) == deleted:
+            return False
+        row.deleted_at = _now_ms() if deleted else None
+        s.add(row)
+        await s.commit()
+        return True

@@ -713,3 +713,38 @@ def test_a_marker_for_an_unknown_query_imports_it_deleted(other_instance):
 
     assert all(e["name"] != "gs never here" for e in r["imported"] + r["deleted"] + r["conflicts"])
     assert "gs never here" in _deleted_names(_default_ws_id())
+
+
+def test_a_delete_through_the_api_during_a_sync_is_not_an_error(other_instance, monkeypatch):
+    """The merge reads the local copy, then writes its deleted flag in a second
+    DB session. A delete through the API landing in between leaves the row
+    already deleted: the sync must treat that as done, not fail."""
+    from queryview import queries
+    from queryview.queries import save_predefined_query
+
+    _run(save_predefined_query("gs raced", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "query", "gs raced", "clickhouse"))
+    _run(gitsync.sync(_default_ws()))  # imported here, agreed
+    _delete("gs raced", other_instance.id)
+    _run(gitsync.store(other_instance, "query", "gs raced", "clickhouse"))
+
+    real_get = queries.get_predefined_query
+    here = _default_ws_id()
+
+    async def get_then_delete(conn_type, name, ws_id, **kw):
+        local = await real_get(conn_type, name, ws_id, **kw)
+        if name == "gs raced" and ws_id == here and local is not None and local["deleted_at"] is None:
+            await queries.set_predefined_query_deleted(conn_type, name, True, workspace_id=ws_id)
+        return local
+
+    monkeypatch.setattr(queries, "get_predefined_query", get_then_delete)
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert {"kind": "query", "name": "gs raced", "conn_type": "clickhouse"} in r["deleted"]
+    assert r["conflicts"] == []
+    assert "gs raced" in _deleted_names(_default_ws_id())
+    # The run's state was saved: the marker is agreed on, so the next sync is a no-op for it.
+    monkeypatch.undo()
+    r = _run(gitsync.sync(_default_ws()))
+    assert all(e["name"] != "gs raced" for e in r["imported"] + r["deleted"] + r["conflicts"])
+    assert gitsync._load_state(_default_ws())["agreed"].get(gitsync._key("query", "gs raced", "clickhouse")) is not None

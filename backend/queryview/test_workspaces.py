@@ -159,3 +159,43 @@ def test_the_fallback_survives_renaming_the_seeded_workspace():
         assert new.workspace == "t-renamed-default"
     finally:
         _run(update_workspace("t-renamed-default", new_name=DEFAULT_WORKSPACE))
+
+
+def test_delete_refuses_a_query_saved_after_the_emptiness_check(monkeypatch):
+    """A live query saved between the emptiness check and the deletes must
+    keep the workspace (409), not be purged along with it."""
+    from queryview import workspaces
+
+    _run(create_workspace("t2-race"))
+    rec = _run(resolve("t2-race"))
+    real_count = workspaces._entity_count
+
+    async def count_then_save(*args):
+        n = await real_count(*args)
+        con = sqlite3.connect(_db_path())
+        try:
+            con.execute(
+                "INSERT INTO predefined_queries (query_name, type, query, workspace_id) "
+                "VALUES ('late', 'clickhouse', 'SELECT 1', ?)",
+                (rec.id,),
+            )
+            con.commit()
+        finally:
+            con.close()
+        return n
+
+    monkeypatch.setattr(workspaces, "_entity_count", count_then_save)
+    with pytest.raises(WorkspaceError) as e:
+        _run(delete_workspace("t2-race"))
+    assert e.value.status == 409
+    monkeypatch.undo()
+
+    assert _run(resolve("t2-race")).id == rec.id
+    con = sqlite3.connect(_db_path())
+    try:
+        assert con.execute("SELECT COUNT(*) FROM predefined_queries WHERE workspace_id=?", (rec.id,)).fetchone()[0] == 1
+        con.execute("DELETE FROM predefined_queries WHERE workspace_id=?", (rec.id,))
+        con.commit()
+    finally:
+        con.close()
+    _run(delete_workspace("t2-race"))
