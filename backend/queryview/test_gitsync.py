@@ -581,7 +581,8 @@ def _delete(name: str, ws_id: int) -> None:
 def _deleted_names(ws_id: int) -> list[str]:
     from queryview.queries import list_predefined_queries
 
-    return [r["query_name"] for r in _run(list_predefined_queries("clickhouse", ws_id, deleted=True))]
+    rows = _run(list_predefined_queries("clickhouse", ws_id, include_deleted=True))
+    return [r["query_name"] for r in rows if r["deleted_at"] is not None]
 
 
 def test_an_uncommitted_delete_stays_deleted_through_a_sync(git_env):

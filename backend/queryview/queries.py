@@ -5,14 +5,13 @@ SQLite engine owned by connect.py."""
 
 from __future__ import annotations
 
-import time
 from typing import Any, ClassVar
 
 from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from .connect import _engine_for_db, _ensure_schema
+from .connect import _engine_for_db, _ensure_schema, _now_ms
 
 
 class PredefinedQuery(SQLModel, table=True):
@@ -36,45 +35,42 @@ class PredefinedQuery(SQLModel, table=True):
     deleted_at: int | None = Field(default=None)
 
 
-def _row_dict(r: PredefinedQuery) -> dict[str, str | None]:
+def _row_dict(r: PredefinedQuery) -> dict[str, Any]:
     """The row shape every accessor here returns (order_by/fields stay the
-    stored JSON text)."""
+    stored JSON text; deleted_at is None for a live query)."""
     return {
         "query_name": r.query_name,
         "query": r.query,
         "cell_view": r.cell_view,
         "order_by": r.order_by,
         "fields": r.fields,
+        "deleted_at": r.deleted_at,
     }
 
 
-def _live(deleted: bool = False):
-    """The WHERE clause for live rows, or for deleted ones."""
-    c = col(PredefinedQuery.deleted_at)
-    return c.is_not(None) if deleted else c.is_(None)
+def _live():
+    """The WHERE clause for live (not deleted) rows."""
+    return col(PredefinedQuery.deleted_at).is_(None)
 
 
-async def list_predefined_queries(conn_type: str, workspace_id: int, *, deleted: bool = False) -> list[dict[str, Any]]:
+async def list_predefined_queries(
+    conn_type: str, workspace_id: int, *, include_deleted: bool = False
+) -> list[dict[str, Any]]:
     """Saved queries for a connection type within one workspace, ordered by
-    name: the live ones, or with `deleted` the deleted ones (plus their
-    `deleted_at`)."""
+    name: the live ones, plus the deleted ones with `include_deleted`."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
-        rows = (
-            await s.exec(
-                select(PredefinedQuery)
-                .where(
-                    PredefinedQuery.type == conn_type,
-                    PredefinedQuery.workspace_id == workspace_id,
-                    _live(deleted),
-                )
-                .order_by(PredefinedQuery.query_name)
-            )
-        ).all()
-    return [{**_row_dict(r), "deleted_at": r.deleted_at} if deleted else _row_dict(r) for r in rows]
+        q = select(PredefinedQuery).where(
+            PredefinedQuery.type == conn_type,
+            PredefinedQuery.workspace_id == workspace_id,
+        )
+        if not include_deleted:
+            q = q.where(_live())
+        rows = (await s.exec(q.order_by(PredefinedQuery.query_name))).all()
+    return [_row_dict(r) for r in rows]
 
 
-async def list_all_predefined_queries(workspace_id: int) -> list[dict[str, str | None]]:
+async def list_all_predefined_queries(workspace_id: int) -> list[dict[str, Any]]:
     """Every saved query in one workspace regardless of connection type,
     ordered by (type, name) — the row shape of list_predefined_queries plus
     `type`. Used by the whole-workspace YAML export."""
@@ -108,25 +104,24 @@ async def get_predefined_query(
 ) -> dict[str, Any] | None:
     """One live saved query by (workspace, type, name) — the unique key — in
     the same row shape as list_predefined_queries items, or None. With
-    `include_deleted` a deleted row counts too, and the dict carries
-    `deleted_at` (None when live)."""
+    `include_deleted` a deleted row counts too."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         row = await _find(s, conn_type, query_name, workspace_id)
-    if row is None:
+    if row is None or (row.deleted_at is not None and not include_deleted):
         return None
-    if include_deleted:
-        return {**_row_dict(row), "deleted_at": row.deleted_at}
-    return _row_dict(row) if row.deleted_at is None else None
+    return _row_dict(row)
 
 
-async def list_predefined_queries_view(conn_type: str, workspace_id: int, *, deleted: bool = False) -> list[dict]:
+async def list_predefined_queries_view(
+    conn_type: str, workspace_id: int, *, include_deleted: bool = False
+) -> list[dict]:
     """Like list_predefined_queries but with order_by/fields parsed from their
     stored JSON text into values (cell_view stays raw YAML). Shared by the HTTP
     list endpoint and the MCP list_queries tool so both present the same shape."""
     import json
 
-    rows = await list_predefined_queries(conn_type, workspace_id, deleted=deleted)
+    rows = await list_predefined_queries(conn_type, workspace_id, include_deleted=include_deleted)
     for r in rows:
         ob, fl = r.get("order_by"), r.get("fields")
         r["order_by"] = json.loads(ob) if ob else None
@@ -137,8 +132,9 @@ async def list_predefined_queries_view(conn_type: str, workspace_id: int, *, del
 async def save_predefined_queries(rows: list[dict[str, Any]], *, workspace_id: int) -> None:
     """Upsert many predefined queries — each a dict with string `type`,
     `query_name`, `query` and optional `cell_view`/`order_by`/`fields` (JSON
-    text or None) — in one transaction, keyed by (workspace, type, query_name).
-    Saving over a deleted query brings it back."""
+    text or None) and `deleted` — in one transaction, keyed by (workspace,
+    type, query_name). Saving over a deleted query brings it back unless
+    `deleted` is set."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         for r in rows:
@@ -149,7 +145,7 @@ async def save_predefined_queries(rows: list[dict[str, Any]], *, workspace_id: i
             row.cell_view = r.get("cell_view")
             row.order_by = r.get("order_by")
             row.fields = r.get("fields")
-            row.deleted_at = None
+            row.deleted_at = _now_ms() if r.get("deleted") else None
             s.add(row)
         await s.commit()
 
@@ -163,8 +159,10 @@ async def save_predefined_query(
     fields: str | None = None,
     *,
     workspace_id: int,
+    deleted: bool = False,
 ) -> None:
-    """Upsert a predefined query by (workspace, type, query_name)."""
+    """Upsert a predefined query by (workspace, type, query_name), live or
+    (`deleted`) deleted."""
     await save_predefined_queries(
         [
             {
@@ -174,6 +172,7 @@ async def save_predefined_query(
                 "cell_view": cell_view,
                 "order_by": order_by,
                 "fields": fields,
+                "deleted": deleted,
             }
         ],
         workspace_id=workspace_id,
@@ -186,10 +185,6 @@ class PredefinedQueryError(Exception):
     def __init__(self, message: str, status: int) -> None:
         super().__init__(message)
         self.status = status
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
 
 
 async def rename_predefined_query(conn_type: str, query_name: str, new_name: str, *, workspace_id: int) -> None:

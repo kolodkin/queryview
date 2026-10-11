@@ -13,9 +13,9 @@ DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
 def _names(base_url: str, ws: str, deleted: bool = False) -> list[str]:
-    params = {"type": "duckdb", "workspace": ws, **({"deleted": "1"} if deleted else {})}
+    params = {"type": "duckdb", "workspace": ws, "include_deleted": "1"}
     r = httpx.get(f"{base_url}/api/predefined-queries", params=params)
-    return [q["query_name"] for q in r.json()["queries"]]
+    return [q["query_name"] for q in r.json()["queries"] if (q["deleted_at"] is not None) == deleted]
 
 
 def test_rename_delete_and_undelete_a_saved_query(seeded_duckdb, page: Page, base_url: str, shot) -> None:

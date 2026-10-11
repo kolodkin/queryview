@@ -214,8 +214,8 @@ def test_delete_is_soft_and_undelete_brings_it_back(default_ws_id):
     assert _run(get_predefined_query("clickhouse", "del q", default_ws_id)) is None
     assert all(r["query_name"] != "del q" for r in _run(list_predefined_queries("clickhouse", default_ws_id)))
     assert all(r["query_name"] != "del q" for r in _run(list_all_predefined_queries(default_ws_id)))
-    gone = _run(list_predefined_queries("clickhouse", default_ws_id, deleted=True))
-    row = next(r for r in gone if r["query_name"] == "del q")
+    everything = _run(list_predefined_queries("clickhouse", default_ws_id, include_deleted=True))
+    row = next(r for r in everything if r["query_name"] == "del q")
     assert row["query"] == "SELECT 1" and isinstance(row["deleted_at"], int)
     assert _run(get_predefined_query("clickhouse", "del q", other)) is not None  # other workspace untouched
     with pytest.raises(PredefinedQueryError) as twice:
@@ -251,7 +251,7 @@ def test_deleted_queries_dont_keep_a_workspace_alive():
     _run(delete_workspace("del-ws"))
     _run(create_workspace("del-ws"))  # a fresh workspace by that name starts empty
     fresh = _run(resolve("del-ws")).id
-    assert _run(list_predefined_queries("clickhouse", fresh, deleted=True)) == []
+    assert _run(list_predefined_queries("clickhouse", fresh, include_deleted=True)) == []
     _run(delete_workspace("del-ws"))
 
 
@@ -265,14 +265,11 @@ def test_api_rename_delete_and_undelete(default_ws_id):
     c.post("/api/predefined-queries", json={"query_name": "api taken", "type": "clickhouse", "query": "SELECT 2"})
 
     def names(deleted: bool = False) -> list[str]:
-        params = {"type": "clickhouse", **({"deleted": "1"} if deleted else {})}
-        r = c.get("/api/predefined-queries", params=params)
-        return [q["query_name"] for q in r.json()["queries"]]
+        r = c.get("/api/predefined-queries", params={"type": "clickhouse", "include_deleted": "1"})
+        return [q["query_name"] for q in r.json()["queries"] if (q["deleted_at"] is not None) == deleted]
 
     r = c.patch("/api/predefined-queries", json={"query_name": "api rn", "type": "clickhouse"})
     assert r.status_code == 400
-    both = {"query_name": "api rn", "type": "clickhouse", "new_name": "x", "deleted": False}
-    assert c.patch("/api/predefined-queries", json=both).status_code == 400
     r = c.patch(
         "/api/predefined-queries",
         json={"query_name": "api rn", "type": "clickhouse", "new_name": "api taken"},
@@ -297,6 +294,11 @@ def test_api_rename_delete_and_undelete(default_ws_id):
     assert c.patch("/api/predefined-queries", json=undelete).json() == {"ok": True}
     assert "api renamed" in names() and "api renamed" not in names(deleted=True)
     assert c.patch("/api/predefined-queries", json=undelete).status_code == 404
+    # PATCH deletes too, and the live list leaves deleted queries out.
+    delete = {**undelete, "deleted": True}
+    assert c.patch("/api/predefined-queries", json=delete).json() == {"ok": True}
+    live = c.get("/api/predefined-queries", params={"type": "clickhouse"}).json()["queries"]
+    assert all(q["query_name"] != "api renamed" for q in live)
 
     r = c.delete(
         "/api/predefined-queries",

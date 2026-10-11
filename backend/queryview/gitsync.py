@@ -259,10 +259,6 @@ def _check_kind(kind: str, conn_type: str | None) -> None:
         raise GitSyncError("conn_type is required for queries", status=400)
 
 
-def entity_relpath(kind: str, name: str, conn_type: str | None) -> str:
-    return query_relpath(conn_type or "", name) if kind == "query" else dashboard_reldir(name)
-
-
 def _entity_paths(kind: str, name: str, conn_type: str | None) -> list[str]:
     """Every repo path the entity can live at: a query's file or its marker."""
     if kind == "query":
@@ -338,18 +334,17 @@ async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]
     found = []
     for fpath, oid in files.items():
         parts = fpath.split("/")
-        if len(parts) == 3 and parts[0] == "queries" and parts[2].endswith(".yaml"):
-            found.append({"kind": "query", "conn_type": unquote(parts[1]), "relpath": fpath, "oid": oid})
-        elif len(parts) == 3 and parts[0] == "queries" and parts[2].endswith(".deleted"):
-            if fpath.removesuffix(".deleted") + ".yaml" in files:
+        if len(parts) == 3 and parts[0] == "queries" and parts[2].endswith((".yaml", ".deleted")):
+            deleted = fpath.endswith(".deleted")
+            if deleted and fpath.removesuffix(".deleted") + ".yaml" in files:
                 continue
             found.append(
                 {
                     "kind": "query",
                     "conn_type": unquote(parts[1]),
                     "relpath": fpath,
-                    "oid": f"{oid}#deleted",
-                    "deleted": True,
+                    "oid": oid + ("#deleted" if deleted else ""),
+                    "deleted": deleted,
                 }
             )
         elif len(parts) == 3 and parts[0] == "dashboards" and parts[2] == "meta.yaml":
@@ -371,6 +366,10 @@ async def _read_repo_entity(wd: Path, ref: str, kind: str, relpath: str) -> dict
             if fname == "meta.yaml":
                 raise
     return dashboard_from_files(files)
+
+
+def _empty_merge() -> dict[str, Any]:
+    return {"imported": [], "deleted": [], "conflicts": []}
 
 
 async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
@@ -397,7 +396,8 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
         if kind == "query":
             local = await get_predefined_query(conn_type, name, ws.id, include_deleted=True)
             same_content = local is not None and query_to_yaml(local) == query_to_yaml(repo)
-            same = same_content and local is not None and (local["deleted_at"] is not None) == repo_deleted
+            local_deleted = local is not None and local["deleted_at"] is not None
+            same = same_content and local_deleted == repo_deleted
         else:
             local = await get_dashboard(name, ws.id)
             same = local is not None and dashboard_to_files(local) == dashboard_to_files(repo)
@@ -415,9 +415,8 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
                     repo["order_by"],
                     repo["fields"],
                     workspace_id=ws.id,
+                    deleted=repo_deleted,  # a marker lands among the deleted, ready to undelete
                 )
-                if repo_deleted:  # lands among the deleted, ready to undelete
-                    await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
             else:
                 await upsert_dashboard(name, repo["html"], repo["queries"], repo["params"], workspace_id=ws.id)
             if not repo_deleted:
@@ -461,7 +460,7 @@ async def sync(ws: WorkspaceRec) -> dict[str, Any]:
         wd = await _ensure_repo(ws)
         head = await _origin_head(wd, ws)
         if head is None:
-            return {"imported": [], "deleted": [], "conflicts": []}
+            return _empty_merge()
         return await _merge(ws, wd, head)
 
 
@@ -485,7 +484,7 @@ async def store(
     async with _lock(ws):
         wd = await _ensure_repo(ws)
         head = await _origin_head(wd, ws)
-        merged: dict[str, Any] = {"imported": [], "deleted": [], "conflicts": []}
+        merged: dict[str, Any] = _empty_merge()
         if head:
             await _git("reset", "--hard", head, cwd=wd)
             merged = await _merge(ws, wd, head)
@@ -496,7 +495,8 @@ async def store(
             keep, drop = reversed(paths) if is_deleted else paths
             (wd / keep).parent.mkdir(parents=True, exist_ok=True)
             (wd / keep).write_text(query_to_yaml(entity), encoding="utf-8")
-            await _git("rm", "-q", "--ignore-unmatch", "--", drop, cwd=wd)
+            if (wd / drop).exists():
+                await _git("rm", "-q", "--", drop, cwd=wd)
         else:
             relpath = paths[0]
             ddir = wd / relpath
@@ -581,34 +581,36 @@ async def restore(
     untouched or fully replaced."""
     _check_kind(kind, conn_type)
     _require_remote(ws)
-    relpath = entity_relpath(kind, name, conn_type)
+    paths = _entity_paths(kind, name, conn_type)
     async with _lock(ws):
         wd = await _ensure_repo(ws)
         head = await _origin_head(wd, ws)
         resolved = ref if ref and ref != "HEAD" else head
         if resolved is None:
             raise GitSyncError(f"{kind} {name!r} not found in git", status=404)
-        merged = await _merge(ws, wd, head) if head else {"imported": [], "deleted": [], "conflicts": []}
+        merged = await _merge(ws, wd, head) if head else _empty_merge()
 
         async def _show(path: str) -> str:
             return await _git("show", f"{resolved}:{path}", cwd=wd)
 
         restore_deleted = False
         if kind == "query":
-            try:
-                text = await _show(relpath)
-            except GitSyncError:
+            text = None
+            for path in paths:  # the live file, else the deletion marker
                 try:
-                    text = await _show(deleted_relpath(conn_type or "", name))
+                    text = await _show(path)
                 except GitSyncError:
-                    raise GitSyncError(f"query {name!r} not found at {resolved}", status=404) from None
-                restore_deleted = True
+                    continue
+                restore_deleted = path.endswith(".deleted")
+                break
+            if text is None:
+                raise GitSyncError(f"query {name!r} not found at {resolved}", status=404)
             data = query_from_yaml(text)
         else:
             files: dict[str, str] = {}
             for fname in ("meta.yaml", "dashboard.html", "queries.yaml"):
                 try:
-                    files[fname] = await _show(f"{relpath}/{fname}")
+                    files[fname] = await _show(f"{paths[0]}/{fname}")
                 except GitSyncError:
                     if fname == "meta.yaml":
                         raise GitSyncError(f"dashboard {name!r} not found at {resolved}", status=404) from None
@@ -616,7 +618,7 @@ async def restore(
 
     # DB upsert happens outside the git lock — it doesn't touch the workdir.
     if kind == "query":
-        from .queries import save_predefined_query, set_predefined_query_deleted
+        from .queries import save_predefined_query
 
         await save_predefined_query(
             data["query_name"],
@@ -626,9 +628,8 @@ async def restore(
             data["order_by"],
             data["fields"],
             workspace_id=ws.id,
+            deleted=restore_deleted,
         )
-        if restore_deleted:
-            await set_predefined_query_deleted(conn_type or "", data["query_name"], True, workspace_id=ws.id)
     else:
         from .dashboards import upsert_dashboard
 
