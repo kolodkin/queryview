@@ -98,24 +98,23 @@ CREATE TABLE predefined_queries (
   **currently selected name** and refreshes the selector. Saving an existing name
   **upserts** (overwrites) it. In an [autosave](./workspace.md#autosave)
   workspace there is no Save button: each successful run saves instead.
-- **Rename** and **Delete** (next to **Copy**) act on the selected saved query;
-  both are disabled until the selected name has been saved. Rename prompts for
-  the new name, which must not be taken by a live or a deleted query.
-- **Delete** asks for confirmation, then marks the query deleted. The query
-  stays selected, labelled *(deleted)*, with its SQL in the editor, so it can
-  be committed (see [git sync](./gitsync.md#deleted-queries)) or brought back;
+- **Rename** and **Delete** (next to **Copy**) act on a saved query. Rename
+  refuses a name already taken, even by a deleted query.
+- **Delete** confirms, then marks the query deleted. It stays selected as
+  *(deleted)* with its SQL, ready to [commit](./gitsync.md#deleted-queries);
   the button becomes **Undelete**.
 
-### Deleted queries
+## Deleted queries
 
-Deleting is soft: the row keeps its content and its name, marked with
-`deleted_at`, and leaves every list of saved queries (the selector, MCP
-`list_queries`, [YAML export](./export-import.md)). The selector's **Show
-deleted (N)** item lists them in a *Deleted* group (**Hide deleted** folds it
-away); picking one loads its SQL, and **Undelete** makes it live again. Saving
-under a deleted name also brings it back, with the new content. Running a
-deleted query in an [autosave](./workspace.md#autosave) workspace never saves
-it. Deleted queries don't keep a workspace from being deleted; they go with it.
+Deleting is soft: the row keeps its content and name, marked by `deleted_at`,
+and drops out of the selector, MCP `list_queries` and
+[YAML export](./export-import.md).
+
+- **Show deleted (N)** in the selector lists them in a *Deleted* group; picking
+  one loads its SQL, **Undelete** makes it live.
+- Saving under a deleted name brings it back with the new content. An
+  [autosave](./workspace.md#autosave) run never does.
+- They don't block deleting their workspace and go with it.
 
 ## Cell views
 

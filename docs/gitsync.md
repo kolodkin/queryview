@@ -65,26 +65,25 @@ The merge only adds, never overwrites:
   **Restore** (take the repo's);
 - different, but only because you edited, deleted or undeleted it locally →
   just an uncommitted change, not a conflict;
-- deleted or undeleted in the repo since, with the same content here → the
-  local copy follows (reported under `deleted` or `imported`).
+- deleted or undeleted in the repo since the last agreement, same content here
+  → the local copy follows (reported under `deleted` or `imported`).
 
-A sync never removes a row: a deletion it applies is the same soft delete,
-undoable with **Undelete**. "Last agreed" is the repo object id each entity had when it was imported,
-committed, restored or found identical, kept with the conflict list in
-`{data dir}/gitsync/{workspace id}.sync.json`.
+A sync never removes a row: a deletion it applies is a soft delete, undone
+with **Undelete**. "Last agreed" is the repo object id each entity had when it
+was imported, committed, restored or found identical, kept with the conflict
+list in `{data dir}/gitsync/{workspace id}.sync.json`.
 Changing a workspace's remote or branch drops its clone and that file.
 
 ## Deleted queries
 
-**Commit** on a [deleted query](./query.md#deleted-queries) replaces its
-`.yaml` with a `.deleted` marker holding the same content, in a commit named
-`delete query {type}/{name}`; committing it again once undeleted swaps the
-marker back. Another instance syncing that repo deletes its own copy, unless
-it changed the query locally — then it is a conflict, and **Restore** takes
-the deletion. A query's history spans both paths: restoring a revision before
-the deletion brings it back live, restoring the marker brings it back
-deleted. Renaming is local only: committing the new name adds a file, and the
-old name's file stays in the repo.
+- **Commit** on a [deleted query](./query.md#deleted-queries) swaps its `.yaml`
+  for a `.deleted` marker with the same content (`delete query {type}/{name}`);
+  once undeleted, Commit swaps it back.
+- Other instances delete their copy on sync; one edited locally becomes a
+  conflict, where **Restore** takes the deletion.
+- History spans both paths: restoring an older revision brings the query back
+  live, restoring the marker brings it back deleted.
+- Renaming is local: committing the new name adds a file, the old one stays.
 
 ## Versioning
 
