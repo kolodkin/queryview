@@ -28,11 +28,19 @@ Small improvements noted in the git-sync final review, none blocking:
   but a second QueryView instance pushing between our fetch and push rejects
   the store. Fine for v1's single-instance scope; add one retry if that
   changes.
-- A sync that follows the repo's deletion doesn't re-check the query's
-  content when it writes: a save landing between the merge's read and its
-  write is soft-deleted instead of becoming a conflict. Fine while one user
-  syncs a workspace; multi-user sync (pulling or a webhook) should make that
-  write a compare-and-set on what the merge read.
+
+## Deferred
+
+Out of scope by design, not planned yet. Git sync assumes a single user syncs
+each workspace; multi-user sync needs git pulling or a webhook first.
+
+- **Content check when a sync follows a deletion.** The merge reads a query,
+  then soft-deletes it in a second DB session without re-checking its
+  content. A save landing in between is soft-deleted instead of becoming a
+  conflict (it stays recoverable with **Undelete**). With one user this needs
+  their own save to race their own sync. Multi-user sync should make that
+  write a compare-and-set on what the merge read, and report a conflict on a
+  mismatch.
 
 ## Related docs
 
