@@ -626,22 +626,23 @@ function QueryPanel({
 
   // Rename, delete or undelete the selected saved query; the editor keeps its
   // SQL. A deleted query stays selected, so it can be committed or undeleted.
+  // `change` PATCHes (rename, undelete); null DELETEs.
   async function mutateSelected(
-    change: { new_name: string } | { deleted: boolean },
+    change: { new_name: string } | { deleted: false } | null,
   ): Promise<boolean> {
     setBusy(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/predefined-queries', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query_name: selectedName,
-          type: connectionType,
-          workspace: activeWorkspace(),
-          ...change,
-        }),
-      })
+      const target = { query_name: selectedName, type: connectionType, workspace: activeWorkspace() }
+      const res = change
+        ? await apiFetch('/api/predefined-queries', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...target, ...change }),
+          })
+        : await apiFetch(`/api/predefined-queries?${new URLSearchParams(target)}`, {
+            method: 'DELETE',
+          })
       const data = await res.json()
       if (!data.ok) {
         setError(data.message ?? 'request failed')
@@ -665,7 +666,7 @@ function QueryPanel({
 
   async function deleteSelected() {
     if (!window.confirm(`Delete query '${selectedName}'?`)) return
-    if (await mutateSelected({ deleted: true })) setPushedCellView(null)
+    if (await mutateSelected(null)) setPushedCellView(null)
   }
 
   // Autosave: persist a named query's last successful run — the SQL that ran,

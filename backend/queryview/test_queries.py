@@ -294,12 +294,10 @@ def test_api_rename_delete_and_undelete(default_ws_id):
     assert c.patch("/api/predefined-queries", json=undelete).json() == {"ok": True}
     assert "api renamed" in names() and "api renamed" not in names(deleted=True)
     assert c.patch("/api/predefined-queries", json=undelete).status_code == 404
-    # PATCH deletes too, and the live list leaves deleted queries out.
-    delete = {**undelete, "deleted": True}
-    assert c.patch("/api/predefined-queries", json=delete).json() == {"ok": True}
-    live = c.get("/api/predefined-queries", params={"type": "clickhouse"}).json()["queries"]
-    assert all(q["query_name"] != "api renamed" for q in live)
+    # Deleting goes through DELETE only.
+    assert c.patch("/api/predefined-queries", json={**undelete, "deleted": True}).status_code == 400
     # Undelete + rename is all or nothing: a taken name leaves it deleted.
+    c.delete("/api/predefined-queries", params={"query_name": "api renamed", "type": "clickhouse"})
     r = c.patch("/api/predefined-queries", json={**undelete, "new_name": "api taken"})
     assert r.status_code == 409
     assert "api renamed" in names(deleted=True)
