@@ -86,6 +86,7 @@ CREATE TABLE predefined_queries (
   type       TEXT NOT NULL,   -- connection type (clickhouse, …)
   query      TEXT NOT NULL,
   cell_view  TEXT,            -- raw YAML; per-column render config + params (see below)
+  deleted_at INTEGER,         -- unix ms when deleted; NULL = live
   UNIQUE (type, query_name)
 );
 ```
@@ -97,9 +98,23 @@ CREATE TABLE predefined_queries (
   **currently selected name** and refreshes the selector. Saving an existing name
   **upserts** (overwrites) it. In an [autosave](./workspace.md#autosave)
   workspace there is no Save button: each successful run saves instead.
+- **Rename** and **Delete** (next to **Copy**) act on a saved query. Rename
+  refuses a name already taken, even by a deleted query.
+- **Delete** confirms, then marks the query deleted. It stays selected as
+  *(deleted)* with its SQL, ready to [commit](./gitsync.md#deleted-queries);
+  the button becomes **Undelete**.
 
-Renaming and deleting predefined queries are not yet supported — see
-[future.md](./future.md).
+## Deleted queries
+
+Deleting is soft: the row keeps its content and name, marked by `deleted_at`,
+and drops out of the selector, MCP `list_queries` and
+[YAML export](./export-import.md).
+
+- **Show deleted (N)** in the selector lists them in a *Deleted* group; picking
+  one loads its SQL, **Undelete** makes it live.
+- Saving under a deleted name brings it back with the new content. An
+  [autosave](./workspace.md#autosave) run never does.
+- They don't block deleting their workspace and go with it.
 
 ## Cell views
 

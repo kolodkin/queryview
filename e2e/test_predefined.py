@@ -1,0 +1,86 @@
+"""Renaming, deleting and undeleting a saved (predefined) query from the
+query panel.
+Uses DuckDB and a uniquely-named workspace per run."""
+
+import uuid
+
+import httpx
+from conftest import open_query_panel
+from playwright.sync_api import Page, expect
+from test_drivers import CASES, _connect
+
+DUCK = next(c for c in CASES if c.id == "duckdb")
+
+
+def _names(base_url: str, ws: str, deleted: bool = False) -> list[str]:
+    params = {"type": "duckdb", "workspace": ws, "include_deleted": "1"}
+    r = httpx.get(f"{base_url}/api/predefined-queries", params=params)
+    return [q["query_name"] for q in r.json()["queries"] if (q["deleted_at"] is not None) == deleted]
+
+
+def test_rename_delete_and_undelete_a_saved_query(seeded_duckdb, page: Page, base_url: str, shot) -> None:
+    ws = f"e2e-pq-{uuid.uuid4().hex[:6]}"
+    httpx.post(f"{base_url}/api/workspaces", json={"name": ws}).raise_for_status()
+
+    _connect(page, DUCK, seeded_duckdb)
+    page.get_by_test_id("workspace-switcher").click()
+    page.get_by_test_id("workspace-option").filter(has_text=ws).click()
+    expect(page.get_by_test_id("workspace-switcher")).to_contain_text(ws)
+    open_query_panel(page)
+
+    select = page.get_by_test_id("query-predefined-select")
+    rename = page.get_by_test_id("query-rename")
+    delete = page.get_by_test_id("query-delete")
+    expect(rename).to_be_disabled()
+    expect(delete).to_be_disabled()
+
+    # A new, not yet saved name can't be renamed or deleted.
+    page.once("dialog", lambda d: d.accept("pq first"))
+    select.select_option("::new::")
+    expect(rename).to_be_disabled()
+    page.get_by_test_id("query-input").fill("SELECT id FROM items ORDER BY id")
+    page.get_by_test_id("query-save").click()
+    expect(rename).to_be_enabled()
+    shot("saved query: Rename and Delete enabled")
+
+    page.once("dialog", lambda d: d.accept("pq renamed"))
+    rename.click()
+    expect(select).to_have_value("pq renamed")
+    expect(select.locator('option[value="pq first"]')).to_have_count(0)
+    assert _names(base_url, ws) == ["pq renamed"]
+    shot("renamed")
+
+    # Dismissing the confirmation keeps it.
+    page.once("dialog", lambda d: d.dismiss())
+    delete.click()
+    expect(select).to_have_value("pq renamed")
+    assert _names(base_url, ws) == ["pq renamed"]
+
+    page.once("dialog", lambda d: d.accept())
+    delete.click()
+    # Deleted, it stays selected (for Commit or Undelete) and keeps its SQL.
+    expect(select).to_have_value("pq renamed")
+    expect(select.locator("option:checked")).to_have_text("pq renamed (deleted)")
+    expect(page.get_by_test_id("query-input")).to_have_value("SELECT id FROM items ORDER BY id")
+    expect(page.get_by_test_id("query-undelete")).to_be_visible()
+    expect(rename).to_be_disabled()
+    assert _names(base_url, ws) == []
+    assert _names(base_url, ws, deleted=True) == ["pq renamed"]
+    shot("deleted: still selected, Undelete offered")
+
+    # Show deleted lists it in its own group; picking it loads its SQL.
+    select.select_option("")
+    page.get_by_test_id("query-input").fill("")
+    select.select_option("::deleted::")
+    group = page.get_by_test_id("query-deleted-group")
+    expect(group.locator("option")).to_have_text(["pq renamed"])
+    select.select_option("pq renamed")
+    expect(page.get_by_test_id("query-input")).to_have_value("SELECT id FROM items ORDER BY id")
+    shot("show deleted: deleted group")
+
+    page.get_by_test_id("query-undelete").click()
+    expect(delete).to_be_enabled()
+    expect(group).to_have_count(0)
+    assert _names(base_url, ws) == ["pq renamed"]
+    assert _names(base_url, ws, deleted=True) == []
+    shot("undeleted")

@@ -37,6 +37,7 @@ type PredefinedQuery = {
   cell_view: string | null
   order_by: OrderCol[] | null
   fields: string[] | null
+  deleted_at: number | null // unix ms when deleted (docs/query.md); null = live
 }
 
 export type QueryPush = {
@@ -55,6 +56,8 @@ export type QueryPush = {
 
 // Sentinel value for the predefined dropdown's "new name" item.
 const NEW_NAME_OPTION = '::new::'
+// Sentinel for the dropdown item that shows or hides deleted queries.
+const TOGGLE_DELETED_OPTION = '::deleted::'
 
 // The query page (`/queryview`), mounted by the App shell only for a ready
 // connection; picking one happens on the Connect page (ConnectView).
@@ -137,7 +140,12 @@ function QueryPanel({
   const [offset, setOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [predefined, setPredefined] = useState<PredefinedQuery[]>([])
+  // Every saved query, live and deleted; the dropdown lists the deleted ones
+  // (docs/query.md) only on request.
+  const [allQueries, setAllQueries] = useState<PredefinedQuery[]>([])
+  const predefined = useMemo(() => allQueries.filter((q) => q.deleted_at == null), [allQueries])
+  const deletedQueries = useMemo(() => allQueries.filter((q) => q.deleted_at != null), [allQueries])
+  const [showDeleted, setShowDeleted] = useState(false)
   const [selectedName, setSelectedName] = useState('')
   // The last successful run — its SQL and the name it runs for, taken at start;
   // a fresh object per run. Autosave reacts to it once the run's state (a
@@ -219,10 +227,18 @@ function QueryPanel({
   // query is picked from the dropdown. null when no push draft is active.
   const [pushedCellView, setPushedCellView] = useState<string | null>(null)
 
+  // A saved query by name, live or deleted (names are unique across both).
+  const findQuery = useCallback(
+    (name: string) => allQueries.find((p) => p.query_name === name),
+    [allQueries],
+  )
+  const savedSelected = predefined.some((p) => p.query_name === selectedName)
+  const deletedSelected = deletedQueries.some((p) => p.query_name === selectedName)
+
   // Saved cell_view of the selected query, or '' when none.
   const savedCellView = useMemo(
-    () => predefined.find((p) => p.query_name === selectedName)?.cell_view ?? '',
-    [predefined, selectedName],
+    () => findQuery(selectedName)?.cell_view ?? '',
+    [findQuery, selectedName],
   )
 
   // What rendering, the modal editor, and Save all read: a pushed draft wins
@@ -334,15 +350,15 @@ function QueryPanel({
 
   // Returns the fetched list (not just the state setter) so a caller that needs
   // the fresh rows right away — e.g. re-seeding the editor after a git restore —
-  // doesn't have to wait a render for `predefined` state to catch up.
+  // doesn't have to wait a render for the state to catch up.
   const loadPredefined = useCallback(async (): Promise<PredefinedQuery[]> => {
     try {
       const res = await fetch(
-        `/api/predefined-queries?type=${encodeURIComponent(connectionType)}&workspace=${encodeURIComponent(activeWorkspace())}`,
+        `/api/predefined-queries?type=${encodeURIComponent(connectionType)}&workspace=${encodeURIComponent(activeWorkspace())}&include_deleted=1`,
       )
       const data = await res.json()
       const list = (data.queries ?? []) as PredefinedQuery[]
-      setPredefined(list)
+      setAllQueries(list)
       return list
     } catch {
       // missing list is non-fatal; leave the selector empty
@@ -351,12 +367,12 @@ function QueryPanel({
   }, [connectionType])
 
   useEffect(() => {
-    // setPredefined runs after the fetch await, so it doesn't cascade renders.
+    // setAllQueries runs after the fetch await, so it doesn't cascade renders.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPredefined()
   }, [loadPredefined])
 
-  // A git sync may have imported queries from the repo.
+  // A git sync may have imported (or deleted) queries from the repo.
   useEffect(() => onGitSync(() => void loadPredefined()), [loadPredefined])
 
   // Apply a pushed query: reflect it in the controls and run it with the pushed
@@ -542,6 +558,10 @@ function QueryPanel({
   }
 
   function onSelectName(value: string) {
+    if (value === TOGGLE_DELETED_OPTION) {
+      setShowDeleted((v) => !v)
+      return
+    }
     if (value === NEW_NAME_OPTION) {
       const name = window.prompt('Save query as (name):', selectedName || '')?.trim()
       if (name) setSelectedName(name)
@@ -549,7 +569,7 @@ function QueryPanel({
     }
     setSelectedName(value)
     setPushedCellView(null) // selecting a query reverts to its saved cell view
-    const q = predefined.find((p) => p.query_name === value)
+    const q = findQuery(value)
     if (q) applyPredefined(q)
   }
 
@@ -604,12 +624,59 @@ function QueryPanel({
     }
   }
 
+  // Rename, delete or undelete the selected saved query; the editor keeps its
+  // SQL. A deleted query stays selected, so it can be committed or undeleted.
+  // `change` PATCHes (rename, undelete); null DELETEs.
+  async function mutateSelected(
+    change: { new_name: string } | { deleted: false } | null,
+  ): Promise<boolean> {
+    setBusy(true)
+    setError(null)
+    try {
+      const target = { query_name: selectedName, type: connectionType, workspace: activeWorkspace() }
+      const res = change
+        ? await apiFetch('/api/predefined-queries', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...target, ...change }),
+          })
+        : await apiFetch(`/api/predefined-queries?${new URLSearchParams(target)}`, {
+            method: 'DELETE',
+          })
+      const data = await res.json()
+      if (!data.ok) {
+        setError(data.message ?? 'request failed')
+        return false
+      }
+      await loadPredefined()
+      return true
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'request failed')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function renameSelected() {
+    const name = window.prompt('Rename query to:', selectedName)?.trim()
+    if (!name || name === selectedName) return
+    if (await mutateSelected({ new_name: name })) setSelectedName(name)
+  }
+
+  async function deleteSelected() {
+    if (!window.confirm(`Delete query '${selectedName}'?`)) return
+    if (await mutateSelected(null)) setPushedCellView(null)
+  }
+
   // Autosave: persist a named query's last successful run — the SQL that ran,
   // never a half-typed edit — unless nothing differs from its stored row.
   function saveLastRun() {
     // Skip when the selection moved on mid-run: its presentation isn't this run's.
     const name = lastOk?.name
     if (!lastOk || !name || name !== selectedName.trim()) return
+    // Running a deleted query never brings it back; Undelete does.
+    if (deletedSelected) return
     const next = {
       query: lastOk.query,
       cell_view: effectiveCellView,
@@ -658,15 +725,30 @@ function QueryPanel({
         >
           <option value="">Predefined queries…</option>
           <option value={NEW_NAME_OPTION}>+ New name…</option>
-          {selectedName !== '' &&
-            !predefined.some((p) => p.query_name === selectedName) && (
-              <option value={selectedName}>{selectedName}</option>
-            )}
+          {(showDeleted || deletedQueries.length > 0) && (
+            <option value={TOGGLE_DELETED_OPTION}>
+              {showDeleted ? 'Hide deleted' : `Show deleted (${deletedQueries.length})`}
+            </option>
+          )}
+          {selectedName !== '' && !savedSelected && !(showDeleted && deletedSelected) && (
+            <option value={selectedName}>
+              {deletedSelected ? `${selectedName} (deleted)` : selectedName}
+            </option>
+          )}
           {predefined.map((p) => (
             <option key={p.query_name} value={p.query_name}>
               {p.query_name}
             </option>
           ))}
+          {showDeleted && deletedQueries.length > 0 && (
+            <optgroup label="Deleted" data-testid="query-deleted-group">
+              {deletedQueries.map((p) => (
+                <option key={p.query_name} value={p.query_name}>
+                  {p.query_name}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
         <button
           type="button"
@@ -679,6 +761,39 @@ function QueryPanel({
         >
           {copiedName ? 'Copied' : 'Copy'}
         </button>
+        <button
+          type="button"
+          onClick={() => void renameSelected()}
+          disabled={busy || !savedSelected}
+          data-testid="query-rename"
+          title="Rename saved query"
+          className="glass-btn px-3 py-2 font-medium"
+        >
+          Rename
+        </button>
+        {deletedSelected ? (
+          <button
+            type="button"
+            onClick={() => void mutateSelected({ deleted: false })}
+            disabled={busy}
+            data-testid="query-undelete"
+            title="Restore this deleted query"
+            className="glass-btn px-3 py-2 font-medium"
+          >
+            Undelete
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void deleteSelected()}
+            disabled={busy || !savedSelected}
+            data-testid="query-delete"
+            title="Delete saved query"
+            className="glass-btn px-3 py-2 font-medium"
+          >
+            Delete
+          </button>
+        )}
         {!autosave && (
           <button
             type="button"

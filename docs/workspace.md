@@ -21,8 +21,9 @@ configs). The API returns it only with the credential stripped
 write-only. A workspace
 without a remote is a pure namespace: its git controls are disabled.
 
-Deleting a workspace requires it to be empty (409 otherwise); the git remote
-keeps its history either way.
+Deleting a workspace requires it to be empty (409 otherwise); its
+[deleted queries](./query.md#deleted-queries) don't count and are removed with
+it. The git remote keeps its history either way.
 
 ## Autosave
 

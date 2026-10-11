@@ -38,7 +38,13 @@ from .dashboard_queries import run_dashboard_queries
 from .dashboards import _upsert_and_push, get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
-from .queries import list_predefined_queries_view, save_predefined_query
+from .queries import (
+    PredefinedQueryError,
+    list_predefined_queries_view,
+    save_predefined_query,
+    set_predefined_query_deleted,
+    update_predefined_query,
+)
 from .validation import cell_view_error, dashboard_params_error, presentation_error
 
 # SPA bundle shipped inside the wheel (release CI copies frontend/dist here);
@@ -70,6 +76,13 @@ async def _read_json(request: Request) -> Any:
 
 def _clean_str(value: Any) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _status_error(
+    e: workspaces.WorkspaceError | gitsync.GitSyncError | yamlio.YamlIOError | PredefinedQueryError,
+) -> JSONResponse:
+    """The `{ok: false, message}` response for a domain error carrying its HTTP status."""
+    return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
 
 
 def _clean_queries(raw: Any) -> dict[str, str]:
@@ -412,7 +425,7 @@ async def _resolve_workspace(raw: Any) -> workspaces.WorkspaceRec | JSONResponse
     try:
         return await (workspaces.resolve(name) if name else workspaces.fallback())
     except workspaces.WorkspaceError as e:
-        return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
+        return _status_error(e)
 
 
 # Predefined queries: keyed by connection type within a workspace.
@@ -422,7 +435,8 @@ async def predefined_queries_list(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    return {"queries": await list_predefined_queries_view(conn_type, ws.id)}
+    include_deleted = request.query_params.get("include_deleted") in ("1", "true")
+    return {"queries": await list_predefined_queries_view(conn_type, ws.id, include_deleted=include_deleted)}
 
 
 @app.post("/api/predefined-queries")
@@ -459,6 +473,49 @@ async def predefined_queries_save(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     await save_predefined_query(name, conn_type, query, cell_view, order_by, fields, workspace_id=ws.id)
+    return {"ok": True}
+
+
+# Partial update: `new_name` renames, `deleted: false` undeletes (DELETE deletes).
+@app.patch("/api/predefined-queries")
+async def predefined_queries_update(request: Request):
+    b = await _read_json(request)
+    b = b if isinstance(b, dict) else {}
+    name = _clean_str(b.get("query_name"))
+    conn_type = _clean_str(b.get("type"))
+    new_name = _clean_str(b.get("new_name"))
+    undelete = b.get("deleted") is False
+    if not name or not conn_type or (not new_name and not undelete) or b.get("deleted") is True:
+        return JSONResponse(
+            {"ok": False, "message": "query_name, type and new_name or deleted: false are required"},
+            status_code=400,
+        )
+    ws = await _resolve_workspace(b.get("workspace"))
+    if isinstance(ws, JSONResponse):
+        return ws
+    try:
+        await update_predefined_query(
+            conn_type, name, workspace_id=ws.id, new_name=new_name or None, deleted=False if undelete else None
+        )
+    except PredefinedQueryError as e:
+        return _status_error(e)
+    return {"ok": True}
+
+
+@app.delete("/api/predefined-queries")
+async def predefined_queries_delete(request: Request):
+    q = request.query_params
+    name = _clean_str(q.get("query_name"))
+    conn_type = _clean_str(q.get("type"))
+    if not name or not conn_type:
+        return JSONResponse({"ok": False, "message": "query_name and type are required"}, status_code=400)
+    ws = await _resolve_workspace(q.get("workspace"))
+    if isinstance(ws, JSONResponse):
+        return ws
+    try:
+        await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
+    except PredefinedQueryError as e:
+        return _status_error(e)
     return {"ok": True}
 
 
@@ -660,7 +717,7 @@ async def _gitsync_json(coro):
     try:
         r = await coro
     except gitsync.GitSyncError as e:
-        return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
+        return _status_error(e)
     return {"ok": True, **r}
 
 
@@ -755,7 +812,7 @@ async def export_yaml(request: Request):
             _clean_str(q.get("kind")), _clean_str(q.get("name")), _clean_str(q.get("conn_type")), ws
         )
     except yamlio.YamlIOError as e:
-        return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
+        return _status_error(e)
     return PlainTextResponse(
         text,
         media_type="application/x-yaml",
@@ -776,17 +833,13 @@ async def import_yaml(request: Request):
     try:
         r = await yamlio.import_text(text, ws.id)
     except yamlio.YamlIOError as e:
-        return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
+        return _status_error(e)
     return {"ok": True, **r}
 
 
 # --- Workspaces (see docs/workspace.md) ------------------------------------
 # Admin configuration with secrets (the remote URL may embed a token): exposed
 # over REST/UI only, deliberately not over MCP.
-
-
-def _workspace_error(e: workspaces.WorkspaceError) -> JSONResponse:
-    return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
 
 
 @app.get("/api/workspaces")
@@ -807,7 +860,7 @@ async def workspaces_create(request: Request):
     try:
         await workspaces.create_workspace(name, remote_url, branch, autosave)
     except workspaces.WorkspaceError as e:
-        return _workspace_error(e)
+        return _status_error(e)
     return {"ok": True, **(await _sync_attached(name) if remote_url else {})}
 
 
@@ -828,7 +881,7 @@ async def workspaces_update(name: str, request: Request):
         before = await workspaces.resolve(name)
         await workspaces.update_workspace(name, **kwargs)
     except workspaces.WorkspaceError as e:
-        return _workspace_error(e)
+        return _status_error(e)
     current = kwargs.get("new_name") or name
     after = await workspaces.resolve(current)
     changed = (after.remote, after.branch) != (before.remote, before.branch)
@@ -847,7 +900,7 @@ async def workspaces_delete(name: str):
         ws = await workspaces.resolve(name)
         moved_to = await workspaces.delete_workspace(name)
     except workspaces.WorkspaceError as e:
-        return _workspace_error(e)
+        return _status_error(e)
     gitsync.forget(ws.id)
     # Sessions that were on it now are on this one.
     return {"ok": True, "workspace": moved_to}

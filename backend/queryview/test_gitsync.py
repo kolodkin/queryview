@@ -560,3 +560,156 @@ def test_dashboard_params_round_trip_through_meta_yaml():
 def test_malformed_dashboard_params_are_rejected():
     with pytest.raises(GitSyncError):
         dashboard_from_files({"meta.yaml": "name: p\nparams:\n- name: x\n  kind: nope\n"})
+
+
+def _repo_files(remote) -> list[str]:
+    return subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", "main"],
+        cwd=remote,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
+
+
+def _delete(name: str, ws_id: int) -> None:
+    from queryview.queries import set_predefined_query_deleted
+
+    _run(set_predefined_query_deleted("clickhouse", name, True, workspace_id=ws_id))
+
+
+def _deleted_names(ws_id: int) -> list[str]:
+    from queryview.queries import list_predefined_queries
+
+    rows = _run(list_predefined_queries("clickhouse", ws_id, include_deleted=True))
+    return [r["query_name"] for r in rows if r["deleted_at"] is not None]
+
+
+def test_an_uncommitted_delete_stays_deleted_through_a_sync(git_env):
+    from queryview.queries import get_predefined_query, save_predefined_query
+
+    _run(save_predefined_query("gs gone", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "query", "gs gone", "clickhouse"))
+    _delete("gs gone", _default_ws_id())
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert all(e["name"] != "gs gone" for e in r["imported"] + r["conflicts"])
+    assert _run(get_predefined_query("clickhouse", "gs gone", _default_ws_id())) is None
+    assert "gs gone" in _deleted_names(_default_ws_id())
+
+
+def test_committing_a_deleted_query_swaps_its_file_for_a_marker(git_env):
+    from queryview.queries import save_predefined_query, set_predefined_query_deleted
+
+    _run(save_predefined_query("gs marked", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "query", "gs marked", "clickhouse"))
+    _delete("gs marked", _default_ws_id())
+
+    r = _run(gitsync.store(_default_ws(), "query", "gs marked", "clickhouse"))
+
+    assert r["committed"]
+    files = _repo_files(git_env)
+    assert "queries/clickhouse/gs marked.deleted" in files
+    assert "queries/clickhouse/gs marked.yaml" not in files
+    assert "delete query clickhouse/gs marked" in _remote_log(git_env)
+    # The deletion is in the query's history, and an older revision restores it live.
+    revs = _run(gitsync.history(_default_ws(), "query", "gs marked", "clickhouse"))["revisions"]
+    assert [v["message"] for v in revs] == ["delete query clickhouse/gs marked", "store query clickhouse/gs marked"]
+    _run(gitsync.restore(_default_ws(), "query", "gs marked", "clickhouse", revs[1]["sha"]))
+    assert "gs marked" not in _deleted_names(_default_ws_id())
+
+    # Undeleting and committing swaps the marker back for the file.
+    _run(set_predefined_query_deleted("clickhouse", "gs marked", True, workspace_id=_default_ws_id()))
+    _run(set_predefined_query_deleted("clickhouse", "gs marked", False, workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "query", "gs marked", "clickhouse"))
+    files = _repo_files(git_env)
+    assert "queries/clickhouse/gs marked.yaml" in files
+    assert "queries/clickhouse/gs marked.deleted" not in files
+
+
+def test_a_renamed_query_leaves_no_copy_under_its_old_name(git_env):
+    from queryview.queries import get_predefined_query, rename_predefined_query, save_predefined_query
+
+    _run(save_predefined_query("gs before", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "query", "gs before", "clickhouse"))
+    _run(rename_predefined_query("clickhouse", "gs before", "gs after", workspace_id=_default_ws_id()))
+
+    _run(gitsync.sync(_default_ws()))
+
+    assert _run(get_predefined_query("clickhouse", "gs before", _default_ws_id())) is None
+    assert _run(get_predefined_query("clickhouse", "gs after", _default_ws_id())) is not None
+
+
+def test_a_deletion_committed_elsewhere_deletes_an_unchanged_copy(other_instance):
+    from queryview.queries import get_predefined_query, save_predefined_query
+
+    _run(save_predefined_query("gs shared", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "query", "gs shared", "clickhouse"))
+    _run(gitsync.sync(_default_ws()))  # imported here
+    assert _run(get_predefined_query("clickhouse", "gs shared", _default_ws_id())) is not None
+
+    _delete("gs shared", other_instance.id)
+    _run(gitsync.store(other_instance, "query", "gs shared", "clickhouse"))
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert {"kind": "query", "name": "gs shared", "conn_type": "clickhouse"} in r["deleted"]
+    assert _run(get_predefined_query("clickhouse", "gs shared", _default_ws_id())) is None
+    assert "gs shared" in _deleted_names(_default_ws_id())
+
+    # Undeleted and committed there: it comes back here too.
+    from queryview.queries import set_predefined_query_deleted
+
+    _run(set_predefined_query_deleted("clickhouse", "gs shared", False, workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "query", "gs shared", "clickhouse"))
+    r = _run(gitsync.sync(_default_ws()))
+    assert {"kind": "query", "name": "gs shared", "conn_type": "clickhouse"} in r["imported"]
+    assert _run(get_predefined_query("clickhouse", "gs shared", _default_ws_id())) is not None
+
+
+def test_a_deletion_committed_elsewhere_conflicts_with_a_local_edit(other_instance):
+    from queryview.queries import get_predefined_query, save_predefined_query
+
+    _run(save_predefined_query("gs edited away", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "query", "gs edited away", "clickhouse"))
+    _run(gitsync.sync(_default_ws()))
+    _run(save_predefined_query("gs edited away", "clickhouse", "SELECT 2", workspace_id=_default_ws_id()))
+
+    _delete("gs edited away", other_instance.id)
+    _run(gitsync.store(other_instance, "query", "gs edited away", "clickhouse"))
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert {"kind": "query", "name": "gs edited away", "conn_type": "clickhouse"} in r["conflicts"]
+    local = _run(get_predefined_query("clickhouse", "gs edited away", _default_ws_id()))
+    assert local is not None and local["query"] == "SELECT 2"
+    # Restore takes the repo's side: the deletion.
+    _run(gitsync.restore(_default_ws(), "query", "gs edited away", "clickhouse"))
+    assert "gs edited away" in _deleted_names(_default_ws_id())
+
+
+def test_a_marker_never_agreed_on_conflicts_instead_of_deleting(other_instance):
+    from queryview.queries import get_predefined_query, save_predefined_query
+
+    _run(save_predefined_query("gs unagreed", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
+    _delete("gs unagreed", other_instance.id)
+    _run(gitsync.store(other_instance, "query", "gs unagreed", "clickhouse"))
+    # The same query, live here, never synced with the repo.
+    _run(save_predefined_query("gs unagreed", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert {"kind": "query", "name": "gs unagreed", "conn_type": "clickhouse"} in r["conflicts"]
+    assert _run(get_predefined_query("clickhouse", "gs unagreed", _default_ws_id())) is not None
+
+
+def test_a_marker_for_an_unknown_query_imports_it_deleted(other_instance):
+    from queryview.queries import save_predefined_query
+
+    _run(save_predefined_query("gs never here", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
+    _delete("gs never here", other_instance.id)
+    _run(gitsync.store(other_instance, "query", "gs never here", "clickhouse"))
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert all(e["name"] != "gs never here" for e in r["imported"] + r["deleted"] + r["conflicts"])
+    assert "gs never here" in _deleted_names(_default_ws_id())
