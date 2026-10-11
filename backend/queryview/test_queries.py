@@ -230,9 +230,10 @@ def test_delete_is_soft_and_undelete_brings_it_back(default_ws_id):
     assert live.value.status == 404
 
 
-def test_a_non_strict_delete_or_undelete_of_a_query_already_there_is_a_no_op(default_ws_id):
+def test_a_non_strict_delete_or_undelete_of_a_query_already_there_is_a_no_op(default_ws_id, monkeypatch):
     import pytest
 
+    from queryview import queries
     from queryview.queries import PredefinedQueryError, update_predefined_query
 
     def mark(name: str, deleted: bool) -> None:
@@ -241,10 +242,12 @@ def test_a_non_strict_delete_or_undelete_of_a_query_already_there_is_a_no_op(def
     _run(save_predefined_query("lax q", "clickhouse", "SELECT 1", workspace_id=default_ws_id))
     mark("lax q", False)  # already live
     assert _run(get_predefined_query("clickhouse", "lax q", default_ws_id)) is not None
+    monkeypatch.setattr(queries, "_now_ms", lambda: 1000)
     mark("lax q", True)
-    stamped = _run(get_predefined_query("clickhouse", "lax q", default_ws_id, include_deleted=True))
+    monkeypatch.setattr(queries, "_now_ms", lambda: 2000)
     mark("lax q", True)  # already deleted: keeps its deletion time
-    assert _run(get_predefined_query("clickhouse", "lax q", default_ws_id, include_deleted=True)) == stamped
+    row = _run(get_predefined_query("clickhouse", "lax q", default_ws_id, include_deleted=True))
+    assert row is not None and row["deleted_at"] == 1000
     with pytest.raises(PredefinedQueryError) as missing:
         mark("lax nope", True)
     assert missing.value.status == 404

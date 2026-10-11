@@ -377,7 +377,7 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
     undeletions) of queries unchanged here; record conflicts. Caller holds the
     lock and has fetched."""
     from .dashboards import get_dashboard, upsert_dashboard
-    from .queries import get_predefined_query, save_predefined_query, update_predefined_query
+    from .queries import PredefinedQueryError, get_predefined_query, save_predefined_query, update_predefined_query
 
     state = _load_state(ws)
     agreed: dict[str, str] = state["agreed"]
@@ -430,8 +430,12 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
             # Deleted or undeleted elsewhere since we last agreed, untouched
             # here: follow the repo. Without an agreement we can't tell which
             # side changed, so that stays a conflict. Not strict: a delete or
-            # undelete through the API since the read above is no error.
-            await update_predefined_query(conn_type, name, workspace_id=ws.id, deleted=repo_deleted, strict=False)
+            # undelete through the API since the read above is no error, and a
+            # rename since is a local change, left alone like any other.
+            try:
+                await update_predefined_query(conn_type, name, workspace_id=ws.id, deleted=repo_deleted, strict=False)
+            except PredefinedQueryError:
+                continue
             (deleted if repo_deleted else imported).append(entry)
             agreed[key] = e["oid"]
         else:
