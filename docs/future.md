@@ -28,6 +28,11 @@ Small improvements noted in the git-sync final review, none blocking:
   but a second QueryView instance pushing between our fetch and push rejects
   the store. Fine for v1's single-instance scope; add one retry if that
   changes.
+- A sync that follows the repo's deletion doesn't re-check the query's
+  content when it writes: a save landing between the merge's read and its
+  write is soft-deleted instead of becoming a conflict. Fine while one user
+  syncs a workspace; multi-user sync (pulling or a webhook) should make that
+  write a compare-and-set on what the merge read.
 
 ## Related docs
 
