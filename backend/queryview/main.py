@@ -476,7 +476,7 @@ async def predefined_queries_save(request: Request):
     return {"ok": True}
 
 
-# Partial update: `new_name` renames, `deleted` deletes or undeletes.
+# Partial update: `new_name` renames, `deleted: false` undeletes (DELETE deletes).
 @app.patch("/api/predefined-queries")
 async def predefined_queries_update(request: Request):
     b = await _read_json(request)
@@ -484,19 +484,19 @@ async def predefined_queries_update(request: Request):
     name = _clean_str(b.get("query_name"))
     conn_type = _clean_str(b.get("type"))
     new_name = _clean_str(b.get("new_name"))
-    deleted = b.get("deleted")
-    if not isinstance(deleted, bool):
-        deleted = None
-    if not name or not conn_type or (not new_name and deleted is None):
+    undelete = b.get("deleted") is False
+    if not name or not conn_type or (not new_name and not undelete) or b.get("deleted") is True:
         return JSONResponse(
-            {"ok": False, "message": "query_name, type and new_name or deleted are required"},
+            {"ok": False, "message": "query_name, type and new_name or deleted: false are required"},
             status_code=400,
         )
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
     try:
-        await update_predefined_query(conn_type, name, workspace_id=ws.id, new_name=new_name or None, deleted=deleted)
+        await update_predefined_query(
+            conn_type, name, workspace_id=ws.id, new_name=new_name or None, deleted=False if undelete else None
+        )
     except PredefinedQueryError as e:
         return _status_error(e)
     return {"ok": True}
