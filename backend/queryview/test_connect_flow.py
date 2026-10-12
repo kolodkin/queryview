@@ -4,6 +4,7 @@ the driver; the database gate is skipped when the driver exposes no databases.""
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import queryview.connect as connect
 from queryview import sessions
@@ -209,7 +210,10 @@ def test_build_session_err_keeps_localhost_hint(monkeypatch):
         async def list_databases(self, c):
             return Err("connection refused")
 
+    # connect_new takes the driver's parsed config object; the hint reads its host.
     monkeypatch.setitem(DRIVERS, "down", _Down())
-    out = _run(connect.connect_new("s-down", "d", {"host": "localhost"}, "down"))
+    monkeypatch.setattr(connect, "_in_container", lambda: True)
+    out = _run(connect.connect_new("s-down", "d", SimpleNamespace(host="localhost"), "down"))
     assert out["ok"] is False
     assert out["message"].startswith("connection refused")
+    assert "host.docker.internal" in out["message"]
