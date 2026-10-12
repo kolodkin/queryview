@@ -4,14 +4,6 @@ Planned work, highest priority first. Each entry is a proposal, not yet
 implemented — the spec lives here until it ships, then moves into the relevant
 doc.
 
-## Workspace-scoped connections
-
-Connections are global — any workspace (see [workspace.md](./workspace.md))
-can use any connection. If workspaces come to represent genuinely separate
-environments or teams, scope connections per workspace: each workspace sees
-only its own, and restore requires the connection to exist in that workspace.
-Deferred because it multiplies setup for the common single-team case.
-
 ## Git sync follow-ups
 
 A small improvement noted in the git-sync final review, not blocking:
