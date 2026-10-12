@@ -41,8 +41,7 @@ dashboards/{name}/queries.yaml     # {query_name: SQL}
 
 File names are percent-encoded where needed; the canonical name lives inside
 the YAML. A dashboard needs all three files (empty is fine): a dir missing one
-is a hand-edited repo, so **Restore** returns 404 naming the file and a sync
-skips the dashboard rather than import a truncated copy.
+is a hand edit, so **Restore** returns 404 naming the file and a sync skips it.
 
 ## Merge-in
 

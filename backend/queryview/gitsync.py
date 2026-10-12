@@ -71,7 +71,7 @@ def query_from_yaml(text: str) -> dict[str, Any]:
         raise GitSyncError(str(e)) from e
 
 
-# Order matters: the joined oids under this order are what sync state records as "agreed".
+# Order matters: sync state records the oids joined in this order as "agreed".
 DASHBOARD_FILES = ("meta.yaml", "dashboard.html", "queries.yaml")
 
 
@@ -373,9 +373,8 @@ async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]
 
 async def _read_repo_entity(wd: Path, ref: str, kind: str, relpath: str) -> dict[str, Any]:
     """An entity's content at `ref`, in the DB row shape. A dashboard needs all
-    three of its files (empty is fine): QueryView writes them in one commit, so
-    a missing one is a hand edit, and reading the rest would replace the local
-    dashboard with a truncated one."""
+    three files (empty is fine): a missing one is a hand edit, and reading the
+    rest would restore a truncated dashboard."""
     if kind == "query":
         return query_from_yaml(await _git("show", f"{ref}:{relpath}", cwd=wd))
     files: dict[str, str] = {}
