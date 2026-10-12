@@ -774,3 +774,24 @@ def test_a_rename_through_the_api_during_a_sync_is_not_an_error(other_instance, 
 
     assert all(e["name"] != "gs moved" for e in r["deleted"] + r["imported"])
     assert _run(get_predefined_query("clickhouse", "gs moved here", here)) is not None
+
+
+def test_restore_by_branch_name_reads_remote_not_stale_local(git_env, tmp_path):
+    """A branch *name* resolves against origin/: the local branch only moves
+    on store, so after an outside push it is behind the fetched remote."""
+    from queryview.queries import list_predefined_queries
+
+    _store_query_versions("gs byname", ["SELECT 1"])
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", str(git_env), str(other)], check=True, capture_output=True)
+    path = other / query_relpath("clickhouse", "gs byname")
+    path.write_text(query_to_yaml({"query_name": "gs byname", "query": "SELECT 2"}), encoding="utf-8")
+    for cmd in (
+        ["git", "-c", "user.name=t", "-c", "user.email=t@localhost", "commit", "-qam", "outside"],
+        ["git", "push", "-q", "origin", "main"],
+    ):
+        subprocess.run(cmd, cwd=other, check=True, capture_output=True)
+    _run(gitsync.restore(_default_ws(), "query", "gs byname", "clickhouse", ref="main"))
+    rows = _run(list_predefined_queries("clickhouse", _default_ws_id()))
+    row = next(x for x in rows if x["query_name"] == "gs byname")
+    assert row["query"] == "SELECT 2"
