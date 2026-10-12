@@ -795,3 +795,47 @@ def test_restore_by_branch_name_reads_remote_not_stale_local(git_env, tmp_path):
     rows = _run(list_predefined_queries("clickhouse", _default_ws_id()))
     row = next(x for x in rows if x["query_name"] == "gs byname")
     assert row["query"] == "SELECT 2"
+
+
+def _remove_from_remote(remote, tmp_path, relpath: str) -> None:
+    """Delete one file from the remote's main, as a hand edit outside QueryView."""
+    other = tmp_path / "hand-edit"
+    subprocess.run(["git", "clone", "-q", str(remote), str(other)], check=True, capture_output=True)
+    for cmd in (
+        ["git", "rm", "-q", relpath],
+        ["git", "-c", "user.name=t", "-c", "user.email=t@localhost", "commit", "-qm", "hand edit"],
+        ["git", "push", "-q", "origin", "main"],
+    ):
+        subprocess.run(cmd, cwd=other, check=True, capture_output=True)
+
+
+def test_restore_of_a_dashboard_missing_a_file_is_404(git_env, tmp_path):
+    """A dashboard dir is readable only with all three files: a hand-edited
+    repo missing one must not restore the rest over the local dashboard."""
+    from queryview.dashboards import get_dashboard, upsert_dashboard
+
+    _run(upsert_dashboard("gs partial", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "dashboard", "gs partial"))
+    _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs partial')}/queries.yaml")
+    _run(upsert_dashboard("gs partial", "<html>v2</html>", {"q": "SELECT 2"}, workspace_id=_default_ws_id()))
+
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.restore(_default_ws(), "dashboard", "gs partial"))
+
+    assert e.value.status == 404
+    assert "queries.yaml" in str(e.value)
+    d = _run(get_dashboard("gs partial", _default_ws_id()))
+    assert d is not None and d["html"] == "<html>v2</html>" and d["queries"] == {"q": "SELECT 2"}
+
+
+def test_sync_skips_a_dashboard_missing_a_file(git_env, other_instance, tmp_path):
+    from queryview.dashboards import get_dashboard, upsert_dashboard
+
+    _run(upsert_dashboard("gs halfdash", "<html>x</html>", {"q": "SELECT 1"}, workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "dashboard", "gs halfdash"))
+    _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs halfdash')}/dashboard.html")
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert r["imported"] == [] and r["conflicts"] == []
+    assert _run(get_dashboard("gs halfdash", _default_ws_id())) is None

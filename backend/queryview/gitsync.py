@@ -71,6 +71,9 @@ def query_from_yaml(text: str) -> dict[str, Any]:
         raise GitSyncError(str(e)) from e
 
 
+DASHBOARD_FILES = ("meta.yaml", "dashboard.html", "queries.yaml")
+
+
 def dashboard_to_files(d: dict[str, Any]) -> dict[str, str]:
     """A dashboard (as returned by get_dashboard) as its three repo files."""
     return {
@@ -360,23 +363,30 @@ async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]
             )
         elif len(parts) == 3 and parts[0] == "dashboards" and parts[2] == "meta.yaml":
             ddir = f"dashboards/{parts[1]}"
-            oid = "+".join(files.get(f"{ddir}/{f}", "") for f in ("meta.yaml", "dashboard.html", "queries.yaml"))
+            oid = "+".join(files.get(f"{ddir}/{f}", "") for f in DASHBOARD_FILES)
             found.append({"kind": "dashboard", "conn_type": None, "relpath": ddir, "oid": oid})
     return found
+
+
+async def _read_dashboard_files(wd: Path, ref: str, reldir: str) -> dict[str, str]:
+    """A dashboard dir's three files at `ref`. All must exist (empty is fine):
+    QueryView writes them in one commit, so a missing one means a hand-edited
+    repo, and importing the rest would replace the local dashboard with a
+    truncated one."""
+    files: dict[str, str] = {}
+    for fname in DASHBOARD_FILES:
+        try:
+            files[fname] = await _git("show", f"{ref}:{reldir}/{fname}", cwd=wd)
+        except GitSyncError:
+            raise GitSyncError(f"{reldir}/{fname} not found at {ref}", status=404) from None
+    return files
 
 
 async def _read_repo_entity(wd: Path, ref: str, kind: str, relpath: str) -> dict[str, Any]:
     """An entity's content at `ref`, in the DB row shape."""
     if kind == "query":
         return query_from_yaml(await _git("show", f"{ref}:{relpath}", cwd=wd))
-    files: dict[str, str] = {}
-    for fname in ("meta.yaml", "dashboard.html", "queries.yaml"):
-        try:
-            files[fname] = await _git("show", f"{ref}:{relpath}/{fname}", cwd=wd)
-        except GitSyncError:
-            if fname == "meta.yaml":
-                raise
-    return dashboard_from_files(files)
+    return dashboard_from_files(await _read_dashboard_files(wd, ref, relpath))
 
 
 def _empty_merge() -> dict[str, Any]:
@@ -624,14 +634,7 @@ async def restore(
                 raise GitSyncError(f"query {name!r} not found at {resolved}", status=404)
             data = query_from_yaml(text)
         else:
-            files: dict[str, str] = {}
-            for fname in ("meta.yaml", "dashboard.html", "queries.yaml"):
-                try:
-                    files[fname] = await _show(f"{paths[0]}/{fname}")
-                except GitSyncError:
-                    if fname == "meta.yaml":
-                        raise GitSyncError(f"dashboard {name!r} not found at {resolved}", status=404) from None
-            data = dashboard_from_files(files)
+            data = dashboard_from_files(await _read_dashboard_files(wd, resolved, paths[0]))
 
     # DB upsert happens outside the git lock — it doesn't touch the workdir.
     if kind == "query":
