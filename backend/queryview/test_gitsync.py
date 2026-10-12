@@ -562,8 +562,15 @@ def test_dashboard_params_round_trip_through_meta_yaml():
 
 
 def test_malformed_dashboard_params_are_rejected():
+    files = {"meta.yaml": "name: p\nparams:\n- name: x\n  kind: nope\n", "dashboard.html": "", "queries.yaml": ""}
     with pytest.raises(GitSyncError):
-        dashboard_from_files({"meta.yaml": "name: p\nparams:\n- name: x\n  kind: nope\n"})
+        dashboard_from_files(files)
+
+
+def test_dashboard_from_files_needs_every_file():
+    """The readers guarantee all three files; the codec never defaults one."""
+    with pytest.raises(KeyError):
+        dashboard_from_files({"meta.yaml": "name: p\n", "dashboard.html": "<p/>"})
 
 
 def _repo_files(remote) -> list[str]:
@@ -863,3 +870,6 @@ def test_restore_of_a_dashboard_missing_meta_names_the_file(git_env, tmp_path):
     with pytest.raises(GitSyncError) as e:
         _run(gitsync.restore(_default_ws(), "dashboard", "gs never stored"))
     assert e.value.status == 404 and str(e.value) == "dashboard 'gs never stored' not found at origin/main"
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.restore(_default_ws(), "dashboard", "gs nometa", ref="no-such-ref"))
+    assert e.value.status == 404 and str(e.value) == "dashboard 'gs nometa' not found at no-such-ref"

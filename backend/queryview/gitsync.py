@@ -88,11 +88,11 @@ def dashboard_to_files(d: dict[str, Any]) -> dict[str, str]:
 def dashboard_from_files(files: dict[str, str]) -> dict[str, Any]:
     """Inverse of dashboard_to_files."""
     try:
-        meta = yaml.safe_load(files.get("meta.yaml") or "")
-        queries = yaml.safe_load(files.get("queries.yaml") or "")
+        meta = yaml.safe_load(files["meta.yaml"])
+        queries = yaml.safe_load(files["queries.yaml"] or "")
     except yaml.YAMLError as e:
         raise GitSyncError(f"malformed dashboard file: {e}") from e
-    data = {**(meta if isinstance(meta, dict) else {}), "html": files.get("dashboard.html", ""), "queries": queries}
+    data = {**(meta if isinstance(meta, dict) else {}), "html": files["dashboard.html"], "queries": queries}
     try:
         return dashboard_from_data(data, require_html=False)
     except YamlIOError as e:
@@ -373,8 +373,8 @@ async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]
 
 async def _read_repo_entity(wd: Path, ref: str, kind: str, relpath: str) -> dict[str, Any]:
     """An entity's content at `ref`, in the DB row shape. A dashboard needs all
-    three files (empty is fine): a missing one is a hand edit, and reading the
-    rest would restore a truncated dashboard."""
+    three files (dashboard.html and queries.yaml may be empty): a missing one
+    is a hand edit, and reading the rest would restore a truncated dashboard."""
     if kind == "query":
         return query_from_yaml(await _git("show", f"{ref}:{relpath}", cwd=wd))
     files: dict[str, str] = {}
@@ -382,8 +382,14 @@ async def _read_repo_entity(wd: Path, ref: str, kind: str, relpath: str) -> dict
         try:
             files[fname] = await _git("show", f"{ref}:{relpath}/{fname}", cwd=wd)
         except GitSyncError:
+            # 404 only when the file really is absent; any other git failure stands.
+            try:
+                listed = (await _git("ls-tree", "--name-only", ref, "--", f"{relpath}/", cwd=wd)).splitlines()
+            except GitSyncError:
+                listed = []
+            if f"{relpath}/{fname}" in listed:
+                raise
             name = unquote(relpath.removeprefix("dashboards/"))
-            listed = await _git("ls-tree", ref, "--", f"{relpath}/", cwd=wd)
             what = f"is missing {fname}" if listed else "not found"
             raise GitSyncError(f"dashboard {name!r} {what} at {ref}", status=404) from None
     return dashboard_from_files(files)
