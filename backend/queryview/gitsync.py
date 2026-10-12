@@ -362,31 +362,30 @@ async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]
                 }
             )
         elif len(parts) == 3 and parts[0] == "dashboards" and parts[2] == "meta.yaml":
+            # A dashboard dir missing a file is a hand edit; leave it to restore's 404.
             ddir = f"dashboards/{parts[1]}"
-            oid = "+".join(files.get(f"{ddir}/{f}", "") for f in DASHBOARD_FILES)
-            found.append({"kind": "dashboard", "conn_type": None, "relpath": ddir, "oid": oid})
+            if all(f"{ddir}/{f}" in files for f in DASHBOARD_FILES):
+                oid = "+".join(files[f"{ddir}/{f}"] for f in DASHBOARD_FILES)
+                found.append({"kind": "dashboard", "conn_type": None, "relpath": ddir, "oid": oid})
     return found
 
 
-async def _read_dashboard_files(wd: Path, ref: str, reldir: str) -> dict[str, str]:
-    """A dashboard dir's three files at `ref`. All must exist (empty is fine):
-    QueryView writes them in one commit, so a missing one means a hand-edited
-    repo, and importing the rest would replace the local dashboard with a
-    truncated one."""
+async def _read_repo_entity(wd: Path, ref: str, kind: str, relpath: str) -> dict[str, Any]:
+    """An entity's content at `ref`, in the DB row shape. A dashboard needs all
+    three of its files (empty is fine): QueryView writes them in one commit, so
+    a missing one is a hand edit, and reading the rest would replace the local
+    dashboard with a truncated one."""
+    if kind == "query":
+        return query_from_yaml(await _git("show", f"{ref}:{relpath}", cwd=wd))
     files: dict[str, str] = {}
     for fname in DASHBOARD_FILES:
         try:
-            files[fname] = await _git("show", f"{ref}:{reldir}/{fname}", cwd=wd)
+            files[fname] = await _git("show", f"{ref}:{relpath}/{fname}", cwd=wd)
         except GitSyncError:
-            raise GitSyncError(f"{reldir}/{fname} not found at {ref}", status=404) from None
-    return files
-
-
-async def _read_repo_entity(wd: Path, ref: str, kind: str, relpath: str) -> dict[str, Any]:
-    """An entity's content at `ref`, in the DB row shape."""
-    if kind == "query":
-        return query_from_yaml(await _git("show", f"{ref}:{relpath}", cwd=wd))
-    return dashboard_from_files(await _read_dashboard_files(wd, ref, relpath))
+            name = unquote(relpath.removeprefix("dashboards/"))
+            what = "not found" if not files else f"is missing {fname}"
+            raise GitSyncError(f"dashboard {name!r} {what} at {ref}", status=404) from None
+    return dashboard_from_files(files)
 
 
 def _empty_merge() -> dict[str, Any]:
@@ -634,7 +633,7 @@ async def restore(
                 raise GitSyncError(f"query {name!r} not found at {resolved}", status=404)
             data = query_from_yaml(text)
         else:
-            data = dashboard_from_files(await _read_dashboard_files(wd, resolved, paths[0]))
+            data = await _read_repo_entity(wd, resolved, "dashboard", paths[0])
 
     # DB upsert happens outside the git lock — it doesn't touch the workdir.
     if kind == "query":

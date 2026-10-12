@@ -6,11 +6,14 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
 from queryview import gitsync, workspaces
 from queryview.gitsync import (
+    DASHBOARD_FILES,
     GitSyncError,
     dashboard_from_files,
     dashboard_reldir,
@@ -71,7 +74,7 @@ def test_dashboard_files_round_trip():
         "params": [],
     }
     files = dashboard_to_files(d)
-    assert set(files) == {"meta.yaml", "dashboard.html", "queries.yaml"}
+    assert set(files) == set(DASHBOARD_FILES)
     assert files["dashboard.html"] == d["html"]  # verbatim
     assert dashboard_from_files(files) == d
 
@@ -782,31 +785,35 @@ def test_restore_by_branch_name_reads_remote_not_stale_local(git_env, tmp_path):
     from queryview.queries import list_predefined_queries
 
     _store_query_versions("gs byname", ["SELECT 1"])
-    other = tmp_path / "other"
-    subprocess.run(["git", "clone", "-q", str(git_env), str(other)], check=True, capture_output=True)
-    path = other / query_relpath("clickhouse", "gs byname")
-    path.write_text(query_to_yaml({"query_name": "gs byname", "query": "SELECT 2"}), encoding="utf-8")
-    for cmd in (
-        ["git", "-c", "user.name=t", "-c", "user.email=t@localhost", "commit", "-qam", "outside"],
-        ["git", "push", "-q", "origin", "main"],
-    ):
-        subprocess.run(cmd, cwd=other, check=True, capture_output=True)
+    _hand_edit(
+        git_env,
+        tmp_path,
+        lambda wd: (wd / query_relpath("clickhouse", "gs byname")).write_text(
+            query_to_yaml({"query_name": "gs byname", "query": "SELECT 2"}), encoding="utf-8"
+        ),
+    )
     _run(gitsync.restore(_default_ws(), "query", "gs byname", "clickhouse", ref="main"))
     rows = _run(list_predefined_queries("clickhouse", _default_ws_id()))
     row = next(x for x in rows if x["query_name"] == "gs byname")
     assert row["query"] == "SELECT 2"
 
 
-def _remove_from_remote(remote, tmp_path, relpath: str) -> None:
-    """Delete one file from the remote's main, as a hand edit outside QueryView."""
-    other = tmp_path / "hand-edit"
-    subprocess.run(["git", "clone", "-q", str(remote), str(other)], check=True, capture_output=True)
+def _hand_edit(remote, tmp_path, edit: Callable[[Path], None]) -> None:
+    """Apply `edit` to a fresh clone's workdir and push it to the remote's
+    main, as a change made outside QueryView."""
+    wd = tmp_path / "hand-edit"
+    subprocess.run(["git", "clone", "-q", str(remote), str(wd)], check=True, capture_output=True)
+    edit(wd)
     for cmd in (
-        ["git", "rm", "-q", relpath],
-        ["git", "-c", "user.name=t", "-c", "user.email=t@localhost", "commit", "-qm", "hand edit"],
+        ["git", "add", "-A"],
+        ["git", "-c", "user.name=t", "-c", "user.email=t@localhost", "commit", "-qm", "outside"],
         ["git", "push", "-q", "origin", "main"],
     ):
-        subprocess.run(cmd, cwd=other, check=True, capture_output=True)
+        subprocess.run(cmd, cwd=wd, check=True, capture_output=True)
+
+
+def _remove_from_remote(remote, tmp_path, relpath: str) -> None:
+    _hand_edit(remote, tmp_path, lambda wd: (wd / relpath).unlink())
 
 
 def test_restore_of_a_dashboard_missing_a_file_is_404(git_env, tmp_path):
