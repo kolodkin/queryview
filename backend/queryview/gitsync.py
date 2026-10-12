@@ -89,7 +89,7 @@ def dashboard_from_files(files: dict[str, str]) -> dict[str, Any]:
     """Inverse of dashboard_to_files."""
     try:
         meta = yaml.safe_load(files["meta.yaml"])
-        queries = yaml.safe_load(files["queries.yaml"] or "")
+        queries = yaml.safe_load(files["queries.yaml"])
     except yaml.YAMLError as e:
         raise GitSyncError(f"malformed dashboard file: {e}") from e
     data = {**(meta if isinstance(meta, dict) else {}), "html": files["dashboard.html"], "queries": queries}
@@ -336,16 +336,22 @@ def _key(kind: str, name: str, conn_type: str | None) -> str:
     return f"query/{conn_type}/{name}" if kind == "query" else f"dashboard/{name}"
 
 
-async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]]:
-    """The entities in the tree at `ref` (under `paths` if given), each with an
-    id that changes whenever any of its files does. A query's `.deleted`
-    marker is the entity with `deleted` set (ignored beside a live file); its
-    id differs from the live file's even when the content is the same."""
+async def _tree_files(wd: Path, ref: str, *paths: str) -> dict[str, str]:
+    """{path: blob oid} for every file in the tree at `ref` (under `paths` if given)."""
     out = await _git("ls-tree", "-r", ref, *(["--", *paths] if paths else []), cwd=wd)
     files: dict[str, str] = {}
     for line in out.splitlines():
         meta, _, fpath = line.partition("\t")
         files[fpath] = meta.split()[2]
+    return files
+
+
+async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]]:
+    """The entities in the tree at `ref` (under `paths` if given), each with an
+    id that changes whenever any of its files does. A query's `.deleted`
+    marker is the entity with `deleted` set (ignored beside a live file); its
+    id differs from the live file's even when the content is the same."""
+    files = await _tree_files(wd, ref, *paths)
     found = []
     for fpath, oid in files.items():
         parts = fpath.split("/")
@@ -363,8 +369,7 @@ async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]
                 }
             )
         elif len(parts) == 3 and parts[0] == "dashboards" and parts[2] == "meta.yaml":
-            # A dashboard dir missing a file is a hand edit; leave it to restore's 404.
-            ddir = f"dashboards/{parts[1]}"
+            ddir = f"dashboards/{parts[1]}"  # skipped when incomplete: a hand edit
             if all(f"{ddir}/{f}" in files for f in DASHBOARD_FILES):
                 oid = "+".join(files[f"{ddir}/{f}"] for f in DASHBOARD_FILES)
                 found.append({"kind": "dashboard", "conn_type": None, "relpath": ddir, "oid": oid})
@@ -372,27 +377,11 @@ async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]
 
 
 async def _read_repo_entity(wd: Path, ref: str, kind: str, relpath: str) -> dict[str, Any]:
-    """An entity's content at `ref`, in the DB row shape. A dashboard needs all
-    three files (dashboard.html and queries.yaml may be empty): a missing one
-    is a hand edit, and reading the rest would restore a truncated dashboard."""
+    """An entity's content at `ref`, in the DB row shape. The caller has checked
+    a dashboard dir holds all of DASHBOARD_FILES."""
     if kind == "query":
         return query_from_yaml(await _git("show", f"{ref}:{relpath}", cwd=wd))
-    files: dict[str, str] = {}
-    for fname in DASHBOARD_FILES:
-        try:
-            files[fname] = await _git("show", f"{ref}:{relpath}/{fname}", cwd=wd)
-        except GitSyncError:
-            # 404 only when the file really is absent; any other git failure stands.
-            try:
-                listed = (await _git("ls-tree", "--name-only", ref, "--", f"{relpath}/", cwd=wd)).splitlines()
-            except GitSyncError:
-                listed = []
-            if f"{relpath}/{fname}" in listed:
-                raise
-            name = unquote(relpath.removeprefix("dashboards/"))
-            what = f"is missing {fname}" if listed else "not found"
-            raise GitSyncError(f"dashboard {name!r} {what} at {ref}", status=404) from None
-    return dashboard_from_files(files)
+    return dashboard_from_files({f: await _git("show", f"{ref}:{relpath}/{f}", cwd=wd) for f in DASHBOARD_FILES})
 
 
 def _empty_merge() -> dict[str, Any]:
@@ -640,6 +629,16 @@ async def restore(
                 raise GitSyncError(f"query {name!r} not found at {resolved}", status=404)
             data = query_from_yaml(text)
         else:
+            # All three files or nothing: a dir missing one is a hand edit, and
+            # restoring the rest would leave a truncated dashboard.
+            try:
+                tree = await _tree_files(wd, resolved, paths[0])
+            except GitSyncError:
+                tree = {}
+            missing = [f for f in DASHBOARD_FILES if f"{paths[0]}/{f}" not in tree]
+            if missing:
+                what = f"is missing {missing[0]}" if tree else "not found"
+                raise GitSyncError(f"dashboard {name!r} {what} at {resolved}", status=404)
             data = await _read_repo_entity(wd, resolved, "dashboard", paths[0])
 
     # DB upsert happens outside the git lock — it doesn't touch the workdir.

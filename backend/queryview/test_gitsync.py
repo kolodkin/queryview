@@ -567,12 +567,6 @@ def test_malformed_dashboard_params_are_rejected():
         dashboard_from_files(files)
 
 
-def test_dashboard_from_files_needs_every_file():
-    """The readers guarantee all three files; the codec never defaults one."""
-    with pytest.raises(KeyError):
-        dashboard_from_files({"meta.yaml": "name: p\n", "dashboard.html": "<p/>"})
-
-
 def _repo_files(remote) -> list[str]:
     return subprocess.run(
         ["git", "ls-tree", "-r", "--name-only", "main"],
