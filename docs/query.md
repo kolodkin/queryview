@@ -1,11 +1,11 @@
 # Querying
 
-The **query panel** is what a ready session shows on **Queries** — a database is
+The **query panel** is what a ready session shows on **QueryView** — a database is
 selected, or the driver has no picker — on the first visit and on every return.
 (Connecting itself lands on the explorer; see
 [queryview.md](./queryview.md#landing-page).) It runs SQL against the session's selected database, pages
 through results, saves/loads reusable queries, and exports the current page as
-CSV. Before a database is selected, Queries redirects to the Connect page.
+CSV. Before a database is selected, QueryView redirects to the Connect page.
 
 ## Panel
 
@@ -86,6 +86,7 @@ CREATE TABLE predefined_queries (
   type       TEXT NOT NULL,   -- connection type (clickhouse, …)
   query      TEXT NOT NULL,
   cell_view  TEXT,            -- raw YAML; per-column render config + params (see below)
+  deleted_at INTEGER,         -- unix ms when deleted; NULL = live
   UNIQUE (type, query_name)
 );
 ```
@@ -97,9 +98,23 @@ CREATE TABLE predefined_queries (
   **currently selected name** and refreshes the selector. Saving an existing name
   **upserts** (overwrites) it. In an [autosave](./workspace.md#autosave)
   workspace there is no Save button: each successful run saves instead.
+- **Rename** and **Delete** (next to **Copy**) act on a saved query. Rename
+  refuses a name already taken, even by a deleted query.
+- **Delete** confirms, then marks the query deleted. It stays selected as
+  *(deleted)* with its SQL, ready to [commit](./gitsync.md#deleted-queries);
+  the button becomes **Undelete**.
 
-Renaming and deleting predefined queries are not yet supported — see
-[future.md](./future.md).
+## Deleted queries
+
+Deleting is soft: the row keeps its content and name, marked by `deleted_at`,
+and drops out of the selector, MCP `list_queries` and
+[YAML export](./export-import.md).
+
+- **Show deleted (N)** in the selector lists them in a *Deleted* group; picking
+  one loads its SQL, **Undelete** makes it live.
+- Saving under a deleted name brings it back with the new content. An
+  [autosave](./workspace.md#autosave) run never does.
+- They don't block deleting their workspace and go with it.
 
 ## Cell views
 
@@ -243,6 +258,8 @@ doubled — write the placeholder where a value goes, no quotes of your own. A
 appears in the query is harmless.
 
 **Changing a dropdown re-runs the query immediately** (resetting to offset 0).
+A database switch re-runs it too, once the `options_sql` choices have been
+resolved on the new database, with those values.
 Substitution applies everywhere the query runs — **Execute**, **Previous** /
 **Next**, **Fields** (`DESCRIBE`), and **Download CSV**. The first option is the
 default.
@@ -325,6 +342,7 @@ scoped to the session's selected database.
 
 ## Related docs
 
+- [queries.md](./queries.md) — the Queries page: a `;`-separated script run as written, writes included.
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [connect.md](./connect.md) — connecting, storage, sessions.
 - [api.md](./api.md) — the full backend JSON API.

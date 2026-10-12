@@ -1,4 +1,5 @@
 import { apiFetch } from './api'
+import { withoutHeartbeat } from './session'
 
 // The active connection as reported by /api/session.
 
@@ -20,6 +21,12 @@ export function isReady(connection: Connection | null): connection is Connection
 }
 
 // A Connection from an /api/session, /api/db/open or /api/db/connect response.
+// What a view's data depends on: the connection and its database together,
+// since another connection may select a database of the same name.
+export function connectionKey(c: Connection | null): string | null {
+  return c ? `${c.name}/${c.database ?? ''}` : null
+}
+
 export function toConnection(data: Record<string, unknown>): Connection {
   return {
     name: data.name as string,
@@ -53,11 +60,14 @@ export async function openSaved(
   }
 }
 
-// Select this session's database; false when the switch failed.
-export async function selectDatabase(database: string): Promise<boolean> {
-  try {
-    return (await postJson('/api/db/database', { database })).ok
-  } catch {
-    return false
-  }
+// Select this session's database; false when the switch failed. Held off the
+// heartbeat, since the shell follows the row's database (withoutHeartbeat).
+export function selectDatabase(database: string): Promise<boolean> {
+  return withoutHeartbeat(async () => {
+    try {
+      return (await postJson('/api/db/database', { database })).ok
+    } catch {
+      return false
+    }
+  })
 }

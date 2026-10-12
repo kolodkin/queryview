@@ -19,7 +19,7 @@ const SESSION = {
   connection: null,
   database: null,
   workspace: 'default',
-  url: '/queries',
+  url: '/queryview',
   ui: {},
 }
 
@@ -279,6 +279,53 @@ describe('startHeartbeat', () => {
     stop()
   })
 
+  it('makes a database switch wait out a beat in flight and holds the next one', async () => {
+    const { attachSession, startHeartbeat, onSessionRow } = await import('./session')
+    const { selectDatabase } = await import('./connection')
+    await attachSession()
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn() })
+    const onRow = vi.fn()
+    onSessionRow(onRow)
+    // A beat that read the row before the switch: it must land before the
+    // switch starts, never after it, or the shell would follow its stale database.
+    let answerBeat!: () => void
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerBeat = () =>
+            resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: { ...SESSION, database: 'old' } }) })
+        }),
+    )
+    await vi.advanceTimersByTimeAsync(10_000)
+    let answerSwitch!: () => void
+    fetchMock.mockImplementation((url: string) =>
+      String(url).includes('/api/db/database')
+        ? new Promise((resolve) => {
+            answerSwitch = () => resolve({ ok: true, status: 200, json: async () => ({ ok: true }) })
+          })
+        : Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) }),
+    )
+
+    const switched = selectDatabase('new')
+    await vi.advanceTimersByTimeAsync(0)
+    const urls = () => fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls().some((u) => u.includes('/api/db/database'))).toBe(false)
+
+    answerBeat()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onRow).toHaveBeenCalledWith(expect.objectContaining({ database: 'old' }))
+    expect(urls().at(-1)).toContain('/api/db/database')
+    // No beat starts while the switch is in flight, however long it takes.
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(urls().filter((u) => u.includes('/attach'))).toHaveLength(2)
+
+    answerSwitch()
+    expect(await switched).toBe(true)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(urls().filter((u) => u.includes('/attach'))).toHaveLength(3)
+    stop()
+  })
+
   it('hands a different session to onChanged', async () => {
     const { attachSession, startHeartbeat } = await import('./session')
     await attachSession()
@@ -289,6 +336,34 @@ describe('startHeartbeat', () => {
     await vi.advanceTimersByTimeAsync(10_000)
 
     expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ id: 's2' }))
+    stop()
+  })
+
+  it('hands every adopted row to onSessionRow, whatever brought it', async () => {
+    const { attachSession, startHeartbeat, onSessionRow, patchView, flushPatches } = await import('./session')
+    await attachSession()
+    const onRow = vi.fn()
+    const stopRows = onSessionRow(onRow)
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn() })
+
+    // A beat: the same session, switched to another database elsewhere.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, session: { ...SESSION, connection: 'c1', database: 'sales' } }),
+    })
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(onRow).toHaveBeenCalledOnce()
+    expect(onRow).toHaveBeenCalledWith(expect.objectContaining({ connection: 'c1', database: 'sales' }))
+
+    // A queued write's response carries the row too.
+    patchView('query', { sql: 'SELECT 1' })
+    await flushPatches()
+    expect(onRow).toHaveBeenCalledTimes(2)
+
+    stopRows()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(onRow).toHaveBeenCalledTimes(2)
     stop()
   })
 })

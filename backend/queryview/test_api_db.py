@@ -49,3 +49,40 @@ def test_tables_without_session_is_409():
     r = c.get("/api/db/tables")
     assert r.status_code == 409
     assert r.json()["ok"] is False
+
+
+def test_execute_requires_sql():
+    c = TestClient(app)
+    r = c.post("/api/db/execute", json={"sql": "   "})
+    assert r.status_code == 400
+    assert r.json()["ok"] is False
+
+
+def test_execute_without_session_is_409():
+    c = TestClient(app)
+    c.post("/api/db/disconnect")
+    r = c.post("/api/db/execute", json={"sql": "SELECT 1"})
+    assert r.status_code == 409
+
+
+def test_execute_runs_a_script_per_statement(tmp_path):
+    c = TestClient(app, headers={"X-QV-Session": "exec-script-test"})
+    path = str(tmp_path / "exec.duckdb")
+    r = c.post("/api/db/connect", json={"type": "duckdb", "name": "exec-duck", "path": path})
+    assert r.json()["ok"], r.text
+    r = c.post(
+        "/api/db/execute",
+        json={
+            "sql": "CREATE TABLE t (id INTEGER); INSERT INTO t VALUES (1), (2); SELECT id FROM t ORDER BY id; SELECT nope"
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is True
+    results = body["results"]
+    assert [x["ok"] for x in results] == [True, True, True, False]
+    assert results[0]["status"] == "OK" and results[0]["meta"] is None
+    assert results[2]["meta"] == [{"name": "id", "type": "INTEGER"}]
+    assert results[2]["data"] == [[1], [2]] and results[2]["truncated"] is False
+    assert "nope" in results[3]["message"]
+    assert all(isinstance(x["elapsed_ms"], int) for x in results)

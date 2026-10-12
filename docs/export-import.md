@@ -2,6 +2,8 @@
 
 Predefined queries and dashboards can be exported to plain YAML files and
 imported back — one entity at a time, or a whole workspace as a single bundle.
+[Deleted queries](./query.md#deleted-queries) are never exported; importing
+one by name brings it back.
 Unlike [git sync](./gitsync.md) this needs no git remote — just a file you can
 share or use to copy content between workspaces and instances. Connections are
 never exported (their config is encrypted credentials).

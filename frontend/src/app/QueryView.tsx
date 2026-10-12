@@ -29,6 +29,7 @@ import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace, flushPatches, patchView, viewState } from './session'
 import { onAutosaveEnabled, queryChanged } from './autosave'
+import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
 type PredefinedQuery = {
   query_name: string
@@ -36,6 +37,7 @@ type PredefinedQuery = {
   cell_view: string | null
   order_by: OrderCol[] | null
   fields: string[] | null
+  deleted_at: number | null // unix ms when deleted (docs/query.md); null = live
 }
 
 export type QueryPush = {
@@ -54,17 +56,22 @@ export type QueryPush = {
 
 // Sentinel value for the predefined dropdown's "new name" item.
 const NEW_NAME_OPTION = '::new::'
+// Sentinel for the dropdown item that shows or hides deleted queries.
+const TOGGLE_DELETED_OPTION = '::deleted::'
 
-// The query page (`/queries`), mounted by the App shell only for a ready
+// The query page (`/queryview`), mounted by the App shell only for a ready
 // connection; picking one happens on the Connect page (ConnectView).
 function QueryView({
   connectionType,
+  runOn,
   pushed,
   onPushConsumed,
   remoteId,
   autosave = false,
 }: {
   connectionType: string
+  // The session's connection and database; results follow it (see QueryPanel).
+  runOn?: string | null
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
@@ -80,6 +87,7 @@ function QueryView({
       </div>
       <QueryPanel
         connectionType={connectionType}
+        runOn={runOn}
         pushed={pushed}
         onPushConsumed={onPushConsumed}
         remoteId={remoteId}
@@ -95,14 +103,26 @@ function firstColumn(rows: QueryRows): string[] {
   return rows.data.map((r) => cellText(r[0]))
 }
 
+// Each param's value given its resolved choices: a still-valid selection stays,
+// anything else falls to the first choice.
+function seedParamValues(defs: ParamDef[], prev: Record<string, string>): Record<string, string> {
+  const next: Record<string, string> = {}
+  for (const d of defs) {
+    next[d.name] = d.options.includes(prev[d.name]) ? prev[d.name] : d.options[0]
+  }
+  return next
+}
+
 function QueryPanel({
   connectionType,
+  runOn,
   pushed,
   onPushConsumed,
   remoteId,
   autosave = false,
 }: {
   connectionType: string
+  runOn?: string | null
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
@@ -120,12 +140,18 @@ function QueryPanel({
   const [offset, setOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [predefined, setPredefined] = useState<PredefinedQuery[]>([])
+  // Every saved query, live and deleted; the dropdown lists the deleted ones
+  // (docs/query.md) only on request.
+  const [allQueries, setAllQueries] = useState<PredefinedQuery[]>([])
+  const predefined = useMemo(() => allQueries.filter((q) => q.deleted_at == null), [allQueries])
+  const deletedQueries = useMemo(() => allQueries.filter((q) => q.deleted_at != null), [allQueries])
+  const [showDeleted, setShowDeleted] = useState(false)
   const [selectedName, setSelectedName] = useState('')
   // The last successful run — its SQL and the name it runs for, taken at start;
   // a fresh object per run. Autosave reacts to it once the run's state (a
   // push's name and presentation) has committed.
   const [lastOk, setLastOk] = useState<{ query: string; name: string } | null>(null)
+  const runSeq = useRef(0)
   const [fields, setFields] = useState<Field[]>([])
   const [visibleCols, setVisibleCols] = useState<string[]>(() =>
     Array.isArray(saved.visibleCols) ? (saved.visibleCols as string[]) : [],
@@ -201,10 +227,18 @@ function QueryPanel({
   // query is picked from the dropdown. null when no push draft is active.
   const [pushedCellView, setPushedCellView] = useState<string | null>(null)
 
+  // A saved query by name, live or deleted (names are unique across both).
+  const findQuery = useCallback(
+    (name: string) => allQueries.find((p) => p.query_name === name),
+    [allQueries],
+  )
+  const savedSelected = predefined.some((p) => p.query_name === selectedName)
+  const deletedSelected = deletedQueries.some((p) => p.query_name === selectedName)
+
   // Saved cell_view of the selected query, or '' when none.
   const savedCellView = useMemo(
-    () => predefined.find((p) => p.query_name === selectedName)?.cell_view ?? '',
-    [predefined, selectedName],
+    () => findQuery(selectedName)?.cell_view ?? '',
+    [findQuery, selectedName],
   )
 
   // What rendering, the modal editor, and Save all read: a pushed draft wins
@@ -229,6 +263,9 @@ function QueryPanel({
   // param-prefixed) blocks the main query.
   const [sqlOptions, setSqlOptions] = useState<Record<string, string[]>>({})
   const [optionsError, setOptionsError] = useState<string | null>(null)
+  // The `runOn` the choices were resolved for: after a database switch they
+  // lag it until the re-fetch lands, and the switch's re-run (below) waits.
+  const [optionsFor, setOptionsFor] = useState<string | null | undefined>(undefined)
 
   // Resolve every `options_sql` param's choices via the panel's query endpoint;
   // cached until the specs change. A failed/empty result records a blocking error.
@@ -238,6 +275,7 @@ function QueryPanel({
       /* eslint-disable react-hooks/set-state-in-effect */
       setSqlOptions({})
       setOptionsError(null)
+      setOptionsFor(runOn)
       /* eslint-enable react-hooks/set-state-in-effect */
       return
     }
@@ -275,11 +313,13 @@ function QueryPanel({
       }
       setSqlOptions(resolved)
       setOptionsError(err)
+      setOptionsFor(runOn)
     })()
     return () => {
       cancelled = true
     }
-  }, [paramSpecs])
+    // The choices come from the session's database, so they follow it too.
+  }, [paramSpecs, runOn])
 
   // Specs with choices resolved to a concrete list: static `options` pass
   // through; `options_sql` params take fetched values (empty until ready).
@@ -305,26 +345,20 @@ function QueryPanel({
   // Re-runs when the resolved defs change, without clobbering live picks.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setParamValues((prev) => {
-      const next: Record<string, string> = {}
-      for (const d of paramDefs) {
-        next[d.name] = d.options.includes(prev[d.name]) ? prev[d.name] : d.options[0]
-      }
-      return next
-    })
+    setParamValues((prev) => seedParamValues(paramDefs, prev))
   }, [paramDefs])
 
   // Returns the fetched list (not just the state setter) so a caller that needs
   // the fresh rows right away — e.g. re-seeding the editor after a git restore —
-  // doesn't have to wait a render for `predefined` state to catch up.
+  // doesn't have to wait a render for the state to catch up.
   const loadPredefined = useCallback(async (): Promise<PredefinedQuery[]> => {
     try {
       const res = await fetch(
-        `/api/predefined-queries?type=${encodeURIComponent(connectionType)}&workspace=${encodeURIComponent(activeWorkspace())}`,
+        `/api/predefined-queries?type=${encodeURIComponent(connectionType)}&workspace=${encodeURIComponent(activeWorkspace())}&include_deleted=1`,
       )
       const data = await res.json()
       const list = (data.queries ?? []) as PredefinedQuery[]
-      setPredefined(list)
+      setAllQueries(list)
       return list
     } catch {
       // missing list is non-fatal; leave the selector empty
@@ -333,12 +367,12 @@ function QueryPanel({
   }, [connectionType])
 
   useEffect(() => {
-    // setPredefined runs after the fetch await, so it doesn't cascade renders.
+    // setAllQueries runs after the fetch await, so it doesn't cascade renders.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPredefined()
   }, [loadPredefined])
 
-  // A git sync may have imported queries from the repo.
+  // A git sync may have imported (or deleted) queries from the repo.
   useEffect(() => onGitSync(() => void loadPredefined()), [loadPredefined])
 
   // Apply a pushed query: reflect it in the controls and run it with the pushed
@@ -365,7 +399,7 @@ function QueryPanel({
     /* eslint-enable react-hooks/set-state-in-effect */
     // An unnamed push runs for no name, so autosave never writes it over the
     // selected query.
-    void runWith(q, lim, off, ord, fld, undefined, pushed.name ?? '')
+    void runWith(q, lim, off, ord, { selectFields: fld, runFor: pushed.name ?? '' })
     // Consume the push so re-mounting doesn't re-run a stale query.
     onPushConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -402,11 +436,16 @@ function QueryPanel({
     lim: number,
     off: number,
     ord: OrderCol[],
-    selectFields?: string[],
-    paramOverride?: Record<string, string>,
-    // The query name this run saves under (autosave); defaults to the selection.
-    runFor: string = selectedName,
+    {
+      selectFields,
+      paramOverride,
+      // The query name this run saves under (autosave); defaults to the selection.
+      runFor = selectedName,
+    }: { selectFields?: string[]; paramOverride?: Record<string, string>; runFor?: string } = {},
   ) {
+    // Only the newest run lands: an older one still in flight (a slow query
+    // overtaken by a re-run) must not overwrite fresher results.
+    const ticket = ++runSeq.current
     setBusy(true)
     setError(null)
     try {
@@ -419,6 +458,7 @@ function QueryPanel({
         body: JSON.stringify({ query, limit: lim, offset: off, order_by: ord }),
       })
       const data = await res.json()
+      if (ticket !== runSeq.current) return
       if (data.ok) {
         const rows: QueryRows = { meta: data.meta ?? [], data: data.data ?? [] }
         setResult(rows)
@@ -438,9 +478,9 @@ function QueryPanel({
         setError(data.message ?? 'query failed')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'request failed')
+      if (ticket === runSeq.current) setError(err instanceof Error ? err.message : 'request failed')
     } finally {
-      setBusy(false)
+      if (ticket === runSeq.current) setBusy(false)
     }
   }
 
@@ -449,6 +489,30 @@ function QueryPanel({
     // review and Save it; it's only cleared on Save or a dropdown selection.
     void runWith(sql, limit, nextOffset, orderBy)
   }
+
+  // The session's database changed under the results: re-run the query that
+  // produced them (not the editor, which may hold an unrun edit) from the first
+  // page, so they never describe a database the pill no longer shows. An empty
+  // panel has nothing to refresh. The run waits for the `options_sql` choices
+  // of the new database and substitutes those, seeded as the dropdowns are
+  // about to be (their state is a render behind). Choices that fail to resolve
+  // block it, as everywhere; the banner says why.
+  const runOnSeen = useRef(runOn)
+  const rerunPending = useRef(false)
+  useEffect(() => {
+    if (runOnSeen.current !== runOn) {
+      runOnSeen.current = runOn
+      rerunPending.current = lastOk !== null
+    }
+    if (!rerunPending.current || optionsFor !== runOn) return
+    rerunPending.current = false
+    if (!optionsReady || !lastOk) return
+    void runWith(lastOk.query, limit, 0, orderBy, {
+      runFor: lastOk.name,
+      paramOverride: seedParamValues(paramDefs, paramValues),
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runOn, optionsFor, optionsReady, paramDefs])
 
   async function downloadCsv() {
     setBusy(true)
@@ -494,6 +558,10 @@ function QueryPanel({
   }
 
   function onSelectName(value: string) {
+    if (value === TOGGLE_DELETED_OPTION) {
+      setShowDeleted((v) => !v)
+      return
+    }
     if (value === NEW_NAME_OPTION) {
       const name = window.prompt('Save query as (name):', selectedName || '')?.trim()
       if (name) setSelectedName(name)
@@ -501,7 +569,7 @@ function QueryPanel({
     }
     setSelectedName(value)
     setPushedCellView(null) // selecting a query reverts to its saved cell view
-    const q = predefined.find((p) => p.query_name === value)
+    const q = findQuery(value)
     if (q) applyPredefined(q)
   }
 
@@ -556,12 +624,59 @@ function QueryPanel({
     }
   }
 
+  // Rename, delete or undelete the selected saved query; the editor keeps its
+  // SQL. A deleted query stays selected, so it can be committed or undeleted.
+  // `change` PATCHes (rename, undelete); null DELETEs.
+  async function mutateSelected(
+    change: { new_name: string } | { deleted: false } | null,
+  ): Promise<boolean> {
+    setBusy(true)
+    setError(null)
+    try {
+      const target = { query_name: selectedName, type: connectionType, workspace: activeWorkspace() }
+      const res = change
+        ? await apiFetch('/api/predefined-queries', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...target, ...change }),
+          })
+        : await apiFetch(`/api/predefined-queries?${new URLSearchParams(target)}`, {
+            method: 'DELETE',
+          })
+      const data = await res.json()
+      if (!data.ok) {
+        setError(data.message ?? 'request failed')
+        return false
+      }
+      await loadPredefined()
+      return true
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'request failed')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function renameSelected() {
+    const name = window.prompt('Rename query to:', selectedName)?.trim()
+    if (!name || name === selectedName) return
+    if (await mutateSelected({ new_name: name })) setSelectedName(name)
+  }
+
+  async function deleteSelected() {
+    if (!window.confirm(`Delete query '${selectedName}'?`)) return
+    if (await mutateSelected(null)) setPushedCellView(null)
+  }
+
   // Autosave: persist a named query's last successful run — the SQL that ran,
   // never a half-typed edit — unless nothing differs from its stored row.
   function saveLastRun() {
     // Skip when the selection moved on mid-run: its presentation isn't this run's.
     const name = lastOk?.name
     if (!lastOk || !name || name !== selectedName.trim()) return
+    // Running a deleted query never brings it back; Undelete does.
+    if (deletedSelected) return
     const next = {
       query: lastOk.query,
       cell_view: effectiveCellView,
@@ -592,13 +707,6 @@ function QueryPanel({
   const resultRows = result ? result.data : []
   const shownIdx = shownColumnIndices(columns, fields, visibleCols)
 
-  const sizes: [string, number, string][] = [
-    ['Min', 0, 'query-size-min'],
-    ['S', 4, 'query-size-s'],
-    ['M', 8, 'query-size-m'],
-    ['L', 16, 'query-size-l'],
-    ['XL', 28, 'query-size-xl'],
-  ]
   const inputClass = 'glass-input px-3 py-2'
 
   return (
@@ -617,15 +725,30 @@ function QueryPanel({
         >
           <option value="">Predefined queries…</option>
           <option value={NEW_NAME_OPTION}>+ New name…</option>
-          {selectedName !== '' &&
-            !predefined.some((p) => p.query_name === selectedName) && (
-              <option value={selectedName}>{selectedName}</option>
-            )}
+          {(showDeleted || deletedQueries.length > 0) && (
+            <option value={TOGGLE_DELETED_OPTION}>
+              {showDeleted ? 'Hide deleted' : `Show deleted (${deletedQueries.length})`}
+            </option>
+          )}
+          {selectedName !== '' && !savedSelected && !(showDeleted && deletedSelected) && (
+            <option value={selectedName}>
+              {deletedSelected ? `${selectedName} (deleted)` : selectedName}
+            </option>
+          )}
           {predefined.map((p) => (
             <option key={p.query_name} value={p.query_name}>
               {p.query_name}
             </option>
           ))}
+          {showDeleted && deletedQueries.length > 0 && (
+            <optgroup label="Deleted" data-testid="query-deleted-group">
+              {deletedQueries.map((p) => (
+                <option key={p.query_name} value={p.query_name}>
+                  {p.query_name}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
         <button
           type="button"
@@ -638,6 +761,39 @@ function QueryPanel({
         >
           {copiedName ? 'Copied' : 'Copy'}
         </button>
+        <button
+          type="button"
+          onClick={() => void renameSelected()}
+          disabled={busy || !savedSelected}
+          data-testid="query-rename"
+          title="Rename saved query"
+          className="glass-btn px-3 py-2 font-medium"
+        >
+          Rename
+        </button>
+        {deletedSelected ? (
+          <button
+            type="button"
+            onClick={() => void mutateSelected({ deleted: false })}
+            disabled={busy}
+            data-testid="query-undelete"
+            title="Restore this deleted query"
+            className="glass-btn px-3 py-2 font-medium"
+          >
+            Undelete
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void deleteSelected()}
+            disabled={busy || !savedSelected}
+            data-testid="query-delete"
+            title="Delete saved query"
+            className="glass-btn px-3 py-2 font-medium"
+          >
+            Delete
+          </button>
+        )}
         {!autosave && (
           <button
             type="button"
@@ -686,7 +842,7 @@ function QueryPanel({
                   setParamValues(next)
                   // Pass new values directly: setParamValues hasn't committed.
                   // runWith resets offset to 0 when the query succeeds.
-                  if (optionsReady) void runWith(sql, limit, 0, orderBy, undefined, next)
+                  if (optionsReady) void runWith(sql, limit, 0, orderBy, { paramOverride: next })
                 }}
                 className={inputClass}
               >
@@ -710,12 +866,12 @@ function QueryPanel({
         >
           Cell view
         </button>
-        {sizes.map(([label, n, testid]) => (
+        {TEXTAREA_SIZES.map(([label, n]) => (
           <button
-            key={testid}
+            key={label}
             type="button"
             onClick={() => setRows(n)}
-            data-testid={testid}
+            data-testid={`query-size-${label.toLowerCase()}`}
             className={`glass-toggle px-2 py-1 text-xs ${rows === n ? 'is-active' : ''}`}
           >
             {label}
@@ -730,9 +886,7 @@ function QueryPanel({
         data-testid="query-input"
         rows={rows || 1}
         placeholder="SELECT …"
-        className={`glass-input w-full px-3 font-mono text-sm ${
-          rows === 0 ? 'h-0 min-h-0 overflow-hidden border-transparent py-0' : 'py-2'
-        }`}
+        className={`glass-input w-full px-3 font-mono text-sm ${textareaSizeClass(rows)}`}
       />
 
       {cellViewModalOpen && (

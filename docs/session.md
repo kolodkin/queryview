@@ -19,6 +19,7 @@ close a tab and the next one you open picks its session back up.
 | Connection | the connection this session is on, and its selected database |
 | Workspace | which workspace scopes its queries, dashboards and git sync |
 | Query panel | SQL text, page size, visible columns, sort |
+| Queries | the script text |
 | Explorer | the Tables sidebar width |
 
 **Results are not remembered** — a reload restores the SQL you were writing,
@@ -60,6 +61,13 @@ still let a claim lapse and another tab take its session. Its next heartbeat (se
 with `keep`, see [api.md](./api.md)) gets a `409`: the tab greys out and stops
 writing until you pick **Use it here** (the other tab then greys out) or **New
 session**. Any session change re-syncs the whole shell.
+
+The row is also the truth for the connection and its database. Every row the tab
+adopts is checked against the connection it shows, so a switch made elsewhere
+(another tab, an API caller) reaches it within a beat, and every view follows —
+the explorer reloads its tables, the dashboard and the query panel re-run what
+is on screen. A switch the tab makes itself holds the heartbeat off, so no beat
+that read the row before it lands after it with the old database.
 
 ## The session dropdown
 
@@ -111,6 +119,7 @@ a view can remember a new setting without a migration.
 
 ```json
 {"query": {"sql": "…", "limit": 100, "visibleCols": [], "orderBy": []},
+ "queries": {"sql": "…"},
  "explorer": {"sidebarWidth": 256}}
 ```
 

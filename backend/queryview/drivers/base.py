@@ -8,7 +8,10 @@ import csv
 import datetime as dt
 import io
 import math
+import re
+import time
 import uuid
+from collections.abc import Awaitable, Callable
 from decimal import Decimal
 from typing import Any, NamedTuple, Protocol, TypeAlias, runtime_checkable
 
@@ -35,6 +38,29 @@ class QueryResult(NamedTuple):
 class TextResult(NamedTuple):
     ok: bool
     value: str  # the text when ok; an error message otherwise
+
+
+# Row results of a script are capped (docs/queries.md). A driver fetches at most
+# SCRIPT_ROW_CAP + 1 rows; run_script trims to the cap and flags `truncated`.
+SCRIPT_ROW_CAP = 100
+# How long one script statement may run: a bulk INSERT or an ALTER is not a
+# 5-second probe, and a timeout reported as a failure would leave the user
+# re-running a write the server finished anyway.
+SCRIPT_TIMEOUT_SECONDS = 600
+
+
+class StatementResult(NamedTuple):
+    """One statement of a script: its rows when it returned any, else the
+    driver's status text (`OK`, Postgres's `INSERT 0 3`); `message` when it
+    failed. `truncated` and `elapsed_ms` are filled in by run_script."""
+
+    sql: str
+    ok: bool
+    rows: QueryRows | None = None
+    truncated: bool = False
+    status: str = ""
+    message: str = ""
+    elapsed_ms: int = 0
 
 
 # A driver's own config object (ChConfig, PgConfig, DuckConfig, …). Opaque to
@@ -97,6 +123,14 @@ class Driver(Protocol):
         sql: str,
         database: str | None,
     ) -> tuple[bool, list[dict[str, str]] | str]: ...
+    # Run a `;`-separated script as written (no pagination wrapper, writes and
+    # DDL included) on one connection — see run_script for the shared policy.
+    async def execute_script(
+        self,
+        config: DriverConfig,
+        sql: str,
+        database: str | None,
+    ) -> list[StatementResult]: ...
 
 
 def _parse_port(raw: Any) -> int | None:
@@ -179,6 +213,79 @@ def wrap_paginated(
         clauses.append(order_clause)
     clauses.append(f"LIMIT {int(limit)} OFFSET {int(offset)}")
     return " ".join(clauses)
+
+
+_DOLLAR_TAG = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
+
+
+def split_statements(sql: str) -> list[str]:
+    """Split a script on the `;` that end statements, skipping those inside
+    quotes (single, double, backtick; a backslash escapes the next character
+    in a single-quoted string, as ClickHouse and Postgres `E''` strings read
+    it), `$$`/`$tag$` bodies, and `--` or `/* */` comments. Blank statements
+    are dropped. An unterminated quote swallows the rest, so a broken statement
+    reaches the database whole and its own parser reports it. Mirrored by
+    statementSpans in the frontend; keep the two in step."""
+    out: list[str] = []
+    start = 0
+    i = 0
+    n = len(sql)
+    while i < n:
+        ch = sql[i]
+        if ch == "'":
+            i = _skip_single_quoted(sql, i)
+        elif ch in ('"', "`"):
+            end = sql.find(ch, i + 1)
+            i = n if end < 0 else end + 1
+        elif (tag := _DOLLAR_TAG.match(sql, i)) is not None:
+            end = sql.find(tag.group(), tag.end())
+            i = n if end < 0 else end + len(tag.group())
+        elif sql.startswith("--", i):
+            end = sql.find("\n", i)
+            i = n if end < 0 else end + 1
+        elif sql.startswith("/*", i):
+            end = sql.find("*/", i + 2)
+            i = n if end < 0 else end + 2
+        elif ch == ";":
+            out.append(sql[start:i])
+            start = i + 1
+            i += 1
+        else:
+            i += 1
+    out.append(sql[start:])
+    return [s for s in (p.strip() for p in out) if s]
+
+
+def _skip_single_quoted(sql: str, i: int) -> int:
+    """The index just past the single-quoted string opening at `i`, or the end
+    of the script when it never closes."""
+    i += 1
+    n = len(sql)
+    while i < n:
+        if sql[i] == "\\":
+            i += 2
+        elif sql[i] == "'":
+            return i + 1
+        else:
+            i += 1
+    return n
+
+
+async def run_script(sql: str, run_one: Callable[[str], Awaitable[StatementResult]]) -> list[StatementResult]:
+    """The script policy every driver shares: split, run each statement in
+    order through `run_one`, time it, cap its rows, and stop at the first
+    failure. `run_one` returns the statement's rows (at most SCRIPT_ROW_CAP + 1
+    of them), status or error; it never raises."""
+    results: list[StatementResult] = []
+    for stmt in split_statements(sql):
+        started = time.monotonic()
+        r = await run_one(stmt)
+        if r.rows is not None and len(r.rows.data) > SCRIPT_ROW_CAP:
+            r = r._replace(rows=QueryRows(r.rows.meta, r.rows.data[:SCRIPT_ROW_CAP]), truncated=True)
+        results.append(r._replace(elapsed_ms=int((time.monotonic() - started) * 1000)))
+        if not r.ok:
+            break
+    return results
 
 
 # The largest integer a JS number holds exactly; beyond it values travel as strings.

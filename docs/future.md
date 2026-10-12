@@ -4,13 +4,6 @@ Planned work, highest priority first. Each entry is a proposal, not yet
 implemented — the spec lives here until it ships, then moves into the relevant
 doc.
 
-## Edit / delete predefined queries
-
-Predefined queries can currently be saved (which upserts by name) and loaded,
-but not renamed or removed from the UI. Add a way to rename and delete saved
-queries — likely a `DELETE /api/predefined-queries` endpoint and edit/delete
-controls in the query panel's predefined-query selector.
-
 ## Workspace-scoped connections
 
 Connections are global — any workspace (see [workspace.md](./workspace.md))
@@ -35,6 +28,19 @@ Small improvements noted in the git-sync final review, none blocking:
   but a second QueryView instance pushing between our fetch and push rejects
   the store. Fine for v1's single-instance scope; add one retry if that
   changes.
+
+## Deferred
+
+Out of scope by design, not planned yet. Git sync assumes a single user syncs
+each workspace; multi-user sync needs git pulling or a webhook first.
+
+- **Content check when a sync follows a deletion.** The merge reads a query,
+  then soft-deletes it in a second DB session without re-checking its
+  content. A save landing in between is soft-deleted instead of becoming a
+  conflict (it stays recoverable with **Undelete**). With one user this needs
+  their own save to race their own sync. Multi-user sync should make that
+  write a compare-and-set on what the merge read, and report a conflict on a
+  mismatch.
 
 ## Related docs
 

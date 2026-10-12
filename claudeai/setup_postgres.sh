@@ -11,16 +11,16 @@
 # chowned accordingly. As a non-root user everything runs in-process.
 #
 # Usage:
-#   scripts/setup_postgres.sh          # ensure a server is running
-#   scripts/setup_postgres.sh stop     # stop the server this script started
+#   claudeai/setup_postgres.sh          # ensure a server is running
+#   claudeai/setup_postgres.sh stop     # stop the server this script started
 #
 # Env:
 #   PGPORT   Postgres TCP port           (default 5432)
 #   PGUSER   superuser role to create    (default postgres)
 set -euo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/_guard.sh"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+. "$ROOT/claudeai/_guard.sh"
 CACHE="$ROOT/.cache"
 PGPORT="${PGPORT:-5432}"
 PGUSER="${PGUSER:-postgres}"
