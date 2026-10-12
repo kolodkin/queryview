@@ -247,6 +247,17 @@ async def _origin_head(wd: Path, ws: WorkspaceRec) -> str | None:
     return ref
 
 
+async def _resolve_ref(wd: Path, ref: str) -> str:
+    """A user-supplied ref for `git show`. A branch name is read as the
+    fetched `origin/<name>`: the local branch only moves on store, so it can
+    be behind. Shas and anything else pass through unchanged."""
+    try:
+        await _git("rev-parse", "--verify", "--quiet", f"origin/{ref}^{{commit}}", cwd=wd)
+    except GitSyncError:
+        return ref
+    return f"origin/{ref}"
+
+
 # --- Entities --------------------------------------------------------------
 
 
@@ -591,7 +602,7 @@ async def restore(
     async with _lock(ws):
         wd = await _ensure_repo(ws)
         head = await _origin_head(wd, ws)
-        resolved = ref if ref and ref != "HEAD" else head
+        resolved = await _resolve_ref(wd, ref) if ref and ref != "HEAD" else head
         if resolved is None:
             raise GitSyncError(f"{kind} {name!r} not found in git", status=404)
         merged = await _merge(ws, wd, head) if head else _empty_merge()

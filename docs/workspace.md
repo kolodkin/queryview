@@ -74,3 +74,4 @@ CRUD stays API/UI-only because it is admin configuration involving secrets.
 - [query.md](./query.md) — predefined queries.
 - [dashboard.md](./dashboard.md) — dashboards.
 - [api.md](./api.md) — backend JSON API.
+- [future.md](./future.md) — planned work, including workspace-scoped connections.
