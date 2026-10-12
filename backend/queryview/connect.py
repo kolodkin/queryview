@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from alembic.config import Config
 
 from .drivers import DRIVERS
-from .drivers.base import DriverConfig, select_all_sql
+from .drivers.base import DriverConfig, Err, select_all_sql
 
 # --- Storage (SQLite, lazily opened) --------------------------------------
 
@@ -291,10 +291,10 @@ async def _build_session(
     name: str, config: DriverConfig, database: str | None, conn_type: str = "clickhouse"
 ) -> tuple[_SessionState | None, str | None]:
     """List a connection's databases and build a session object."""
-    ok, result = await DRIVERS[conn_type].list_databases(config)
-    if not ok:
-        return None, _with_localhost_hint(result, config)  # type: ignore[arg-type]
-    databases: list[str] = result  # type: ignore[assignment]
+    r = await DRIVERS[conn_type].list_databases(config)
+    if isinstance(r, Err):
+        return None, _with_localhost_hint(r.message, config)
+    databases = r.databases
     return (
         _SessionState(
             name=name,
@@ -416,10 +416,10 @@ async def describe_query(sid: str, sql: str) -> dict[str, Any]:
     s, err = await _gated_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
-    ok, result = await DRIVERS[s.type].describe_query(s.config, sql, s.database)
-    if not ok:
-        return {"ok": False, "message": result}
-    return {"ok": True, "fields": result}
+    r = await DRIVERS[s.type].describe_query(s.config, sql, s.database)
+    if isinstance(r, Err):
+        return {"ok": False, "message": r.message}
+    return {"ok": True, "fields": r.fields}
 
 
 async def list_tables(sid: str) -> dict[str, Any]:
@@ -430,10 +430,10 @@ async def list_tables(sid: str) -> dict[str, Any]:
     if s is None:
         return err  # type: ignore[return-value]
     driver = DRIVERS[s.type]
-    _ok, result = await driver.list_tables(s.config, s.database)
-    if isinstance(result, str):
-        return {"ok": False, "message": result}
-    tables = [{**t, "query": select_all_sql(t["name"], driver.ident_quote)} for t in result]
+    r = await driver.list_tables(s.config, s.database)
+    if isinstance(r, Err):
+        return {"ok": False, "message": r.message}
+    tables = [{**t, "query": select_all_sql(t["name"], driver.ident_quote)} for t in r.tables]
     return {"ok": True, "tables": tables}
 
 
@@ -451,7 +451,7 @@ async def run_query(
     if s is None:
         return err  # type: ignore[return-value]
     r = await DRIVERS[s.type].run_query(s.config, sql, s.database, limit, offset, order_by)
-    if not r.ok or r.rows is None:
+    if isinstance(r, Err):
         return {"ok": False, "message": r.message}
     return {"ok": True, "database": s.database, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
 
@@ -493,9 +493,9 @@ async def export_csv(
     if s is None:
         return err  # type: ignore[return-value]
     r = await DRIVERS[s.type].export_csv(s.config, sql, s.database, limit, offset, order_by)
-    if not r.ok:
-        return {"ok": False, "message": r.value}
-    return {"ok": True, "output": r.value}
+    if isinstance(r, Err):
+        return {"ok": False, "message": r.message}
+    return {"ok": True, "output": r.text}
 
 
 # Imported last, not at the top: sessions.py builds on this module's engine and

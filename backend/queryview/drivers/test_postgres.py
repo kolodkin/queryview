@@ -7,7 +7,15 @@ from __future__ import annotations
 
 import asyncio
 
-from queryview.drivers.base import SCRIPT_ROW_CAP, SCRIPT_TIMEOUT_SECONDS, Column
+from queryview.drivers.base import (
+    SCRIPT_ROW_CAP,
+    SCRIPT_TIMEOUT_SECONDS,
+    Column,
+    Err,
+    RowsResult,
+    TablesResult,
+    TextResult,
+)
 from queryview.drivers.postgres import PgConfig, PostgresDriver
 
 
@@ -46,14 +54,14 @@ def test_run_query_builds_aliased_double_quoted_sql(monkeypatch):
             PgConfig("h", 5432, "u", ""), "SELECT name FROM t;", "mydb", 50, 10, [{"name": "name", "dir": "ASC"}]
         )
     )
-    assert r.ok and r.rows is not None
+    assert isinstance(r, RowsResult)
     assert r.rows.meta == [Column("name", "text")]
     assert r.rows.data == [["alpha"]]
     assert captured["database"] == "mydb"
     assert captured["sql"] == ('SELECT * FROM (\nSELECT name FROM t\n) AS _qv ORDER BY "name" ASC LIMIT 50 OFFSET 10')
 
     csv = asyncio.run(d.export_csv(PgConfig("h", 5432, "u", ""), "SELECT name FROM t", "mydb", 50, 10, None))
-    assert csv.ok and csv.value == "name\nalpha"
+    assert isinstance(csv, TextResult) and csv.text == "name\nalpha"
 
 
 def test_list_tables_queries_public_schema_with_estimates(monkeypatch):
@@ -76,8 +84,8 @@ def test_list_tables_queries_public_schema_with_estimates(monkeypatch):
         return _Conn()
 
     monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
-    ok, tables = asyncio.run(d.list_tables(PgConfig("h", 5432, "u", ""), "mydb"))
-    assert ok and tables == [
+    r = asyncio.run(d.list_tables(PgConfig("h", 5432, "u", ""), "mydb"))
+    assert isinstance(r, TablesResult) and r.tables == [
         {"name": "items", "rows": 3, "bytes": 16384},
         {"name": "fresh", "rows": None, "bytes": 8192},
     ]
@@ -211,3 +219,18 @@ def test_execute_script_reports_a_failed_connect_against_the_script(monkeypatch)
     monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
     results = asyncio.run(d.execute_script(PgConfig("h", 5432, "u", ""), "SELECT 1; SELECT 2", "mydb"))
     assert len(results) == 1 and results[0].ok is False and "refused" in results[0].message
+
+
+def test_errors_become_err(monkeypatch):
+    d = PostgresDriver()
+
+    async def fake_connect(c, database, command_timeout=None):
+        raise RuntimeError("refused")
+
+    monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
+    cfg = PgConfig("h", 5432, "u", "")
+    assert asyncio.run(d.list_databases(cfg)) == Err("refused")
+    assert asyncio.run(d.list_tables(cfg, "db")) == Err("refused")
+    assert asyncio.run(d.run_query(cfg, "SELECT 1", "db", 10, 0, None)) == Err("refused")
+    assert asyncio.run(d.export_csv(cfg, "SELECT 1", "db", 10, 0, None)) == Err("refused")
+    assert asyncio.run(d.describe_query(cfg, "SELECT 1", "db")) == Err("refused")

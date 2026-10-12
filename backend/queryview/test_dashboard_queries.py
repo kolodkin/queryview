@@ -9,7 +9,7 @@ import asyncio
 import queryview.connect as connect
 from queryview.dashboard_queries import run_dashboard_queries
 from queryview.drivers import DRIVERS
-from queryview.drivers.base import Column, QueryResult, QueryRows
+from queryview.drivers.base import Column, DatabasesResult, Err, QueryRows, RowsResult
 
 
 class _RowsDriver:
@@ -30,12 +30,12 @@ class _RowsDriver:
         return {"ok": True, "message": "ok"}
 
     async def list_databases(self, c):
-        return True, []
+        return DatabasesResult([])
 
     async def run_query(self, c, sql, database, limit, offset, order_by):
         if "fail" in sql:
-            return QueryResult(False, None, "bad sql")
-        return QueryResult(True, QueryRows([Column("n", "Int32"), Column("s", "String")], [[1, "a"], [2, "b"]]))
+            return Err("bad sql")
+        return RowsResult(QueryRows([Column("n", "Int32"), Column("s", "String")], [[1, "a"], [2, "b"]]))
 
 
 def test_run_queries_returns_typed_columns(monkeypatch):

@@ -10,6 +10,7 @@ import asyncio
 import duckdb
 import pytest
 
+from queryview.drivers.base import DatabasesResult, Err, FieldsResult, RowsResult, TablesResult, TextResult
 from queryview.drivers.duckdb import DuckConfig, DuckDBDriver
 
 
@@ -35,16 +36,16 @@ def test_parse_config_defaults_blank_path_to_memory():
 
 def test_list_databases_is_empty(duck_path):
     d = DuckDBDriver()
-    assert _run(d.list_databases(DuckConfig(duck_path))) == (True, [])
+    assert _run(d.list_databases(DuckConfig(duck_path))) == DatabasesResult([])
 
 
 def test_list_tables_names_seeded_table_with_estimates(duck_path):
     d = DuckDBDriver()
     # rows is duckdb_tables()'s estimated_size; bytes is storage blocks × block
     # size (a small positive multiple of the 256KiB block for a tiny table).
-    ok, tables = _run(d.list_tables(DuckConfig(duck_path), None))
-    assert ok and isinstance(tables, list) and len(tables) == 1
-    t = tables[0]
+    r = _run(d.list_tables(DuckConfig(duck_path), None))
+    assert isinstance(r, TablesResult) and len(r.tables) == 1
+    t = r.tables[0]
     assert t["name"] == "items" and t["rows"] == 3
     assert isinstance(t["bytes"], int) and t["bytes"] > 0
 
@@ -61,7 +62,7 @@ def test_run_query_paginates_and_returns_typed_rows(duck_path):
             [{"name": "name", "dir": "ASC"}],
         )
     )
-    assert r.ok and r.rows is not None
+    assert isinstance(r, RowsResult)
     assert [c.name for c in r.rows.meta] == ["id", "name"]
     assert all(isinstance(c.type, str) and c.type for c in r.rows.meta)
     assert r.rows.data == [[1, "alpha"], [2, "beta"]]
@@ -70,21 +71,21 @@ def test_run_query_paginates_and_returns_typed_rows(duck_path):
 def test_export_csv_returns_csv_with_names(duck_path):
     d = DuckDBDriver()
     r = _run(d.export_csv(DuckConfig(duck_path), "SELECT id, name FROM items ORDER BY id", None, 2, 0, None))
-    assert r.ok and r.value == "id,name\n1,alpha\n2,beta"
+    assert isinstance(r, TextResult) and r.text == "id,name\n1,alpha\n2,beta"
 
 
 def test_describe_query_returns_columns(duck_path):
     d = DuckDBDriver()
-    ok, fields = _run(d.describe_query(DuckConfig(duck_path), "SELECT id, name FROM items", None))
-    assert ok and isinstance(fields, list)
-    names = [f["name"] for f in fields]
+    r = _run(d.describe_query(DuckConfig(duck_path), "SELECT id, name FROM items", None))
+    assert isinstance(r, FieldsResult)
+    names = [f["name"] for f in r.fields]
     assert names == ["id", "name"]
 
 
 def test_run_query_error_is_reported(duck_path):
     d = DuckDBDriver()
     r = _run(d.run_query(DuckConfig(duck_path), "SELECT * FROM no_such", None, 10, 0, None))
-    assert r.ok is False and r.rows is None and "no_such" in r.message
+    assert isinstance(r, Err) and "no_such" in r.message
 
 
 def test_execute_script_runs_statements_in_order_on_one_connection(duck_path):
@@ -134,3 +135,11 @@ def test_execute_script_reports_a_runtime_error_as_a_failed_statement(duck_path)
     results = _run(d.execute_script(DuckConfig(duck_path), "SELECT 1 AS a; SELECT 'abc'::INTEGER AS b; SELECT 2", None))
     assert [r.ok for r in results] == [True, False]
     assert "abc" in results[1].message
+
+
+def test_describe_and_export_errors_become_err(duck_path):
+    d = DuckDBDriver()
+    r = _run(d.describe_query(DuckConfig(duck_path), "SELECT * FROM no_such", None))
+    assert isinstance(r, Err) and "no_such" in r.message
+    r = _run(d.export_csv(DuckConfig(duck_path), "SELECT * FROM no_such", None, 10, 0, None))
+    assert isinstance(r, Err) and "no_such" in r.message

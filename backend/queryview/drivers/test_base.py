@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import uuid
 from decimal import Decimal
+
+import pytest
 
 from queryview.drivers.base import (
     Column,
@@ -120,3 +123,36 @@ def test_split_statements_handles_tagged_dollar_quotes_and_backslash_escapes():
         "SELECT 'a\\'b;c'",
         "SELECT 2",
     ]
+
+
+def test_result_classes_are_frozen_named_payloads():
+    from queryview.drivers.base import (
+        DatabasesResult,
+        Err,
+        FieldsResult,
+        Result,
+        RowsResult,
+        TablesResult,
+        TextResult,
+    )
+
+    rows = QueryRows([Column("n", "Int32")], [[1]])
+    results = [
+        Err("boom"),
+        RowsResult(rows),
+        TextResult("a,b"),
+        DatabasesResult(["db1"]),
+        TablesResult([{"name": "items", "rows": 1, "bytes": None}]),
+        FieldsResult([{"name": "n", "type": "Int32"}]),
+    ]
+    assert all(isinstance(r, Result) for r in results)
+    assert Err("boom").message == "boom"
+    assert RowsResult(rows).rows is rows
+    assert TextResult("a,b").text == "a,b"
+    assert DatabasesResult(["db1"]).databases == ["db1"]
+    assert TablesResult([]).tables == []
+    assert FieldsResult([]).fields == []
+    # isinstance against Err is the one error check every consumer uses.
+    assert [isinstance(r, Err) for r in results] == [True, False, False, False, False, False]
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        Err("x").message = "y"  # type: ignore[misc]

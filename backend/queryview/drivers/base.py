@@ -12,6 +12,7 @@ import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, NamedTuple, Protocol, TypeAlias, runtime_checkable
 
@@ -29,15 +30,42 @@ class QueryRows(NamedTuple):
     data: list[list[Any]]
 
 
-class QueryResult(NamedTuple):
-    ok: bool
-    rows: QueryRows | None = None  # set when ok
-    message: str = ""  # set when not ok
+class Result:
+    """Marker base for a driver method's outcome. Methods are annotated with the
+    concrete union (`DatabasesResult | Err`), never this base: that is what lets
+    `isinstance(r, Err)` narrow the other branch for the type checker."""
 
 
-class TextResult(NamedTuple):
-    ok: bool
-    value: str  # the text when ok; an error message otherwise
+@dataclass(frozen=True)
+class Err(Result):
+    message: str
+
+
+@dataclass(frozen=True)
+class RowsResult(Result):
+    rows: QueryRows
+
+
+@dataclass(frozen=True)
+class TextResult(Result):
+    text: str
+
+
+@dataclass(frozen=True)
+class DatabasesResult(Result):
+    databases: list[str]
+
+
+@dataclass(frozen=True)
+class TablesResult(Result):
+    # Each table is {"name": str, "rows": int|None, "bytes": int|None}; rows and
+    # bytes are cheap engine estimates, None when the engine doesn't track them.
+    tables: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class FieldsResult(Result):
+    fields: list[dict[str, str]]  # {"name", "type"}, the dialect's own type names
 
 
 # Row results of a script are capped (docs/queries.md). A driver fetches at most
@@ -89,15 +117,8 @@ class Driver(Protocol):
     def config_to_dict(self, config: DriverConfig) -> dict[str, Any]: ...
     def config_from_dict(self, data: dict[str, Any]) -> DriverConfig: ...
     async def test(self, config: DriverConfig) -> dict[str, Any]: ...
-    async def list_databases(self, config: DriverConfig) -> tuple[bool, list[str] | str]: ...
-    # Each table is {"name": str, "rows": int|None, "bytes": int|None} — rows and
-    # bytes are cheap engine estimates (never a COUNT(*) scan), None when the
-    # engine doesn't track them (e.g. views, or DuckDB's missing per-table size).
-    async def list_tables(
-        self,
-        config: DriverConfig,
-        database: str | None,
-    ) -> tuple[bool, list[dict[str, Any]] | str]: ...
+    async def list_databases(self, config: DriverConfig) -> DatabasesResult | Err: ...
+    async def list_tables(self, config: DriverConfig, database: str | None) -> TablesResult | Err: ...
     async def run_query(
         self,
         config: DriverConfig,
@@ -106,7 +127,7 @@ class Driver(Protocol):
         limit: int,
         offset: int,
         order_by: list[dict[str, Any]] | None,
-    ) -> QueryResult: ...
+    ) -> RowsResult | Err: ...
     # The same page as run_query, as CSVWithNames text for download.
     async def export_csv(
         self,
@@ -116,13 +137,8 @@ class Driver(Protocol):
         limit: int,
         offset: int,
         order_by: list[dict[str, Any]] | None,
-    ) -> TextResult: ...
-    async def describe_query(
-        self,
-        config: DriverConfig,
-        sql: str,
-        database: str | None,
-    ) -> tuple[bool, list[dict[str, str]] | str]: ...
+    ) -> TextResult | Err: ...
+    async def describe_query(self, config: DriverConfig, sql: str, database: str | None) -> FieldsResult | Err: ...
     # Run a `;`-separated script as written (no pagination wrapper, writes and
     # DDL included) on one connection — see run_script for the shared policy.
     async def execute_script(

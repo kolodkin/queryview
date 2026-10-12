@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import asdict, dataclass
-from typing import Any, NamedTuple
+from typing import Any, ClassVar, Self, TypeVar
 
 import httpx
 
@@ -13,9 +13,14 @@ from .base import (
     SCRIPT_ROW_CAP,
     SCRIPT_TIMEOUT_SECONDS,
     Column,
-    QueryResult,
+    DatabasesResult,
+    Err,
+    FieldsResult,
     QueryRows,
+    Result,
+    RowsResult,
     StatementResult,
+    TablesResult,
     TextResult,
     build_order_by,
     parse_host_port_config,
@@ -34,11 +39,6 @@ class ChConfig:
     password: str
 
 
-class ChResult(NamedTuple):
-    ok: bool
-    value: str
-
-
 # JSONCompact output settings: values a JS number would mangle are quoted by
 # ClickHouse itself, and named tuples arrive as objects so the UI can label
 # their fields.
@@ -49,24 +49,78 @@ JSON_COMPACT_SETTINGS = {
     "output_format_json_named_tuples_as_objects": "1",
 }
 
+# Script statements: JSONCompact unless the statement names its own FORMAT, and
+# the server stops filling the result past the row cap instead of failing. The
+# check runs between blocks, so up to a block (max_block_size, ~65k rows) can
+# still arrive; run_script trims it. Subqueries are not affected.
+SCRIPT_SETTINGS = {
+    **JSON_COMPACT_SETTINGS,
+    "default_format": "JSONCompact",
+    "max_result_rows": str(SCRIPT_ROW_CAP + 1),
+    "result_overflow_mode": "break",
+}
 
-async def ch_query(
+
+class ChResult(Result):
+    """A result the ClickHouse client can produce: the FORMAT clause to ask the
+    server for, and how to decode the body it returns."""
+
+    clause: ClassVar[str | None] = None  # None: the server's default (TabSeparated)
+
+    @classmethod
+    def from_text(cls, text: str) -> Self | Err:
+        raise NotImplementedError
+
+
+class ChText(TextResult, ChResult):
+    @classmethod
+    def from_text(cls, text: str) -> Self | Err:
+        return cls(text)
+
+
+class ChCsv(ChText):
+    clause = "CSVWithNames"
+
+
+class ChRows(RowsResult, ChResult):
+    clause = "JSONCompact"
+
+    @classmethod
+    def from_text(cls, text: str) -> Self | Err:
+        """Decode a JSONCompact body: values arrive decoded (NULL as None, 64-bit
+        integers as strings, a pretty-printed type keeps its newlines). Every row
+        must have one cell per `meta` column, so callers can index by position."""
+        try:
+            doc = json.loads(text)
+            meta = [Column(str(m["name"]), str(m["type"])) for m in doc["meta"]]
+            data = [list(row) for row in doc["data"] if isinstance(row, list)]
+            if len(data) != len(doc["data"]) or any(len(row) != len(meta) for row in data):
+                raise ValueError("rows don't match meta")
+        except (ValueError, KeyError, TypeError) as err:
+            return Err(f"unexpected JSON from ClickHouse: {err}")
+        return cls(QueryRows(meta, data))
+
+
+R = TypeVar("R", bound=ChResult)
+
+
+async def ch_fetch(
     c: ChConfig,
     query: str,
+    clause: str | None = None,
     database: str | None = None,
-    fmt: str | None = None,
     settings: dict[str, str] | None = None,
     write: bool = False,
     client: httpx.AsyncClient | None = None,
-) -> ChResult:
-    """Run a query against the ClickHouse HTTP interface (Basic auth, 5s timeout).
-    `database` scopes the query; `fmt` appends a ClickHouse `FORMAT` clause;
-    `settings` are passed as URL parameters. Queries go as a GET, which
-    ClickHouse treats as read-only — that is what keeps every other path from
-    writing; `write` sends the query as a POST body instead. `client` reuses a
-    caller's connection across several queries."""
+) -> str | Err:
+    """Run a query against the ClickHouse HTTP interface (Basic auth, 5s timeout)
+    and return the body as text. `clause` appends a `FORMAT` clause; `database`
+    scopes the query; `settings` are passed as URL parameters. Queries go as a
+    GET, which ClickHouse treats as read-only — that is what keeps every other
+    path from writing; `write` sends the query as a POST body instead. `client`
+    reuses a caller's connection across several queries."""
     url = f"http://{c.host}:{c.port}/"
-    q = f"{query}\nFORMAT {fmt}" if fmt else query
+    q = f"{query}\nFORMAT {clause}" if clause else query
     params = dict(settings or {})
     if database:
         params["database"] = database
@@ -84,13 +138,27 @@ async def ch_query(
             async with httpx.AsyncClient(timeout=CH_TIMEOUT_SECONDS) as own:
                 res = await send(own)
     except httpx.TimeoutException:
-        return ChResult(False, "connection timed out")
+        return Err("connection timed out")
     except httpx.HTTPError as err:
-        return ChResult(False, str(err) or "connection failed")
+        return Err(str(err) or "connection failed")
     text = res.text.strip()
     if not res.is_success:
-        return ChResult(False, f"ClickHouse responded {res.status_code}: {text[:200]}")
-    return ChResult(True, text)
+        return Err(f"ClickHouse responded {res.status_code}: {text[:200]}")
+    return text
+
+
+async def ch_query(
+    c: ChConfig,
+    query: str,
+    kind: type[R],
+    database: str | None = None,
+    settings: dict[str, str] | None = None,
+) -> R | Err:
+    """Run `query` asking for `kind`'s format and decode the body into it."""
+    text = await ch_fetch(c, query, kind.clause, database, settings)
+    if isinstance(text, Err):
+        return text
+    return kind.from_text(text)
 
 
 def parse_ch_config(body: Any) -> tuple[ChConfig | None, str | None]:
@@ -100,50 +168,6 @@ def parse_ch_config(body: Any) -> tuple[ChConfig | None, str | None]:
     if err or fields is None:
         return None, err
     return ChConfig(**fields), None
-
-
-async def ch_json(
-    c: ChConfig,
-    query: str,
-    database: str | None = None,
-    settings: dict[str, str] | None = None,
-    cols: int = 0,
-) -> QueryRows | str:
-    """A query's JSONCompact result (values decoded: NULL as None, 64-bit
-    integers as strings, a pretty-printed type keeps its newlines), or an error
-    message. Every row has one cell per `meta` column and at least `cols` cells,
-    so callers can index the columns they selected."""
-    r = await ch_query(c, query, database=database, fmt="JSONCompact", settings=settings)
-    if not r.ok:
-        return r.value
-    try:
-        return _parse_json_compact(r.value, cols)
-    except (ValueError, KeyError, TypeError) as err:
-        return f"unexpected JSON from ClickHouse: {err}"
-
-
-# Script statements: JSONCompact unless the statement names its own FORMAT, and
-# the server stops filling the result past the row cap instead of failing. The
-# check runs between blocks, so up to a block (max_block_size, ~65k rows) can
-# still arrive; run_script trims it. Subqueries are not affected.
-SCRIPT_SETTINGS = {
-    **JSON_COMPACT_SETTINGS,
-    "default_format": "JSONCompact",
-    "max_result_rows": str(SCRIPT_ROW_CAP + 1),
-    "result_overflow_mode": "break",
-}
-
-
-def _parse_json_compact(text: str, cols: int = 0) -> QueryRows:
-    """Decode a JSONCompact body. Every row must have one cell per `meta`
-    column and there must be at least `cols` columns; raises ValueError,
-    KeyError or TypeError otherwise."""
-    doc = json.loads(text)
-    meta = [Column(str(m["name"]), str(m["type"])) for m in doc["meta"]]
-    data = [list(row) for row in doc["data"] if isinstance(row, list)]
-    if len(data) != len(doc["data"]) or len(meta) < cols or any(len(row) != len(meta) for row in data):
-        raise ValueError("rows don't match meta")
-    return QueryRows(meta, data)
 
 
 class ClickHouseDriver:
@@ -161,36 +185,42 @@ class ClickHouseDriver:
         return ChConfig(**data)
 
     async def test(self, config: ChConfig) -> dict[str, Any]:
-        r = await ch_query(config, "SELECT 1")
-        if r.ok:
-            return {"ok": True, "message": f"Connected — SELECT 1 returned {r.value}"}
-        return {"ok": False, "message": r.value}
+        r = await ch_query(config, "SELECT 1", ChText)
+        if isinstance(r, Err):
+            return {"ok": False, "message": r.message}
+        return {"ok": True, "message": f"Connected — SELECT 1 returned {r.text}"}
 
-    async def list_databases(self, config: ChConfig) -> tuple[bool, list[str] | str]:
-        res = await ch_json(config, "SHOW DATABASES", cols=1)
-        if isinstance(res, str):
-            return False, res
-        return True, [row[0] for row in res.data]
+    async def list_databases(self, config: ChConfig) -> DatabasesResult | Err:
+        r = await ch_query(config, "SHOW DATABASES", ChRows)
+        if isinstance(r, Err):
+            return r
+        if len(r.rows.meta) < 1:
+            return Err("unexpected JSON from ClickHouse: too few columns")
+        return DatabasesResult([row[0] for row in r.rows.data])
 
-    async def list_tables(self, config: ChConfig, database: str | None) -> tuple[bool, list[dict[str, Any]] | str]:
+    async def list_tables(self, config: ChConfig, database: str | None) -> TablesResult | Err:
         # Same set SHOW TABLES yields, plus the engine's stored row/byte counts
         # (NULL for views and engines that don't track them).
-        res = await ch_json(
+        r = await ch_query(
             config,
             "SELECT name, total_rows, total_bytes FROM system.tables WHERE database = currentDatabase() ORDER BY name",
+            ChRows,
             database=database,
-            cols=3,
         )
-        if isinstance(res, str):
-            return False, res
-        return True, [
-            {
-                "name": row[0],
-                "rows": None if row[1] is None else int(row[1]),
-                "bytes": None if row[2] is None else int(row[2]),
-            }
-            for row in res.data
-        ]
+        if isinstance(r, Err):
+            return r
+        if len(r.rows.meta) < 3:
+            return Err("unexpected JSON from ClickHouse: too few columns")
+        return TablesResult(
+            [
+                {
+                    "name": row[0],
+                    "rows": None if row[1] is None else int(row[1]),
+                    "bytes": None if row[2] is None else int(row[2]),
+                }
+                for row in r.rows.data
+            ]
+        )
 
     async def run_query(
         self,
@@ -200,13 +230,10 @@ class ClickHouseDriver:
         limit: int,
         offset: int,
         order_by: list[dict[str, Any]] | None,
-    ) -> QueryResult:
+    ) -> RowsResult | Err:
         order_clause = build_order_by(order_by, "`")
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias=None)
-        res = await ch_json(config, paginated, database=database, settings=JSON_COMPACT_SETTINGS)
-        if isinstance(res, str):
-            return QueryResult(False, None, res)
-        return QueryResult(True, res)
+        return await ch_query(config, paginated, ChRows, database=database, settings=JSON_COMPACT_SETTINGS)
 
     async def export_csv(
         self,
@@ -216,20 +243,19 @@ class ClickHouseDriver:
         limit: int,
         offset: int,
         order_by: list[dict[str, Any]] | None,
-    ) -> TextResult:
+    ) -> TextResult | Err:
         order_clause = build_order_by(order_by, "`")
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias=None)
-        r = await ch_query(config, paginated, database=database, fmt="CSVWithNames")
-        return TextResult(r.ok, r.value)
+        return await ch_query(config, paginated, ChCsv, database=database)
 
-    async def describe_query(
-        self, config: ChConfig, sql: str, database: str | None
-    ) -> tuple[bool, list[dict[str, str]] | str]:
+    async def describe_query(self, config: ChConfig, sql: str, database: str | None) -> FieldsResult | Err:
         inner = sql.rstrip().rstrip(";")
-        res = await ch_json(config, f"DESCRIBE (\n{inner}\n)", database=database, cols=2)
-        if isinstance(res, str):
-            return False, res
-        return True, [{"name": row[0], "type": row[1]} for row in res.data]
+        r = await ch_query(config, f"DESCRIBE (\n{inner}\n)", ChRows, database=database)
+        if isinstance(r, Err):
+            return r
+        if len(r.rows.meta) < 2:
+            return Err("unexpected JSON from ClickHouse: too few columns")
+        return FieldsResult([{"name": row[0], "type": row[1]} for row in r.rows.data])
 
     async def execute_script(self, config: ChConfig, sql: str, database: str | None) -> list[StatementResult]:
         # One HTTP client for the script, and one server session so SET and
@@ -240,15 +266,15 @@ class ClickHouseDriver:
         async with httpx.AsyncClient(timeout=timeout) as client:
 
             async def run_one(stmt: str) -> StatementResult:
-                r = await ch_query(config, stmt, database=database, settings=settings, write=True, client=client)
-                if not r.ok:
-                    return StatementResult(stmt, False, message=r.value)
-                if not r.value:  # DDL/DML: nothing comes back
+                text = await ch_fetch(config, stmt, database=database, settings=settings, write=True, client=client)
+                if isinstance(text, Err):
+                    return StatementResult(stmt, False, message=text.message)
+                if not text:  # DDL/DML: nothing comes back
                     return StatementResult(stmt, True, status="OK")
-                try:
-                    return StatementResult(stmt, True, rows=_parse_json_compact(r.value))
-                except (ValueError, KeyError, TypeError):
+                rows = ChRows.from_text(text)
+                if isinstance(rows, Err):
                     # The statement chose its own FORMAT: show its text as-is.
-                    return StatementResult(stmt, True, status=r.value)
+                    return StatementResult(stmt, True, status=text)
+                return StatementResult(stmt, True, rows=rows.rows)
 
             return await run_script(sql, run_one)
