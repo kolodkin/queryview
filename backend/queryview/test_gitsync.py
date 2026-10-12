@@ -799,7 +799,7 @@ def test_restore_by_branch_name_reads_remote_not_stale_local(git_env, tmp_path):
     assert row["query"] == "SELECT 2"
 
 
-def _hand_edit(remote, tmp_path, edit: Callable[[Path], None]) -> None:
+def _hand_edit(remote, tmp_path, edit: Callable[[Path], object]) -> None:
     """Apply `edit` to a fresh clone's workdir and push it to the remote's
     main, as a change made outside QueryView."""
     wd = Path(tempfile.mkdtemp(prefix="hand-edit-", dir=tmp_path))
