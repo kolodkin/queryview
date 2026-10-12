@@ -71,6 +71,7 @@ def query_from_yaml(text: str) -> dict[str, Any]:
         raise GitSyncError(str(e)) from e
 
 
+# Order matters: the joined oids under this order are what sync state records as "agreed".
 DASHBOARD_FILES = ("meta.yaml", "dashboard.html", "queries.yaml")
 
 
@@ -383,7 +384,8 @@ async def _read_repo_entity(wd: Path, ref: str, kind: str, relpath: str) -> dict
             files[fname] = await _git("show", f"{ref}:{relpath}/{fname}", cwd=wd)
         except GitSyncError:
             name = unquote(relpath.removeprefix("dashboards/"))
-            what = "not found" if not files else f"is missing {fname}"
+            listed = await _git("ls-tree", ref, "--", f"{relpath}/", cwd=wd)
+            what = f"is missing {fname}" if listed else "not found"
             raise GitSyncError(f"dashboard {name!r} {what} at {ref}", status=404) from None
     return dashboard_from_files(files)
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -801,7 +802,7 @@ def test_restore_by_branch_name_reads_remote_not_stale_local(git_env, tmp_path):
 def _hand_edit(remote, tmp_path, edit: Callable[[Path], None]) -> None:
     """Apply `edit` to a fresh clone's workdir and push it to the remote's
     main, as a change made outside QueryView."""
-    wd = tmp_path / "hand-edit"
+    wd = Path(tempfile.mkdtemp(prefix="hand-edit-", dir=tmp_path))
     subprocess.run(["git", "clone", "-q", str(remote), str(wd)], check=True, capture_output=True)
     edit(wd)
     for cmd in (
@@ -846,3 +847,19 @@ def test_sync_skips_a_dashboard_missing_a_file(git_env, other_instance, tmp_path
 
     assert r["imported"] == [] and r["conflicts"] == []
     assert _run(get_dashboard("gs halfdash", _default_ws_id())) is None
+
+
+def test_restore_of_a_dashboard_missing_meta_names_the_file(git_env, tmp_path):
+    from queryview.dashboards import upsert_dashboard
+
+    _run(upsert_dashboard("gs nometa", "<html/>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "dashboard", "gs nometa"))
+    _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs nometa')}/meta.yaml")
+
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.restore(_default_ws(), "dashboard", "gs nometa"))
+
+    assert e.value.status == 404 and "meta.yaml" in str(e.value)
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.restore(_default_ws(), "dashboard", "gs never stored"))
+    assert e.value.status == 404 and str(e.value) == "dashboard 'gs never stored' not found at origin/main"
