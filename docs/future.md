@@ -14,13 +14,8 @@ Deferred because it multiplies setup for the common single-team case.
 
 ## Git sync follow-ups
 
-Small improvements noted in the git-sync final review, none blocking:
+A small improvement noted in the git-sync final review, not blocking:
 
-- The dashboard readers (`restore` and the merge's `_read_repo_entity`)
-  treat only a missing `meta.yaml` at a ref as 404; a missing
-  `dashboard.html`/`queries.yaml` silently defaults. Unreachable through
-  QueryView, which writes all three files in one commit, but a hand-edited
-  repo reaches it — remove or document the asymmetry.
 - No push retry: under the single per-instance lock a store never self-races,
   but a second QueryView instance pushing between our fetch and push rejects
   the store. Fine for v1's single-instance scope; add one retry if that
