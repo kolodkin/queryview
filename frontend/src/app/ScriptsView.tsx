@@ -7,27 +7,27 @@ import { Spinner } from './controls/Spinner'
 import { loadIntoQueryView } from './queryPanel'
 import { flushPatches, patchView, viewState } from './session'
 import { useEditLock } from './sessionLock'
-import { failedSpan, runSummary, statementRangeAt, type Span, type StatementResult } from './queriesScript'
+import { failedSpan, runSummary, statementRangeAt, type Span, type StatementResult } from './scriptRun'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
 // A script the agent pushed (MCP push_script).
 export type ScriptPush = { sql: string; run: boolean }
 
-type QueriesViewProps = {
+type ScriptsViewProps = {
   pushed: ScriptPush | null
   onPushConsumed: () => void
   remoteId: string | null
 }
 
-// The Queries page (`/queries`, docs/queries.md), mounted by the App shell only
+// The Scripts page (`/scripts`, docs/scripts.md), mounted by the App shell only
 // for a ready connection: a flat SQL textbox whose statements run as written.
 // Run takes the statement under the cursor (or the selection), Run all the
 // whole script; a run leaves one status line and the last statement's rows.
-function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
+function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
   const navigate = useNavigate()
   // The text is restored from the session; results never are (docs/session.md).
   const [sql, setSql] = useState(() => {
-    const saved = viewState('queries').sql
+    const saved = viewState('scripts').sql
     return typeof saved === 'string' ? saved : ''
   })
   const [results, setResults] = useState<StatementResult[] | null>(null)
@@ -49,7 +49,7 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
   function edit(next: string) {
     setSql(next)
     // Queued for the session; the write lands when the textbox is left.
-    patchView('queries', { sql: next })
+    patchView('scripts', { sql: next })
   }
 
   // The selection when there is one, else the statement under the cursor.
@@ -136,7 +136,7 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
           rows={lastRows.data}
           types={columnTypes(lastRows)}
           shownIdx={lastRows.meta.map((_, i) => i)}
-          testid="queries-output"
+          testid="scripts-output"
           dimmed={busy}
         />
       ),
@@ -145,10 +145,10 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
   const mark = failed && failed.script === sql && rows > 0 ? failed.span : null
 
   return (
-    <div data-testid="queries-page" className="viewport-page flex w-full max-w-[80vw] flex-col">
+    <div data-testid="scripts-page" className="viewport-page flex w-full max-w-[80vw] flex-col">
       <div className="mb-6 flex items-center justify-center">
         <h1 className="text-3xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
-          Queries
+          Scripts
         </h1>
       </div>
       <section ref={panelRef} className="glass-panel flex grow flex-col gap-3 p-6">
@@ -158,7 +158,7 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
               key={label}
               type="button"
               onClick={() => setRows(n)}
-              data-testid={`queries-size-${label.toLowerCase()}`}
+              data-testid={`scripts-size-${label.toLowerCase()}`}
               className={`glass-toggle px-2 py-1 text-xs ${rows === n ? 'is-active' : ''}`}
             >
               {label}
@@ -180,7 +180,7 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
               if (markRef.current) markRef.current.scrollTop = e.currentTarget.scrollTop
             }}
             aria-label="SQL script"
-            data-testid="queries-input"
+            data-testid="scripts-input"
             rows={rows || 1}
             spellCheck={false}
             placeholder={'CREATE TABLE …;\nINSERT INTO …;\nSELECT …'}
@@ -193,7 +193,7 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
               className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words border border-transparent px-3 py-2 font-mono text-sm text-transparent"
             >
               {sql.slice(0, mark.start)}
-              <mark data-testid="queries-failed-mark" className="rounded bg-red-500/15 text-red-300">
+              <mark data-testid="scripts-failed-mark" className="rounded bg-red-500/15 text-red-300">
                 {sql.slice(mark.start, mark.end)}
               </mark>
               {sql.slice(mark.end)}
@@ -205,7 +205,7 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
             type="button"
             onClick={() => void run(currentStatement())}
             disabled={busy || !sql.trim()}
-            data-testid="queries-run-current"
+            data-testid="scripts-run-current"
             title="Run the statement under the cursor, or the selection (Ctrl/⌘+Enter)"
             className="glass-btn-primary px-4 py-2 font-semibold"
           >
@@ -215,7 +215,7 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
             type="button"
             onClick={() => void run({ start: 0, end: sql.length })}
             disabled={busy || !sql.trim()}
-            data-testid="queries-run-all"
+            data-testid="scripts-run-all"
             title="Run every statement, in order (Ctrl/⌘+Shift+Enter)"
             className="glass-btn px-3 py-2 text-sm font-medium"
           >
@@ -229,14 +229,14 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
               navigate('/queryview')
             }}
             disabled={!lastRows}
-            data-testid="queries-open-queryview"
+            data-testid="scripts-open-queryview"
             title="Load the last statement's SQL into QueryView for paging, saving and presentation"
             className="glass-btn px-3 py-2 text-sm font-medium"
           >
             Open in QueryView
           </button>
           {busy && (
-            <span data-testid="queries-busy" role="status" aria-label="Running">
+            <span data-testid="scripts-busy" role="status" aria-label="Running">
               <Spinner />
             </span>
           )}
@@ -246,13 +246,13 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
           </span>
         </div>
         {error && (
-          <p data-testid="queries-error" className="text-sm text-red-300">
+          <p data-testid="scripts-error" className="text-sm text-red-300">
             {error}
           </p>
         )}
         {results !== null && (
           <p
-            data-testid="queries-status"
+            data-testid="scripts-status"
             data-ok={summary.ok}
             className={`text-sm ${summary.ok ? 'text-slate-400' : 'text-red-300'}`}
           >
@@ -265,4 +265,4 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
   )
 }
 
-export default QueriesView
+export default ScriptsView

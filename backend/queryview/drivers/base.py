@@ -68,7 +68,7 @@ class FieldsResult(Result):
     fields: list[dict[str, str]]  # {"name", "type"}, the dialect's own type names
 
 
-# Row results of a script are capped (docs/queries.md). A driver fetches at most
+# Row results of a script are capped (docs/scripts.md). A driver fetches at most
 # SCRIPT_ROW_CAP + 1 rows; run_script trims to the cap and flags `truncated`.
 SCRIPT_ROW_CAP = 100
 # How long one script statement may run: a bulk INSERT or an ALTER is not a

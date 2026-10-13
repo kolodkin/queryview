@@ -19,7 +19,7 @@ import {
   type Connection,
 } from './connection'
 import QueryView, { type QueryPush } from './QueryView'
-import QueriesView, { type ScriptPush } from './QueriesView'
+import ScriptsView, { type ScriptPush } from './ScriptsView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
@@ -98,7 +98,7 @@ function DatabaseMenu({
 
 // App shell: routing, shared connection state, the connection pill + agent
 // popover, and the armed/SSE remote-control channel. Pages: /connect,
-// /queryview, /queries, /explorer, /dashboard.
+// /queryview, /scripts, /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -287,7 +287,7 @@ function Shell() {
     on<ScriptPush>('script', (payload) => {
       setScriptPush(payload)
       setToast('Agent updated the script')
-      navigate('/queries')
+      navigate('/scripts')
     })
     on<DashboardPush>('dashboard', (payload) => {
       setDashboardPush(payload)
@@ -484,12 +484,12 @@ function Shell() {
               QueryView
             </Link>
             <Link
-              to={ready ? '/queries' : '/connect'}
-              data-testid="nav-queries"
+              to={ready ? '/scripts' : '/connect'}
+              data-testid="nav-scripts"
               onClick={() => setNavOpen(false)}
-              className={navLinkClass('/queries')}
+              className={navLinkClass('/scripts')}
             >
-              Queries
+              Scripts
             </Link>
             <Link
               to="/explorer"
@@ -535,15 +535,20 @@ function Shell() {
               which drops the rows on screen (they came from somewhere else
               now) and brings the text back from the session. */}
           <Route
-            path="/queries"
+            path="/scripts"
             element={withDatabase(
-              <QueriesView
+              <ScriptsView
                 key={`${sessionKey}:${connectionKey(connection)}`}
                 pushed={scriptPush}
                 onPushConsumed={() => setScriptPush(null)}
                 remoteId={remoteId}
               />,
             )}
+          />
+          {/* Old URL, kept for bookmarks and sessions saved before the rename. */}
+          <Route
+            path="/queries"
+            element={<Navigate to={{ pathname: '/scripts', search: location.search, hash: location.hash }} replace />}
           />
           <Route
             path="/connect"
@@ -622,7 +627,7 @@ const NAV_ROW =
 
 function pageTitle(path: string): string {
   if (path.startsWith('/queryview')) return 'QueryView'
-  if (path.startsWith('/queries')) return 'Queries'
+  if (path.startsWith('/scripts')) return 'Scripts'
   if (path.startsWith('/explorer')) return 'Explorer'
   if (path.startsWith('/dashboard')) return 'Dashboard'
   return 'Connect'

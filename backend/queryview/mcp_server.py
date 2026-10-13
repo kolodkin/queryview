@@ -112,7 +112,7 @@ def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
 @mcp.tool()
 async def run_script(session_id: str, sql: str) -> dict[str, Any]:
     """Run a `;`-separated script on the session's connection and selected
-    database, like the Queries page's Run all, returning each statement's result.
+    database, like the Scripts page's Run all, returning each statement's result.
     WRITES ARE ALLOWED (use run_query to explore read-only). Stops at the first
     error; rows per statement are capped and the script has a timeout.
 
@@ -141,10 +141,10 @@ async def run_script(session_id: str, sql: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str, Any]:
-    """Replace the text of a live session's Queries editor; with run=True the
+    """Replace the text of a live session's Scripts editor; with run=True the
     browser also runs it all. Results stay in the browser (use run_script to get
     them). Fails with "blocked, user editing" while the user types, or "not
-    connected" / "select a database first" when the Queries page can't open.
+    connected" / "select a database first" when the Scripts page can't open.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -154,7 +154,7 @@ async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str,
     from .connect import _gated_session
 
     # Otherwise the push would wait in the browser and replay (run included)
-    # whenever the user next opens Queries.
+    # whenever the user next opens Scripts.
     s, err = await _gated_session(session_id)
     if s is None:
         return {"ok": False, "message": err["message"], "database": None}  # type: ignore[index]

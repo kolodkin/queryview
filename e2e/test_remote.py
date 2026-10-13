@@ -12,7 +12,7 @@ def _open_query_panel(page: Page) -> None:
     open_query_panel(page)
 
 
-def test_mcp_push_script_fills_and_runs_the_queries_editor(seeded_duckdb, page: Page, base_url: str) -> None:
+def test_mcp_push_script_fills_and_runs_the_scripts_editor(seeded_duckdb, page: Page, base_url: str) -> None:
     _connect(page, DUCK, seeded_duckdb)
     session_id = arm_remote(page)
 
@@ -20,20 +20,20 @@ def test_mcp_push_script_fills_and_runs_the_queries_editor(seeded_duckdb, page: 
     out = mcp_call(base_url, "push_script", {"session_id": session_id, "sql": script, "run": True})
     assert out["ok"] is True, out
 
-    # The browser opened the Queries page, loaded the script and ran it all.
-    expect(page.get_by_test_id("queries-input")).to_have_value(script)
-    expect(page.get_by_test_id("queries-status")).to_contain_text("2 statements")
-    expect(page.get_by_test_id("queries-output").locator("table thead th")).to_contain_text(["name"])
+    # The browser opened the Scripts page, loaded the script and ran it all.
+    expect(page.get_by_test_id("scripts-input")).to_have_value(script)
+    expect(page.get_by_test_id("scripts-status")).to_contain_text("2 statements")
+    expect(page.get_by_test_id("scripts-output").locator("table thead th")).to_contain_text(["name"])
 
     # While the user is typing in the editor, a push is refused, not applied.
-    textarea = page.get_by_test_id("queries-input")
+    textarea = page.get_by_test_id("scripts-input")
     with page.expect_response(lambda r: r.url.endswith("/api/remote/lock")):  # focus takes the lock
         textarea.click()
     textarea.press("End")
     page.keyboard.type(" -- mine")
     blocked = mcp_call(base_url, "push_script", {"session_id": session_id, "sql": "SELECT 2"})
     assert not blocked["ok"] and blocked["message"] == "blocked, user editing"
-    expect(page.get_by_test_id("queries-input")).to_have_value(script + " -- mine")
+    expect(page.get_by_test_id("scripts-input")).to_have_value(script + " -- mine")
 
 
 def test_mcp_push_to_live_session(seeded_test_db, page: Page, base_url: str) -> None:

@@ -193,7 +193,7 @@ def test_ch_rows_from_text_decodes_and_rejects():
 
 
 def test_execute_script_posts_each_statement_as_written(monkeypatch):
-    """The Queries page: no pagination wrapper, a write (HTTP POST — a GET is
+    """The Scripts page: no pagination wrapper, a write (HTTP POST — a GET is
     read-only in ClickHouse), JSONCompact via default_format so a statement
     with no result set simply comes back empty, one client for the script."""
     d = ClickHouseDriver()

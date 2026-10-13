@@ -1,4 +1,4 @@
-// The height steps of a SQL textbox, shared by QueryView and the Queries page:
+// The height steps of a SQL textbox, shared by QueryView and the Scripts page:
 // Min collapses it so the results get the room.
 export const TEXTAREA_SIZES: [label: string, rows: number][] = [
   ['Min', 0],

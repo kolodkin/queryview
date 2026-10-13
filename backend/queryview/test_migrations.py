@@ -117,3 +117,48 @@ def test_predefined_queries_has_deleted_at_column():
     finally:
         con.close()
     assert "deleted_at" in cols, f"missing column, got {sorted(cols)}"
+
+
+def test_sessions_queries_to_scripts_migration(tmp_path, monkeypatch):
+    """A session saved before the Queries -> Scripts rename keeps its script
+    text under `scripts`; a newer `scripts` key wins, and an unreadable ui
+    doesn't stop the upgrade."""
+    import json
+
+    from alembic import command
+
+    import queryview.connect as _c
+    from queryview.connect import _alembic_config
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(_c, "_engine", None)
+    monkeypatch.setattr(_c, "_schema_ready", False)
+
+    cfg = _alembic_config()
+    command.upgrade(cfg, "c4d5e6f7a8b9")
+    uis = {
+        "old": json.dumps({"queries": {"sql": "SELECT 1"}}),
+        "both": json.dumps({"queries": {"sql": "old"}, "scripts": {"sql": "new"}}),
+        "broken": '{"queries": {',
+        "list": '["queries"]',
+    }
+    con = sqlite3.connect(_db_path())
+    try:
+        con.executemany(
+            "INSERT INTO sessions (id, seq, workspace, url, ui, last_active_at) VALUES (?,?,'default','/',?,1)",
+            [(sid, n, ui) for n, (sid, ui) in enumerate(uis.items())],
+        )
+        con.commit()
+    finally:
+        con.close()
+
+    command.upgrade(cfg, "head")
+
+    con = sqlite3.connect(_db_path())
+    try:
+        got = dict(con.execute("SELECT id, ui FROM sessions").fetchall())
+    finally:
+        con.close()
+    assert json.loads(got["old"]) == {"scripts": {"sql": "SELECT 1"}}
+    assert json.loads(got["both"]) == {"scripts": {"sql": "new"}}
+    assert got["broken"] == uis["broken"] and got["list"] == uis["list"]
