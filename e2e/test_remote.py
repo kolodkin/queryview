@@ -12,7 +12,7 @@ def _open_query_panel(page: Page) -> None:
     open_query_panel(page)
 
 
-def test_mcp_push_script_fills_and_runs_the_queries_editor(seeded_duckdb, page: Page, base_url: str) -> None:
+def test_mcp_push_script_fills_and_runs_the_scripts_editor(seeded_duckdb, page: Page, base_url: str) -> None:
     _connect(page, DUCK, seeded_duckdb)
     session_id = arm_remote(page)
 

@@ -7,7 +7,7 @@ import { Spinner } from './controls/Spinner'
 import { loadIntoQueryView } from './queryPanel'
 import { flushPatches, patchView, viewState } from './session'
 import { useEditLock } from './sessionLock'
-import { failedSpan, runSummary, statementRangeAt, type Span, type StatementResult } from './script'
+import { failedSpan, runSummary, statementRangeAt, type Span, type StatementResult } from './scriptRun'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
 // A script the agent pushed (MCP push_script).
@@ -27,8 +27,7 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
   const navigate = useNavigate()
   // The text is restored from the session; results never are (docs/session.md).
   const [sql, setSql] = useState(() => {
-    // 'queries' is the pre-rename key, read so existing sessions keep their text.
-    const saved = viewState('scripts').sql ?? viewState('queries').sql
+    const saved = viewState('scripts').sql
     return typeof saved === 'string' ? saved : ''
   })
   const [results, setResults] = useState<StatementResult[] | null>(null)

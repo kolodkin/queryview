@@ -117,3 +117,43 @@ def test_predefined_queries_has_deleted_at_column():
     finally:
         con.close()
     assert "deleted_at" in cols, f"missing column, got {sorted(cols)}"
+
+
+def test_sessions_queries_to_scripts_migration(tmp_path, monkeypatch):
+    """A session saved before the Queries -> Scripts rename keeps its script
+    text and lands on /scripts."""
+    import json
+
+    from alembic import command
+
+    import queryview.connect as _c
+    from queryview.connect import _alembic_config
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(_c, "_engine", None)
+    monkeypatch.setattr(_c, "_schema_ready", False)
+
+    cfg = _alembic_config()
+    command.upgrade(cfg, "c4d5e6f7a8b9")
+    con = sqlite3.connect(_db_path())
+    try:
+        con.execute(
+            "INSERT INTO sessions (id, seq, workspace, url, ui, last_active_at) VALUES (?,?,?,?,?,?)",
+            ("s1", 1, "default", "/queries?x=1", json.dumps({"queries": {"sql": "SELECT 1"}}), 1),
+        )
+        con.execute(
+            "INSERT INTO sessions (id, seq, workspace, url, ui, last_active_at) VALUES (?,?,?,?,?,?)",
+            ("s2", 2, "default", "/queryview", "{}", 1),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+    command.upgrade(cfg, "head")
+
+    con = sqlite3.connect(_db_path())
+    try:
+        rows = dict(((i, (u, json.loads(ui))) for i, u, ui in con.execute("SELECT id, url, ui FROM sessions")))
+    finally:
+        con.close()
+    assert rows == {"s1": ("/scripts?x=1", {"scripts": {"sql": "SELECT 1"}}), "s2": ("/queryview", {})}

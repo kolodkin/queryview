@@ -545,7 +545,7 @@ function Shell() {
               />,
             )}
           />
-          {/* Pre-rename URL, still held by saved sessions and bookmarks. */}
+          {/* Pre-rename URL, for old bookmarks. */}
           <Route path="/queries" element={<Navigate to="/scripts" replace />} />
           <Route
             path="/connect"
