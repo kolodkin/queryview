@@ -266,6 +266,9 @@ function QueryPanel({
   // The `runOn` the choices were resolved for: after a database switch they
   // lag it until the re-fetch lands, and the switch's re-run (below) waits.
   const [optionsFor, setOptionsFor] = useState<string | null | undefined>(undefined)
+  // The specs the choices above were resolved for: a dropdown pick's run waits
+  // until they match the picked query's specs.
+  const optionsSpecs = useRef<ParamSpec[] | null>(null)
 
   // Resolve every `options_sql` param's choices via the panel's query endpoint;
   // cached until the specs change. A failed/empty result records a blocking error.
@@ -277,6 +280,7 @@ function QueryPanel({
       setOptionsError(null)
       setOptionsFor(runOn)
       /* eslint-enable react-hooks/set-state-in-effect */
+      optionsSpecs.current = paramSpecs
       return
     }
     let cancelled = false
@@ -314,6 +318,7 @@ function QueryPanel({
       setSqlOptions(resolved)
       setOptionsError(err)
       setOptionsFor(runOn)
+      optionsSpecs.current = paramSpecs
     })()
     return () => {
       cancelled = true
@@ -570,8 +575,23 @@ function QueryPanel({
     setSelectedName(value)
     setPushedCellView(null) // selecting a query reverts to its saved cell view
     const q = findQuery(value)
-    if (q) applyPredefined(q)
+    if (q) {
+      applyPredefined(q)
+      setRunPicked(true)
+    }
   }
+
+  // A saved query picked from the dropdown runs once its SQL has loaded and its
+  // param choices have resolved, seeded as the dropdowns are about to be (their
+  // state is a render behind). Choices that fail to resolve block it, as on Run.
+  const [runPicked, setRunPicked] = useState(false)
+  useEffect(() => {
+    if (!runPicked || optionsSpecs.current !== paramSpecs) return
+    setRunPicked(false)
+    if (!optionsReady) return
+    void runWith(sql, limit, 0, orderBy, { paramOverride: seedParamValues(paramDefs, paramValues) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runPicked, paramSpecs, sqlOptions, optionsError])
 
   // After a git restore overwrites the stored row, refetch the list and
   // re-seed the editor from the (now-current) row for the selected name —

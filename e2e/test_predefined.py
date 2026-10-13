@@ -84,3 +84,35 @@ def test_rename_delete_and_undelete_a_saved_query(seeded_duckdb, page: Page, bas
     assert _names(base_url, ws) == ["pq renamed"]
     assert _names(base_url, ws, deleted=True) == []
     shot("undeleted")
+
+
+def test_picking_a_saved_query_runs_it(seeded_duckdb, page: Page, base_url: str, shot) -> None:
+    ws = f"e2e-pq-{uuid.uuid4().hex[:6]}"
+    httpx.post(f"{base_url}/api/workspaces", json={"name": ws}).raise_for_status()
+    for name, row_id in (("pq alpha", 1), ("pq beta", 2)):
+        httpx.post(
+            f"{base_url}/api/predefined-queries",
+            json={"query_name": name, "type": "duckdb", "workspace": ws, "query": f"SELECT name FROM items WHERE id = {row_id}"},
+        ).raise_for_status()
+
+    _connect(page, DUCK, seeded_duckdb)
+    page.get_by_test_id("workspace-switcher").click()
+    page.get_by_test_id("workspace-option").filter(has_text=ws).click()
+    expect(page.get_by_test_id("workspace-switcher")).to_contain_text(ws)
+    open_query_panel(page)
+
+    # Picking alone runs: Execute is never clicked.
+    select = page.get_by_test_id("query-predefined-select")
+    output = page.get_by_test_id("query-output")
+    select.select_option("pq alpha")
+    expect(output).to_contain_text("alpha")
+    select.select_option("pq beta")
+    expect(output).to_contain_text("beta")
+    expect(output).not_to_contain_text("alpha")
+    shot("swapped query: results follow the pick")
+
+    # A new name runs nothing: the previous results stay.
+    page.once("dialog", lambda d: d.accept("pq new"))
+    select.select_option("::new::")
+    expect(select).to_have_value("pq new")
+    expect(output).to_contain_text("beta")
