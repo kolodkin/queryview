@@ -1,5 +1,5 @@
-"""sessions: follow the Queries page's rename to Scripts — move the `queries`
-ui key to `scripts` (old `/queries` urls are redirected by the frontend)
+"""sessions: rename the `queries` ui key to `scripts` (old `/queries` urls are
+redirected by the frontend)
 
 Revision ID: d5e6f7a8b9c0
 Revises: c4d5e6f7a8b9

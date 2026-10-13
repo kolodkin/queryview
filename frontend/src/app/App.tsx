@@ -545,7 +545,7 @@ function Shell() {
               />,
             )}
           />
-          {/* Pre-rename URL, for bookmarks and sessions saved before the rename. */}
+          {/* Old URL, kept for bookmarks and sessions saved before the rename. */}
           <Route
             path="/queries"
             element={<Navigate to={{ pathname: '/scripts', search: location.search, hash: location.hash }} replace />}
