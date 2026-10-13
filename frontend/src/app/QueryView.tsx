@@ -147,7 +147,7 @@ function QueryPanel({
   const deletedQueries = useMemo(() => allQueries.filter((q) => q.deleted_at != null), [allQueries])
   const [showDeleted, setShowDeleted] = useState(false)
   const [selectedName, setSelectedName] = useState('')
-  // A saved query picked from the dropdown, waiting to run (see onSelectName).
+  // A saved query picked from the dropdown, waiting to run.
   const [picked, setPicked] = useState<PredefinedQuery | null>(null)
   // The last successful run — its SQL and the name it runs for, taken at start;
   // a fresh object per run. Autosave reacts to it once the run's state (a
@@ -516,9 +516,8 @@ function QueryPanel({
     setVisibleCols(q.fields ?? []) // [] = show all (matches pushed-fields semantics)
   }
 
-  // Dropdown selection: a saved query loads its SQL and cell_view and runs; the
-  // "new name" item prompts for a fresh name and runs nothing. The chosen name is
-  // what Save writes under.
+  // Dropdown selection: a saved query loads and runs; "new name" prompts for a
+  // fresh name and runs nothing. The chosen name is what Save writes under.
   function onSelectName(value: string) {
     if (value === TOGGLE_DELETED_OPTION) {
       setShowDeleted((v) => !v)
@@ -539,9 +538,8 @@ function QueryPanel({
     setPicked(q ?? null)
   }
 
-  // Run the picked query once its param choices have resolved for this database,
-  // seeded as the dropdowns are about to be (their state is a render behind).
-  // Choices that fail to resolve block it, as on Run.
+  // Run the pick once its param choices resolve for this database, seeded as the
+  // dropdowns are about to be (a render behind). Failed choices block it, as on Run.
   useEffect(() => {
     if (!picked || optionsFor?.runOn !== runOn || optionsFor?.specs !== paramSpecs) return
     // eslint-disable-next-line react-hooks/set-state-in-effect

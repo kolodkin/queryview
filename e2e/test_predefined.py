@@ -136,7 +136,7 @@ def test_picking_a_saved_query_runs_it(seeded_duckdb, page: Page, base_url: str,
     select.select_option("pq alpha")
     expect(output).to_contain_text("alpha")
 
-    # A new name runs nothing: of the runs sent from here on, Execute's is the only one.
+    # A new name runs nothing: Execute's is the only run sent.
     runs: list[str] = []
     page.on("request", lambda r: runs.append(r.url) if "/api/db/query" in r.url else None)
     page.once("dialog", lambda d: d.accept("pq new"))

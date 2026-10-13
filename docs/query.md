@@ -92,9 +92,9 @@ CREATE TABLE predefined_queries (
 ```
 
 - The **selector** lists saved queries for the active connection's type; choosing
-  one loads its SQL into the textarea, makes it the active name, and runs it
-  against the current connection and database, as **Execute** would. Its **+ New
-  name…** item prompts for a fresh name (no separate name field) and runs nothing.
+  one loads its SQL into the textarea, makes it the active name, and runs it as
+  **Execute** would. Its **+ New name…** item prompts for a fresh name (no
+  separate name field) and runs nothing.
 - **Save** stores the textarea's SQL (and the `cell_view` YAML) under the
   **currently selected name** and refreshes the selector. Saving an existing name
   **upserts** (overwrites) it. In an [autosave](./workspace.md#autosave)
