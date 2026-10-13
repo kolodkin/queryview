@@ -96,7 +96,12 @@ function ConnectView({
   }, [current, visible])
 
   function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
-    const steps: Record<string, number> = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }
+    const steps: Record<string, number> = {
+      ArrowDown: 1,
+      ArrowRight: 1,
+      ArrowUp: -1,
+      ArrowLeft: -1,
+    }
     const step = steps[e.key]
     if (step === undefined || visible.length === 0) return
     e.preventDefault()
@@ -161,17 +166,19 @@ function ConnectView({
 
   // Cards for visible[from..to), highlighted by their index in `visible`.
   const cards = (from: number, to?: number) =>
-    visible.slice(from, to).map((c, i) => (
-      <SavedCard
-        key={c.name}
-        conn={c}
-        active={c.name === active}
-        highlighted={many && from + i === current}
-        busy={opening === c.name}
-        disabled={opening !== null}
-        onOpen={() => void open(c.name)}
-      />
-    ))
+    visible
+      .slice(from, to)
+      .map((c, i) => (
+        <SavedCard
+          key={c.name}
+          conn={c}
+          active={c.name === active}
+          highlighted={many && from + i === current}
+          busy={opening === c.name}
+          disabled={opening !== null}
+          onOpen={() => void open(c.name)}
+        />
+      ))
 
   const newCards = Object.values(DRIVERS).map((d) => (
     <button
@@ -191,7 +198,6 @@ function ConnectView({
       </span>
     </button>
   ))
-
 
   return (
     <div className={`w-full ${form ? 'max-w-md' : 'max-w-3xl'}`} data-testid="connect-page">
@@ -290,7 +296,10 @@ function ConnectView({
             {saved === null ? (
               <Loading label="Loading connections…" />
             ) : count === 0 ? (
-              <p data-testid="conn-empty" className="glass-panel p-5 text-center text-sm text-slate-400">
+              <p
+                data-testid="conn-empty"
+                className="glass-panel p-5 text-center text-sm text-slate-400"
+              >
                 No saved connections yet — create one below.
               </p>
             ) : visible.length === 0 ? (
@@ -312,7 +321,9 @@ function ConnectView({
                   // Capped so the page never grows; padding keeps the hover lift unclipped.
                   <div
                     data-testid="conn-all"
-                    className={many ? `-m-1 max-h-[22rem] overflow-y-auto p-1 ${cardGrid}` : cardGrid}
+                    className={
+                      many ? `-m-1 max-h-[22rem] overflow-y-auto p-1 ${cardGrid}` : cardGrid
+                    }
                   >
                     {cards(recentCount)}
                   </div>

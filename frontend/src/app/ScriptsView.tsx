@@ -7,7 +7,13 @@ import { Spinner } from './controls/Spinner'
 import { loadIntoQueryView } from './queryPanel'
 import { flushPatches, patchView, viewState } from './session'
 import { useEditLock } from './sessionLock'
-import { failedSpan, runSummary, statementRangeAt, type Span, type StatementResult } from './scriptRun'
+import {
+  failedSpan,
+  runSummary,
+  statementRangeAt,
+  type Span,
+  type StatementResult,
+} from './scriptRun'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
 // A script the agent pushed (MCP push_script).
@@ -193,7 +199,10 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
               className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words border border-transparent px-3 py-2 font-mono text-sm text-transparent"
             >
               {sql.slice(0, mark.start)}
-              <mark data-testid="scripts-failed-mark" className="rounded bg-red-500/15 text-red-300">
+              <mark
+                data-testid="scripts-failed-mark"
+                className="rounded bg-red-500/15 text-red-300"
+              >
                 {sql.slice(mark.start, mark.end)}
               </mark>
               {sql.slice(mark.end)}

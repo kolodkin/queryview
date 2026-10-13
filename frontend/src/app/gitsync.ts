@@ -52,7 +52,9 @@ export type GitConflict = { kind: GitKind; name: string; conn_type: string | nul
 
 export async function gitConflicts(workspace: string): Promise<GitConflict[]> {
   try {
-    const r = await (await apiFetch(`/api/git/status?workspace=${encodeURIComponent(workspace)}`)).json()
+    const r = await (
+      await apiFetch(`/api/git/status?workspace=${encodeURIComponent(workspace)}`)
+    ).json()
     return (r.conflicts ?? []) as GitConflict[]
   } catch {
     return []
@@ -145,10 +147,7 @@ export async function gitRestore(
 
 // Merge a fetched page into the already-loaded revisions, dropping any shas
 // we already have (pages can overlap if a commit lands mid-scroll).
-export function appendRevisions(
-  existing: GitRevision[],
-  page: GitRevision[],
-): GitRevision[] {
+export function appendRevisions(existing: GitRevision[], page: GitRevision[]): GitRevision[] {
   const seen = new Set(existing.map((r) => r.sha))
   return [...existing, ...page.filter((r) => !seen.has(r.sha))]
 }

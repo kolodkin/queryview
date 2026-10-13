@@ -15,9 +15,7 @@ export type Connection = {
 // Ready to query when a database is selected, or the driver has no picker
 // (empty databases, e.g. DuckDB) so there's nothing to select.
 export function isReady(connection: Connection | null): connection is Connection {
-  return (
-    !!connection && (connection.database !== null || connection.databases.length === 0)
-  )
+  return !!connection && (connection.database !== null || connection.databases.length === 0)
 }
 
 // A Connection from an /api/session, /api/db/open or /api/db/connect response.

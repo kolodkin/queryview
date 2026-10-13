@@ -4,25 +4,19 @@ import { applyParams, parseQueryParams, type ParamDef } from './queryParams'
 describe('parseQueryParams', () => {
   test('parses a params list of name + options', () => {
     const yaml = 'params:\n  - name: source\n    options: [a, b, c]\n'
-    expect(parseQueryParams(yaml)).toEqual([
-      { name: 'source', options: ['a', 'b', 'c'] },
-    ])
+    expect(parseQueryParams(yaml)).toEqual([{ name: 'source', options: ['a', 'b', 'c'] }])
   })
 
   test('coerces non-string options to strings', () => {
     const yaml = 'params:\n  - name: n\n    options: [1, 2, true]\n'
-    expect(parseQueryParams(yaml)).toEqual([
-      { name: 'n', options: ['1', '2', 'true'] },
-    ])
+    expect(parseQueryParams(yaml)).toEqual([{ name: 'n', options: ['1', '2', 'true'] }])
   })
 
   test('ignores the cell-view column keys alongside params', () => {
     const yaml =
       'params:\n  - name: source\n    options: [a, b]\n' +
       'cve_id:\n  type: link\n  value: https://x/{cell}\n'
-    expect(parseQueryParams(yaml)).toEqual([
-      { name: 'source', options: ['a', 'b'] },
-    ])
+    expect(parseQueryParams(yaml)).toEqual([{ name: 'source', options: ['a', 'b'] }])
   })
 
   test('returns [] when there is no params key', () => {

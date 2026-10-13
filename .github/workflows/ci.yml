@@ -28,6 +28,12 @@ jobs:
       - name: Install backend + test dependencies
         run: uv sync --frozen --group test
 
+      # Node runtime for the prettier pre-commit hook.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Run pre-commit
         uses: pre-commit/action@v3.0.1
 

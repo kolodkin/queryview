@@ -17,11 +17,20 @@ type Props = {
 // Export / Import pair for one entity (query or dashboard) or a whole
 // workspace. Export downloads the *saved* DB state as a YAML file; Import
 // reads a picked YAML file and upserts whatever the file's `kind` declares.
-export default function ExportImportControls({ kind, name, connType, disabled, compact, onImported }: Props) {
+export default function ExportImportControls({
+  kind,
+  name,
+  connType,
+  disabled,
+  compact,
+  onImported,
+}: Props) {
   const fileInput = useRef<HTMLInputElement>(null)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
-  const btnClass = compact ? 'glass-btn px-2 py-1 text-xs font-medium' : 'glass-btn px-3 py-2 font-medium'
+  const btnClass = compact
+    ? 'glass-btn px-2 py-1 text-xs font-medium'
+    : 'glass-btn px-3 py-2 font-medium'
 
   function flash(text: string) {
     setNote(text)

@@ -5,10 +5,7 @@ import { useEffect, type RefObject } from 'react'
 import { apiFetch } from './api'
 import { flushPatches } from './session'
 
-export async function postLock(
-  sessionId: string,
-  action: 'acquire' | 'release',
-): Promise<void> {
+export async function postLock(sessionId: string, action: 'acquire' | 'release'): Promise<void> {
   if (!sessionId) return
   try {
     await apiFetch('/api/remote/lock', {
@@ -26,7 +23,10 @@ export async function postLock(
 // lands then (not on a timer while you are still typing), and the edit lock,
 // when armed, is released. The lock is acquired on focus and refreshed every
 // ~10s against its 30s TTL. Advisory — postLock swallows errors.
-export function useEditLock(ref: RefObject<HTMLElement | null>, remoteId: string | null | undefined): void {
+export function useEditLock(
+  ref: RefObject<HTMLElement | null>,
+  remoteId: string | null | undefined,
+): void {
   useEffect(() => {
     const el = ref.current
     if (!el) return

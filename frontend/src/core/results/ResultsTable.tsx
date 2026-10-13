@@ -48,9 +48,7 @@ function BodyCell({
         {overflowing && (
           <button
             type="button"
-            onClick={() =>
-              onOpen({ column: col, value, type })
-            }
+            onClick={() => onOpen({ column: col, value, type })}
             data-testid="cell-expand"
             data-col={col}
             aria-label={`Open ${col} value`}
