@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 from sqlalchemy import UniqueConstraint
-from sqlmodel import Field, SQLModel, col, delete, select
+from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .connect import _engine_for_db, _ensure_schema, _now_ms
@@ -240,14 +240,8 @@ async def purge_predefined_query(conn_type: str, query_name: str, *, workspace_i
     a live query must be deleted first."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
-        gone = await s.exec(
-            delete(PredefinedQuery).where(
-                PredefinedQuery.type == conn_type,
-                PredefinedQuery.query_name == query_name,
-                PredefinedQuery.workspace_id == workspace_id,
-                col(PredefinedQuery.deleted_at).is_not(None),
-            )
-        )
-        if gone.rowcount != 1:
+        row = await _find(s, conn_type, query_name, workspace_id)
+        if row is None or row.deleted_at is None:
             raise PredefinedQueryError(f"deleted query {query_name!r} not found", status=404)
+        await s.delete(row)
         await s.commit()

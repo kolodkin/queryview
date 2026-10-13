@@ -621,9 +621,10 @@ function QueryPanel({
 
   // Rename, delete or undelete the selected saved query; the editor keeps its
   // SQL. A deleted query stays selected, so it can be committed, undeleted or
-  // purged. `change` PATCHes (rename, undelete); null DELETEs, 'purge' for good.
+  // purged. `change` PATCHes (rename, undelete); null DELETEs, for good with `purge`.
   async function mutateSelected(
-    change: { new_name: string } | { deleted: false } | null | 'purge',
+    change: { new_name: string } | { deleted: false } | null,
+    purge = false,
   ): Promise<boolean> {
     setBusy(true)
     setError(null)
@@ -632,18 +633,17 @@ function QueryPanel({
         query_name: selectedName,
         type: connectionType,
         workspace: activeWorkspace(),
+        ...(purge && { purge: '1' }),
       }
-      const query = new URLSearchParams(change === 'purge' ? { ...target, purge: '1' } : target)
-      const res =
-        change && change !== 'purge'
-          ? await apiFetch('/api/predefined-queries', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ...target, ...change }),
-            })
-          : await apiFetch(`/api/predefined-queries?${query}`, {
-              method: 'DELETE',
-            })
+      const res = change
+        ? await apiFetch('/api/predefined-queries', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...target, ...change }),
+          })
+        : await apiFetch(`/api/predefined-queries?${new URLSearchParams(target)}`, {
+            method: 'DELETE',
+          })
       const data = await res.json()
       if (!data.ok) {
         setError(data.message ?? 'request failed')
@@ -675,7 +675,7 @@ function QueryPanel({
       !window.confirm(`Permanently remove deleted query '${selectedName}'? This can't be undone.`)
     )
       return
-    if (await mutateSelected('purge')) setSelectedName('')
+    if (await mutateSelected(null, true)) setSelectedName('')
   }
 
   // Autosave: persist a named query's last successful run — the SQL that ran,
