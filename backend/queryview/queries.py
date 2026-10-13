@@ -236,8 +236,7 @@ async def set_predefined_query_deleted(conn_type: str, query_name: str, deleted:
 
 
 async def purge_predefined_query(conn_type: str, query_name: str, *, workspace_id: int) -> None:
-    """Remove one deleted query for good. 404 unless it exists and is deleted:
-    a live query must be deleted first."""
+    """Remove one deleted query for good; 404 unless it is deleted."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         row = await _find(s, conn_type, query_name, workspace_id)

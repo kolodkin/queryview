@@ -85,7 +85,7 @@ def test_rename_delete_undelete_and_purge_a_saved_query(seeded_duckdb, page: Pag
     assert _names(base_url, ws, deleted=True) == []
     shot("undeleted")
 
-    # Purge removes a deleted query for good and clears the selection.
+    # Purge clears the selection too.
     page.once("dialog", lambda d: d.accept())
     delete.click()
     page.once("dialog", lambda d: d.accept())

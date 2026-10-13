@@ -112,9 +112,8 @@ and drops out of the selector, MCP `list_queries` and
 
 - **Show deleted (N)** in the selector lists them in a *Deleted* group; picking
   one loads its SQL, **Undelete** makes it live.
-- **Purge** (beside **Undelete**) confirms, then removes the deleted query for
-  good, here only: purging doesn't touch a [committed](./gitsync.md) copy, so
-  commit the delete first if the query was ever synced.
+- **Purge** confirms, then removes it for good, locally only: a
+  [committed](./gitsync.md) copy stays, so commit the delete first.
 - Saving under a deleted name brings it back with the new content. An
   [autosave](./workspace.md#autosave) run never does.
 - They don't block deleting their workspace and go with it.
