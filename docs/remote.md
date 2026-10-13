@@ -49,6 +49,17 @@ tools (among others):
   typed as the driver returns them (64-bit integers and decimals as strings,
   collections as JSON). `database` tells the agent whether to fully-qualify
   tables. A disconnected session fails with `not connected`.
+- `run_script(session_id, sql)` — run a `;`-separated script as the
+  [Queries](./queries.md) page's Run all does, **writes included**, returning
+  each statement's result to the agent: `{ok, database, results: [{sql, ok,
+  status, message, columns, types, rows, truncated, elapsed_ms}]}`. It stops at
+  the first failing statement, under the page's row cap and timeout.
+  `columns`/`types`/`rows` are null for a statement that returned no rows.
+- `push_script(session_id, sql, run?=false)` — replace the text of the
+  session's [Queries](./queries.md) editor; the browser navigates there and,
+  with `run`, runs the whole script. Results stay in the browser. Returns
+  `{ok, message, database}`; `ok:false` for an unknown id, empty `sql`, or a
+  held lock (`"blocked, user editing"`).
 - `push_dashboard(session_id, name, html, queries, params?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
   renders it. Only the user's **Save** persists it, unless the workspace has

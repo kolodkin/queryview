@@ -19,10 +19,10 @@ import {
   type Connection,
 } from './connection'
 import QueryView, { type QueryPush } from './QueryView'
+import QueriesView, { type ScriptPush } from './QueriesView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
-import QueriesView from './QueriesView'
 import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
 import { CopyName } from './controls/CopyName'
@@ -109,6 +109,7 @@ function Shell() {
   const [agentOpen, setAgentOpen] = useState(false)
   const [queryPush, setQueryPush] = useState<QueryPush | null>(null)
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
+  const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   // Seeded from the session once it attaches.
@@ -258,8 +259,9 @@ function Shell() {
   }, [sessionChecked, location.pathname, location.search])
 
 
-  // When armed, open an SSE channel: `ready` gives the session id; `query` and
-  // `dashboard` events carry payloads that navigate to the matching page.
+  // When armed, open an SSE channel: `ready` gives the session id; `query`,
+  // `script` and `dashboard` events carry payloads that navigate to the
+  // matching page.
   useEffect(() => {
     if (!armed) return
     // EventSource cannot send headers, so the session id travels in the query
@@ -273,6 +275,15 @@ function Shell() {
         setQueryPush(JSON.parse((e as MessageEvent).data) as QueryPush)
         setToast('Agent updated the query')
         navigate('/queryview')
+      } catch {
+        /* ignore malformed event */
+      }
+    })
+    es.addEventListener('script', (e) => {
+      try {
+        setScriptPush(JSON.parse((e as MessageEvent).data) as ScriptPush)
+        setToast('Agent updated the script')
+        navigate('/queries')
       } catch {
         /* ignore malformed event */
       }
@@ -530,7 +541,12 @@ function Shell() {
           <Route
             path="/queries"
             element={withDatabase(
-              <QueriesView key={`${sessionKey}:${connectionKey(connection)}`} />,
+              <QueriesView
+                key={`${sessionKey}:${connectionKey(connection)}`}
+                pushed={scriptPush}
+                onPushConsumed={() => setScriptPush(null)}
+                remoteId={remoteId}
+              />,
             )}
           />
           <Route

@@ -4,7 +4,9 @@ The **Queries** page (`/queries`) is a flat SQL textbox: whatever you type runs
 **as written** against the session's selected database — `CREATE`, `INSERT`,
 `ALTER`, `DROP` included — with no pagination wrapper, no saved names, no
 column pickers. [QueryView](./query.md) wraps a single `SELECT` for paging,
-saving and presentation; the MCP `run_query` tool stays read-only. Before a
+saving and presentation; the MCP `run_query` tool stays read-only, while
+`run_script` runs a script the way this page does and `push_script` loads one
+into its textbox ([remote.md](./remote.md)). Before a
 database is selected the page redirects to Connect.
 
 ## Layout
@@ -100,6 +102,13 @@ The textbox's text is session state — a reload brings it back — but the stat
 line and the table are not, like every other view ([session.md](./session.md));
 a reload never re-runs a script. Switching database clears them and keeps the
 text.
+
+## Agent pushes
+
+`push_script` replaces the text (saved to the session like an edit) and, with
+`run`, runs it all. Focus in the page holds the session's
+[edit lock](./query.md#co-edit--edit-lock), so a push never lands while you are
+typing; it is refused with `blocked, user editing`.
 
 ## API
 
