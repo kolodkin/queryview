@@ -10,8 +10,7 @@ import { useEditLock } from './sessionLock'
 import { failedSpan, runSummary, statementRangeAt, type Span, type StatementResult } from './queriesScript'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
-// A script the agent pushed (MCP push_script): replaces the text, and with
-// `run` runs it all.
+// A script the agent pushed (MCP push_script).
 export type ScriptPush = { sql: string; run: boolean }
 
 type QueriesViewProps = {

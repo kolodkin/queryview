@@ -111,18 +111,15 @@ def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
 
 @mcp.tool()
 async def run_script(session_id: str, sql: str) -> dict[str, Any]:
-    """Run a multi-statement SQL script on the session's connection and selected
-    database, as the Queries page's Run all does, returning each statement's
-    result to the agent. WRITES ARE ALLOWED: DDL/DML run for real (use
-    run_query for read-only exploration). Statements run in order and the
-    script stops at the first error; each statement's rows are capped and the
-    whole script has a timeout (docs/queries.md).
+    """Run a `;`-separated script on the session's connection and selected
+    database, like the Queries page's Run all, returning each statement's result.
+    WRITES ARE ALLOWED (use run_query to explore read-only). Stops at the first
+    error; rows per statement are capped and the script has a timeout.
 
     Returns {"ok": True, "database", "results": [{sql, ok, status, message,
-    columns, types, rows, truncated, elapsed_ms}]} — one entry per statement
-    run; columns/types/rows are null for a statement that returned no rows, and
-    message is set on the failing one — or {"ok": False, "message"} (e.g.
-    "sql required", "not connected", "select a database first").
+    columns, types, rows, truncated, elapsed_ms}]}, one entry per statement run
+    (columns/types/rows null when it returned no rows), or {"ok": False,
+    "message"} (e.g. "sql required", "not connected", "select a database first").
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -144,22 +141,20 @@ async def run_script(session_id: str, sql: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str, Any]:
-    """Push a SQL script into the Queries editor of a live QueryView browser
-    session, replacing its text; with run=True the browser then runs the whole
-    script (Run all) on the session's connection. The results stay in the
-    browser — use run_script to get them back. Fails with "blocked, user
-    editing" while the user is typing in an editor, and with "not connected" /
-    "select a database first" when the Queries page can't open.
+    """Replace the text of a live session's Queries editor; with run=True the
+    browser also runs it all. Results stay in the browser (use run_script to get
+    them). Fails with "blocked, user editing" while the user types, or "not
+    connected" / "select a database first" when the Queries page can't open.
 
     Args:
         session_id: The session id shown in the QueryView popover.
         sql: The script; separate statements with `;`.
-        run: Run the script after loading it (default False: load only).
+        run: Also run it (default False: load only).
     """
     from .connect import _gated_session
 
-    # The browser can't open Queries yet: a delivered push would wait there and
-    # replay (run included) whenever the user next opens the page.
+    # Otherwise the push would wait in the browser and replay (run included)
+    # whenever the user next opens Queries.
     s, err = await _gated_session(session_id)
     if s is None:
         return {"ok": False, "message": err["message"], "database": None}  # type: ignore[index]

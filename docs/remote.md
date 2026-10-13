@@ -49,15 +49,14 @@ tools (among others):
   typed as the driver returns them (64-bit integers and decimals as strings,
   collections as JSON). `database` tells the agent whether to fully-qualify
   tables. A disconnected session fails with `not connected`.
-- `run_script(session_id, sql)` — run a `;`-separated script as the
-  [Queries](./queries.md) page's Run all does, **writes included**, returning
-  each statement's result to the agent: `{ok, database, results: [{sql, ok,
-  status, message, columns, types, rows, truncated, elapsed_ms}]}`. It stops at
-  the first failing statement, under the page's row cap and timeout.
-  `columns`/`types`/`rows` are null for a statement that returned no rows.
-- `push_script(session_id, sql, run?=false)` — replace the text of the
-  session's [Queries](./queries.md) editor; the browser navigates there and,
-  with `run`, runs the whole script. Results stay in the browser. Returns
+- `run_script(session_id, sql)` — run a script like the [Queries](./queries.md)
+  page's Run all, **writes included**, returning `{ok, database, results: [{sql,
+  ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
+  agent. Stops at the first failure; `columns`/`types`/`rows` are null for a
+  statement without rows.
+- `push_script(session_id, sql, run?=false)` — replace the Queries editor's
+  text; the browser navigates there and, with `run`, runs it all (results stay
+  in the browser). Returns
   `{ok, message, database}`; `ok:false` for an unknown id, a held lock
   (`"blocked, user editing"`), or a session whose Queries page can't open yet
   (`"not connected"`, `"select a database first"`).
