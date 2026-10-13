@@ -105,9 +105,7 @@ export function FieldPickers({
 }) {
   function toggleField(name: string) {
     onVisibleColsChange(
-      visibleCols.includes(name)
-        ? visibleCols.filter((c) => c !== name)
-        : [...visibleCols, name],
+      visibleCols.includes(name) ? visibleCols.filter((c) => c !== name) : [...visibleCols, name],
     )
   }
 
@@ -121,9 +119,7 @@ export function FieldPickers({
 
   function flipDir(name: string) {
     onOrderByChange(
-      orderBy.map((o) =>
-        o.name === name ? { ...o, dir: o.dir === 'ASC' ? 'DESC' : 'ASC' } : o,
-      ),
+      orderBy.map((o) => (o.name === name ? { ...o, dir: o.dir === 'ASC' ? 'DESC' : 'ASC' } : o)),
     )
   }
 

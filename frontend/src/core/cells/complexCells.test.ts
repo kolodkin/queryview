@@ -16,8 +16,14 @@ describe('parseComplexType', () => {
   })
 
   test('Array(Tuple(...)) and Array(Map(...)) record the element kind', () => {
-    expect(parseComplexType('Array(Tuple(id Int32, name String))')).toEqual({ kind: 'array', element: 'tuple' })
-    expect(parseComplexType('Array(Map(String, UInt64))')).toEqual({ kind: 'array', element: 'map' })
+    expect(parseComplexType('Array(Tuple(id Int32, name String))')).toEqual({
+      kind: 'array',
+      element: 'tuple',
+    })
+    expect(parseComplexType('Array(Map(String, UInt64))')).toEqual({
+      kind: 'array',
+      element: 'map',
+    })
   })
 
   test('Array(Nullable(String)) is still a scalar array', () => {
@@ -30,7 +36,9 @@ describe('parseComplexType', () => {
   })
 
   test('tolerates pretty-printed types with newlines and indentation', () => {
-    expect(parseComplexType('Array(\n    Tuple(\n        id Int32,\n        name String))')).toEqual({
+    expect(
+      parseComplexType('Array(\n    Tuple(\n        id Int32,\n        name String))'),
+    ).toEqual({
       kind: 'array',
       element: 'tuple',
     })
@@ -52,7 +60,10 @@ describe('complexCellItems', () => {
   })
 
   test('map object → one "key → value" line per entry', () => {
-    expect(complexCellItems({ kind: 'map' }, { x: 1, y: 2 })).toEqual([{ lines: ['x → 1'] }, { lines: ['y → 2'] }])
+    expect(complexCellItems({ kind: 'map' }, { x: 1, y: 2 })).toEqual([
+      { lines: ['x → 1'] },
+      { lines: ['y → 2'] },
+    ])
   })
 
   test('named tuple object → one "name: value" line per field', () => {
@@ -63,7 +74,10 @@ describe('complexCellItems', () => {
   })
 
   test('unnamed tuple array uses positional indices', () => {
-    expect(complexCellItems({ kind: 'tuple' }, [1, 'a'])).toEqual([{ lines: ['0: 1'] }, { lines: ['1: a'] }])
+    expect(complexCellItems({ kind: 'tuple' }, [1, 'a'])).toEqual([
+      { lines: ['0: 1'] },
+      { lines: ['1: a'] },
+    ])
   })
 
   test('Array(Tuple) → one item per element, each tuple on a single line', () => {
@@ -76,10 +90,9 @@ describe('complexCellItems', () => {
   })
 
   test('Array(Map) → one item per element, each map on a single line', () => {
-    expect(complexCellItems({ kind: 'array', element: 'map' }, [{ x: 1 }, { y: 2, z: 3 }])).toEqual([
-      { lines: ['x → 1'] },
-      { lines: ['y → 2, z → 3'] },
-    ])
+    expect(complexCellItems({ kind: 'array', element: 'map' }, [{ x: 1 }, { y: 2, z: 3 }])).toEqual(
+      [{ lines: ['x → 1'] }, { lines: ['y → 2, z → 3'] }],
+    )
   })
 
   test('without a known type, containers are inferred from the value', () => {
@@ -88,7 +101,9 @@ describe('complexCellItems', () => {
   })
 
   test('deeper nesting renders as JSON text inside a line', () => {
-    expect(complexCellItems({ kind: 'array', element: null }, [['a', 'b']])).toEqual([{ lines: ['["a","b"]'] }])
+    expect(complexCellItems({ kind: 'array', element: null }, [['a', 'b']])).toEqual([
+      { lines: ['["a","b"]'] },
+    ])
   })
 
   test('empty collection or scalar → no items', () => {

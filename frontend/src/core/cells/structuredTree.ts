@@ -53,6 +53,8 @@ const OPEN_DEPTH = 1
 // open so the document's shape is visible, everything below folds.
 export function defaultCollapsed(data: unknown): Set<string> {
   return new Set(
-    treeRows(data, new Set()).filter((r) => r.expandable && r.depth > OPEN_DEPTH).map((r) => r.path),
+    treeRows(data, new Set())
+      .filter((r) => r.expandable && r.depth > OPEN_DEPTH)
+      .map((r) => r.path),
   )
 }

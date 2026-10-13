@@ -95,7 +95,9 @@ function DashboardView({
   // Refetch the dropdown list (also used after a Save to surface a new name).
   async function loadDashboards() {
     try {
-      const d = await (await apiFetch(`/api/dashboards?workspace=${encodeURIComponent(activeWorkspace())}`)).json()
+      const d = await (
+        await apiFetch(`/api/dashboards?workspace=${encodeURIComponent(activeWorkspace())}`)
+      ).json()
       setDashboards((d.dashboards ?? []) as DashboardSummary[])
     } catch {
       /* non-fatal; keep the last list */

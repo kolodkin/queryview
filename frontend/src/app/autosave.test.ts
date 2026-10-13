@@ -19,9 +19,9 @@ describe('queryChanged', () => {
 
   test('null and empty mean the same: nothing stored', () => {
     const bare = { query: 'SELECT 1', cell_view: null, order_by: null, fields: null }
-    expect(queryChanged(bare, { query: 'SELECT 1', cell_view: '', order_by: null, fields: null })).toBe(
-      false,
-    )
+    expect(
+      queryChanged(bare, { query: 'SELECT 1', cell_view: '', order_by: null, fields: null }),
+    ).toBe(false)
   })
 
   test('any field differing is a change', () => {

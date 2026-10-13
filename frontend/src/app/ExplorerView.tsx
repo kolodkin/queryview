@@ -131,40 +131,37 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, scope])
 
-  const runQuery = useCallback(
-    async (sql: string, lim: number, off: number, ord: OrderCol[]) => {
-      const ticket = ++runSeq.current
-      setBusy(true)
-      setError(null)
-      try {
-        const res = await apiFetch('/api/db/query', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: sql,
-            limit: lim,
-            offset: off,
-            order_by: ord,
-          }),
-        })
-        const data = await res.json()
-        if (ticket !== runSeq.current) return
-        if (data.ok) {
-          setResult({ meta: data.meta ?? [], data: data.data ?? [] })
-          setOffset(off)
-          appliedLimit.current = lim
-        } else {
-          setError((data.message as string) ?? 'query failed')
-        }
-      } catch (err) {
-        if (ticket !== runSeq.current) return
-        setError(err instanceof Error ? err.message : 'request failed')
-      } finally {
-        if (ticket === runSeq.current) setBusy(false)
+  const runQuery = useCallback(async (sql: string, lim: number, off: number, ord: OrderCol[]) => {
+    const ticket = ++runSeq.current
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await apiFetch('/api/db/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: sql,
+          limit: lim,
+          offset: off,
+          order_by: ord,
+        }),
+      })
+      const data = await res.json()
+      if (ticket !== runSeq.current) return
+      if (data.ok) {
+        setResult({ meta: data.meta ?? [], data: data.data ?? [] })
+        setOffset(off)
+        appliedLimit.current = lim
+      } else {
+        setError((data.message as string) ?? 'query failed')
       }
-    },
-    [],
-  )
+    } catch (err) {
+      if (ticket !== runSeq.current) return
+      setError(err instanceof Error ? err.message : 'request failed')
+    } finally {
+      if (ticket === runSeq.current) setBusy(false)
+    }
+  }, [])
 
   // A confirmed selection (also after a database switch reloads the list):
   // reset the presentation, then describe and load the first page — the two
@@ -486,9 +483,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
                 orderBy={orderBy}
                 onVisibleColsChange={setVisibleCols}
                 onOrderByChange={changeOrder}
-                trailing={
-                  <span className="text-xs text-slate-400">(re-runs the query)</span>
-                }
+                trailing={<span className="text-xs text-slate-400">(re-runs the query)</span>}
               />
             )}
 

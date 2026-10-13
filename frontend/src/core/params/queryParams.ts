@@ -13,9 +13,7 @@ export type ParamSpec = {
 }
 
 // Parse YAML into a plain object, or null on parse error / non-object root.
-export function parseYamlObject(
-  text: string | null | undefined,
-): Record<string, unknown> | null {
+export function parseYamlObject(text: string | null | undefined): Record<string, unknown> | null {
   if (!text) return null
   let doc: unknown
   try {
@@ -50,9 +48,7 @@ export function parseQueryParams(text: string | null | undefined): ParamSpec[] {
     }
     if (hasOptions) {
       // Keep scalars only; null/objects/arrays (all typeof 'object') aren't valid.
-      const options = (o.options as unknown[])
-        .filter((v) => typeof v !== 'object')
-        .map(String)
+      const options = (o.options as unknown[]).filter((v) => typeof v !== 'object').map(String)
       if (options.length === 0) continue
       out.push({ name: o.name, options })
     }
@@ -64,11 +60,7 @@ export function parseQueryParams(text: string | null | undefined): ParamSpec[] {
 // Substitute each `{name}` with the selected value as a quoted SQL literal
 // (single quotes doubled). Unselected params fall back to their first option;
 // an unmatched placeholder is left untouched.
-export function applyParams(
-  sql: string,
-  defs: ParamDef[],
-  values: Record<string, string>,
-): string {
+export function applyParams(sql: string, defs: ParamDef[], values: Record<string, string>): string {
   let out = sql
   for (const def of defs) {
     const value = values[def.name] ?? def.options[0]

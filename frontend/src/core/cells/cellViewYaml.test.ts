@@ -45,9 +45,9 @@ describe('renderCell', () => {
     // The value alone is enough — no column type needed (Postgres arrays, JSON).
     expect(props(renderCell('tags', { k: 1 }, {}, row, columns, {})).value).toEqual({ k: 1 })
     const views = { tags: { type: 'link', value: 'https://x/{cell}' } }
-    expect(props(renderCell('tags', row[1], views, row, columns, { tags: 'Array(String)' })).href).toBe(
-      'https://x/%5B%22a%22%2C%22b%22%5D',
-    )
+    expect(
+      props(renderCell('tags', row[1], views, row, columns, { tags: 'Array(String)' })).href,
+    ).toBe('https://x/%5B%22a%22%2C%22b%22%5D')
   })
 
   test('link view substitutes and URL-encodes, http(s) only', () => {
