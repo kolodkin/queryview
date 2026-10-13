@@ -457,7 +457,7 @@ async def run_query(
 
 
 async def execute_script(sid: str, sql: str) -> dict[str, Any]:
-    """Run a script as written on this session's selected database (the Queries
+    """Run a script as written on this session's selected database (the Scripts
     page): `{ok, results}`, one entry per statement run — see docs/api.md."""
     s, err = await _gated_session(sid)
     if s is None:
@@ -465,6 +465,7 @@ async def execute_script(sid: str, sql: str) -> dict[str, Any]:
     results = await DRIVERS[s.type].execute_script(s.config, sql, s.database)
     return {
         "ok": True,
+        "database": s.database,
         "results": [
             {
                 "sql": r.sql,

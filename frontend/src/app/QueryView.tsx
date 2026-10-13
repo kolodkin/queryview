@@ -24,10 +24,10 @@ import {
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { downloadText } from './yamlio'
-import { postLock } from './sessionLock'
+import { useEditLock } from './sessionLock'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
-import { activeWorkspace, flushPatches, patchView, viewState } from './session'
+import { activeWorkspace, patchView, viewState } from './session'
 import { onAutosaveEnabled, queryChanged } from './autosave'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
@@ -181,46 +181,7 @@ function QueryPanel({
   // Panel root, for the focus tracker below.
   const panelRef = useRef<HTMLElement>(null)
 
-  // Leaving the panel is what "done editing" means. One exit detector serves
-  // both consumers of that signal, so they cannot disagree: the session write
-  // lands then (not on a timer while you are still typing), and the edit lock,
-  // when armed, is released. The lock is acquired on focus and refreshed every
-  // ~10s against its 30s TTL. Advisory — postLock swallows errors.
-  useEffect(() => {
-    const el = panelRef.current
-    if (!el) return
-    let exitTimer: number | undefined
-    const acquire = () => {
-      if (remoteId) void postLock(remoteId, 'acquire')
-    }
-    const onFocusIn = () => {
-      window.clearTimeout(exitTimer)
-      acquire()
-    }
-    const onFocusOut = () => {
-      // Moving between inputs fires focusout then focusin; only a real exit
-      // counts.
-      window.clearTimeout(exitTimer)
-      exitTimer = window.setTimeout(() => {
-        if (el.contains(document.activeElement)) return
-        void flushPatches()
-        if (remoteId) void postLock(remoteId, 'release')
-      }, 150)
-    }
-    el.addEventListener('focusin', onFocusIn)
-    el.addEventListener('focusout', onFocusOut)
-    const beat = remoteId
-      ? window.setInterval(() => {
-          if (el.contains(document.activeElement)) acquire()
-        }, 10000)
-      : undefined
-    return () => {
-      el.removeEventListener('focusin', onFocusIn)
-      el.removeEventListener('focusout', onFocusOut)
-      window.clearInterval(beat)
-      window.clearTimeout(exitTimer)
-    }
-  }, [remoteId])
+  useEditLock(panelRef, remoteId)
   // Cell-view YAML carried by a push, loaded as an unsaved draft: it renders
   // and seeds the editor/Save, but isn't persisted until the user clicks Save.
   // Cleared on a successful Save (the saved view takes over) or when another

@@ -19,10 +19,10 @@ import {
   type Connection,
 } from './connection'
 import QueryView, { type QueryPush } from './QueryView'
+import ScriptsView, { type ScriptPush } from './ScriptsView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
-import QueriesView from './QueriesView'
 import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
 import { CopyName } from './controls/CopyName'
@@ -98,7 +98,7 @@ function DatabaseMenu({
 
 // App shell: routing, shared connection state, the connection pill + agent
 // popover, and the armed/SSE remote-control channel. Pages: /connect,
-// /queryview, /queries, /explorer, /dashboard.
+// /queryview, /scripts, /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -109,6 +109,7 @@ function Shell() {
   const [agentOpen, setAgentOpen] = useState(false)
   const [queryPush, setQueryPush] = useState<QueryPush | null>(null)
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
+  const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   // Seeded from the session once it attaches.
@@ -258,8 +259,9 @@ function Shell() {
   }, [sessionChecked, location.pathname, location.search])
 
 
-  // When armed, open an SSE channel: `ready` gives the session id; `query` and
-  // `dashboard` events carry payloads that navigate to the matching page.
+  // When armed, open an SSE channel: `ready` gives the session id; `query`,
+  // `script` and `dashboard` events carry payloads that navigate to the
+  // matching page.
   useEffect(() => {
     if (!armed) return
     // EventSource cannot send headers, so the session id travels in the query
@@ -268,24 +270,29 @@ function Shell() {
       `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}`,
     )
     es.addEventListener('ready', () => setChannelOpen(true))
-    es.addEventListener('query', (e) => {
-      try {
-        setQueryPush(JSON.parse((e as MessageEvent).data) as QueryPush)
-        setToast('Agent updated the query')
-        navigate('/queryview')
-      } catch {
-        /* ignore malformed event */
-      }
+    function on<T>(event: string, apply: (payload: T) => void) {
+      es.addEventListener(event, (e) => {
+        try {
+          apply(JSON.parse((e as MessageEvent).data) as T)
+        } catch {
+          /* ignore malformed event */
+        }
+      })
+    }
+    on<QueryPush>('query', (payload) => {
+      setQueryPush(payload)
+      setToast('Agent updated the query')
+      navigate('/queryview')
     })
-    es.addEventListener('dashboard', (e) => {
-      try {
-        const payload = JSON.parse((e as MessageEvent).data) as DashboardPush
-        setDashboardPush(payload)
-        setToast('Agent updated the dashboard')
-        navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
-      } catch {
-        /* ignore malformed event */
-      }
+    on<ScriptPush>('script', (payload) => {
+      setScriptPush(payload)
+      setToast('Agent updated the script')
+      navigate('/scripts')
+    })
+    on<DashboardPush>('dashboard', (payload) => {
+      setDashboardPush(payload)
+      setToast('Agent updated the dashboard')
+      navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
     })
     return () => {
       es.close()
@@ -477,12 +484,12 @@ function Shell() {
               QueryView
             </Link>
             <Link
-              to={ready ? '/queries' : '/connect'}
-              data-testid="nav-queries"
+              to={ready ? '/scripts' : '/connect'}
+              data-testid="nav-scripts"
               onClick={() => setNavOpen(false)}
-              className={navLinkClass('/queries')}
+              className={navLinkClass('/scripts')}
             >
-              Queries
+              Scripts
             </Link>
             <Link
               to="/explorer"
@@ -528,10 +535,20 @@ function Shell() {
               which drops the rows on screen (they came from somewhere else
               now) and brings the text back from the session. */}
           <Route
-            path="/queries"
+            path="/scripts"
             element={withDatabase(
-              <QueriesView key={`${sessionKey}:${connectionKey(connection)}`} />,
+              <ScriptsView
+                key={`${sessionKey}:${connectionKey(connection)}`}
+                pushed={scriptPush}
+                onPushConsumed={() => setScriptPush(null)}
+                remoteId={remoteId}
+              />,
             )}
+          />
+          {/* Old URL, kept for bookmarks and sessions saved before the rename. */}
+          <Route
+            path="/queries"
+            element={<Navigate to={{ pathname: '/scripts', search: location.search, hash: location.hash }} replace />}
           />
           <Route
             path="/connect"
@@ -610,7 +627,7 @@ const NAV_ROW =
 
 function pageTitle(path: string): string {
   if (path.startsWith('/queryview')) return 'QueryView'
-  if (path.startsWith('/queries')) return 'Queries'
+  if (path.startsWith('/scripts')) return 'Scripts'
   if (path.startsWith('/explorer')) return 'Explorer'
   if (path.startsWith('/dashboard')) return 'Dashboard'
   return 'Connect'

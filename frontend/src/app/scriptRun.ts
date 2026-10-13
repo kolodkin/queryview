@@ -1,4 +1,4 @@
-// The Queries page's plumbing: which statement the cursor is on, where a
+// The Scripts page's plumbing: which statement the cursor is on, where a
 // failed one sits, and the one status line a run leaves.
 
 import type { ColumnMeta, Cell } from '../core'

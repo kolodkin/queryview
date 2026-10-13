@@ -1,7 +1,7 @@
 import re
 
 import httpx
-from conftest import connect_clickhouse_test_db
+from conftest import arm_remote, connect_clickhouse_test_db
 from playwright.sync_api import Page, expect
 
 
@@ -34,14 +34,7 @@ def test_dashboard_push_and_reopen(seeded_test_db, page: Page, base_url: str, sh
     _connect_and_select_test_db(page)
     shot("connected to qvtest db")
 
-    # Arm remote control via the agent popover, then read the session id.
-    page.get_by_test_id("agent-toggle").click()
-    expect(page.get_by_test_id("agent-panel")).to_be_visible()
-    page.get_by_test_id("remote-arm").check()
-    sid_el = page.get_by_test_id("remote-session-id")
-    expect(sid_el).to_be_visible()
-    session_id = sid_el.inner_text().strip()
-    assert session_id
+    session_id = arm_remote(page)
     shot("remote control armed")
 
     # Push a dashboard the way the MCP tool would (via the REST mirror).

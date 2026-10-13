@@ -305,12 +305,12 @@ fields** view.
 
 ## Co-edit & edit lock
 
-An agent (via the `push_query` MCP tool) and a human can share a live session
+An agent (via the `push_query` / `push_script` MCP tools) and a human can share a live session
 without clobbering each other, arbitrated by a **server-side edit lock** on the
 session (owner: none / human / agent, held in memory).
 
 - **Human** acquires the lock on **focus** of any editable item in the query
-  panel and releases it on **blur** (a ~10s heartbeat refreshes a 30s TTL, so a
+  panel or the [Scripts](./scripts.md) page and releases it on **blur** (a ~10s heartbeat refreshes a 30s TTL, so a
   frozen tab can't hold it forever; a closed tab drops it immediately).
 - **Agent** pushes are atomic: a push checks the lock and, if a human holds it,
   is rejected with `blocked, user editing` (the agent backs off and retries).
@@ -343,7 +343,7 @@ scoped to the session's selected database.
 
 ## Related docs
 
-- [queries.md](./queries.md) — the Queries page: a `;`-separated script run as written, writes included.
+- [scripts.md](./scripts.md) — the Scripts page: a `;`-separated script run as written, writes included.
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [connect.md](./connect.md) — connecting, storage, sessions.
 - [api.md](./api.md) — the full backend JSON API.
