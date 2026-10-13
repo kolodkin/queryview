@@ -1,6 +1,6 @@
 """Predefined query store: reusable SQL keyed by connection type within a
 workspace (names are unique per workspace). Deleting is soft: the row stays,
-marked with `deleted_at`, until it is saved again or undeleted. Reuses the
+marked with `deleted_at`, until it is saved again, undeleted or purged. Reuses the
 SQLite engine owned by connect.py."""
 
 from __future__ import annotations
@@ -233,3 +233,14 @@ async def set_predefined_query_deleted(conn_type: str, query_name: str, deleted:
     """Delete (soft) or undelete one saved query. 404 unless it exists in the
     other state."""
     await update_predefined_query(conn_type, query_name, workspace_id=workspace_id, deleted=deleted)
+
+
+async def purge_predefined_query(conn_type: str, query_name: str, *, workspace_id: int) -> None:
+    """Remove one deleted query for good; 404 unless it is deleted."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = await _find(s, conn_type, query_name, workspace_id)
+        if row is None or row.deleted_at is None:
+            raise PredefinedQueryError(f"deleted query {query_name!r} not found", status=404)
+        await s.delete(row)
+        await s.commit()
