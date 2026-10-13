@@ -40,7 +40,9 @@ dashboards/{name}/queries.yaml     # {query_name: SQL}
 ```
 
 File names are percent-encoded where needed; the canonical name lives inside
-the YAML.
+the YAML. A dashboard needs all three files (the HTML and queries may be
+empty): a dir missing one is a hand edit, so **Restore** returns 404 naming
+the file and a sync skips it.
 
 ## Merge-in
 
@@ -108,6 +110,7 @@ are disabled when the active workspace has no remote configured.
 - `POST /api/git/store` `{kind, name, conn_type?, message?, workspace?}` → `{ok, committed, sha, message, imported, deleted, conflicts}`
 - `GET /api/git/history?kind=&name=&conn_type=&before=&limit=10&workspace=` → `{ok, revisions: [{sha, date, message}], has_more}`
 - `POST /api/git/restore` `{kind, name, conn_type?, ref?, workspace?}` → `{ok, restored, sha, imported, deleted, conflicts}`
+  `ref` is a sha from history or a branch name (read as `origin/<name>`); default: the remote branch head.
 
 `kind` is `"query"` or `"dashboard"`; `conn_type` is required for queries;
 `workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_store`, `git_history`,
@@ -121,3 +124,4 @@ optional `session_id` (see [workspace.md](./workspace.md)).
 - [query.md](./query.md) — predefined queries.
 - [dashboard.md](./dashboard.md) — dashboards.
 - [api.md](./api.md) — backend JSON API.
+- [future.md](./future.md) — planned follow-ups to git sync.

@@ -3,7 +3,8 @@
 Predefined queries and dashboards belong to a **workspace**; each workspace
 git-syncs to its own remote (see [gitsync.md](./gitsync.md)). Entity names are
 unique per workspace, so two workspaces can each have a "daily revenue"
-dashboard. Connections are global — any workspace can use any connection.
+dashboard. Connections are global by design — any workspace can use any
+connection — so workspaces stay cheap namespaces for the single-team case.
 
 A `default` workspace is seeded by migration, with no remote and on branch
 `main`. It is an ordinary row, renamable like any other. The **fallback**
@@ -74,3 +75,4 @@ CRUD stays API/UI-only because it is admin configuration involving secrets.
 - [query.md](./query.md) — predefined queries.
 - [dashboard.md](./dashboard.md) — dashboards.
 - [api.md](./api.md) — backend JSON API.
+- [future.md](./future.md) — planned work.

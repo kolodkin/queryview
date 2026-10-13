@@ -333,7 +333,8 @@ async def git_restore(
         kind: "query" or "dashboard".
         name: The entity's name.
         conn_type: The query's connection type; required for kind="query".
-        ref: A sha from git_history (default: latest backup).
+        ref: A sha from git_history or a branch name, read as origin/<name>
+            (default: latest backup).
         session_id: Optional armed-session id; the operation runs in that
             session's workspace (default workspace otherwise).
 

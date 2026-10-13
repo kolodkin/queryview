@@ -6,11 +6,15 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+import tempfile
+from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
 from queryview import gitsync, workspaces
 from queryview.gitsync import (
+    DASHBOARD_FILES,
     GitSyncError,
     dashboard_from_files,
     dashboard_reldir,
@@ -71,7 +75,7 @@ def test_dashboard_files_round_trip():
         "params": [],
     }
     files = dashboard_to_files(d)
-    assert set(files) == {"meta.yaml", "dashboard.html", "queries.yaml"}
+    assert set(files) == set(DASHBOARD_FILES)
     assert files["dashboard.html"] == d["html"]  # verbatim
     assert dashboard_from_files(files) == d
 
@@ -558,8 +562,9 @@ def test_dashboard_params_round_trip_through_meta_yaml():
 
 
 def test_malformed_dashboard_params_are_rejected():
+    files = {"meta.yaml": "name: p\nparams:\n- name: x\n  kind: nope\n", "dashboard.html": "", "queries.yaml": ""}
     with pytest.raises(GitSyncError):
-        dashboard_from_files({"meta.yaml": "name: p\nparams:\n- name: x\n  kind: nope\n"})
+        dashboard_from_files(files)
 
 
 def _repo_files(remote) -> list[str]:
@@ -774,3 +779,91 @@ def test_a_rename_through_the_api_during_a_sync_is_not_an_error(other_instance, 
 
     assert all(e["name"] != "gs moved" for e in r["deleted"] + r["imported"])
     assert _run(get_predefined_query("clickhouse", "gs moved here", here)) is not None
+
+
+def test_restore_by_branch_name_reads_remote_not_stale_local(git_env, tmp_path):
+    """A branch *name* resolves against origin/: the local branch only moves
+    on store, so after an outside push it is behind the fetched remote."""
+    from queryview.queries import list_predefined_queries
+
+    _store_query_versions("gs byname", ["SELECT 1"])
+    _hand_edit(
+        git_env,
+        tmp_path,
+        lambda wd: (wd / query_relpath("clickhouse", "gs byname")).write_text(
+            query_to_yaml({"query_name": "gs byname", "query": "SELECT 2"}), encoding="utf-8"
+        ),
+    )
+    _run(gitsync.restore(_default_ws(), "query", "gs byname", "clickhouse", ref="main"))
+    rows = _run(list_predefined_queries("clickhouse", _default_ws_id()))
+    row = next(x for x in rows if x["query_name"] == "gs byname")
+    assert row["query"] == "SELECT 2"
+
+
+def _hand_edit(remote, tmp_path, edit: Callable[[Path], object]) -> None:
+    """Apply `edit` to a fresh clone's workdir and push it to the remote's
+    main, as a change made outside QueryView."""
+    wd = Path(tempfile.mkdtemp(prefix="hand-edit-", dir=tmp_path))
+    subprocess.run(["git", "clone", "-q", str(remote), str(wd)], check=True, capture_output=True)
+    edit(wd)
+    for cmd in (
+        ["git", "add", "-A"],
+        ["git", "-c", "user.name=t", "-c", "user.email=t@localhost", "commit", "-qm", "outside"],
+        ["git", "push", "-q", "origin", "main"],
+    ):
+        subprocess.run(cmd, cwd=wd, check=True, capture_output=True)
+
+
+def _remove_from_remote(remote, tmp_path, relpath: str) -> None:
+    _hand_edit(remote, tmp_path, lambda wd: (wd / relpath).unlink())
+
+
+def test_restore_of_a_dashboard_missing_a_file_is_404(git_env, tmp_path):
+    """A dashboard dir is readable only with all three files: a hand-edited
+    repo missing one must not restore the rest over the local dashboard."""
+    from queryview.dashboards import get_dashboard, upsert_dashboard
+
+    _run(upsert_dashboard("gs partial", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "dashboard", "gs partial"))
+    _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs partial')}/queries.yaml")
+    _run(upsert_dashboard("gs partial", "<html>v2</html>", {"q": "SELECT 2"}, workspace_id=_default_ws_id()))
+
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.restore(_default_ws(), "dashboard", "gs partial"))
+
+    assert e.value.status == 404
+    assert "queries.yaml" in str(e.value)
+    d = _run(get_dashboard("gs partial", _default_ws_id()))
+    assert d is not None and d["html"] == "<html>v2</html>" and d["queries"] == {"q": "SELECT 2"}
+
+
+def test_sync_skips_a_dashboard_missing_a_file(git_env, other_instance, tmp_path):
+    from queryview.dashboards import get_dashboard, upsert_dashboard
+
+    _run(upsert_dashboard("gs halfdash", "<html>x</html>", {"q": "SELECT 1"}, workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "dashboard", "gs halfdash"))
+    _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs halfdash')}/dashboard.html")
+
+    r = _run(gitsync.sync(_default_ws()))
+
+    assert r["imported"] == [] and r["conflicts"] == []
+    assert _run(get_dashboard("gs halfdash", _default_ws_id())) is None
+
+
+def test_restore_of_a_dashboard_missing_meta_names_the_file(git_env, tmp_path):
+    from queryview.dashboards import upsert_dashboard
+
+    _run(upsert_dashboard("gs nometa", "<html/>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
+    _run(gitsync.store(_default_ws(), "dashboard", "gs nometa"))
+    _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs nometa')}/meta.yaml")
+
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.restore(_default_ws(), "dashboard", "gs nometa"))
+
+    assert e.value.status == 404 and "meta.yaml" in str(e.value)
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.restore(_default_ws(), "dashboard", "gs never stored"))
+    assert e.value.status == 404 and str(e.value) == "dashboard 'gs never stored' not found at origin/main"
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.restore(_default_ws(), "dashboard", "gs nometa", ref="no-such-ref"))
+    assert e.value.status == 404 and str(e.value) == "dashboard 'gs nometa' not found at no-such-ref"

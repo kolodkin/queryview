@@ -125,7 +125,7 @@ def dashboard_to_data(d: dict[str, Any]) -> dict[str, Any]:
 def dashboard_from_data(data: Any, where: str = "dashboard file", require_html: bool = True) -> dict[str, Any]:
     """Validate a dashboard mapping back to the upsert_dashboard shape.
     gitsync passes require_html=False: its repo format stores the HTML as a
-    separate file that may legitimately be absent/empty."""
+    separate file that may legitimately be empty."""
     if not isinstance(data, dict):
         raise YamlIOError(f"malformed {where}: expected a mapping")
     name = _require_str(data, "name", where)
