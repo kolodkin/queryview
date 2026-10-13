@@ -12,9 +12,13 @@ import duckdb
 from .base import (
     SCRIPT_ROW_CAP,
     Column,
-    QueryResult,
+    DatabasesResult,
+    Err,
+    FieldsResult,
     QueryRows,
+    RowsResult,
     StatementResult,
+    TablesResult,
     TextResult,
     build_order_by,
     run_script,
@@ -85,11 +89,11 @@ class DuckDBDriver:
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "message": str(e) or "connection failed"}
 
-    async def list_databases(self, config: DuckConfig) -> tuple[bool, list[str] | str]:
+    async def list_databases(self, config: DuckConfig) -> DatabasesResult | Err:
         # No picker: queries run directly against the file (schema-qualify in SQL).
-        return True, []
+        return DatabasesResult([])
 
-    async def list_tables(self, config: DuckConfig, database: str | None) -> tuple[bool, list[dict[str, Any]] | str]:
+    async def list_tables(self, config: DuckConfig, database: str | None) -> TablesResult | Err:
         # SHOW TABLES for the name set, joined with duckdb_tables()'s estimated
         # row count (absent for views). Bytes are distinct storage blocks ×
         # block size from pragma_storage_info — metadata only, no data scan;
@@ -119,9 +123,9 @@ class DuckDBDriver:
                 con.close()
 
         try:
-            return True, await asyncio.to_thread(_work)
+            return TablesResult(await asyncio.to_thread(_work))
         except Exception as e:  # noqa: BLE001
-            return False, str(e)
+            return Err(str(e))
 
     async def _fetch_page(
         self,
@@ -152,11 +156,11 @@ class DuckDBDriver:
         limit: int,
         offset: int,
         order_by: list[dict[str, Any]] | None,
-    ) -> QueryResult:
+    ) -> RowsResult | Err:
         try:
-            return QueryResult(True, await self._fetch_page(config, sql, database, limit, offset, order_by))
+            return RowsResult(await self._fetch_page(config, sql, database, limit, offset, order_by))
         except Exception as e:  # noqa: BLE001
-            return QueryResult(False, None, str(e))
+            return Err(str(e))
 
     async def export_csv(
         self,
@@ -166,16 +170,14 @@ class DuckDBDriver:
         limit: int,
         offset: int,
         order_by: list[dict[str, Any]] | None,
-    ) -> TextResult:
+    ) -> TextResult | Err:
         try:
             rows = await self._fetch_page(config, sql, database, limit, offset, order_by)
         except Exception as e:  # noqa: BLE001
-            return TextResult(False, str(e))
-        return TextResult(True, to_csv([c.name for c in rows.meta], rows.data))
+            return Err(str(e))
+        return TextResult(to_csv([c.name for c in rows.meta], rows.data))
 
-    async def describe_query(
-        self, config: DuckConfig, sql: str, database: str | None
-    ) -> tuple[bool, list[dict[str, str]] | str]:
+    async def describe_query(self, config: DuckConfig, sql: str, database: str | None) -> FieldsResult | Err:
         inner = sql.rstrip().rstrip(";")
 
         def _work():
@@ -188,9 +190,9 @@ class DuckDBDriver:
 
         try:
             rows = await asyncio.to_thread(_work)
-            return True, [{"name": r[0], "type": r[1]} for r in rows]
+            return FieldsResult([{"name": r[0], "type": r[1]} for r in rows])
         except Exception as e:  # noqa: BLE001
-            return False, str(e)
+            return Err(str(e))
 
     async def execute_script(self, config: DuckConfig, sql: str, database: str | None) -> list[StatementResult]:
         # Read-write, unlike every other open: this is the one path that writes.

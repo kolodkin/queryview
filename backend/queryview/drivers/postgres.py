@@ -13,9 +13,13 @@ from .base import (
     SCRIPT_ROW_CAP,
     SCRIPT_TIMEOUT_SECONDS,
     Column,
-    QueryResult,
+    DatabasesResult,
+    Err,
+    FieldsResult,
     QueryRows,
+    RowsResult,
     StatementResult,
+    TablesResult,
     TextResult,
     build_order_by,
     parse_host_port_config,
@@ -116,17 +120,17 @@ class PostgresDriver:
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "message": str(e) or "connection failed"}
 
-    async def list_databases(self, config: PgConfig) -> tuple[bool, list[str] | str]:
+    async def list_databases(self, config: PgConfig) -> DatabasesResult | Err:
         try:
             async with _connect_bootstrap(config) as conn:
                 rows = await conn.fetch(
                     "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate ORDER BY datname"
                 )
-                return True, [r["datname"] for r in rows]
+                return DatabasesResult([r["datname"] for r in rows])
         except Exception as e:  # noqa: BLE001
-            return False, str(e) or "connection failed"
+            return Err(str(e) or "connection failed")
 
-    async def list_tables(self, config: PgConfig, database: str | None) -> tuple[bool, list[dict[str, Any]] | str]:
+    async def list_tables(self, config: PgConfig, database: str | None) -> TablesResult | Err:
         # Tables and views of the public schema — what an unqualified name in
         # the explorer's generated SELECT resolves to under the default
         # search_path. Other schemas need explicit SQL on the query page.
@@ -143,9 +147,9 @@ class PostgresDriver:
                     "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm') "
                     "ORDER BY c.relname"
                 )
-                return True, [{"name": r["name"], "rows": r["rows"], "bytes": r["bytes"]} for r in rows]
+                return TablesResult([{"name": r["name"], "rows": r["rows"], "bytes": r["bytes"]} for r in rows])
         except Exception as e:  # noqa: BLE001
-            return False, str(e) or "connection failed"
+            return Err(str(e) or "connection failed")
 
     async def _fetch_page(
         self,
@@ -170,11 +174,11 @@ class PostgresDriver:
         limit: int,
         offset: int,
         order_by: list[dict[str, Any]] | None,
-    ) -> QueryResult:
+    ) -> RowsResult | Err:
         try:
-            return QueryResult(True, await self._fetch_page(config, sql, database, limit, offset, order_by))
+            return RowsResult(await self._fetch_page(config, sql, database, limit, offset, order_by))
         except Exception as e:  # noqa: BLE001
-            return QueryResult(False, None, str(e) or "connection failed")
+            return Err(str(e) or "connection failed")
 
     async def export_csv(
         self,
@@ -184,23 +188,21 @@ class PostgresDriver:
         limit: int,
         offset: int,
         order_by: list[dict[str, Any]] | None,
-    ) -> TextResult:
+    ) -> TextResult | Err:
         try:
             rows = await self._fetch_page(config, sql, database, limit, offset, order_by)
         except Exception as e:  # noqa: BLE001
-            return TextResult(False, str(e) or "connection failed")
-        return TextResult(True, to_csv([c.name for c in rows.meta], rows.data))
+            return Err(str(e) or "connection failed")
+        return TextResult(to_csv([c.name for c in rows.meta], rows.data))
 
-    async def describe_query(
-        self, config: PgConfig, sql: str, database: str | None
-    ) -> tuple[bool, list[dict[str, str]] | str]:
+    async def describe_query(self, config: PgConfig, sql: str, database: str | None) -> FieldsResult | Err:
         inner = sql.rstrip().rstrip(";")
         try:
             async with _connect(config, database) as conn:
                 stmt = await conn.prepare(inner)
-                return True, [{"name": a.name, "type": a.type.name} for a in stmt.get_attributes()]
+                return FieldsResult([{"name": a.name, "type": a.type.name} for a in stmt.get_attributes()])
         except Exception as e:  # noqa: BLE001
-            return False, str(e) or "connection failed"
+            return Err(str(e) or "connection failed")
 
     async def execute_script(self, config: PgConfig, sql: str, database: str | None) -> list[StatementResult]:
         try:

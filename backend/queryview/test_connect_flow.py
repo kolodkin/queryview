@@ -4,11 +4,21 @@ the driver; the database gate is skipped when the driver exposes no databases.""
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import queryview.connect as connect
 from queryview import sessions
 from queryview.drivers import DRIVERS
-from queryview.drivers.base import Column, QueryResult, QueryRows, TextResult
+from queryview.drivers.base import (
+    Column,
+    DatabasesResult,
+    Err,
+    FieldsResult,
+    QueryRows,
+    RowsResult,
+    TablesResult,
+    TextResult,
+)
 
 
 def _run(coro):
@@ -33,19 +43,19 @@ class _FakeDriver:
         return {"ok": True, "message": "ok"}
 
     async def list_databases(self, c):
-        return True, []  # no picker
+        return DatabasesResult([])  # no picker
 
     async def run_query(self, c, sql, database, limit, offset, order_by):
-        return QueryResult(True, QueryRows([Column("q", "String")], [[f"ran:{sql}:db={database}"]]))
+        return RowsResult(QueryRows([Column("q", "String")], [[f"ran:{sql}:db={database}"]]))
 
     async def export_csv(self, c, sql, database, limit, offset, order_by):
-        return TextResult(True, f"q\nran:{sql}:db={database}")
+        return TextResult(f"q\nran:{sql}:db={database}")
 
     async def describe_query(self, c, sql, database):
-        return True, [{"name": "x", "type": "int"}]
+        return FieldsResult([{"name": "x", "type": "int"}])
 
     async def list_tables(self, c, database):
-        return True, [{"name": f"t-of-{database}", "rows": 1, "bytes": None}]
+        return TablesResult([{"name": f"t-of-{database}", "rows": 1, "bytes": None}])
 
 
 def test_run_query_skips_db_gate_when_no_databases(monkeypatch):
@@ -120,7 +130,7 @@ def test_run_query_requires_database_when_picker_present(monkeypatch):
         requires_database = True
 
         async def list_databases(self, c):
-            return True, ["a", "b"]
+            return DatabasesResult(["a", "b"])
 
     monkeypatch.setitem(DRIVERS, "fakedb", _WithDbs())
     sid = "s-fakedb"
@@ -135,7 +145,7 @@ def test_list_tables_requires_database_when_picker_present(monkeypatch):
         requires_database = True
 
         async def list_databases(self, c):
-            return True, ["a", "b"]
+            return DatabasesResult(["a", "b"])
 
     monkeypatch.setitem(DRIVERS, "fakedb2", _WithDbs())
     sid = "s-fakedb2"
@@ -191,3 +201,19 @@ def test_two_sessions_keep_their_own_connections(monkeypatch):
 
     assert _run(connect.get_session(a.id))["name"] == "reporting"
     assert _run(connect.get_session(b.id))["name"] == "warehouse"
+
+
+def test_build_session_err_keeps_localhost_hint(monkeypatch):
+    class _Down(_FakeDriver):
+        type = "down"
+
+        async def list_databases(self, c):
+            return Err("connection refused")
+
+    # connect_new takes the driver's parsed config object; the hint reads its host.
+    monkeypatch.setitem(DRIVERS, "down", _Down())
+    monkeypatch.setattr(connect, "_in_container", lambda: True)
+    out = _run(connect.connect_new("s-down", "d", SimpleNamespace(host="localhost"), "down"))
+    assert out["ok"] is False
+    assert out["message"].startswith("connection refused")
+    assert "host.docker.internal" in out["message"]

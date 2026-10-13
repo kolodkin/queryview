@@ -1,3 +1,5 @@
+import re
+
 from conftest import author_params_yaml, connect_clickhouse_test_db, open_query_panel
 from playwright.sync_api import Page, expect
 
@@ -458,3 +460,21 @@ def test_a_native_map_cell_is_labelled_by_its_column_type(seeded_test_db, page: 
     expect(modal.get_by_test_id("cell-data-format")).to_have_text("Map")
     expect(modal.get_by_test_id("cell-data-format")).to_have_attribute("title", "Map(String, Array(String))")
     expect(modal.get_by_test_id("cell-data-tree")).to_contain_text("service")
+
+
+def test_field_menu_keeps_names_beside_long_types(seeded_test_db, page: Page) -> None:
+    """DESCRIBE spreads a named Tuple's long type over lines: the Fields menu
+    still shows the column's name, and the type keeps its real newlines."""
+    _open_query_panel(page)
+    page.get_by_test_id("query-input").fill(
+        "SELECT 1 AS id, CAST([('d1', 'v1', 'repo', 42)], "
+        "'Array(Tuple(artifact_digest String, artifact_tag String, artifact_repo String, artifact_size UInt32))'"
+        ") AS artifacts"
+    )
+    page.get_by_test_id("query-fields").click()
+    page.get_by_test_id("fields-menu").click()
+
+    row = page.locator('[data-testid="field-toggle"][data-col="artifacts"]')
+    expect(row.get_by_text("artifacts", exact=True)).to_be_visible()
+    expect(row).to_have_attribute("title", re.compile(r"\n"))
+    expect(row).not_to_have_attribute("title", re.compile(r"\\n"))

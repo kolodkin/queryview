@@ -5,12 +5,14 @@ per-driver test modules."""
 
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
 from queryview.drivers import DRIVERS, Driver
+from queryview.drivers.base import DatabasesResult, Err, FieldsResult, RowsResult, TablesResult, TextResult
 from queryview.drivers.clickhouse import ChConfig
 from queryview.drivers.duckdb import DuckConfig
 from queryview.drivers.postgres import PgConfig
@@ -75,3 +77,21 @@ def test_network_driver_rejects_missing_host_and_bad_port(type_):
     assert d.parse_config({"host": "h", "port": 0})[0] is None  # port too low
     assert d.parse_config({"host": "h", "port": 99999})[0] is None  # too high
     assert d.parse_config({"host": "h", "port": "x"})[0] is None  # non-numeric
+
+
+RESULT_OF = {
+    "list_databases": DatabasesResult,
+    "list_tables": TablesResult,
+    "run_query": RowsResult,
+    "export_csv": TextResult,
+    "describe_query": FieldsResult,
+}
+
+
+@pytest.mark.parametrize("method", sorted(RESULT_OF))
+@pytest.mark.parametrize("type_", ALL)
+def test_query_methods_are_annotated_named_result_or_err(type_, method):
+    # One shape per method across every driver: callers narrow with isinstance(r, Err).
+    fn = getattr(type(DRIVERS[type_]), method)
+    hints = typing.get_type_hints(fn)
+    assert set(typing.get_args(hints["return"])) == {RESULT_OF[method], Err}, hints["return"]
