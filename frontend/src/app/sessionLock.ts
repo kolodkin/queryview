@@ -31,11 +31,19 @@ export function useEditLock(ref: RefObject<HTMLElement | null>, remoteId: string
     const el = ref.current
     if (!el) return
     let exitTimer: number | undefined
+    // Focus is (or just was) inside: an unmount must still do the exit.
+    let held = false
     const acquire = () => {
       if (remoteId) void postLock(remoteId, 'acquire')
     }
+    const exit = () => {
+      held = false
+      void flushPatches()
+      if (remoteId) void postLock(remoteId, 'release')
+    }
     const onFocusIn = () => {
       window.clearTimeout(exitTimer)
+      held = true
       acquire()
     }
     const onFocusOut = () => {
@@ -43,9 +51,7 @@ export function useEditLock(ref: RefObject<HTMLElement | null>, remoteId: string
       // counts.
       window.clearTimeout(exitTimer)
       exitTimer = window.setTimeout(() => {
-        if (el.contains(document.activeElement)) return
-        void flushPatches()
-        if (remoteId) void postLock(remoteId, 'release')
+        if (!el.contains(document.activeElement)) exit()
       }, 150)
     }
     el.addEventListener('focusin', onFocusIn)
@@ -60,6 +66,8 @@ export function useEditLock(ref: RefObject<HTMLElement | null>, remoteId: string
       el.removeEventListener('focusout', onFocusOut)
       window.clearInterval(beat)
       window.clearTimeout(exitTimer)
+      // Navigating away unmounts before the exit timer fires.
+      if (held) exit()
     }
   }, [ref, remoteId])
 }

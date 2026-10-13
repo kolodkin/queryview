@@ -148,15 +148,23 @@ async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str,
     session, replacing its text; with run=True the browser then runs the whole
     script (Run all) on the session's connection. The results stay in the
     browser — use run_script to get them back. Fails with "blocked, user
-    editing" while the user is typing in an editor.
+    editing" while the user is typing in an editor, and with "not connected" /
+    "select a database first" when the Queries page can't open.
 
     Args:
         session_id: The session id shown in the QueryView popover.
         sql: The script; separate statements with `;`.
         run: Run the script after loading it (default False: load only).
     """
+    from .connect import _gated_session
+
+    # The browser can't open Queries yet: a delivered push would wait there and
+    # replay (run included) whenever the user next opens the page.
+    s, err = await _gated_session(session_id)
+    if s is None:
+        return {"ok": False, "message": err["message"], "database": None}  # type: ignore[index]
     ok, message = remote.push(session_id, {"type": "script", "sql": sql, "run": run})
-    return {"ok": ok, "message": message, "database": await sessions.database_of(session_id)}
+    return {"ok": ok, "message": message, "database": s.database}
 
 
 @mcp.tool()

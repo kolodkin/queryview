@@ -66,7 +66,9 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
   // hasn't reached state yet).
   async function run({ start, end }: Span, script = sql) {
     const text = script.slice(start, end)
-    if (!text.trim() || busy) return
+    // No busy guard here: a push must run even mid-run (runSeq drops the stale
+    // result); the buttons and shortcut guard the user's own double runs.
+    if (!text.trim()) return
     const ticket = ++runSeq.current
     setBusy(true)
     setError(null)
@@ -96,12 +98,15 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
   }
 
   // Apply a push once: load the text (saved to the session like an edit), then
-  // run it all when asked.
+  // run it all when asked. The ref keeps StrictMode's double mount effect from
+  // running a script (writes included) twice.
+  const appliedPush = useRef<ScriptPush | null>(null)
   useEffect(() => {
-    if (!pushed) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!pushed || appliedPush.current === pushed) return
+    appliedPush.current = pushed
     edit(pushed.sql)
     void flushPatches()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (pushed.run) void run({ start: 0, end: pushed.sql.length }, pushed.sql)
     onPushConsumed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,6 +115,7 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
+      if (busy) return
       void run(e.shiftKey ? { start: 0, end: sql.length } : currentStatement())
     }
   }

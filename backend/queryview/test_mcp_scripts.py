@@ -67,3 +67,16 @@ def test_push_script_blocked_while_user_edits():
 
 def test_push_script_unknown_session_fails():
     assert _run(push_script("no-such-session", "SELECT 1"))["ok"] is False
+
+
+def test_push_script_on_disconnected_session_is_not_delivered():
+    rid = remote.register(_run(sessions.create_session()).id)
+    try:
+        assert _run(push_script(rid, "SELECT 1", run=True)) == {
+            "ok": False,
+            "message": "not connected",
+            "database": None,
+        }
+        assert _run(remote.next_message(rid, 0.1)) is None
+    finally:
+        remote.unregister(rid)

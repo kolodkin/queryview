@@ -58,8 +58,9 @@ tools (among others):
 - `push_script(session_id, sql, run?=false)` — replace the text of the
   session's [Queries](./queries.md) editor; the browser navigates there and,
   with `run`, runs the whole script. Results stay in the browser. Returns
-  `{ok, message, database}`; `ok:false` for an unknown id or a held lock
-  (`"blocked, user editing"`).
+  `{ok, message, database}`; `ok:false` for an unknown id, a held lock
+  (`"blocked, user editing"`), or a session whose Queries page can't open yet
+  (`"not connected"`, `"select a database first"`).
 - `push_dashboard(session_id, name, html, queries, params?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
   renders it. Only the user's **Save** persists it, unless the workspace has

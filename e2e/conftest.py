@@ -102,6 +102,7 @@ def mcp_call(base_url: str, tool: str, args: dict[str, Any]) -> dict[str, Any]:
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 res = await session.call_tool(tool, args)
+                assert not res.isError, res
                 return json.loads(res.content[0].text)  # type: ignore[union-attr]
 
     # Playwright's sync API owns this thread's event loop; run the client on another.
