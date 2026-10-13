@@ -1,5 +1,5 @@
 """The MCP layer: a FastMCP server (mounted by main.py at /mcp) whose tools push
-queries/dashboards to a live QueryView browser session, delegating to the
+queries/scripts/dashboards to a live QueryView browser session, delegating to the
 in-process remote.py hub."""
 
 from __future__ import annotations
@@ -99,13 +99,67 @@ async def run_query(
     r = await _run_query(session_id, query, limit, offset)
     if not r["ok"]:
         return {"ok": False, "message": r["message"]}
-    return {
-        "ok": True,
-        "database": r["database"],
-        "columns": [c["name"] for c in r["meta"]],
-        "types": [c["type"] for c in r["meta"]],
-        "rows": r["data"],
-    }
+    return {"ok": True, "database": r["database"], **_columns(r["meta"]), "rows": r["data"]}
+
+
+def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """The agent-facing column shape of a driver's meta (None: no result set)."""
+    if meta is None:
+        return {"columns": None, "types": None}
+    return {"columns": [c["name"] for c in meta], "types": [c["type"] for c in meta]}
+
+
+@mcp.tool()
+async def run_script(session_id: str, sql: str) -> dict[str, Any]:
+    """Run a `;`-separated script on the session's connection and selected
+    database, like the Queries page's Run all, returning each statement's result.
+    WRITES ARE ALLOWED (use run_query to explore read-only). Stops at the first
+    error; rows per statement are capped and the script has a timeout.
+
+    Returns {"ok": True, "database", "results": [{sql, ok, status, message,
+    columns, types, rows, truncated, elapsed_ms}]}, one entry per statement run
+    (columns/types/rows null when it returned no rows), or {"ok": False,
+    "message"} (e.g. "sql required", "not connected", "select a database first").
+
+    Args:
+        session_id: The session id shown in the QueryView popover.
+        sql: The script; separate statements with `;`.
+    """
+    from .connect import execute_script
+
+    if not sql.strip():
+        return {"ok": False, "message": "sql required"}
+    r = await execute_script(session_id, sql)
+    if not r["ok"]:
+        return {"ok": False, "message": r["message"]}
+    results = [
+        {**{k: v for k, v in s.items() if k not in ("meta", "data")}, **_columns(s["meta"]), "rows": s["data"]}
+        for s in r["results"]
+    ]
+    return {"ok": True, "database": r["database"], "results": results}
+
+
+@mcp.tool()
+async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str, Any]:
+    """Replace the text of a live session's Queries editor; with run=True the
+    browser also runs it all. Results stay in the browser (use run_script to get
+    them). Fails with "blocked, user editing" while the user types, or "not
+    connected" / "select a database first" when the Queries page can't open.
+
+    Args:
+        session_id: The session id shown in the QueryView popover.
+        sql: The script; separate statements with `;`.
+        run: Also run it (default False: load only).
+    """
+    from .connect import _gated_session
+
+    # Otherwise the push would wait in the browser and replay (run included)
+    # whenever the user next opens Queries.
+    s, err = await _gated_session(session_id)
+    if s is None:
+        return {"ok": False, "message": err["message"], "database": None}  # type: ignore[index]
+    ok, message = remote.push(session_id, {"type": "script", "sql": sql, "run": run})
+    return {"ok": ok, "message": message, "database": s.database}
 
 
 @mcp.tool()

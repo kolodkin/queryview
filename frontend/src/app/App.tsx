@@ -19,10 +19,10 @@ import {
   type Connection,
 } from './connection'
 import QueryView, { type QueryPush } from './QueryView'
+import QueriesView, { type ScriptPush } from './QueriesView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
-import QueriesView from './QueriesView'
 import { Toast } from './controls/Toast'
 import { Loading } from './controls/Spinner'
 import { CopyName } from './controls/CopyName'
@@ -109,6 +109,7 @@ function Shell() {
   const [agentOpen, setAgentOpen] = useState(false)
   const [queryPush, setQueryPush] = useState<QueryPush | null>(null)
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
+  const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   // Seeded from the session once it attaches.
@@ -258,8 +259,9 @@ function Shell() {
   }, [sessionChecked, location.pathname, location.search])
 
 
-  // When armed, open an SSE channel: `ready` gives the session id; `query` and
-  // `dashboard` events carry payloads that navigate to the matching page.
+  // When armed, open an SSE channel: `ready` gives the session id; `query`,
+  // `script` and `dashboard` events carry payloads that navigate to the
+  // matching page.
   useEffect(() => {
     if (!armed) return
     // EventSource cannot send headers, so the session id travels in the query
@@ -268,24 +270,29 @@ function Shell() {
       `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}`,
     )
     es.addEventListener('ready', () => setChannelOpen(true))
-    es.addEventListener('query', (e) => {
-      try {
-        setQueryPush(JSON.parse((e as MessageEvent).data) as QueryPush)
-        setToast('Agent updated the query')
-        navigate('/queryview')
-      } catch {
-        /* ignore malformed event */
-      }
+    function on<T>(event: string, apply: (payload: T) => void) {
+      es.addEventListener(event, (e) => {
+        try {
+          apply(JSON.parse((e as MessageEvent).data) as T)
+        } catch {
+          /* ignore malformed event */
+        }
+      })
+    }
+    on<QueryPush>('query', (payload) => {
+      setQueryPush(payload)
+      setToast('Agent updated the query')
+      navigate('/queryview')
     })
-    es.addEventListener('dashboard', (e) => {
-      try {
-        const payload = JSON.parse((e as MessageEvent).data) as DashboardPush
-        setDashboardPush(payload)
-        setToast('Agent updated the dashboard')
-        navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
-      } catch {
-        /* ignore malformed event */
-      }
+    on<ScriptPush>('script', (payload) => {
+      setScriptPush(payload)
+      setToast('Agent updated the script')
+      navigate('/queries')
+    })
+    on<DashboardPush>('dashboard', (payload) => {
+      setDashboardPush(payload)
+      setToast('Agent updated the dashboard')
+      navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
     })
     return () => {
       es.close()
@@ -530,7 +537,12 @@ function Shell() {
           <Route
             path="/queries"
             element={withDatabase(
-              <QueriesView key={`${sessionKey}:${connectionKey(connection)}`} />,
+              <QueriesView
+                key={`${sessionKey}:${connectionKey(connection)}`}
+                pushed={scriptPush}
+                onPushConsumed={() => setScriptPush(null)}
+                remoteId={remoteId}
+              />,
             )}
           />
           <Route

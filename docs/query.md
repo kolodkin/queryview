@@ -304,12 +304,12 @@ fields** view.
 
 ## Co-edit & edit lock
 
-An agent (via the `push_query` MCP tool) and a human can share a live session
+An agent (via the `push_query` / `push_script` MCP tools) and a human can share a live session
 without clobbering each other, arbitrated by a **server-side edit lock** on the
 session (owner: none / human / agent, held in memory).
 
 - **Human** acquires the lock on **focus** of any editable item in the query
-  panel and releases it on **blur** (a ~10s heartbeat refreshes a 30s TTL, so a
+  panel or the [Queries](./queries.md) page and releases it on **blur** (a ~10s heartbeat refreshes a 30s TTL, so a
   frozen tab can't hold it forever; a closed tab drops it immediately).
 - **Agent** pushes are atomic: a push checks the lock and, if a human holds it,
   is rejected with `blocked, user editing` (the agent backs off and retries).

@@ -1,6 +1,9 @@
 import httpx
-from conftest import connect_clickhouse_test_db, open_query_panel
+from conftest import arm_remote, connect_clickhouse_test_db, mcp_call, open_query_panel
 from playwright.sync_api import Page, expect
+from test_drivers import CASES, _connect
+
+DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
 def _open_query_panel(page: Page) -> None:
@@ -9,17 +12,34 @@ def _open_query_panel(page: Page) -> None:
     open_query_panel(page)
 
 
+def test_mcp_push_script_fills_and_runs_the_queries_editor(seeded_duckdb, page: Page, base_url: str) -> None:
+    _connect(page, DUCK, seeded_duckdb)
+    session_id = arm_remote(page)
+
+    script = "SELECT 1 AS a; SELECT name FROM items ORDER BY id"
+    out = mcp_call(base_url, "push_script", {"session_id": session_id, "sql": script, "run": True})
+    assert out["ok"] is True, out
+
+    # The browser opened the Queries page, loaded the script and ran it all.
+    expect(page.get_by_test_id("queries-input")).to_have_value(script)
+    expect(page.get_by_test_id("queries-status")).to_contain_text("2 statements")
+    expect(page.get_by_test_id("queries-output").locator("table thead th")).to_contain_text(["name"])
+
+    # While the user is typing in the editor, a push is refused, not applied.
+    textarea = page.get_by_test_id("queries-input")
+    with page.expect_response(lambda r: r.url.endswith("/api/remote/lock")):  # focus takes the lock
+        textarea.click()
+    textarea.press("End")
+    page.keyboard.type(" -- mine")
+    blocked = mcp_call(base_url, "push_script", {"session_id": session_id, "sql": "SELECT 2"})
+    assert not blocked["ok"] and blocked["message"] == "blocked, user editing"
+    expect(page.get_by_test_id("queries-input")).to_have_value(script + " -- mine")
+
+
 def test_mcp_push_to_live_session(seeded_test_db, page: Page, base_url: str) -> None:
     _open_query_panel(page)
 
-    # Arm remote control via the agent popover, then read the session id.
-    page.get_by_test_id("agent-toggle").click()
-    expect(page.get_by_test_id("agent-panel")).to_be_visible()
-    page.get_by_test_id("remote-arm").check()
-    sid_el = page.get_by_test_id("remote-session-id")
-    expect(sid_el).to_be_visible()
-    session_id = sid_el.inner_text().strip()
-    assert session_id
+    session_id = arm_remote(page)
 
     # Push a query the way an MCP client would (via the REST surface).
     res = httpx.post(
@@ -45,6 +65,7 @@ def test_mcp_push_to_live_session(seeded_test_db, page: Page, base_url: str) -> 
     expect(output).to_contain_text("gamma")  # id DESC -> gamma first
 
     # Disarm: the popover no longer exposes the session id...
+    page.get_by_test_id("agent-toggle").click()
     page.get_by_test_id("remote-arm").uncheck()
     expect(page.get_by_test_id("remote-session-id")).to_have_count(0)
 

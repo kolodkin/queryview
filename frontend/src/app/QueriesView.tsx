@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ResultsTable, columnNames, columnTypes, type QueryRows } from '../core'
@@ -6,14 +6,24 @@ import { apiFetch } from './api'
 import { Spinner } from './controls/Spinner'
 import { loadIntoQueryView } from './queryPanel'
 import { flushPatches, patchView, viewState } from './session'
+import { useEditLock } from './sessionLock'
 import { failedSpan, runSummary, statementRangeAt, type Span, type StatementResult } from './queriesScript'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
+
+// A script the agent pushed (MCP push_script).
+export type ScriptPush = { sql: string; run: boolean }
+
+type QueriesViewProps = {
+  pushed: ScriptPush | null
+  onPushConsumed: () => void
+  remoteId: string | null
+}
 
 // The Queries page (`/queries`, docs/queries.md), mounted by the App shell only
 // for a ready connection: a flat SQL textbox whose statements run as written.
 // Run takes the statement under the cursor (or the selection), Run all the
 // whole script; a run leaves one status line and the last statement's rows.
-function QueriesView() {
+function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
   const navigate = useNavigate()
   // The text is restored from the session; results never are (docs/session.md).
   const [sql, setSql] = useState(() => {
@@ -31,6 +41,10 @@ function QueriesView() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const markRef = useRef<HTMLPreElement>(null)
   const runSeq = useRef(0)
+  // Focus in the panel holds the edit lock (a push can't clobber typing);
+  // leaving it writes the text to the session.
+  const panelRef = useRef<HTMLElement>(null)
+  useEditLock(panelRef, remoteId)
 
   function edit(next: string) {
     setSql(next)
@@ -47,10 +61,13 @@ function QueriesView() {
     return statementRangeAt(sql, el.selectionStart) ?? { start: 0, end: 0 }
   }
 
-  // Runs the script's [start, end) slice.
-  async function run({ start, end }: Span) {
-    const text = sql.slice(start, end)
-    if (!text.trim() || busy) return
+  // Runs the [start, end) slice of `script` (the textbox, unless a push's text
+  // hasn't reached state yet).
+  async function run({ start, end }: Span, script = sql) {
+    const text = script.slice(start, end)
+    // No busy guard here: a push must run even mid-run (runSeq drops the stale
+    // result); the buttons and shortcut guard the user's own double runs.
+    if (!text.trim()) return
     const ticket = ++runSeq.current
     setBusy(true)
     setError(null)
@@ -67,7 +84,7 @@ function QueriesView() {
         const results = (data.results ?? []) as StatementResult[]
         setResults(results)
         const span = failedSpan(text, start, results)
-        setFailed(span && { script: sql, span })
+        setFailed(span && { script, span })
       } else {
         setError((data.message as string) ?? 'request failed')
       }
@@ -79,9 +96,25 @@ function QueriesView() {
     }
   }
 
+  // Apply a push once: load the text (saved to the session like an edit), then
+  // run it all when asked. The ref keeps StrictMode's double mount effect from
+  // running a script (writes included) twice.
+  const appliedPush = useRef<ScriptPush | null>(null)
+  useEffect(() => {
+    if (!pushed || appliedPush.current === pushed) return
+    appliedPush.current = pushed
+    edit(pushed.sql)
+    void flushPatches()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (pushed.run) void run({ start: 0, end: pushed.sql.length }, pushed.sql)
+    onPushConsumed()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pushed])
+
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault()
+      if (busy) return
       void run(e.shiftKey ? { start: 0, end: sql.length } : currentStatement())
     }
   }
@@ -118,7 +151,7 @@ function QueriesView() {
           Queries
         </h1>
       </div>
-      <section className="glass-panel flex grow flex-col gap-3 p-6">
+      <section ref={panelRef} className="glass-panel flex grow flex-col gap-3 p-6">
         <div className="flex items-center justify-end gap-1">
           {TEXTAREA_SIZES.map(([label, n]) => (
             <button
@@ -143,7 +176,6 @@ function QueriesView() {
             onFocus={() => setFailed(null)}
             onClick={() => setFailed(null)}
             onKeyDown={onKeyDown}
-            onBlur={() => void flushPatches()}
             onScroll={(e) => {
               if (markRef.current) markRef.current.scrollTop = e.currentTarget.scrollTop
             }}

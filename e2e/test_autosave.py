@@ -5,7 +5,7 @@ backend tests (test_dashboards.py). Uses a uniquely-named workspace per run."""
 import uuid
 
 import httpx
-from conftest import open_query_panel
+from conftest import arm_remote, mcp_call, open_query_panel
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -56,10 +56,7 @@ def test_autosave_saves_successful_runs_and_hides_save(seeded_duckdb, page: Page
 
     # An unnamed agent push runs but never overwrites the selected query; a
     # named one saves under its name.
-    page.get_by_test_id("agent-toggle").click()
-    page.get_by_test_id("remote-arm").check()
-    session_id = page.get_by_test_id("remote-session-id").inner_text().strip()
-    page.get_by_test_id("agent-toggle").click()
+    session_id = arm_remote(page)
     push = {"session_id": session_id, "query": "SELECT name FROM items"}
     httpx.post(f"{base_url}/api/remote/push", json=push, timeout=10.0).raise_for_status()
     expect(page.get_by_test_id("query-input")).to_have_value("SELECT name FROM items")
@@ -80,30 +77,6 @@ def test_autosave_saves_successful_runs_and_hides_save(seeded_duckdb, page: Page
     autosave.uncheck()
     page.get_by_test_id("workspace-save").click()
     expect(page.get_by_test_id("dashboard-save")).to_be_visible()
-
-
-def _mcp_push_dashboard(base_url: str, session_id: str, name: str) -> None:
-    """Push a dashboard draft through the real MCP endpoint — there's no REST
-    route that drafts without persisting."""
-    import asyncio
-    from concurrent.futures import ThreadPoolExecutor
-
-    from mcp import ClientSession
-    from mcp.client.streamable_http import streamable_http_client
-
-    async def push() -> None:
-        async with streamable_http_client(f"{base_url}/mcp/") as (read, write, _):
-            async with ClientSession(read, write) as s:
-                await s.initialize()
-                out = await s.call_tool(
-                    "push_dashboard",
-                    {"session_id": session_id, "name": name, "html": "<p>draft</p>", "queries": {}},
-                )
-                assert not out.isError, out
-
-    # Playwright's sync API owns this thread's event loop; run the client on another.
-    with ThreadPoolExecutor(1) as pool:
-        pool.submit(asyncio.run, push()).result()
 
 
 def test_turning_autosave_on_saves_open_drafts(seeded_duckdb, page: Page, base_url: str) -> None:
@@ -138,11 +111,10 @@ def test_turning_autosave_on_saves_open_drafts(seeded_duckdb, page: Page, base_u
     # Dashboards: an agent draft is kept when autosave goes on.
     httpx.patch(f"{base_url}/api/workspaces/{ws}", json={"autosave": False}).raise_for_status()
     page.reload()
-    page.get_by_test_id("agent-toggle").click()
-    page.get_by_test_id("remote-arm").check()
-    session_id = page.get_by_test_id("remote-session-id").inner_text().strip()
-    page.get_by_test_id("agent-toggle").click()
-    _mcp_push_dashboard(base_url, session_id, "draft dash")
+    session_id = arm_remote(page)
+    # Through the real MCP endpoint: there's no REST route that drafts without persisting.
+    args = {"session_id": session_id, "name": "draft dash", "html": "<p>draft</p>", "queries": {}}
+    assert mcp_call(base_url, "push_dashboard", args)["ok"]
     expect(page.get_by_test_id("dashboard-select")).to_have_value("draft dash")
     expect(page.get_by_test_id("dashboard-save")).to_be_visible()
 

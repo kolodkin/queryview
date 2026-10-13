@@ -169,7 +169,8 @@ container to loopback — `docker run -p 127.0.0.1:8000:8000 ...` — since a pl
 
 Tools: `session_info` (the session's connection, database, databases,
 workspace and tables), `run_query` (read-only SQL on the session's connection,
-rows returned to the agent), `push_query` and `push_dashboard` (fill a live browser session),
+rows returned to the agent), `run_script` (a script with writes, per-statement
+results returned to the agent), `push_query`, `push_script` and `push_dashboard` (fill a live browser session),
 `list_queries` / `list_dashboards`, and `git_store` / `git_history` /
 `git_restore` (workspace git backups). `session_info`, `run_query` and the push tools target an **armed** browser session: enable
 "Allow remote control" from the agent icon next to the connection pill and use
