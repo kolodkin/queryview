@@ -47,9 +47,10 @@ describe('tabStorage', () => {
 describe('attachSession', () => {
   it('posts the tab token and remembers the returned id', async () => {
     const store = stubTabStorage()
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, json: async () => ({ ok: true, created: true, session: SESSION }) })
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, created: true, session: SESSION }),
+    })
     vi.stubGlobal('fetch', fetchMock)
     const { attachSession } = await import('./session')
 
@@ -63,9 +64,10 @@ describe('attachSession', () => {
 
   it('sends the id it already has, so a refresh re-attaches', async () => {
     stubTabStorage({ [TAB_KEY]: 'tab-1', [SESSION_KEY]: 's-existing' })
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, json: async () => ({ ok: true, created: false, session: SESSION }) })
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, created: false, session: SESSION }),
+    })
     vi.stubGlobal('fetch', fetchMock)
     const { attachSession } = await import('./session')
 
@@ -226,16 +228,23 @@ describe('startHeartbeat', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     stubTabStorage()
-    vi.stubGlobal('document', { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} })
-    fetchMock = vi
-      .fn()
-      .mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
+    vi.stubGlobal('document', {
+      visibilityState: 'visible',
+      addEventListener() {},
+      removeEventListener() {},
+    })
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, session: SESSION }),
+    })
     vi.stubGlobal('fetch', fetchMock)
   })
   afterEach(() => vi.useRealTimers())
 
   it('reports a taken session and stops writing to it', async () => {
-    const { attachSession, startHeartbeat, patchView, flushPatches, isTaken } = await import('./session')
+    const { attachSession, startHeartbeat, patchView, flushPatches, isTaken } =
+      await import('./session')
     await attachSession()
     const onTaken = vi.fn()
     const stop = startHeartbeat({ onChanged: vi.fn(), onTaken })
@@ -262,11 +271,16 @@ describe('startHeartbeat', () => {
     fetchMock.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          answerBeat = () => resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
+          answerBeat = () =>
+            resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
         }),
     )
     await vi.advanceTimersByTimeAsync(10_000)
-    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: { ...SESSION, id: 's2' } }) })
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, session: { ...SESSION, id: 's2' } }),
+    })
 
     const switched = selectSession('s2')
     await vi.advanceTimersByTimeAsync(0)
@@ -293,7 +307,11 @@ describe('startHeartbeat', () => {
       () =>
         new Promise((resolve) => {
           answerBeat = () =>
-            resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: { ...SESSION, database: 'old' } }) })
+            resolve({
+              ok: true,
+              status: 200,
+              json: async () => ({ ok: true, session: { ...SESSION, database: 'old' } }),
+            })
         }),
     )
     await vi.advanceTimersByTimeAsync(10_000)
@@ -301,9 +319,14 @@ describe('startHeartbeat', () => {
     fetchMock.mockImplementation((url: string) =>
       String(url).includes('/api/db/database')
         ? new Promise((resolve) => {
-            answerSwitch = () => resolve({ ok: true, status: 200, json: async () => ({ ok: true }) })
+            answerSwitch = () =>
+              resolve({ ok: true, status: 200, json: async () => ({ ok: true }) })
           })
-        : Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) }),
+        : Promise.resolve({
+            ok: true,
+            status: 200,
+            json: async () => ({ ok: true, session: SESSION }),
+          }),
     )
 
     const switched = selectDatabase('new')
@@ -332,7 +355,11 @@ describe('startHeartbeat', () => {
     const onChanged = vi.fn()
     const stop = startHeartbeat({ onChanged, onTaken: vi.fn() })
 
-    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ ok: true, session: { ...SESSION, id: 's2' } }) })
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, session: { ...SESSION, id: 's2' } }),
+    })
     await vi.advanceTimersByTimeAsync(10_000)
 
     expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ id: 's2' }))
@@ -340,7 +367,8 @@ describe('startHeartbeat', () => {
   })
 
   it('hands every adopted row to onSessionRow, whatever brought it', async () => {
-    const { attachSession, startHeartbeat, onSessionRow, patchView, flushPatches } = await import('./session')
+    const { attachSession, startHeartbeat, onSessionRow, patchView, flushPatches } =
+      await import('./session')
     await attachSession()
     const onRow = vi.fn()
     const stopRows = onSessionRow(onRow)
@@ -350,11 +378,16 @@ describe('startHeartbeat', () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ ok: true, session: { ...SESSION, connection: 'c1', database: 'sales' } }),
+      json: async () => ({
+        ok: true,
+        session: { ...SESSION, connection: 'c1', database: 'sales' },
+      }),
     })
     await vi.advanceTimersByTimeAsync(10_000)
     expect(onRow).toHaveBeenCalledOnce()
-    expect(onRow).toHaveBeenCalledWith(expect.objectContaining({ connection: 'c1', database: 'sales' }))
+    expect(onRow).toHaveBeenCalledWith(
+      expect.objectContaining({ connection: 'c1', database: 'sales' }),
+    )
 
     // A queued write's response carries the row too.
     patchView('query', { sql: 'SELECT 1' })

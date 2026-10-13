@@ -51,13 +51,7 @@ describe('substituteCellTemplate', () => {
   })
 
   test('leaves an unknown {row.<col>} placeholder untouched', () => {
-    const out = substituteCellTemplate(
-      '{row.missing}',
-      '1',
-      row,
-      columns,
-      encodeURIComponent,
-    )
+    const out = substituteCellTemplate('{row.missing}', '1', row, columns, encodeURIComponent)
     expect(out).toBe('{row.missing}')
   })
 
@@ -75,24 +69,12 @@ describe('substituteCellTemplate', () => {
   test('does not re-interpret an injected value as a placeholder', () => {
     // The cell's own value contains placeholder-looking text; a single pass means
     // it is encoded as literal text, never resolved against the row.
-    const out = substituteCellTemplate(
-      '{cell}',
-      '{row.severity}',
-      row,
-      columns,
-      escapeHtml,
-    )
+    const out = substituteCellTemplate('{cell}', '{row.severity}', row, columns, escapeHtml)
     expect(out).toBe('{row.severity}')
   })
 
   test('replaces every occurrence of a placeholder', () => {
-    const out = substituteCellTemplate(
-      '{row.name}-{row.name}',
-      '1',
-      row,
-      columns,
-      (s) => s,
-    )
+    const out = substituteCellTemplate('{row.name}-{row.name}', '1', row, columns, (s) => s)
     expect(out).toBe('alpha-alpha')
   })
 })

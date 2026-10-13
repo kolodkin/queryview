@@ -8,7 +8,8 @@ import { cellText, isContainer, type Cell } from '../results/rows'
 
 export type ElementKind = 'tuple' | 'map' | null
 
-export type ComplexType = { kind: 'array'; element: ElementKind } | { kind: 'map' } | { kind: 'tuple' }
+export type ComplexType =
+  { kind: 'array'; element: ElementKind } | { kind: 'map' } | { kind: 'tuple' }
 
 // Match a `Name(<inner>)` wrapper, returning the constructor name and inner text.
 function matchWrapper(type: string): { name: string; inner: string } | null {
@@ -29,7 +30,8 @@ export function parseComplexType(type: string): ComplexType | null {
   if (w.name === 'Nullable' || w.name === 'LowCardinality') return parseComplexType(w.inner)
   if (w.name === 'Array') {
     const inner = matchWrapper(w.inner)
-    const element: ElementKind = inner?.name === 'Tuple' ? 'tuple' : inner?.name === 'Map' ? 'map' : null
+    const element: ElementKind =
+      inner?.name === 'Tuple' ? 'tuple' : inner?.name === 'Map' ? 'map' : null
     return { kind: 'array', element }
   }
   if (w.name === 'Map') return { kind: 'map' }
@@ -62,7 +64,9 @@ export function complexCellItems(type: ComplexType | null, value: Cell): CellIte
     const element = type?.kind === 'array' ? type.element : null
     // A list of tuples/maps reads best with each element on one line.
     return value.map((el) => ({
-      lines: [isContainer(el) && !Array.isArray(el) ? entryLines(el, element).join(', ') : cellText(el)],
+      lines: [
+        isContainer(el) && !Array.isArray(el) ? entryLines(el, element).join(', ') : cellText(el),
+      ],
     }))
   }
   const kind: ElementKind = type?.kind === 'map' ? 'map' : 'tuple'

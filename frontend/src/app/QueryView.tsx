@@ -215,10 +215,7 @@ function QueryPanel({
   // Selectors from the cell_view YAML's `params:` section. Each renders a
   // <select> whose value is substituted into the SQL via {name}; `options_sql`
   // choices are resolved by querying (below).
-  const paramSpecs = useMemo<ParamSpec[]>(
-    () => parseQueryParams(savedCellView),
-    [savedCellView],
-  )
+  const paramSpecs = useMemo<ParamSpec[]>(() => parseQueryParams(savedCellView), [savedCellView])
   const [paramValues, setParamValues] = useState<Record<string, string>>({})
   // Resolved choices for `options_sql` params, keyed by name. An error (already
   // param-prefixed) blocks the main query.
@@ -431,9 +428,7 @@ function QueryPanel({
         if (selectFields !== undefined) {
           const cols = columnNames(rows)
           setFields(cols.map((name) => ({ name, type: '' })))
-          setVisibleCols(
-            selectFields.length ? selectFields.filter((f) => cols.includes(f)) : cols,
-          )
+          setVisibleCols(selectFields.length ? selectFields.filter((f) => cols.includes(f)) : cols)
         }
       } else {
         setError(data.message ?? 'query failed')
@@ -594,7 +589,11 @@ function QueryPanel({
     setBusy(true)
     setError(null)
     try {
-      const target = { query_name: selectedName, type: connectionType, workspace: activeWorkspace() }
+      const target = {
+        query_name: selectedName,
+        type: connectionType,
+        workspace: activeWorkspace(),
+      }
       const res = change
         ? await apiFetch('/api/predefined-queries', {
             method: 'PATCH',
@@ -643,7 +642,12 @@ function QueryPanel({
       cell_view: effectiveCellView,
       ...presentationForSave(orderBy, visibleCols),
     }
-    if (queryChanged(predefined.find((p) => p.query_name === name), next)) {
+    if (
+      queryChanged(
+        predefined.find((p) => p.query_name === name),
+        next,
+      )
+    ) {
       void save(effectiveCellView, lastOk.query)
     }
   }
@@ -783,15 +787,9 @@ function QueryPanel({
       </div>
 
       {paramDefs.length > 0 && (
-        <div
-          data-testid="query-params"
-          className="flex flex-wrap items-center gap-x-4 gap-y-2"
-        >
+        <div data-testid="query-params" className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {paramDefs.map((def) => (
-            <label
-              key={def.name}
-              className="flex items-center gap-1.5 text-sm text-slate-300"
-            >
+            <label key={def.name} className="flex items-center gap-1.5 text-sm text-slate-300">
               {def.name}
               <select
                 data-testid="param-select"

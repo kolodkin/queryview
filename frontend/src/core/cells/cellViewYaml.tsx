@@ -43,7 +43,8 @@ export function renderCell(
   // An explicit cell_view entry wins (and is the opt-out from a default view).
   if (!view) {
     const complex = parseComplexType(colTypes[colName] ?? '')
-    if (complex || isContainer(value)) return <ComplexCell type={complex} value={value} col={colName} />
+    if (complex || isContainer(value))
+      return <ComplexCell type={complex} value={value} col={colName} />
     return cellText(value)
   }
   const raw = cellText(value)

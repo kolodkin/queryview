@@ -15,7 +15,12 @@ export {
 } from './results/rows'
 export { ResultsTable } from './results/ResultsTable'
 export { escapeHtml, substituteCellTemplate } from './cells/cellView'
-export { parseCellViewYaml, renderCell, type CellView, type CellViewMap } from './cells/cellViewYaml'
+export {
+  parseCellViewYaml,
+  renderCell,
+  type CellView,
+  type CellViewMap,
+} from './cells/cellViewYaml'
 export {
   complexCellItems,
   parseComplexType,

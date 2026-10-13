@@ -187,8 +187,8 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
           className="glass-popover absolute right-0 top-full z-10 mt-2 w-80 space-y-2 p-3 text-sm"
         >
           <p className="font-medium text-amber-200">
-            {conflicts.length === 1 ? '1 item differs' : `${conflicts.length} items differ`} from the git
-            repo
+            {conflicts.length === 1 ? '1 item differs' : `${conflicts.length} items differ`} from
+            the git repo
           </p>
           <p className="text-xs text-slate-400">
             Both here and in the repo, with different content. Sync never overwrites local work, so
@@ -203,8 +203,8 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
             ))}
           </ul>
           <p className="text-xs text-slate-400">
-            To settle one, open it and <b className="text-slate-200">Commit</b> to push your version,
-            or <b className="text-slate-200">Restore</b> to take the repo&apos;s.
+            To settle one, open it and <b className="text-slate-200">Commit</b> to push your
+            version, or <b className="text-slate-200">Restore</b> to take the repo&apos;s.
           </p>
         </div>
       )}
@@ -288,8 +288,8 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
               className="mt-0.5"
             />
             <span>
-              Autosave — save queries after each successful run and agent pushes as they arrive;
-              no Save button. Commit / Restore keep the history.
+              Autosave — save queries after each successful run and agent pushes as they arrive; no
+              Save button. Commit / Restore keep the history.
             </span>
           </label>
           {current?.configured && (
@@ -340,7 +340,11 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
             >
               Delete
             </button>
-            <button type="button" onClick={() => setManage(false)} className="glass-btn px-2 py-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setManage(false)}
+              className="glass-btn px-2 py-1 text-xs"
+            >
               Close
             </button>
           </div>

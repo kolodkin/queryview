@@ -24,9 +24,16 @@ describe('parseDashboardParams', () => {
 
   test('parses an options_sql param', () => {
     expect(
-      parseDashboardParams([{ name: 'table', kind: 'identifier', options_sql: 'SELECT name FROM system.tables' }]),
+      parseDashboardParams([
+        { name: 'table', kind: 'identifier', options_sql: 'SELECT name FROM system.tables' },
+      ]),
     ).toEqual([
-      { name: 'table', kind: 'identifier', optionsSql: 'SELECT name FROM system.tables', autoSelect: true },
+      {
+        name: 'table',
+        kind: 'identifier',
+        optionsSql: 'SELECT name FROM system.tables',
+        autoSelect: true,
+      },
     ])
   })
 
@@ -37,7 +44,9 @@ describe('parseDashboardParams', () => {
   })
 
   test('drops an entry declaring both options and options_sql', () => {
-    expect(parseDashboardParams([{ name: 'x', options: ['a'], options_sql: 'SELECT 1' }])).toEqual([])
+    expect(parseDashboardParams([{ name: 'x', options: ['a'], options_sql: 'SELECT 1' }])).toEqual(
+      [],
+    )
   })
 
   test('drops an entry with an unknown kind', () => {
@@ -62,8 +71,9 @@ describe('substituteParams', () => {
   ])
 
   test('substitutes an identifier as a quoted identifier, not a string literal', () => {
-    expect(sub('SELECT {field} FROM {table}', params, { field: 'city', table: 'events' }))
-      .toBe('SELECT `city` FROM `events`')
+    expect(sub('SELECT {field} FROM {table}', params, { field: 'city', table: 'events' })).toBe(
+      'SELECT `city` FROM `events`',
+    )
   })
 
   test('substitutes a value as a quoted literal', () => {
@@ -115,7 +125,9 @@ describe('substituteParams', () => {
 
 describe('placeholdersIn', () => {
   test('finds the placeholders a query depends on', () => {
-    expect(placeholdersIn('SELECT name FROM system.columns WHERE table = {table} AND x = {y}')).toEqual(['table', 'y'])
+    expect(
+      placeholdersIn('SELECT name FROM system.columns WHERE table = {table} AND x = {y}'),
+    ).toEqual(['table', 'y'])
   })
 
   test('finds a cast placeholder by its param name', () => {
@@ -130,7 +142,11 @@ describe('placeholdersIn', () => {
 describe('resolveOrder', () => {
   test('orders a dependent param after the one its options_sql references', () => {
     const params = parseDashboardParams([
-      { name: 'field', kind: 'identifier', options_sql: 'SELECT name FROM system.columns WHERE table = {table}' },
+      {
+        name: 'field',
+        kind: 'identifier',
+        options_sql: 'SELECT name FROM system.columns WHERE table = {table}',
+      },
       { name: 'table', kind: 'identifier', options_sql: 'SELECT name FROM system.tables' },
     ])
     expect(resolveOrder(params).map((p) => p.name)).toEqual(['table', 'field'])
@@ -155,9 +171,11 @@ describe('resolveOrder', () => {
 
 describe('default: none', () => {
   test('parses a param that starts unselected', () => {
-    expect(parseDashboardParams([{ name: 'table', kind: 'identifier', options: ['a'], default: 'none' }])).toEqual([
-      { name: 'table', kind: 'identifier', options: ['a'], autoSelect: false },
-    ])
+    expect(
+      parseDashboardParams([
+        { name: 'table', kind: 'identifier', options: ['a'], default: 'none' },
+      ]),
+    ).toEqual([{ name: 'table', kind: 'identifier', options: ['a'], autoSelect: false }])
   })
 
   test('auto-selects by default, as query params do', () => {
@@ -173,11 +191,15 @@ describe('missingParams', () => {
   ])
 
   test('names the placeholders a query still needs a value for', () => {
-    expect(missingParams('SELECT {field} FROM {table}', params, { table: 'events' })).toEqual(['field'])
+    expect(missingParams('SELECT {field} FROM {table}', params, { table: 'events' })).toEqual([
+      'field',
+    ])
   })
 
   test('is empty once every placeholder has a value', () => {
-    expect(missingParams('SELECT {field} FROM {table}', params, { table: 'events', field: 'city' })).toEqual([])
+    expect(
+      missingParams('SELECT {field} FROM {table}', params, { table: 'events', field: 'city' }),
+    ).toEqual([])
   })
 
   test('never reports a dimension, which is off rather than unset', () => {
@@ -191,7 +213,12 @@ describe('missingParams', () => {
 
 describe('resolveParams', () => {
   const params = parseDashboardParams([
-    { name: 'table', kind: 'identifier', default: 'none', options_sql: 'SELECT name FROM system.tables' },
+    {
+      name: 'table',
+      kind: 'identifier',
+      default: 'none',
+      options_sql: 'SELECT name FROM system.tables',
+    },
     {
       name: 'field',
       kind: 'identifier',
@@ -216,7 +243,12 @@ describe('resolveParams', () => {
 
   test('resolves the dependent options once the dependency has a value', async () => {
     const resolved = await resolveParams(params, { table: 'events' }, run, '`')
-    expect(resolved[1]).toEqual({ name: 'field', kind: 'identifier', options: ['city', 'ts'], value: '' })
+    expect(resolved[1]).toEqual({
+      name: 'field',
+      kind: 'identifier',
+      options: ['city', 'ts'],
+      value: '',
+    })
   })
 
   test('keeps a chosen value that is still a valid option', async () => {
@@ -239,18 +271,24 @@ describe('resolveParams', () => {
 
 describe('applyToQueries', () => {
   test('substitutes ready queries and holds back ones waiting on a selector', () => {
-    const params: DashboardParam[] = [{ name: 'table', kind: 'identifier', autoSelect: false, options: ['t'] }]
+    const params: DashboardParam[] = [
+      { name: 'table', kind: 'identifier', autoSelect: false, options: ['t'] },
+    ]
     const resolved = [{ name: 'table', kind: 'identifier' as const, options: ['t'], value: '' }]
     const out = applyToQueries({ a: 'SELECT 1', b: 'SELECT * FROM {table}' }, params, resolved, '"')
     expect(out).toEqual({ a: 'SELECT 1' })
     const chosen = [{ ...resolved[0], value: 't' }]
-    expect(applyToQueries({ b: 'SELECT * FROM {table}' }, params, chosen, '"')).toEqual({ b: 'SELECT * FROM "t"' })
+    expect(applyToQueries({ b: 'SELECT * FROM {table}' }, params, chosen, '"')).toEqual({
+      b: 'SELECT * FROM "t"',
+    })
   })
 })
 
 describe('parseParamsRequest', () => {
   test('takes values only, booleans as checkbox state', () => {
-    expect(parseParamsRequest({ type: 'set-params', values: { a: 'x', d: true, e: false } })).toEqual({
+    expect(
+      parseParamsRequest({ type: 'set-params', values: { a: 'x', d: true, e: false } }),
+    ).toEqual({
       a: 'x',
       d: 'on',
       e: '',

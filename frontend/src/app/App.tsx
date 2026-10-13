@@ -140,7 +140,9 @@ function Shell() {
     if (!workspace) return
     let live = true
     listWorkspaces()
-      .then((list) => live && setAutosave(list.find((w) => w.name === workspace)?.autosave ?? false))
+      .then(
+        (list) => live && setAutosave(list.find((w) => w.name === workspace)?.autosave ?? false),
+      )
       .catch(() => {})
     return () => {
       live = false
@@ -257,7 +259,6 @@ function Shell() {
     if (url === currentSession()?.url) return
     void patchSession({ url })
   }, [sessionChecked, location.pathname, location.search])
-
 
   // When armed, open an SSE channel: `ready` gives the session id; `query`,
   // `script` and `dashboard` events carry payloads that navigate to the
@@ -548,16 +549,17 @@ function Shell() {
           {/* Old URL, kept for bookmarks and sessions saved before the rename. */}
           <Route
             path="/queries"
-            element={<Navigate to={{ pathname: '/scripts', search: location.search, hash: location.hash }} replace />}
+            element={
+              <Navigate
+                to={{ pathname: '/scripts', search: location.search, hash: location.hash }}
+                replace
+              />
+            }
           />
           <Route
             path="/connect"
             element={
-              <ConnectView
-                key={sessionKey}
-                connection={connection}
-                setConnection={setConnection}
-              />
+              <ConnectView key={sessionKey} connection={connection} setConnection={setConnection} />
             }
           />
           <Route path="/explorer" element={<ExplorerView connection={connection} />} />
@@ -593,12 +595,16 @@ function Shell() {
         >
           <div className="glass-popover w-80 space-y-3 p-5 text-sm">
             <p className="font-medium text-slate-100">{sessionLabel} is open in another tab.</p>
-            <p className="text-slate-400">This tab is paused so the two don't overwrite each other.</p>
+            <p className="text-slate-400">
+              This tab is paused so the two don't overwrite each other.
+            </p>
             <div className="flex gap-2">
               <button
                 type="button"
                 data-testid="session-take-over"
-                onClick={() => void selectSession(sessionId(), true).then((n) => n && applySession(n))}
+                onClick={() =>
+                  void selectSession(sessionId(), true).then((n) => n && applySession(n))
+                }
                 className="glass-btn-primary px-3 py-1.5"
               >
                 Use it here

@@ -23,9 +23,7 @@ export function CellViewModal({ initial, onCancel, onSave, saveDisabled }: Props
       <div className="glass-popover w-full max-w-2xl p-5">
         <div className="mb-3">
           <h3 className="text-base font-semibold text-slate-100">Cell view (YAML)</h3>
-          <p className="mt-1 text-xs text-slate-400">
-            Maps column → render rule. Applied on Save.
-          </p>
+          <p className="mt-1 text-xs text-slate-400">Maps column → render rule. Applied on Save.</p>
         </div>
         <textarea
           value={value}

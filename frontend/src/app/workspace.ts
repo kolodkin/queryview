@@ -16,7 +16,12 @@ export type Workspace = {
 
 // `sync_error`: saved, but merging the newly attached repo in failed.
 // `workspace`: after a delete, where the sessions on it moved.
-export type WorkspaceResult = { ok: boolean; message?: string; sync_error?: string; workspace?: string }
+export type WorkspaceResult = {
+  ok: boolean
+  message?: string
+  sync_error?: string
+  workspace?: string
+}
 
 export async function listWorkspaces(): Promise<Workspace[]> {
   const r = await (await apiFetch('/api/workspaces')).json()
