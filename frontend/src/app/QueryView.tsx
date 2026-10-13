@@ -675,7 +675,10 @@ function QueryPanel({
       !window.confirm(`Permanently remove deleted query '${selectedName}'? This can't be undone.`)
     )
       return
-    if (await mutateSelected(null, true)) setSelectedName('')
+    if (await mutateSelected(null, true)) {
+      setSelectedName('')
+      setPushedCellView(null)
+    }
   }
 
   // Autosave: persist a named query's last successful run — the SQL that ran,
