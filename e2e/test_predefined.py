@@ -136,8 +136,12 @@ def test_picking_a_saved_query_runs_it(seeded_duckdb, page: Page, base_url: str,
     select.select_option("pq alpha")
     expect(output).to_contain_text("alpha")
 
-    # A new name runs nothing: the previous results stay.
+    # A new name runs nothing: of the runs sent from here on, Execute's is the only one.
+    runs: list[str] = []
+    page.on("request", lambda r: runs.append(r.url) if "/api/db/query" in r.url else None)
     page.once("dialog", lambda d: d.accept("pq new"))
     select.select_option("::new::")
     expect(select).to_have_value("pq new")
-    expect(output).to_contain_text("alpha")
+    with page.expect_response(lambda r: "/api/db/query" in r.url):
+        page.get_by_test_id("query-run").click()
+    assert len(runs) == 1

@@ -147,6 +147,8 @@ function QueryPanel({
   const deletedQueries = useMemo(() => allQueries.filter((q) => q.deleted_at != null), [allQueries])
   const [showDeleted, setShowDeleted] = useState(false)
   const [selectedName, setSelectedName] = useState('')
+  // A saved query picked from the dropdown, waiting to run (see onSelectName).
+  const [picked, setPicked] = useState<PredefinedQuery | null>(null)
   // The last successful run — its SQL and the name it runs for, taken at start;
   // a fresh object per run. Autosave reacts to it once the run's state (a
   // push's name and presentation) has committed.
@@ -501,8 +503,6 @@ function QueryPanel({
     }
   }
 
-  // Dropdown selection: a saved query loads its SQL and cell_view; the "new name"
-  // item prompts for a fresh name. The chosen name is what Save writes under.
   // Copy the selected predefined-query name, with a brief "Copied" on the button.
   async function copyName() {
     const name = selectedName.trim()
@@ -516,6 +516,9 @@ function QueryPanel({
     setVisibleCols(q.fields ?? []) // [] = show all (matches pushed-fields semantics)
   }
 
+  // Dropdown selection: a saved query loads its SQL and cell_view and runs; the
+  // "new name" item prompts for a fresh name and runs nothing. The chosen name is
+  // what Save writes under.
   function onSelectName(value: string) {
     if (value === TOGGLE_DELETED_OPTION) {
       setShowDeleted((v) => !v)
@@ -523,29 +526,33 @@ function QueryPanel({
     }
     if (value === NEW_NAME_OPTION) {
       const name = window.prompt('Save query as (name):', selectedName || '')?.trim()
-      if (name) setSelectedName(name)
+      if (name) {
+        setSelectedName(name)
+        setPicked(null)
+      }
       return
     }
     setSelectedName(value)
     setPushedCellView(null) // selecting a query reverts to its saved cell view
     const q = findQuery(value)
-    if (q) {
-      applyPredefined(q)
-      setRunPicked(true)
-    }
+    if (q) applyPredefined(q)
+    setPicked(q ?? null)
   }
 
-  // A saved query picked from the dropdown runs once its SQL has loaded and its
-  // param choices have resolved, seeded as the dropdowns are about to be (their
-  // state is a render behind). Choices that fail to resolve block it, as on Run.
-  const [runPicked, setRunPicked] = useState(false)
+  // Run the picked query once its param choices have resolved for this database,
+  // seeded as the dropdowns are about to be (their state is a render behind).
+  // Choices that fail to resolve block it, as on Run.
   useEffect(() => {
-    if (!runPicked || optionsFor?.specs !== paramSpecs) return
-    setRunPicked(false)
+    if (!picked || optionsFor?.runOn !== runOn || optionsFor?.specs !== paramSpecs) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPicked(null)
     if (!optionsReady) return
-    void runWith(sql, limit, 0, orderBy, { paramOverride: seedParamValues(paramDefs, paramValues) })
+    void runWith(picked.query, limit, 0, picked.order_by ?? [], {
+      runFor: picked.query_name,
+      paramOverride: seedParamValues(paramDefs, paramValues),
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runPicked, optionsFor, paramSpecs])
+  }, [picked, optionsFor, paramSpecs, runOn])
 
   // After a git restore overwrites the stored row, refetch the list and
   // re-seed the editor from the (now-current) row for the selected name —
