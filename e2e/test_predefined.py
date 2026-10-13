@@ -18,15 +18,25 @@ def _names(base_url: str, ws: str, deleted: bool = False) -> list[str]:
     return [q["query_name"] for q in r.json()["queries"] if (q["deleted_at"] is not None) == deleted]
 
 
-def test_rename_delete_undelete_and_purge_a_saved_query(seeded_duckdb, page: Page, base_url: str, shot) -> None:
+def _open_new_workspace(page: Page, base_url: str, seeded_duckdb: str, queries: dict[str, dict] | None = None) -> str:
+    """Create a uniquely-named workspace saving `queries` (name -> saved fields),
+    connect DuckDB, switch to it and open the query panel. Returns its name."""
     ws = f"e2e-pq-{uuid.uuid4().hex[:6]}"
     httpx.post(f"{base_url}/api/workspaces", json={"name": ws}).raise_for_status()
+    for name, fields in (queries or {}).items():
+        body = {"query_name": name, "type": "duckdb", "workspace": ws, **fields}
+        httpx.post(f"{base_url}/api/predefined-queries", json=body).raise_for_status()
 
     _connect(page, DUCK, seeded_duckdb)
     page.get_by_test_id("workspace-switcher").click()
     page.get_by_test_id("workspace-option").filter(has_text=ws).click()
     expect(page.get_by_test_id("workspace-switcher")).to_contain_text(ws)
     open_query_panel(page)
+    return ws
+
+
+def test_rename_delete_undelete_and_purge_a_saved_query(seeded_duckdb, page: Page, base_url: str, shot) -> None:
+    ws = _open_new_workspace(page, base_url, seeded_duckdb)
 
     select = page.get_by_test_id("query-predefined-select")
     rename = page.get_by_test_id("query-rename")
@@ -96,24 +106,19 @@ def test_rename_delete_undelete_and_purge_a_saved_query(seeded_duckdb, page: Pag
 
 
 def test_picking_a_saved_query_runs_it(seeded_duckdb, page: Page, base_url: str, shot) -> None:
-    ws = f"e2e-pq-{uuid.uuid4().hex[:6]}"
-    httpx.post(f"{base_url}/api/workspaces", json={"name": ws}).raise_for_status()
-    for name, row_id in (("pq alpha", 1), ("pq beta", 2)):
-        httpx.post(
-            f"{base_url}/api/predefined-queries",
-            json={
-                "query_name": name,
-                "type": "duckdb",
-                "workspace": ws,
-                "query": f"SELECT name FROM items WHERE id = {row_id}",
+    _open_new_workspace(
+        page,
+        base_url,
+        seeded_duckdb,
+        {
+            "pq alpha": {"query": "SELECT name FROM items WHERE id = 1"},
+            "pq beta": {"query": "SELECT name FROM items WHERE id = 2"},
+            "pq broken": {
+                "query": "SELECT name FROM items WHERE name = {sel}",
+                "cell_view": "params:\n  - name: sel\n    options_sql: SELECT name FROM no_such_table\n",
             },
-        ).raise_for_status()
-
-    _connect(page, DUCK, seeded_duckdb)
-    page.get_by_test_id("workspace-switcher").click()
-    page.get_by_test_id("workspace-option").filter(has_text=ws).click()
-    expect(page.get_by_test_id("workspace-switcher")).to_contain_text(ws)
-    open_query_panel(page)
+        },
+    )
 
     # Picking alone runs: Execute is never clicked.
     select = page.get_by_test_id("query-predefined-select")
@@ -125,8 +130,14 @@ def test_picking_a_saved_query_runs_it(seeded_duckdb, page: Page, base_url: str,
     expect(output).not_to_contain_text("alpha")
     shot("swapped query: results follow the pick")
 
+    # Param choices that fail to resolve block the run; the next pick still runs.
+    select.select_option("pq broken")
+    expect(page.get_by_test_id("query-error")).to_contain_text('options for "sel"')
+    select.select_option("pq alpha")
+    expect(output).to_contain_text("alpha")
+
     # A new name runs nothing: the previous results stay.
     page.once("dialog", lambda d: d.accept("pq new"))
     select.select_option("::new::")
     expect(select).to_have_value("pq new")
-    expect(output).to_contain_text("beta")
+    expect(output).to_contain_text("alpha")

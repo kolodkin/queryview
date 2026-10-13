@@ -221,12 +221,12 @@ function QueryPanel({
   // param-prefixed) blocks the main query.
   const [sqlOptions, setSqlOptions] = useState<Record<string, string[]>>({})
   const [optionsError, setOptionsError] = useState<string | null>(null)
-  // The `runOn` the choices were resolved for: after a database switch they
-  // lag it until the re-fetch lands, and the switch's re-run (below) waits.
-  const [optionsFor, setOptionsFor] = useState<string | null | undefined>(undefined)
-  // The specs the choices above were resolved for: a dropdown pick's run waits
-  // until they match the picked query's specs.
-  const optionsSpecs = useRef<ParamSpec[] | null>(null)
+  // The `runOn` and specs the choices were resolved for: after a database switch
+  // or a dropdown pick they lag until the re-fetch lands, and the run waits.
+  const [optionsFor, setOptionsFor] = useState<{
+    runOn: string | null | undefined
+    specs: ParamSpec[]
+  } | null>(null)
 
   // Resolve every `options_sql` param's choices via the panel's query endpoint;
   // cached until the specs change. A failed/empty result records a blocking error.
@@ -236,9 +236,8 @@ function QueryPanel({
       /* eslint-disable react-hooks/set-state-in-effect */
       setSqlOptions({})
       setOptionsError(null)
-      setOptionsFor(runOn)
+      setOptionsFor({ runOn, specs: paramSpecs })
       /* eslint-enable react-hooks/set-state-in-effect */
-      optionsSpecs.current = paramSpecs
       return
     }
     let cancelled = false
@@ -275,8 +274,7 @@ function QueryPanel({
       }
       setSqlOptions(resolved)
       setOptionsError(err)
-      setOptionsFor(runOn)
-      optionsSpecs.current = paramSpecs
+      setOptionsFor({ runOn, specs: paramSpecs })
     })()
     return () => {
       cancelled = true
@@ -465,7 +463,7 @@ function QueryPanel({
       runOnSeen.current = runOn
       rerunPending.current = lastOk !== null
     }
-    if (!rerunPending.current || optionsFor !== runOn) return
+    if (!rerunPending.current || optionsFor?.runOn !== runOn) return
     rerunPending.current = false
     if (!optionsReady || !lastOk) return
     void runWith(lastOk.query, limit, 0, orderBy, {
@@ -542,12 +540,12 @@ function QueryPanel({
   // state is a render behind). Choices that fail to resolve block it, as on Run.
   const [runPicked, setRunPicked] = useState(false)
   useEffect(() => {
-    if (!runPicked || optionsSpecs.current !== paramSpecs) return
+    if (!runPicked || optionsFor?.specs !== paramSpecs) return
     setRunPicked(false)
     if (!optionsReady) return
     void runWith(sql, limit, 0, orderBy, { paramOverride: seedParamValues(paramDefs, paramValues) })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runPicked, paramSpecs, sqlOptions, optionsError])
+  }, [runPicked, optionsFor, paramSpecs])
 
   // After a git restore overwrites the stored row, refetch the list and
   // re-seed the editor from the (now-current) row for the selected name —
