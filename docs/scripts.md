@@ -1,6 +1,6 @@
-# Queries — the SQL scratchpad
+# Scripts — the SQL scratchpad
 
-The **Queries** page (`/queries`) is a flat SQL textbox: whatever you type runs
+The **Scripts** page (`/scripts`) is a flat SQL textbox: whatever you type runs
 **as written** against the session's selected database — `CREATE`, `INSERT`,
 `ALTER`, `DROP` included — with no pagination wrapper, no saved names, no
 column pickers. [QueryView](./query.md) wraps a single `SELECT` for paging,
@@ -12,7 +12,7 @@ database is selected the page redirects to Connect.
 
 ```
 ┌───────────────────────────────────────────────────────────┐
-│                         Queries                           │
+│                         Scripts                           │
 │                                    [Min] [S] [M] [L] [XL]  │
 │ ┌───────────────────────────────────────────────────────┐ │
 │ │ CREATE TABLE t (id INTEGER);                          │ │  ← SQL textarea

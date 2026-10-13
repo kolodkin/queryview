@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { failedSpan, runSummary, statementRangeAt, type StatementResult } from './queriesScript'
+import { failedSpan, runSummary, statementRangeAt, type StatementResult } from './script'
 
 const base: StatementResult = {
   ok: true,

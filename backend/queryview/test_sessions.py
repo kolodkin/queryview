@@ -53,7 +53,7 @@ def test_patch_ui_merges_per_view_and_keeps_unknown_keys():
 
 
 def test_patch_unknown_session_returns_none():
-    assert _run(sessions.patch_session("nope", url="/queries")) is None
+    assert _run(sessions.patch_session("nope", url="/scripts")) is None
 
 
 def test_patch_returns_the_updated_record():

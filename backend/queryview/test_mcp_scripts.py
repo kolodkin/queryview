@@ -1,5 +1,5 @@
-"""MCP tools for the Queries page: run_script returns per-statement results to
-the agent; push_script fills the browser's Queries editor."""
+"""MCP tools for the Scripts page: run_script returns per-statement results to
+the agent; push_script fills the browser's Scripts editor."""
 
 from __future__ import annotations
 
