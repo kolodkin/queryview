@@ -156,7 +156,7 @@ def test_sessions_queries_to_scripts_migration(tmp_path, monkeypatch):
 
     con = sqlite3.connect(_db_path())
     try:
-        got = {sid: ui for sid, ui in con.execute("SELECT id, ui FROM sessions")}
+        got = dict(con.execute("SELECT id, ui FROM sessions").fetchall())
     finally:
         con.close()
     assert json.loads(got["old"]) == {"scripts": {"sql": "SELECT 1"}}
