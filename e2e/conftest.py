@@ -1,3 +1,5 @@
+import asyncio
+import json
 import os
 import re
 import socket
@@ -6,10 +8,14 @@ import sys
 import time
 import uuid
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
 from playwright.sync_api import Page, expect
 
 # Mirror playwright.config.ts: 15s default assertion timeout.
@@ -72,6 +78,35 @@ def open_query_panel(page: Page) -> None:
     """Open the query panel from wherever the test is, via the QueryView page."""
     page.get_by_test_id("nav-queryview").click()
     expect(page.get_by_test_id("query-panel")).to_be_visible()
+
+
+def arm_remote(page: Page) -> str:
+    """Arm remote control via the agent popover and return the session id the
+    popover shows; leaves the popover closed."""
+    page.get_by_test_id("agent-toggle").click()
+    page.get_by_test_id("remote-arm").check()
+    sid_el = page.get_by_test_id("remote-session-id")
+    expect(sid_el).to_be_visible()
+    session_id = sid_el.inner_text().strip()
+    assert session_id
+    page.get_by_test_id("agent-toggle").click()
+    return session_id
+
+
+def mcp_call(base_url: str, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Call one tool over the real MCP endpoint, the way an agent does, and
+    return its JSON result."""
+
+    async def call() -> dict[str, Any]:
+        async with streamable_http_client(f"{base_url}/mcp/") as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                res = await session.call_tool(tool, args)
+                return json.loads(res.content[0].text)  # type: ignore[union-attr]
+
+    # Playwright's sync API owns this thread's event loop; run the client on another.
+    with ThreadPoolExecutor(1) as pool:
+        return pool.submit(asyncio.run, call()).result(timeout=30)
 
 
 @pytest.fixture

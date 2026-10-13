@@ -99,13 +99,14 @@ async def run_query(
     r = await _run_query(session_id, query, limit, offset)
     if not r["ok"]:
         return {"ok": False, "message": r["message"]}
-    return {
-        "ok": True,
-        "database": r["database"],
-        "columns": [c["name"] for c in r["meta"]],
-        "types": [c["type"] for c in r["meta"]],
-        "rows": r["data"],
-    }
+    return {"ok": True, "database": r["database"], **_columns(r["meta"]), "rows": r["data"]}
+
+
+def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """The agent-facing column shape of a driver's meta (None: no result set)."""
+    if meta is None:
+        return {"columns": None, "types": None}
+    return {"columns": [c["name"] for c in meta], "types": [c["type"] for c in meta]}
 
 
 @mcp.tool()
@@ -134,24 +135,11 @@ async def run_script(session_id: str, sql: str) -> dict[str, Any]:
     r = await execute_script(session_id, sql)
     if not r["ok"]:
         return {"ok": False, "message": r["message"]}
-    return {
-        "ok": True,
-        "database": await sessions.database_of(session_id),
-        "results": [
-            {
-                "sql": s["sql"],
-                "ok": s["ok"],
-                "status": s["status"],
-                "message": s["message"],
-                "columns": [c["name"] for c in s["meta"]] if s["meta"] is not None else None,
-                "types": [c["type"] for c in s["meta"]] if s["meta"] is not None else None,
-                "rows": s["data"],
-                "truncated": s["truncated"],
-                "elapsed_ms": s["elapsed_ms"],
-            }
-            for s in r["results"]
-        ],
-    }
+    results = [
+        {**{k: v for k, v in s.items() if k not in ("meta", "data")}, **_columns(s["meta"]), "rows": s["data"]}
+        for s in r["results"]
+    ]
+    return {"ok": True, "database": r["database"], "results": results}
 
 
 @mcp.tool()
@@ -167,8 +155,6 @@ async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str,
         sql: The script; separate statements with `;`.
         run: Run the script after loading it (default False: load only).
     """
-    if not sql.strip():
-        return {"ok": False, "message": "sql required", "database": None}
     ok, message = remote.push(session_id, {"type": "script", "sql": sql, "run": run})
     return {"ok": ok, "message": message, "database": await sessions.database_of(session_id)}
 

@@ -15,9 +15,9 @@ import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 export type ScriptPush = { sql: string; run: boolean }
 
 type QueriesViewProps = {
-  pushed?: ScriptPush | null
-  onPushConsumed?: () => void
-  remoteId?: string | null
+  pushed: ScriptPush | null
+  onPushConsumed: () => void
+  remoteId: string | null
 }
 
 // The Queries page (`/queries`, docs/queries.md), mounted by the App shell only
@@ -42,7 +42,8 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const markRef = useRef<HTMLPreElement>(null)
   const runSeq = useRef(0)
-  // Focus in the panel holds the edit lock, so a push can't clobber typing.
+  // Focus in the panel holds the edit lock (a push can't clobber typing);
+  // leaving it writes the text to the session.
   const panelRef = useRef<HTMLElement>(null)
   useEditLock(panelRef, remoteId)
 
@@ -102,7 +103,7 @@ function QueriesView({ pushed, onPushConsumed, remoteId }: QueriesViewProps) {
     edit(pushed.sql)
     void flushPatches()
     if (pushed.run) void run({ start: 0, end: pushed.sql.length }, pushed.sql)
-    onPushConsumed?.()
+    onPushConsumed()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pushed])
 

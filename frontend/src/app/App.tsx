@@ -270,33 +270,29 @@ function Shell() {
       `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}`,
     )
     es.addEventListener('ready', () => setChannelOpen(true))
-    es.addEventListener('query', (e) => {
-      try {
-        setQueryPush(JSON.parse((e as MessageEvent).data) as QueryPush)
-        setToast('Agent updated the query')
-        navigate('/queryview')
-      } catch {
-        /* ignore malformed event */
-      }
+    function on<T>(event: string, apply: (payload: T) => void) {
+      es.addEventListener(event, (e) => {
+        try {
+          apply(JSON.parse((e as MessageEvent).data) as T)
+        } catch {
+          /* ignore malformed event */
+        }
+      })
+    }
+    on<QueryPush>('query', (payload) => {
+      setQueryPush(payload)
+      setToast('Agent updated the query')
+      navigate('/queryview')
     })
-    es.addEventListener('script', (e) => {
-      try {
-        setScriptPush(JSON.parse((e as MessageEvent).data) as ScriptPush)
-        setToast('Agent updated the script')
-        navigate('/queries')
-      } catch {
-        /* ignore malformed event */
-      }
+    on<ScriptPush>('script', (payload) => {
+      setScriptPush(payload)
+      setToast('Agent updated the script')
+      navigate('/queries')
     })
-    es.addEventListener('dashboard', (e) => {
-      try {
-        const payload = JSON.parse((e as MessageEvent).data) as DashboardPush
-        setDashboardPush(payload)
-        setToast('Agent updated the dashboard')
-        navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
-      } catch {
-        /* ignore malformed event */
-      }
+    on<DashboardPush>('dashboard', (payload) => {
+      setDashboardPush(payload)
+      setToast('Agent updated the dashboard')
+      navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
     })
     return () => {
       es.close()

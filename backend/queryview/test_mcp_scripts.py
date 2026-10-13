@@ -3,24 +3,9 @@ the agent; push_script fills the browser's Queries editor."""
 
 from __future__ import annotations
 
-import asyncio
-
 from queryview import remote, sessions
-from queryview.connect import _save_active_connection, open_saved
-from queryview.drivers.duckdb import DuckConfig
 from queryview.mcp_server import push_script, run_script
-
-
-def _run(coro):
-    return asyncio.run(coro)
-
-
-def _connected_session(name: str) -> str:
-    """A new session on a saved in-memory DuckDB connection named `name`."""
-    _run(_save_active_connection(name, DuckConfig(":memory:"), "duckdb"))
-    rec = _run(sessions.create_session())
-    assert _run(open_saved(rec.id, name))["ok"]
-    return rec.id
+from queryview.test_mcp_connections import _connected_session, _run
 
 
 def test_run_script_runs_writes_and_returns_each_statement():
@@ -80,6 +65,5 @@ def test_push_script_blocked_while_user_edits():
         remote.unregister(rid)
 
 
-def test_push_script_unknown_session_or_empty_sql_fails():
+def test_push_script_unknown_session_fails():
     assert _run(push_script("no-such-session", "SELECT 1"))["ok"] is False
-    assert _run(push_script("no-such-session", ""))["message"] == "sql required"
