@@ -66,6 +66,7 @@ class ChResult(Result):
     server for, and how to decode the body it returns."""
 
     clause: ClassVar[str | None] = None  # None: the server's default (TabSeparated)
+    settings: ClassVar[dict[str, str]] = {}  # output settings the decoder relies on
 
     @classmethod
     def from_text(cls, text: str) -> Self | Err:
@@ -84,6 +85,7 @@ class ChCsv(ChText):
 
 class ChRows(RowsResult, ChResult):
     clause = "JSONCompact"
+    settings = JSON_COMPACT_SETTINGS
 
     @classmethod
     def from_text(cls, text: str) -> Self | Err:
@@ -93,8 +95,8 @@ class ChRows(RowsResult, ChResult):
         try:
             doc = json.loads(text)
             meta = [Column(str(m["name"]), str(m["type"])) for m in doc["meta"]]
-            data = [list(row) for row in doc["data"] if isinstance(row, list)]
-            if len(data) != len(doc["data"]) or any(len(row) != len(meta) for row in data):
+            data = doc["data"]
+            if not isinstance(data, list) or any(not isinstance(row, list) or len(row) != len(meta) for row in data):
                 raise ValueError("rows don't match meta")
         except (ValueError, KeyError, TypeError) as err:
             return Err(f"unexpected JSON from ClickHouse: {err}")
@@ -155,10 +157,21 @@ async def ch_query(
     settings: dict[str, str] | None = None,
 ) -> R | Err:
     """Run `query` asking for `kind`'s format and decode the body into it."""
-    text = await ch_fetch(c, query, kind.clause, database, settings)
+    text = await ch_fetch(c, query, kind.clause, database, {**kind.settings, **(settings or {})})
     if isinstance(text, Err):
         return text
     return kind.from_text(text)
+
+
+async def ch_rows(c: ChConfig, query: str, min_cols: int, database: str | None = None) -> QueryRows | Err:
+    """`ch_query` for a metadata query whose rows the caller indexes by position:
+    the result has at least `min_cols` columns, or it is an Err."""
+    r = await ch_query(c, query, ChRows, database=database)
+    if isinstance(r, Err):
+        return r
+    if len(r.rows.meta) < min_cols:
+        return Err(f"unexpected JSON from ClickHouse: expected at least {min_cols} columns, got {len(r.rows.meta)}")
+    return r.rows
 
 
 def parse_ch_config(body: Any) -> tuple[ChConfig | None, str | None]:
@@ -191,26 +204,22 @@ class ClickHouseDriver:
         return {"ok": True, "message": f"Connected — SELECT 1 returned {r.text}"}
 
     async def list_databases(self, config: ChConfig) -> DatabasesResult | Err:
-        r = await ch_query(config, "SHOW DATABASES", ChRows)
+        r = await ch_rows(config, "SHOW DATABASES", 1)
         if isinstance(r, Err):
             return r
-        if len(r.rows.meta) < 1:
-            return Err("unexpected JSON from ClickHouse: too few columns")
-        return DatabasesResult([row[0] for row in r.rows.data])
+        return DatabasesResult([row[0] for row in r.data])
 
     async def list_tables(self, config: ChConfig, database: str | None) -> TablesResult | Err:
         # Same set SHOW TABLES yields, plus the engine's stored row/byte counts
         # (NULL for views and engines that don't track them).
-        r = await ch_query(
+        r = await ch_rows(
             config,
             "SELECT name, total_rows, total_bytes FROM system.tables WHERE database = currentDatabase() ORDER BY name",
-            ChRows,
+            3,
             database=database,
         )
         if isinstance(r, Err):
             return r
-        if len(r.rows.meta) < 3:
-            return Err("unexpected JSON from ClickHouse: too few columns")
         return TablesResult(
             [
                 {
@@ -218,7 +227,7 @@ class ClickHouseDriver:
                     "rows": None if row[1] is None else int(row[1]),
                     "bytes": None if row[2] is None else int(row[2]),
                 }
-                for row in r.rows.data
+                for row in r.data
             ]
         )
 
@@ -233,7 +242,7 @@ class ClickHouseDriver:
     ) -> RowsResult | Err:
         order_clause = build_order_by(order_by, "`")
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias=None)
-        return await ch_query(config, paginated, ChRows, database=database, settings=JSON_COMPACT_SETTINGS)
+        return await ch_query(config, paginated, ChRows, database=database)
 
     async def export_csv(
         self,
@@ -250,12 +259,10 @@ class ClickHouseDriver:
 
     async def describe_query(self, config: ChConfig, sql: str, database: str | None) -> FieldsResult | Err:
         inner = sql.rstrip().rstrip(";")
-        r = await ch_query(config, f"DESCRIBE (\n{inner}\n)", ChRows, database=database)
+        r = await ch_rows(config, f"DESCRIBE (\n{inner}\n)", 2, database=database)
         if isinstance(r, Err):
             return r
-        if len(r.rows.meta) < 2:
-            return Err("unexpected JSON from ClickHouse: too few columns")
-        return FieldsResult([{"name": row[0], "type": row[1]} for row in r.rows.data])
+        return FieldsResult([{"name": row[0], "type": row[1]} for row in r.data])
 
     async def execute_script(self, config: ChConfig, sql: str, database: str | None) -> list[StatementResult]:
         # One HTTP client for the script, and one server session so SET and

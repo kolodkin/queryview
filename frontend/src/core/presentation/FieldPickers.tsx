@@ -70,11 +70,12 @@ function FieldMenu({
               >
                 {on ? '✓' : ''}
               </span>
-              <span className={`truncate ${on ? 'text-indigo-100' : 'text-slate-300'}`}>
+              {/* The name is capped so a long one still leaves the type room; the
+                  type takes only what is left, so a long type (a named Tuple runs
+                  to hundreds of characters) truncates before the name does. */}
+              <span className={`max-w-[60%] truncate ${on ? 'text-indigo-100' : 'text-slate-300'}`}>
                 {f.name}
               </span>
-              {/* Takes only what the name leaves over, so a long type (a named
-                  Tuple runs to hundreds of characters) truncates first. */}
               <span className="min-w-0 flex-1 truncate text-right font-mono text-[10px] text-slate-500">
                 {f.type}
               </span>

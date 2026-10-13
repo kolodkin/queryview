@@ -20,7 +20,7 @@ from queryview.drivers.base import (
     TablesResult,
     TextResult,
 )
-from queryview.drivers.clickhouse import ChConfig, ChCsv, ChRows, ChText, ClickHouseDriver
+from queryview.drivers.clickhouse import JSON_COMPACT_SETTINGS, ChConfig, ChCsv, ChRows, ChText, ClickHouseDriver
 
 JSON_COMPACT = (
     '{"meta":[{"name":"id","type":"UInt64"},{"name":"tags","type":"Array(String)"}],"data":[["1",["a","b"]]],"rows":1}'
@@ -112,6 +112,8 @@ def test_list_databases_reads_json_compact_rows(monkeypatch):
     r = asyncio.run(d.list_databases(CFG))
     assert isinstance(r, DatabasesResult) and r.databases == ["db1", "db2"]
     assert seen["query"] == "SHOW DATABASES" and seen["clause"] == "JSONCompact"
+    # Every JSONCompact read asks for the same value shapes, not only run_query.
+    assert seen["settings"] == JSON_COMPACT_SETTINGS
 
 
 def test_list_tables_parses_rows_and_bytes_with_nulls(monkeypatch):
@@ -132,15 +134,17 @@ def test_list_tables_parses_rows_and_bytes_with_nulls(monkeypatch):
     assert "system.tables" in seen["query"]
     assert seen["database"] == "db"
     assert seen["clause"] == "JSONCompact"
+    assert seen["settings"] == JSON_COMPACT_SETTINGS
 
 
 def test_describe_query_keeps_multiline_types(monkeypatch):
     # DESCRIBE pretty-prints named tuples across lines; a type must come back
     # as ClickHouse wrote it, which JSON decoding gives for free.
     d = ClickHouseDriver()
+    seen = {}
     _capture(
         monkeypatch,
-        {},
+        seen,
         _json_compact(
             ["name", "type", "default_type"],
             [["tags", "Array(Tuple(\n    id Int32,\n    name String))", ""], ["note", "String", ""]],
@@ -151,6 +155,7 @@ def test_describe_query_keeps_multiline_types(monkeypatch):
         {"name": "tags", "type": "Array(Tuple(\n    id Int32,\n    name String))"},
         {"name": "note", "type": "String"},
     ]
+    assert seen["settings"] == JSON_COMPACT_SETTINGS
 
 
 @pytest.mark.parametrize(
@@ -169,6 +174,13 @@ def test_describe_query_rejects_unexpected_bodies(monkeypatch, body):
     _capture(monkeypatch, {}, body)
     r = asyncio.run(d.describe_query(CFG, "SELECT 1", "db"))
     assert isinstance(r, Err) and "JSON" in r.message
+
+
+def test_too_few_columns_says_what_was_expected(monkeypatch):
+    d = ClickHouseDriver()
+    _capture(monkeypatch, {}, _json_compact(["name"], [["x"]]))
+    r = asyncio.run(d.describe_query(CFG, "SELECT 1", "db"))
+    assert r == Err("unexpected JSON from ClickHouse: expected at least 2 columns, got 1")
 
 
 def test_ch_rows_from_text_decodes_and_rejects():
