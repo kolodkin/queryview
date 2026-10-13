@@ -330,3 +330,12 @@ def test_api_rename_delete_and_undelete(default_ws_id):
         params={"query_name": "api taken", "type": "clickhouse", "workspace": "nope-del"},
     )
     assert r.status_code == 404
+
+    # Purge removes a deleted query for good; a live one must be deleted first.
+    purge = {"query_name": "api taken", "type": "clickhouse", "purge": "1"}
+    assert c.delete("/api/predefined-queries", params=purge).status_code == 404
+    assert "api taken" in names()
+    c.delete("/api/predefined-queries", params={"query_name": "api taken", "type": "clickhouse"})
+    assert c.delete("/api/predefined-queries", params=purge).json() == {"ok": True}
+    assert "api taken" not in names() and "api taken" not in names(deleted=True)
+    assert c.delete("/api/predefined-queries", params=purge).status_code == 404

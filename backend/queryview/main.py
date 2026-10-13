@@ -41,6 +41,7 @@ from .mcp_server import mcp
 from .queries import (
     PredefinedQueryError,
     list_predefined_queries_view,
+    purge_predefined_query,
     save_predefined_query,
     set_predefined_query_deleted,
     update_predefined_query,
@@ -502,6 +503,7 @@ async def predefined_queries_update(request: Request):
     return {"ok": True}
 
 
+# Soft-deletes; `purge=1` removes an already deleted query for good.
 @app.delete("/api/predefined-queries")
 async def predefined_queries_delete(request: Request):
     q = request.query_params
@@ -513,7 +515,10 @@ async def predefined_queries_delete(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     try:
-        await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
+        if q.get("purge") in ("1", "true"):
+            await purge_predefined_query(conn_type, name, workspace_id=ws.id)
+        else:
+            await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
     except PredefinedQueryError as e:
         return _status_error(e)
     return {"ok": True}
