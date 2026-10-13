@@ -1,4 +1,4 @@
-"""Renaming, deleting and undeleting a saved (predefined) query from the
+"""Renaming, deleting, undeleting and purging a saved (predefined) query from the
 query panel.
 Uses DuckDB and a uniquely-named workspace per run."""
 
@@ -18,7 +18,7 @@ def _names(base_url: str, ws: str, deleted: bool = False) -> list[str]:
     return [q["query_name"] for q in r.json()["queries"] if (q["deleted_at"] is not None) == deleted]
 
 
-def test_rename_delete_and_undelete_a_saved_query(seeded_duckdb, page: Page, base_url: str, shot) -> None:
+def test_rename_delete_undelete_and_purge_a_saved_query(seeded_duckdb, page: Page, base_url: str, shot) -> None:
     ws = f"e2e-pq-{uuid.uuid4().hex[:6]}"
     httpx.post(f"{base_url}/api/workspaces", json={"name": ws}).raise_for_status()
 
@@ -84,3 +84,12 @@ def test_rename_delete_and_undelete_a_saved_query(seeded_duckdb, page: Page, bas
     assert _names(base_url, ws) == ["pq renamed"]
     assert _names(base_url, ws, deleted=True) == []
     shot("undeleted")
+
+    # Purge clears the selection too.
+    page.once("dialog", lambda d: d.accept())
+    delete.click()
+    page.once("dialog", lambda d: d.accept())
+    page.get_by_test_id("query-purge").click()
+    expect(select).to_have_value("")
+    assert _names(base_url, ws) == [] and _names(base_url, ws, deleted=True) == []
+    shot("purged")

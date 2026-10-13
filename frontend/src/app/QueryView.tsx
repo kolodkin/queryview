@@ -581,10 +581,11 @@ function QueryPanel({
   }
 
   // Rename, delete or undelete the selected saved query; the editor keeps its
-  // SQL. A deleted query stays selected, so it can be committed or undeleted.
-  // `change` PATCHes (rename, undelete); null DELETEs.
+  // SQL. A deleted query stays selected, so it can be committed, undeleted or
+  // purged. `change` PATCHes (rename, undelete); null DELETEs, for good with `purge`.
   async function mutateSelected(
     change: { new_name: string } | { deleted: false } | null,
+    purge = false,
   ): Promise<boolean> {
     setBusy(true)
     setError(null)
@@ -593,6 +594,7 @@ function QueryPanel({
         query_name: selectedName,
         type: connectionType,
         workspace: activeWorkspace(),
+        ...(purge && { purge: '1' }),
       }
       const res = change
         ? await apiFetch('/api/predefined-queries', {
@@ -627,6 +629,17 @@ function QueryPanel({
   async function deleteSelected() {
     if (!window.confirm(`Delete query '${selectedName}'?`)) return
     if (await mutateSelected(null)) setPushedCellView(null)
+  }
+
+  async function purgeSelected() {
+    if (
+      !window.confirm(`Permanently remove deleted query '${selectedName}'? This can't be undone.`)
+    )
+      return
+    if (await mutateSelected(null, true)) {
+      setSelectedName('')
+      setPushedCellView(null)
+    }
   }
 
   // Autosave: persist a named query's last successful run — the SQL that ran,
@@ -737,16 +750,28 @@ function QueryPanel({
           Rename
         </button>
         {deletedSelected ? (
-          <button
-            type="button"
-            onClick={() => void mutateSelected({ deleted: false })}
-            disabled={busy}
-            data-testid="query-undelete"
-            title="Restore this deleted query"
-            className="glass-btn px-3 py-2 font-medium"
-          >
-            Undelete
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => void mutateSelected({ deleted: false })}
+              disabled={busy}
+              data-testid="query-undelete"
+              title="Restore this deleted query"
+              className="glass-btn px-3 py-2 font-medium"
+            >
+              Undelete
+            </button>
+            <button
+              type="button"
+              onClick={() => void purgeSelected()}
+              disabled={busy}
+              data-testid="query-purge"
+              title="Permanently remove this deleted query"
+              className="glass-btn px-3 py-2 font-medium"
+            >
+              Purge
+            </button>
+          </>
         ) : (
           <button
             type="button"
