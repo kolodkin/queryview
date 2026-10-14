@@ -46,6 +46,9 @@ let taken = false
 let beating: Promise<void> | null = null
 let holds = 0
 let pending: PendingPatch = {}
+// Bumped by patchSession and selectSession. A reply is adopted only if this
+// hasn't moved since its request, so a late one can't roll back a newer change.
+let localGen = 0
 let timer: ReturnType<typeof setTimeout> | undefined
 // Subscribers to every row the mirror adopts, whatever brought it.
 const rowListeners = new Set<(row: SessionState) => void>()
@@ -82,6 +85,15 @@ function adopt(next: SessionState): SessionState {
   return state
 }
 
+// Adopts a reply unless a local change since its request (`gen`) made it stale.
+function adoptIfCurrent(gen: number, next: SessionState, what: string): SessionState {
+  if (state && gen !== localGen) {
+    console.debug(`session: dropped stale ${what} reply`)
+    return state
+  }
+  return adopt(next)
+}
+
 // Run `f` on every row adopted from here on; returns the unsubscribe. The
 // shell uses it to notice a connection or database switched elsewhere.
 export function onSessionRow(f: (row: SessionState) => void): () => void {
@@ -98,6 +110,7 @@ export async function attachSession(keep = false): Promise<SessionState> {
   const known = tabRead(SESSION_KEY)
   if (known) body.session_id = known
   if (keep) body.keep = true
+  const gen = localGen
   const res = await apiFetch('/api/sessions/attach', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -106,7 +119,11 @@ export async function attachSession(keep = false): Promise<SessionState> {
   if (keep && res.status === 409) throw new SessionTakenError()
   const data = await res.json()
   if (!data?.session) throw new Error('attach returned no session')
-  return adopt(data.session as SessionState)
+  const next = data.session as SessionState
+  // A different session always lands: the server replaced a deleted one.
+  // withoutHeartbeat keeps switches from racing this.
+  if (next.id !== state?.id) return adopt(next)
+  return adoptIfCurrent(gen, next, 'attach')
 }
 
 export function isTaken(): boolean {
@@ -196,6 +213,7 @@ export async function flushPatches(): Promise<void> {
   const body = pending
   pending = {}
   if (!sid || taken || Object.keys(body).length === 0) return
+  const gen = localGen
   try {
     const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
       method: 'PATCH',
@@ -203,7 +221,7 @@ export async function flushPatches(): Promise<void> {
       body: JSON.stringify(body),
     })
     const data = await res.json()
-    if (data?.session) adopt(data.session as SessionState)
+    if (data?.session) adoptIfCurrent(gen, data.session as SessionState, 'patch')
   } catch {
     /* a lost patch costs a remembered preference, never live work */
   }
@@ -242,6 +260,7 @@ export function patchSession(changes: SessionPatch): Promise<void> {
   if (!state) return Promise.resolve()
   state = { ...state, ...changes } as SessionState
   pending = { ...pending, ...changes }
+  localGen++
   return flushPatches()
 }
 
@@ -264,6 +283,7 @@ export function selectSession(id: string | null, force = false): Promise<Session
     const data = await res.json()
     if (!data.ok) return null
     taken = false
+    localGen++
     return adopt(data.session as SessionState)
   })
 }
