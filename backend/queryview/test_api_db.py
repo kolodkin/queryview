@@ -3,20 +3,31 @@ the old /api/clickhouse paths are gone (404)."""
 
 from __future__ import annotations
 
+import asyncio
+import uuid
+
 from fastapi.testclient import TestClient
 
+from queryview import sessions
 from queryview.main import app
 
 
+def _tab_client() -> TestClient:
+    """A client acting as the browser tab that holds a fresh session."""
+    tab = uuid.uuid4().hex
+    rec, _ = asyncio.run(sessions.attach(tab, None, force_new=True))
+    return TestClient(app, headers={"X-QV-Session": rec.id, "X-QV-Tab": tab})
+
+
 def test_connect_unknown_type_is_400():
-    c = TestClient(app)
+    c = _tab_client()
     r = c.post("/api/db/connect", json={"type": "nope", "name": "x", "host": "h", "port": 1})
     assert r.status_code == 400
     assert "unknown" in r.json()["message"].lower()
 
 
 def test_connect_validation_error_is_400():
-    c = TestClient(app)
+    c = _tab_client()
     r = c.post("/api/db/connect", json={"type": "clickhouse", "name": "x"})  # no host
     assert r.status_code == 400
 
@@ -66,7 +77,7 @@ def test_execute_without_session_is_409():
 
 
 def test_execute_runs_a_script_per_statement(tmp_path):
-    c = TestClient(app, headers={"X-QV-Session": "exec-script-test"})
+    c = _tab_client()
     path = str(tmp_path / "exec.duckdb")
     r = c.post("/api/db/connect", json={"type": "duckdb", "name": "exec-duck", "path": path})
     assert r.json()["ok"], r.text
@@ -89,8 +100,8 @@ def test_execute_runs_a_script_per_statement(tmp_path):
 
 
 def test_session_only_connect_lists_for_its_session_and_promotes():
-    c = TestClient(app, headers={"X-QV-Session": "session-only-test"})
-    other = TestClient(app, headers={"X-QV-Session": "session-only-other"})
+    c = _tab_client()
+    other = _tab_client()
     r = c.post("/api/db/connect", json={"type": "duckdb", "name": "so-duck", "path": ":memory:", "session": True})
     assert r.json()["ok"], r.text
     assert c.get("/api/session").json()["scope"] == "session"
@@ -101,3 +112,22 @@ def test_session_only_connect_lists_for_its_session_and_promotes():
     assert c.post("/api/db/promote", json={"name": "so-duck"}).json() == {"ok": True}
     assert c.get("/api/session").json()["scope"] == "saved"
     assert other.get("/api/db/connections").json()["connections"][0]["name"] == "so-duck"
+
+
+def test_session_id_alone_cannot_add_open_save_or_confirm():
+    """What an agent can send: the session id, never its tab token."""
+    c = _tab_client()
+    sid = c.headers["X-QV-Session"]
+    agent = TestClient(app, headers={"X-QV-Session": sid})
+    stale = TestClient(app, headers={"X-QV-Session": sid, "X-QV-Tab": "not-the-tab"})
+    for client in (agent, stale):
+        assert client.get("/api/db/pending-add").status_code == 403
+        for path, body in [
+            ("/api/db/confirm-add", {"id": "x"}),
+            ("/api/db/cancel-add", {"id": "x"}),
+            ("/api/db/promote", {"name": "x"}),
+            ("/api/db/open", {"name": "x"}),
+            ("/api/db/connect", {"type": "duckdb", "name": "x", "path": ":memory:"}),
+        ]:
+            assert client.post(path, json=body).status_code == 403, path
+    assert c.get("/api/db/pending-add").json() == {"ask": None}

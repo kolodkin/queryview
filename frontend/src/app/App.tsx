@@ -666,15 +666,14 @@ function Shell() {
             <p className="break-all text-slate-400">{askText(connectionAsk)[1]}</p>
           )}
           <div className="flex gap-2">
-            <button
-              type="button"
-              data-testid="connection-ask-confirm"
-              onClick={() => void confirmAsk(connectionAsk)}
-              className="glass-btn-primary px-3 py-1.5"
-              autoFocus
-            >
-              {askText(connectionAsk)[2]}
-            </button>
+            {/* Keyed by the request, so a request swapped in under the cursor
+                remounts the button disabled and can't take a click meant for
+                the previous one. */}
+            <ConfirmButton
+              key={JSON.stringify(connectionAsk)}
+              label={askText(connectionAsk)[2]}
+              onConfirm={() => void confirmAsk(connectionAsk)}
+            />
             <button
               type="button"
               data-testid="connection-ask-cancel"
@@ -718,6 +717,27 @@ function Shell() {
         </Dialog>
       )}
     </main>
+  )
+}
+
+// The confirm button of an agent request: disabled for its first second.
+function ConfirmButton({ label, onConfirm }: { label: string; onConfirm: () => void }) {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 1000)
+    return () => clearTimeout(t)
+  }, [])
+  return (
+    <button
+      type="button"
+      data-testid="connection-ask-confirm"
+      onClick={onConfirm}
+      disabled={!ready}
+      className="glass-btn-primary px-3 py-1.5"
+      autoFocus
+    >
+      {label}
+    </button>
   )
 }
 

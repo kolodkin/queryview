@@ -80,7 +80,7 @@ describe('attachSession', () => {
 
 describe('apiFetch', () => {
   it('sends the session id as a header', async () => {
-    stubTabStorage({ [SESSION_KEY]: 's-header' })
+    stubTabStorage({ [SESSION_KEY]: 's-header', [TAB_KEY]: 't-header' })
     const fetchMock = vi.fn().mockResolvedValue({ ok: true })
     vi.stubGlobal('fetch', fetchMock)
     const { apiFetch } = await import('./api')
@@ -89,6 +89,7 @@ describe('apiFetch', () => {
 
     const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>
     expect(headers['X-QV-Session']).toBe('s-header')
+    expect(headers['X-QV-Tab']).toBe('t-header')
   })
 })
 

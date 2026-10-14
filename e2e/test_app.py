@@ -241,10 +241,14 @@ def test_disconnected_lands_on_connect(page: Page) -> None:
 
 def _save_connections(page: Page, base_url: str, configs: list[dict]) -> None:
     """Save connections through the API as the page's session."""
-    sid = page.evaluate("() => sessionStorage.getItem('qv_session')")
+    # Connecting is tab-only (docs/connect.md#session-connections): act as the page's tab.
+    sid, tab = page.evaluate("() => [sessionStorage.getItem('qv_session'), sessionStorage.getItem('qv_tab')]")
     for config in configs:
         httpx.post(
-            f"{base_url}/api/db/connect", json=config, headers={"X-QV-Session": sid}, timeout=10.0
+            f"{base_url}/api/db/connect",
+            json=config,
+            headers={"X-QV-Session": sid, "X-QV-Tab": tab},
+            timeout=10.0,
         ).raise_for_status()
 
 

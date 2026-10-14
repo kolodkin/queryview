@@ -277,6 +277,16 @@ async def db_disconnect(request: Request) -> dict[str, Any]:
     return await disconnect(request.state.sid)
 
 
+async def _tab_only(request: Request) -> JSONResponse | None:
+    """403 unless the request comes from the browser tab holding its session
+    (X-QV-Tab). An agent knows the session id but never the tab token, so this
+    keeps adding, opening and saving connections, and confirming its requests,
+    human-only. See docs/connect.md#session-connections."""
+    if await sessions.held_by(request.state.sid, request.headers.get("X-QV-Tab") or ""):
+        return None
+    return JSONResponse({"ok": False, "message": "only the session's own browser tab may do this"}, status_code=403)
+
+
 # This session's connections and the saved ones, for the Connect page's cards.
 @app.get("/api/db/connections")
 async def db_connections(request: Request) -> dict[str, Any]:
@@ -286,6 +296,8 @@ async def db_connections(request: Request) -> dict[str, Any]:
 # Add an agent's session connection (its add dialog, confirmed by the user).
 @app.post("/api/db/confirm-add")
 async def db_confirm_add(request: Request):
+    if (denied := await _tab_only(request)) is not None:
+        return denied
     b = await _read_json(request)
     rid = _clean_str(b.get("id")) if isinstance(b, dict) else ""
     if not rid:
@@ -295,13 +307,17 @@ async def db_confirm_add(request: Request):
 
 # An agent's add request still awaiting the user, so a reloaded tab reopens its dialog.
 @app.get("/api/db/pending-add")
-async def db_pending_add(request: Request) -> dict[str, Any]:
+async def db_pending_add(request: Request):
+    if (denied := await _tab_only(request)) is not None:
+        return denied
     return {"ask": add_ask(request.state.sid)}
 
 
 # The user cancelled an agent's add dialog: forget the held request.
 @app.post("/api/db/cancel-add")
-async def db_cancel_add(request: Request) -> dict[str, Any]:
+async def db_cancel_add(request: Request):
+    if (denied := await _tab_only(request)) is not None:
+        return denied
     b = await _read_json(request)
     drop_add(request.state.sid, _clean_str(b.get("id")) if isinstance(b, dict) else "")
     return {"ok": True}
@@ -311,6 +327,8 @@ async def db_cancel_add(request: Request) -> dict[str, Any]:
 # dialog, confirmed by the user).
 @app.post("/api/db/promote")
 async def db_promote(request: Request):
+    if (denied := await _tab_only(request)) is not None:
+        return denied
     b = await _read_json(request)
     name = _clean_str(b.get("name")) if isinstance(b, dict) else ""
     if not name:
@@ -340,6 +358,8 @@ async def db_test(request: Request):
 # Create + open a connection for this session.
 @app.post("/api/db/connect")
 async def db_connect(request: Request):
+    if (denied := await _tab_only(request)) is not None:
+        return denied
     body = await _read_json(request)
     resolved = _driver_and_config(body)
     if isinstance(resolved, JSONResponse):
@@ -354,6 +374,8 @@ async def db_connect(request: Request):
 # Open a saved connection by name for this session (a Connect page card).
 @app.post("/api/db/open")
 async def db_open(request: Request):
+    if (denied := await _tab_only(request)) is not None:
+        return denied
     b = await _read_json(request) or {}
     raw_name = b.get("name") if isinstance(b, dict) else None
     name = raw_name.strip() if isinstance(raw_name, str) else ""

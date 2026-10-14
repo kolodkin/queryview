@@ -162,9 +162,14 @@ deleted or the backend restarts (the session then reads as disconnected).
   (`agent` | `user`); session cards get a badge.
 - A user adds one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved and session connections.
+- Adding, opening, saving and confirming (`/api/db/connect`, `open`, `promote`,
+  `confirm-add`, `cancel-add`, `pending-add`) answer only the browser tab that
+  holds the session: it sends its tab token as `X-QV-Tab`, which an agent that
+  knows only the session id cannot. Otherwise `403`.
 - The agent adds a session connection only through a dialog the user confirms.
   It shows the fields, never the password, and reopens after a reload. One
-  request is held per session; a new one replaces it. The agent may then switch
+  request is held per session; a new one replaces it, and the dialog's confirm
+  button waits a second after any change. The agent may then switch
   to and remove the ones it added. Switching to anything else
   (`pick_connection`) or saving one (`promote_connection`) is also a dialog. See
   [remote.md](./remote.md#mcp-tools).

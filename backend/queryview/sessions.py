@@ -363,6 +363,17 @@ async def touch_for_test(
         await s.commit()
 
 
+async def held_by(sid: str, tab: str) -> bool:
+    """Whether `tab` is the live tab holding this session. The tab token never
+    leaves the browser, so an agent that knows the session id still fails this."""
+    if not sid or not tab:
+        return False
+    await _ensure_schema()
+    async with _open() as s:
+        row = await s.get(Session, sid)
+    return row is not None and row.claimed_by == tab and _is_held(row, _now_ms())
+
+
 async def set_connection(sid: str, connection_name: str | None) -> None:
     """Record which connection a session is on, clearing its database — both
     connecting and disconnecting reset the picker. A None name is the durable
