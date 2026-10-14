@@ -147,6 +147,8 @@ function QueryPanel({
   const deletedQueries = useMemo(() => allQueries.filter((q) => q.deleted_at != null), [allQueries])
   const [showDeleted, setShowDeleted] = useState(false)
   const [selectedName, setSelectedName] = useState('')
+  // A saved query picked from the dropdown, waiting to run.
+  const [picked, setPicked] = useState<PredefinedQuery | null>(null)
   // The last successful run — its SQL and the name it runs for, taken at start;
   // a fresh object per run. Autosave reacts to it once the run's state (a
   // push's name and presentation) has committed.
@@ -221,9 +223,12 @@ function QueryPanel({
   // param-prefixed) blocks the main query.
   const [sqlOptions, setSqlOptions] = useState<Record<string, string[]>>({})
   const [optionsError, setOptionsError] = useState<string | null>(null)
-  // The `runOn` the choices were resolved for: after a database switch they
-  // lag it until the re-fetch lands, and the switch's re-run (below) waits.
-  const [optionsFor, setOptionsFor] = useState<string | null | undefined>(undefined)
+  // The `runOn` and specs the choices were resolved for: after a database switch
+  // or a dropdown pick they lag until the re-fetch lands, and the run waits.
+  const [optionsFor, setOptionsFor] = useState<{
+    runOn: string | null | undefined
+    specs: ParamSpec[]
+  } | null>(null)
 
   // Resolve every `options_sql` param's choices via the panel's query endpoint;
   // cached until the specs change. A failed/empty result records a blocking error.
@@ -233,7 +238,7 @@ function QueryPanel({
       /* eslint-disable react-hooks/set-state-in-effect */
       setSqlOptions({})
       setOptionsError(null)
-      setOptionsFor(runOn)
+      setOptionsFor({ runOn, specs: paramSpecs })
       /* eslint-enable react-hooks/set-state-in-effect */
       return
     }
@@ -271,7 +276,7 @@ function QueryPanel({
       }
       setSqlOptions(resolved)
       setOptionsError(err)
-      setOptionsFor(runOn)
+      setOptionsFor({ runOn, specs: paramSpecs })
     })()
     return () => {
       cancelled = true
@@ -460,7 +465,7 @@ function QueryPanel({
       runOnSeen.current = runOn
       rerunPending.current = lastOk !== null
     }
-    if (!rerunPending.current || optionsFor !== runOn) return
+    if (!rerunPending.current || optionsFor?.runOn !== runOn) return
     rerunPending.current = false
     if (!optionsReady || !lastOk) return
     void runWith(lastOk.query, limit, 0, orderBy, {
@@ -498,8 +503,6 @@ function QueryPanel({
     }
   }
 
-  // Dropdown selection: a saved query loads its SQL and cell_view; the "new name"
-  // item prompts for a fresh name. The chosen name is what Save writes under.
   // Copy the selected predefined-query name, with a brief "Copied" on the button.
   async function copyName() {
     const name = selectedName.trim()
@@ -513,6 +516,8 @@ function QueryPanel({
     setVisibleCols(q.fields ?? []) // [] = show all (matches pushed-fields semantics)
   }
 
+  // Dropdown selection: a saved query loads and runs; "new name" prompts for a
+  // fresh name and runs nothing. The chosen name is what Save writes under.
   function onSelectName(value: string) {
     if (value === TOGGLE_DELETED_OPTION) {
       setShowDeleted((v) => !v)
@@ -520,14 +525,32 @@ function QueryPanel({
     }
     if (value === NEW_NAME_OPTION) {
       const name = window.prompt('Save query as (name):', selectedName || '')?.trim()
-      if (name) setSelectedName(name)
+      if (name) {
+        setSelectedName(name)
+        setPicked(null)
+      }
       return
     }
     setSelectedName(value)
     setPushedCellView(null) // selecting a query reverts to its saved cell view
     const q = findQuery(value)
     if (q) applyPredefined(q)
+    setPicked(q ?? null)
   }
+
+  // Run the pick once its param choices resolve for this database, seeded as the
+  // dropdowns are about to be (a render behind). Failed choices block it, as on Run.
+  useEffect(() => {
+    if (!picked || optionsFor?.runOn !== runOn || optionsFor?.specs !== paramSpecs) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPicked(null)
+    if (!optionsReady) return
+    void runWith(picked.query, limit, 0, picked.order_by ?? [], {
+      runFor: picked.query_name,
+      paramOverride: seedParamValues(paramDefs, paramValues),
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picked, optionsFor, paramSpecs, runOn])
 
   // After a git restore overwrites the stored row, refetch the list and
   // re-seed the editor from the (now-current) row for the selected name —
