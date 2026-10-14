@@ -153,6 +153,8 @@ function Shell() {
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [connectionAsk, setConnectionAsk] = useState<ConnectionAsk | null>(null)
+  // Bumped to reopen the remote-control stream after a refused connect.
+  const [sseRetry, setSseRetry] = useState(0)
   const [dbOpen, setDbOpen] = useState(false)
   // Seeded from the session once it attaches.
   const [workspace, setWorkspace] = useState('')
@@ -318,6 +320,13 @@ function Shell() {
       `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}&tab=${encodeURIComponent(tabRead(TAB_KEY) ?? '')}`,
     )
     es.addEventListener('ready', () => setChannelOpen(true))
+    // A refused connect (403 while the claim lapsed) closes an EventSource for
+    // good; reopen it after a heartbeat has had time to reclaim the session.
+    let retry: ReturnType<typeof setTimeout> | undefined
+    es.onerror = () => {
+      if (es.readyState === EventSource.CLOSED)
+        retry = setTimeout(() => setSseRetry((n) => n + 1), 10_000)
+    }
     function on<T>(event: string, apply: (payload: T) => void) {
       es.addEventListener(event, (e) => {
         try {
@@ -337,18 +346,26 @@ function Shell() {
       setToast('Agent updated the script')
       navigate('/scripts')
     })
-    on<ConnectionAsk>('connection', setConnectionAsk)
+    // A new ask replaces the open one; a replaced add request is cancelled, so
+    // it doesn't come back on the next reload.
+    on<ConnectionAsk>('connection', (next) =>
+      setConnectionAsk((prev) => {
+        if (prev?.id && prev.id !== next.id) cancelAdd(prev.id)
+        return next
+      }),
+    )
     on<DashboardPush>('dashboard', (payload) => {
       setDashboardPush(payload)
       setToast('Agent updated the dashboard')
       navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
     })
     return () => {
+      clearTimeout(retry)
       es.close()
       setChannelOpen(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [armed])
+  }, [armed, sseRetry])
 
   function toggleArm(e: React.ChangeEvent<HTMLInputElement>) {
     setArmed(e.target.checked)

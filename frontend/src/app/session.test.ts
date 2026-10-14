@@ -91,6 +91,27 @@ describe('apiFetch', () => {
     expect(headers['X-QV-Session']).toBe('s-header')
     expect(headers['X-QV-Tab']).toBe('t-header')
   })
+
+  it('reclaims a lapsed claim on 403 and retries once', async () => {
+    stubTabStorage({ [SESSION_KEY]: 's1', [TAB_KEY]: 'tab-1' })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 403 })
+      .mockResolvedValueOnce({ ok: true, status: 200 })
+      .mockResolvedValueOnce({ ok: true, status: 200, retried: true })
+    vi.stubGlobal('fetch', fetchMock)
+    const { apiFetch } = await import('./api')
+
+    const res = (await apiFetch('/api/db/tables')) as unknown as { retried?: boolean }
+
+    expect(res.retried).toBe(true)
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/sessions/attach')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      tab: 'tab-1',
+      session_id: 's1',
+      keep: true,
+    })
+  })
 })
 
 describe('patchView', () => {

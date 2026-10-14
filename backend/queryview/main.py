@@ -680,6 +680,9 @@ async def remote_lock(request: Request):
             {"ok": False, "message": "session_id and action (acquire|release) required"},
             status_code=400,
         )
+    # The gate proved the caller holds its own session, not the one in the body.
+    if session_id != request.state.sid:
+        return JSONResponse({"ok": False, "message": "a tab may lock only its own session"}, status_code=403)
     if action == "acquire":
         ok, message = remote.acquire(session_id, "human")
     else:

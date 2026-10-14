@@ -106,10 +106,9 @@ def test_push_endpoint_forwards_cell_view():
 
 
 def test_lock_endpoint_acquire_blocks_push():
-
-    rid = remote.register(uuid.uuid4().hex)
+    client = tab_client()
+    rid = remote.register(client.headers["X-QV-Session"])
     try:
-        client = tab_client()
         r = client.post("/api/remote/lock", json={"session_id": rid, "action": "acquire"})
         assert r.json()["ok"] is True
         ok, msg = remote.push(rid, {"type": "query", "query": "SELECT 1"})
@@ -118,6 +117,15 @@ def test_lock_endpoint_acquire_blocks_push():
         assert r.json()["ok"] is True
         ok, _ = remote.push(rid, {"type": "query", "query": "SELECT 1"})
         assert ok is True
+    finally:
+        remote.unregister(rid)
+
+
+def test_lock_endpoint_refuses_another_sessions_lock():
+    rid = remote.register(uuid.uuid4().hex)
+    try:
+        r = tab_client().post("/api/remote/lock", json={"session_id": rid, "action": "release"})
+        assert r.status_code == 403
     finally:
         remote.unregister(rid)
 
