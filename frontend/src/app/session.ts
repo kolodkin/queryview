@@ -111,7 +111,10 @@ export async function attachSession(keep = false): Promise<SessionState> {
   if (keep && res.status === 409) throw new SessionTakenError()
   const data = await res.json()
   if (!data?.session) throw new Error('attach returned no session')
-  if (state && gen !== localGen) return state
+  if (state && gen !== localGen) {
+    console.debug('session: dropped stale heartbeat reply')
+    return state
+  }
   return adopt(data.session as SessionState)
 }
 
@@ -210,7 +213,9 @@ export async function flushPatches(): Promise<void> {
       body: JSON.stringify(body),
     })
     const data = await res.json()
-    if (data?.session && gen === localGen) adopt(data.session as SessionState)
+    if (!data?.session) return
+    if (gen === localGen) adopt(data.session as SessionState)
+    else console.debug('session: dropped stale patch reply')
   } catch {
     /* a lost patch costs a remembered preference, never live work */
   }
