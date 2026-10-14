@@ -512,9 +512,22 @@ async def promote_connection(sid: str, name: str) -> dict[str, Any]:
     return {"ok": True}
 
 
-# Agent add requests awaiting the user's confirmation: sid -> request id ->
-# (name, type, config). The config (password included) never leaves the server.
-_pending_adds: dict[str, dict[str, tuple[str, str, DriverConfig]]] = {}
+@dataclass
+class _PendingAdd:
+    id: str
+    name: str
+    type: str
+    config: DriverConfig  # password included; never leaves the server
+
+
+# The agent's add request awaiting the user, one per session: a new request
+# replaces the previous one.
+_pending_adds: dict[str, _PendingAdd] = {}
+
+
+def _pending(sid: str, rid: str) -> _PendingAdd | None:
+    req = _pending_adds.get(sid)
+    return req if req is not None and req.id == rid else None
 
 
 async def request_add(sid: str, name: str, config: DriverConfig, conn_type: str) -> tuple[str | None, str | None]:
@@ -522,36 +535,41 @@ async def request_add(sid: str, name: str, config: DriverConfig, conn_type: str)
     id, None), or (None, error) for a taken name. Nothing connects yet."""
     if _session_conn(sid, name) is not None or name in await list_connection_names():
         return None, f'a connection named "{name}" already exists'
-    rid = uuid.uuid4().hex
-    _pending_adds.setdefault(sid, {})[rid] = (name, conn_type, config)
-    return rid, None
+    req = _PendingAdd(uuid.uuid4().hex, name, conn_type, config)
+    _pending_adds[sid] = req
+    return req.id, None
 
 
-def add_ask(sid: str, rid: str | None = None) -> dict[str, Any] | None:
-    """The dialog payload for a held add request (`rid`, else the latest), so a
-    reloaded tab can reopen it. Shows the driver's fields minus the password."""
-    reqs = _pending_adds.get(sid, {})
-    rid = rid or next(reversed(reqs), None)
-    req = reqs.get(rid) if rid else None
+def add_ask(sid: str) -> dict[str, Any] | None:
+    """The dialog payload for the held add request, also what a reloaded tab
+    reopens. Shows the driver's fields minus the password."""
+    req = _pending_adds.get(sid)
     if req is None:
         return None
-    name, conn_type, config = req
-    details = {k: v for k, v in DRIVERS[conn_type].config_to_dict(config).items() if k != "password"}
-    return {"type": "connection", "action": "add", "name": name, "id": rid, "driver": conn_type, "details": details}
+    details = {k: v for k, v in DRIVERS[req.type].config_to_dict(req.config).items() if k != "password"}
+    return {
+        "type": "connection",
+        "action": "add",
+        "name": req.name,
+        "id": req.id,
+        "driver": req.type,
+        "details": details,
+    }
 
 
 def drop_add(sid: str, rid: str) -> None:
-    _pending_adds.get(sid, {}).pop(rid, None)
+    if _pending(sid, rid) is not None:
+        del _pending_adds[sid]
 
 
 async def confirm_add(sid: str, rid: str) -> dict[str, Any]:
     """The user confirmed an agent's add request: add it as the agent's."""
-    req = _pending_adds.get(sid, {}).pop(rid, None)
+    req = _pending(sid, rid)
     if req is None:
         return {"ok": False, "message": "no such request"}
-    name, conn_type, config = req
-    state, message = await add_session_connection(sid, name, config, conn_type, "agent")
-    return {"ok": True, "name": name} if state is not None else {"ok": False, "message": message}
+    del _pending_adds[sid]
+    state, message = await add_session_connection(sid, req.name, req.config, req.type, "agent")
+    return {"ok": True, "name": req.name} if state is not None else {"ok": False, "message": message}
 
 
 def forget_session(sid: str) -> None:

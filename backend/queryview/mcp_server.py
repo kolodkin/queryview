@@ -259,7 +259,7 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
     rid, error = await request_add(session_id, name.strip(), parsed, type)
     if rid is None:
         return {"ok": False, "message": error}
-    ok, message = remote.push(session_id, add_ask(session_id, rid) or {})
+    ok, message = remote.push(session_id, add_ask(session_id) or {})
     if not ok:
         drop_add(session_id, rid)
     return {"ok": ok, "message": "waiting for the user to confirm" if ok else message}

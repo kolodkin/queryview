@@ -112,7 +112,17 @@ def test_add_connection_dialog_hides_the_password_and_needs_an_armed_session():
     assert "password" not in msg["details"] and msg["details"]["host"] == "db.example.internal"
     assert connect.add_ask(sid) == msg  # a reloaded tab reopens the same dialog
     assert _run(connect.confirm_add(sid, "bogus"))["ok"] is False
+    # A new request replaces the held one: the old id can no longer be confirmed.
+    rid = remote.register(sid)
+    try:
+        assert _run(add_connection(sid, "ag-ch2", "clickhouse", cfg))["ok"]
+    finally:
+        remote.unregister(rid)
+    assert _run(connect.confirm_add(sid, msg["id"]))["message"] == "no such request"
+    msg = connect.add_ask(sid) or {}
+    assert msg["name"] == "ag-ch2"
     connect.drop_add(sid, msg["id"])  # the user cancelled
+    assert connect.add_ask(sid) is None
     assert _run(connect.confirm_add(sid, msg["id"]))["message"] == "no such request"
 
 
