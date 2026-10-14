@@ -396,6 +396,8 @@ async def connect_new(
     `session_only` it becomes a session connection instead of being saved."""
     if session_only:
         state, message = await add_session_connection(sid, name, config, conn_type, "user")
+    elif _session_conn(sid, name) is not None:
+        state, message = None, f'a session connection named "{name}" already exists'
     else:
         state, message = await _build_session(name, config, None, conn_type)
     if state is None:
@@ -407,9 +409,10 @@ async def connect_new(
     return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
 
 
-async def open_saved(sid: str, name: str) -> dict[str, Any]:
+async def open_saved(sid: str, name: str, database: str | None = None) -> dict[str, Any]:
     """Open a connection by name for this session: one of its session
-    connections, else a saved one."""
+    connections, else a saved one. A `database` not on it fails before the
+    session switches."""
     found = await _resolve(sid, name)
     if found is None:
         return {
@@ -421,11 +424,15 @@ async def open_saved(sid: str, name: str) -> dict[str, Any]:
     state, message = await _build_session(name, found[1], None, found[0])
     if state is None:
         return {"ok": False, "message": message}
+    if database is not None and database not in state.databases:
+        return {"ok": False, "message": "unknown database"}
     _set_session_entry(sid, state)
     if _session_conn(sid, name) is None:
         await _touch_connection(name)
     await sessions.set_connection(sid, name)
-    return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
+    if database is not None:
+        await select_database(sid, database)
+    return {"ok": True, "name": name, "type": state.type, "databases": state.databases, "database": database}
 
 
 async def disconnect(sid: str) -> dict[str, Any]:
@@ -481,8 +488,9 @@ async def remove_session_connection(sid: str, name: str) -> dict[str, Any]:
     """Drop a session connection, disconnecting the session if it is active."""
     if _session_conns.get(sid, {}).pop(name, None) is None:
         return {"ok": False, "message": f'no session connection named "{name}"'}
-    s = _get_session_entry(sid)
-    if s is not None and s.name == name:
+    # The row, not the LRU cache: an evicted session must not keep pointing here.
+    rec = await sessions.get_session_rec(sid)
+    if rec is not None and rec.connection_name == name:
         await disconnect(sid)
     return {"ok": True}
 

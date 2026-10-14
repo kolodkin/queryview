@@ -352,8 +352,9 @@ function Shell() {
       return
     }
     let next = r.connection
-    if (ask.database && (await selectDatabase(ask.database))) {
-      next = { ...next, database: ask.database }
+    if (ask.database) {
+      if (await selectDatabase(ask.database)) next = { ...next, database: ask.database }
+      else setToast(`Could not select ${ask.database}`)
     }
     setConnection(next)
     navigate(isReady(next) ? '/explorer' : '/connect')

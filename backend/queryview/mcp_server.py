@@ -284,19 +284,15 @@ async def use_connection(session_id: str, name: str, database: str | None = None
     Returns {"ok": True, "name", "type", "databases", "database"} or
     {"ok": False, "message"}.
     """
-    from .connect import agent_owned_error, open_saved, select_database
+    from .connect import agent_owned_error, open_saved
 
     err = agent_owned_error(session_id, name)
     if err is not None:
         return {"ok": False, "message": err}
-    r = await open_saved(session_id, name)
+    r = await open_saved(session_id, name, database)
     if not r["ok"]:
         return {"ok": False, "message": r["message"]}
-    if database is not None:
-        picked = await select_database(session_id, database)
-        if not picked["ok"]:
-            return {"ok": False, "message": picked["message"]}
-    return {**r, "database": database}
+    return r
 
 
 @mcp.tool()

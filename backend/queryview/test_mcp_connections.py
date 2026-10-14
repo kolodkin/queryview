@@ -103,6 +103,11 @@ def test_agent_session_connection_lifecycle():
     assert _run(run_query(sid, "SELECT 1 AS one"))["rows"] == [[1]]
     assert any(r["id"] == sid and r["connection"] == "ag-mem" for r in _run(sessions.list_sessions()))
 
+    # A bad database fails before the session switches.
+    assert _run(add_connection(sid, "ag-mem2", "duckdb", {"path": ":memory:"}))["ok"]
+    assert _run(use_connection(sid, "ag-mem2", "nope"))["message"] == "unknown database"
+    assert _names(_run(list_connections(sid)))["ag-mem"]["active"] is True
+
     assert _run(remove_connection(sid, "ag-mem"))["ok"] is True
     assert "ag-mem" not in _names(_run(list_connections(sid)))
     assert _run(run_query(sid, "SELECT 1")) == {"ok": False, "message": "not connected"}
@@ -232,3 +237,12 @@ def test_session_info_on_a_disconnected_or_unknown_session():
     out = _run(session_info(rec.id))
     assert out["ok"] is True and out["connected"] is False and "tables" not in out
     assert _run(session_info("no-such-session"))["ok"] is False
+
+
+def test_saved_connect_refuses_a_session_connection_name():
+    from queryview.connect import add_session_connection, connect_new
+
+    sid = _run(sessions.create_session()).id
+    _run(add_session_connection(sid, "ag-clash", DuckConfig(":memory:"), "duckdb", "user"))
+    out = _run(connect_new(sid, "ag-clash", DuckConfig(":memory:"), "duckdb"))
+    assert out["ok"] is False and "already exists" in out["message"]
