@@ -151,12 +151,11 @@ async def session_header(request: Request, call_next):
     id but never the tab token (X-QV-Tab), so it cannot use this API to get
     around MCP's limits. EventSource cannot send headers, so the SSE stream
     passes both as `?session=` and `?tab=`. See docs/session.md."""
-    request.state.sid = request.headers.get("X-QV-Session") or ""
+    request.state.sid = request.headers.get("X-QV-Session") or request.query_params.get("session") or ""
     path = request.url.path
     if path.startswith("/api/") and path not in _UNGATED:
-        sid = request.state.sid or request.query_params.get("session") or ""
         tab = request.headers.get("X-QV-Tab") or request.query_params.get("tab") or ""
-        if not await sessions.held_by(sid, tab):
+        if not await sessions.held_by(request.state.sid, tab):
             return JSONResponse(
                 {"ok": False, "message": "only the session's own browser tab may do this"}, status_code=403
             )
@@ -280,19 +279,16 @@ async def sessions_release(request: Request):
     tab = _clean_str(b.get("tab"))
     if not tab:
         return {"ok": True}
-    sid = _clean_str(b.get("session_id"))
-    # Ungated route: write only to a session this tab really holds.
-    if sid and await sessions.held_by(sid, tab):
-        ui = b.get("ui")
-        await sessions.patch_session(
-            sid,
-            url=_str_or_none(b, "url"),
-            ui=ui if isinstance(ui, dict) else None,
-            label=_str_or_none(b, "label"),
-            workspace=_str_or_none(b, "workspace"),
-        )
     seen = b.get("claimed_at")
-    await sessions.release(tab, seen if isinstance(seen, int) else None)
+    ui = b.get("ui")
+    await sessions.release(
+        tab,
+        seen if isinstance(seen, int) else None,
+        url=_str_or_none(b, "url"),
+        ui=ui if isinstance(ui, dict) else None,
+        label=_str_or_none(b, "label"),
+        workspace=_str_or_none(b, "workspace"),
+    )
     return {"ok": True}
 
 
@@ -625,7 +621,7 @@ async def _event_stream(remote_id: str, request: Request):
 async def remote_events(request: Request):
     # EventSource cannot send headers, so the browser passes its session id in
     # the query string; other callers still identify by header.
-    remote_id = remote.register(request.query_params.get("session") or request.state.sid)
+    remote_id = remote.register(request.state.sid)
     return StreamingResponse(
         _event_stream(remote_id, request),
         media_type="text/event-stream",

@@ -112,25 +112,29 @@ type ConnectionAsk = {
   details?: Record<string, unknown>
 }
 
-// The dialog's question, an optional note, and its confirm button.
-function askText(ask: ConnectionAsk): [string, string | null, string] {
+// The dialog's question, an optional note, and its confirm button's label.
+function askText(ask: ConnectionAsk): { question: string; note: string | null; confirm: string } {
   if (ask.action === 'add') {
     const where = Object.values(ask.details ?? {}).join(' · ')
-    return [
-      `The agent asks to add session connection “${ask.name}”.`,
-      `${labelOf(ask.driver ?? '')}: ${where}`,
-      'Add',
-    ]
+    return {
+      question: `The agent asks to add session connection “${ask.name}”.`,
+      note: `${labelOf(ask.driver ?? '')}: ${where}`,
+      confirm: 'Add',
+    }
   }
   if (ask.action === 'promote') {
-    return [
-      `The agent asks to save session connection “${ask.name}”.`,
-      'Saved connections are shared by every session.',
-      'Save',
-    ]
+    return {
+      question: `The agent asks to save session connection “${ask.name}”.`,
+      note: 'Saved connections are shared by every session.',
+      confirm: 'Save',
+    }
   }
   const db = ask.database ? ` / ${ask.database}` : ''
-  return [`The agent asks to switch to “${ask.name}”${db}.`, null, 'Switch']
+  return {
+    question: `The agent asks to switch to “${ask.name}”${db}.`,
+    note: null,
+    confirm: 'Switch',
+  }
 }
 
 // App shell: routing, shared connection state, the connection pill + agent
@@ -402,6 +406,8 @@ function Shell() {
     navigate(isReady(next) ? '/explorer' : '/connect')
   }
 
+  const askLines = connectionAsk && askText(connectionAsk)
+
   // The channel is keyed by this session, so the agent's id is the session's own.
   const remoteId = channelOpen ? sessionId() : null
   const agentCommand = `Use the queryview mcp to connect to session "${remoteId ?? ''}"`
@@ -662,17 +668,15 @@ function Shell() {
       <Toast message={toast} onDone={() => setToast(null)} />
       {connectionAsk && (
         <Dialog label="Agent connection request" testid="connection-ask">
-          <p className="font-medium text-slate-100">{askText(connectionAsk)[0]}</p>
-          {askText(connectionAsk)[1] && (
-            <p className="break-all text-slate-400">{askText(connectionAsk)[1]}</p>
-          )}
+          <p className="font-medium text-slate-100">{askLines?.question}</p>
+          {askLines?.note && <p className="break-all text-slate-400">{askLines.note}</p>}
           <div className="flex gap-2">
             {/* Keyed by the request, so a request swapped in under the cursor
                 remounts the button disabled and can't take a click meant for
                 the previous one. */}
             <ConfirmButton
               key={JSON.stringify(connectionAsk)}
-              label={askText(connectionAsk)[2]}
+              label={askLines?.confirm ?? ''}
               onConfirm={() => void confirmAsk(connectionAsk)}
             />
             <button

@@ -461,14 +461,21 @@ async def list_connections_for(sid: str) -> list[dict[str, Any]]:
     return own + [{**c, "scope": "saved", "created_by": "user"} for c in await list_connections()]
 
 
+async def _name_taken(sid: str, name: str) -> str | None:
+    """Names are unique across saved and session connections."""
+    if _session_conn(sid, name) is not None or name in await list_connection_names():
+        return f'a connection named "{name}" already exists'
+    return None
+
+
 async def add_session_connection(
     sid: str, name: str, config: DriverConfig, conn_type: str, created_by: str
 ) -> tuple[_SessionState | None, str | None]:
     """Add a session connection after checking it connects; its built state, or
     the error. A name already used by a saved or session connection is refused,
     so a name means one thing."""
-    if _session_conn(sid, name) is not None or name in await list_connection_names():
-        return None, f'a connection named "{name}" already exists'
+    if (taken := await _name_taken(sid, name)) is not None:
+        return None, taken
     state, message = await _build_session(name, config, None, conn_type)
     if state is not None:
         _session_conns.setdefault(sid, {})[name] = _SessionConn(conn_type, config, created_by, _now_ms())
@@ -525,16 +532,19 @@ class _PendingAdd:
 _pending_adds: dict[str, _PendingAdd] = {}
 
 
-def _pending(sid: str, rid: str) -> _PendingAdd | None:
+def _take(sid: str, rid: str) -> _PendingAdd | None:
+    """Remove and return the held request if `rid` is still its id."""
     req = _pending_adds.get(sid)
-    return req if req is not None and req.id == rid else None
+    if req is None or req.id != rid:
+        return None
+    return _pending_adds.pop(sid)
 
 
 async def request_add(sid: str, name: str, config: DriverConfig, conn_type: str) -> tuple[str | None, str | None]:
     """Hold an agent's session connection until the user confirms it: (request
     id, None), or (None, error) for a taken name. Nothing connects yet."""
-    if _session_conn(sid, name) is not None or name in await list_connection_names():
-        return None, f'a connection named "{name}" already exists'
+    if (taken := await _name_taken(sid, name)) is not None:
+        return None, taken
     req = _PendingAdd(uuid.uuid4().hex, name, conn_type, config)
     _pending_adds[sid] = req
     return req.id, None
@@ -558,16 +568,14 @@ def add_ask(sid: str) -> dict[str, Any] | None:
 
 
 def drop_add(sid: str, rid: str) -> None:
-    if _pending(sid, rid) is not None:
-        del _pending_adds[sid]
+    _take(sid, rid)
 
 
 async def confirm_add(sid: str, rid: str) -> dict[str, Any]:
     """The user confirmed an agent's add request: add it as the agent's."""
-    req = _pending(sid, rid)
+    req = _take(sid, rid)
     if req is None:
         return {"ok": False, "message": "no such request"}
-    del _pending_adds[sid]
     state, message = await add_session_connection(sid, req.name, req.config, req.type, "agent")
     return {"ok": True, "name": req.name} if state is not None else {"ok": False, "message": message}
 

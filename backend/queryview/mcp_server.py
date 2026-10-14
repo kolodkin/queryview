@@ -259,10 +259,10 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
     rid, error = await request_add(session_id, name.strip(), parsed, type)
     if rid is None:
         return {"ok": False, "message": error}
-    ok, message = remote.push(session_id, add_ask(session_id) or {})
-    if not ok:
+    r = _push_ask(session_id, add_ask(session_id) or {})
+    if not r["ok"]:
         drop_add(session_id, rid)
-    return {"ok": ok, "message": "waiting for the user to confirm" if ok else message}
+    return r
 
 
 @mcp.tool()
@@ -359,7 +359,12 @@ async def _ask(session_id: str, name: str, extra: dict[str, Any]) -> dict[str, A
 
     if _session_conn(session_id, name) is None and name not in await list_connection_names():
         return {"ok": False, "message": await unknown_connection_message(name)}
-    ok, message = remote.push(session_id, {"type": "connection", "name": name, **extra})
+    return _push_ask(session_id, {"type": "connection", "name": name, **extra})
+
+
+def _push_ask(session_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Show a confirm dialog in the armed browser; it returns before the user answers."""
+    ok, message = remote.push(session_id, payload)
     return {"ok": ok, "message": "waiting for the user to confirm" if ok else message}
 
 
