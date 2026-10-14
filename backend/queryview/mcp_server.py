@@ -330,6 +330,30 @@ async def promote_connection(session_id: str, name: str) -> dict[str, Any]:
     return await _ask(session_id, name, {"action": "promote"})
 
 
+@mcp.tool()
+async def select_database(session_id: str, database: str) -> dict[str, Any]:
+    """Switch the session's database on its active connection. Direct on a
+    session connection you added; otherwise it asks the user in a dialog in the
+    armed browser and returns once the dialog is shown (check session_info).
+
+    Returns {"ok", "message", "database"}; not ok when disconnected or the
+    database is not in session_info's "databases".
+    """
+    from .connect import agent_owned_error, get_session
+    from .connect import select_database as _select_database
+
+    cur = await get_session(session_id)
+    if not cur["connected"]:
+        return {"ok": False, "message": "not connected", "database": None}
+    if database not in cur["databases"]:
+        return {"ok": False, "message": "unknown database", "database": cur["database"]}
+    if agent_owned_error(session_id, cur["name"]) is None:
+        r = await _select_database(session_id, database)
+        return {"ok": r["ok"], "message": r.get("message", "selected"), "database": database}
+    r = await _ask(session_id, cur["name"], {"action": "pick", "database": database})
+    return {**r, "database": cur["database"]}
+
+
 async def _ask(session_id: str, name: str, extra: dict[str, Any]) -> dict[str, Any]:
     """Push a connection dialog for the user to confirm in the browser."""
     from .connect import list_connections_for

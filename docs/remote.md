@@ -48,7 +48,9 @@ tools (among others):
   `created_by` and `active`. `add_connection(session_id, name, type, config)`
   adds a session connection (memory only); `use_connection(session_id, name,
   database?)` and `remove_connection(session_id, name)` act on ones the agent
-  added. `pick_connection(session_id, name, database?)` and
+  added. `select_database(session_id, database)` switches the active
+  connection's database: directly on the agent's own session connection, by
+  dialog otherwise. `pick_connection(session_id, name, database?)` and
   `promote_connection(session_id, name)` show a dialog in the armed browser
   and return before the user answers.
 - `run_query(session_id, query, limit?=1000, offset?=0)` — run a read-only

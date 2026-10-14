@@ -351,6 +351,11 @@ function Shell() {
       }
       return
     }
+    // Only the database changes: keep the open connection rather than reopen it.
+    if (connection?.name === ask.name && ask.database) {
+      await switchDatabase(ask.database)
+      return
+    }
     const r = await openSaved(ask.name)
     if (!r.ok) {
       setToast(r.message)
