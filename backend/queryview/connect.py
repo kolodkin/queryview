@@ -527,9 +527,17 @@ async def request_add(sid: str, name: str, config: DriverConfig, conn_type: str)
     return rid, None
 
 
-def add_summary(conn_type: str, config: DriverConfig) -> dict[str, Any]:
-    """What the confirm dialog shows: the driver's fields minus the password."""
-    return {k: v for k, v in DRIVERS[conn_type].config_to_dict(config).items() if k != "password"}
+def add_ask(sid: str, rid: str | None = None) -> dict[str, Any] | None:
+    """The dialog payload for a held add request (`rid`, else the latest), so a
+    reloaded tab can reopen it. Shows the driver's fields minus the password."""
+    reqs = _pending_adds.get(sid, {})
+    rid = rid or next(reversed(reqs), None)
+    req = reqs.get(rid) if rid else None
+    if req is None:
+        return None
+    name, conn_type, config = req
+    details = {k: v for k, v in DRIVERS[conn_type].config_to_dict(config).items() if k != "password"}
+    return {"type": "connection", "action": "add", "name": name, "id": rid, "driver": conn_type, "details": details}
 
 
 def drop_add(sid: str, rid: str) -> None:

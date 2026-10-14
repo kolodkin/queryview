@@ -22,6 +22,7 @@ from fastapi.responses import (
 from . import gitsync, remote, sessions, workspaces, yamlio
 from .connect import (
     _ensure_schema,
+    add_ask,
     confirm_add,
     connect_new,
     describe_query,
@@ -290,6 +291,12 @@ async def db_confirm_add(request: Request):
     if not rid:
         return JSONResponse({"ok": False, "message": "id required"}, status_code=400)
     return await confirm_add(request.state.sid, rid)
+
+
+# An agent's add request still awaiting the user, so a reloaded tab reopens its dialog.
+@app.get("/api/db/pending-add")
+async def db_pending_add(request: Request) -> dict[str, Any]:
+    return {"ask": add_ask(request.state.sid)}
 
 
 # The user cancelled an agent's add dialog: forget the held request.

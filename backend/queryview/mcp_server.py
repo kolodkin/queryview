@@ -247,7 +247,7 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
     Returns {"ok", "message"}; not ok for a bad config, a taken name, or a
     session that is not armed.
     """
-    from .connect import add_summary, drop_add, parse_driver_config, request_add
+    from .connect import add_ask, drop_add, parse_driver_config, request_add
 
     if await sessions.get_session_rec(session_id) is None:
         return {"ok": False, "message": "unknown session"}
@@ -259,8 +259,7 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
     rid, error = await request_add(session_id, name.strip(), parsed, type)
     if rid is None:
         return {"ok": False, "message": error}
-    payload = {"type": "connection", "action": "add", "name": name.strip(), "id": rid, "driver": type}
-    ok, message = remote.push(session_id, {**payload, "details": add_summary(type, parsed)})
+    ok, message = remote.push(session_id, add_ask(session_id, rid) or {})
     if not ok:
         drop_add(session_id, rid)
     return {"ok": ok, "message": "waiting for the user to confirm" if ok else message}

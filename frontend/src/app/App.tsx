@@ -266,6 +266,11 @@ function Shell() {
         } else if (restored.connection) {
           await refreshConnection()
         }
+        // An agent's add request survives a reload: reopen its dialog.
+        apiFetch('/api/db/pending-add')
+          .then((r) => r.json())
+          .then((d) => d.ask && setConnectionAsk(d.ask as ConnectionAsk))
+          .catch(() => {})
         stopRows = onSessionRow(followRow)
         stopHeartbeat = startHeartbeat({
           onChanged: applySession,
