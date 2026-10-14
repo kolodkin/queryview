@@ -43,16 +43,15 @@ tools (among others):
   connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
   discovery. The agent switches only to its own session connections (below).
-- Connections — see [connect.md](./connect.md#session-connections) for the
-  access rule. `list_connections(session_id)` lists them with `scope`,
-  `created_by` and `active`. `add_connection(session_id, name, type, config)`
-  adds a session connection (memory only); `use_connection(session_id, name,
-  database?)` and `remove_connection(session_id, name)` act on ones the agent
-  added. `select_database(session_id, database)` switches the active
-  connection's database: directly on the agent's own session connection, by
-  dialog otherwise. `pick_connection(session_id, name, database?)` and
-  `promote_connection(session_id, name)` show a dialog in the armed browser
-  and return before the user answers.
+- Connections ([access rule](./connect.md#session-connections)):
+  `list_connections(session_id)` tags each with `scope`, `created_by`,
+  `active`. `add_connection(session_id, name, type, config)` adds a session
+  connection; `use_connection(session_id, name, database?)` and
+  `remove_connection(session_id, name)` act only on the agent's own.
+  `select_database(session_id, database)` is direct on those, a dialog
+  otherwise. `pick_connection(session_id, name, database?)` and
+  `promote_connection(session_id, name)` show a dialog and return before the
+  user answers.
 - `run_query(session_id, query, limit?=1000, offset?=0)` — run a read-only
   query on the session's connection and selected database, returning rows to
   the agent (not the browser): `{ok, database, columns, types, rows}`, values

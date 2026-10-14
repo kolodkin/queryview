@@ -154,22 +154,18 @@ which re-encrypts it with the current key.
 
 ## Session connections
 
-A **session connection** lives only in the memory of one QueryView session. It
-is never written to the connections table, does not appear in other sessions,
-and is gone when the session is deleted or the backend restarts (a session on
-one then reads as disconnected). Saved connections are the rows in SQLite.
+A **session connection** lives only in one QueryView session's memory: never
+in the connections table, invisible to other sessions, gone when the session is
+deleted or the backend restarts (the session then reads as disconnected).
 
-Every connection carries `scope` (`session` | `saved`) and `created_by`
-(`agent` | `user`); the Connect page badges session cards. A user creates one
-with **Session only — don't save** on the new-connection form. A name is
-unique across saved and session connections, so it always means one thing.
-
-The agent may add, remove and switch to session connections it created itself.
-Everything else is read-only to it: it can list saved and user-added
-connections and query whichever is active, but switching to one goes through
-`pick_connection`, and saving a session connection through
-`promote_connection`, both dialogs the user confirms. MCP tools are in
-[remote.md](./remote.md#mcp-tools).
+- Each connection carries `scope` (`session` | `saved`) and `created_by`
+  (`agent` | `user`); session cards get a badge.
+- A user adds one with **Session only — don't save** on the new-connection form.
+- Names are unique across saved and session connections.
+- The agent may add, remove and switch to only the session connections it
+  created. Switching to anything else (`pick_connection`) or saving one
+  (`promote_connection`) is a dialog the user confirms. See
+  [remote.md](./remote.md#mcp-tools).
 
 ## Sessions & reconnecting
 
