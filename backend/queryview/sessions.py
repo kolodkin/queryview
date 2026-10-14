@@ -66,7 +66,6 @@ class SessionRec:
     ui: dict[str, Any]
     held: bool
     last_active_at: int
-    claim_seen_at: int | None = None
 
 
 def _is_held(row: Session, now: int) -> bool:
@@ -97,7 +96,6 @@ def _to_rec(row: Session, now: int | None = None) -> SessionRec:
         ui=ui,
         held=_is_held(row, now),
         last_active_at=row.last_active_at,
-        claim_seen_at=row.claim_seen_at,
     )
 
 
@@ -221,30 +219,19 @@ async def patch_session(
         row = await s.get(Session, sid)
         if row is None:
             return None
-        _apply_patch(row, url=url, ui=ui, label=label, workspace=workspace)
+        if url is not None:
+            row.url = url
+        if workspace is not None:
+            row.workspace = workspace
+        if label is not None:
+            # An empty label unpins, falling back to the derived one.
+            row.label = label.strip() or None
+        if ui is not None:
+            row.ui = json.dumps(_merge_ui(_to_rec(row).ui, ui))
+        row.last_active_at = _now_ms()
         s.add(row)
         await s.commit()
         return _to_rec(row)
-
-
-def _apply_patch(
-    row: Session,
-    *,
-    url: str | None = None,
-    ui: dict[str, Any] | None = None,
-    label: str | None = None,
-    workspace: str | None = None,
-) -> None:
-    if url is not None:
-        row.url = url
-    if workspace is not None:
-        row.workspace = workspace
-    if label is not None:
-        # An empty label unpins, falling back to the derived one.
-        row.label = label.strip() or None
-    if ui is not None:
-        row.ui = json.dumps(_merge_ui(_to_rec(row).ui, ui))
-    row.last_active_at = _now_ms()
 
 
 async def delete_session(sid: str) -> tuple[bool, str]:
@@ -342,24 +329,12 @@ async def select_session(tab: str, sid: str | None, force: bool = False) -> tupl
         return _to_rec(row, now), ""
 
 
-async def release(tab: str, seen: int | None = None, **patch: Any) -> None:
-    """Drop whatever this tab holds (the pagehide beacon), first applying the
-    `patch_session` fields it had not flushed — only to sessions this tab holds,
-    so the beacon can't write to anyone else's. Idempotent; the TTL covers the
-    tab that never got to send it.
-
-    `seen` is the claim time the closing page last saw. A reload keeps the tab
-    token, and its beacon can land after the new page's attach; a claim renewed
-    since `seen` is that new page's, so it is kept (its edits still apply)."""
-    patch = {k: v for k, v in patch.items() if v is not None}
+async def release(tab: str) -> None:
+    """Drop whatever this tab holds (the pagehide beacon). Idempotent; the TTL
+    covers the tab that never got to send it."""
     await _ensure_schema()
     async with _writes, _open() as s:
         for row in (await s.exec(select(Session).where(Session.claimed_by == tab))).all():
-            if patch:
-                _apply_patch(row, **patch)
-                s.add(row)
-            if seen is not None and (row.claim_seen_at or 0) > seen:
-                continue
             row.claimed_by = None
             row.claim_seen_at = None
             s.add(row)
@@ -386,18 +361,6 @@ async def touch_for_test(
             row.last_active_at = last_active_at
         s.add(row)
         await s.commit()
-
-
-async def held_by(sid: str, tab: str) -> bool:
-    """Whether `tab` is the live tab holding this session. The tab token never
-    leaves the browser, so an agent that knows the session id still fails this."""
-    if not sid or not tab:
-        return False
-    await _ensure_schema()
-    async with _open() as s:
-        seen = (await s.exec(select(Session.claim_seen_at).where(Session.id == sid, Session.claimed_by == tab))).first()
-    # Column-scoped: this runs on every /api call, and the full row carries the ui blob.
-    return seen is not None and (_now_ms() - seen) < SESSION_CLAIM_TTL_MS
 
 
 async def set_connection(sid: str, connection_name: str | None) -> None:

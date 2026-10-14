@@ -64,7 +64,7 @@ session**. Any session change re-syncs the whole shell.
 
 The row is also the truth for the connection and its database. Every row the tab
 adopts is checked against the connection it shows, so a switch made elsewhere
-(the agent over MCP, a server-side call) reaches it within a beat, and every view follows —
+(another tab, an API caller) reaches it within a beat, and every view follows —
 the explorer reloads its tables, the dashboard and the query panel re-run what
 is on screen. A switch the tab makes itself holds the heartbeat off, so no beat
 that read the row before it lands after it with the old database.
@@ -126,8 +126,8 @@ a view can remember a new setting without a migration.
 Every `/api/*` request names its session with an `X-QV-Session` header. There is
 no session cookie — a session is named by its id, not by the browser it is open
 in, which is what lets two tabs sit on two different databases. The one
-exception is the remote-control SSE stream, which takes `?session=` (and
-`?tab=`) because `EventSource` cannot send headers.
+exception is the remote-control SSE stream, which takes `?session=` because
+`EventSource` cannot send headers.
 
 **Nothing is written while you are still typing.** Leaving the query panel is
 what "done editing" means, so that is when its state is written — the same
@@ -168,29 +168,3 @@ sequenceDiagram
 The `/api/sessions/*` shapes are in [api.md](./api.md). Connection and database
 are not among them — `/api/db/connect`, `/open` and `/database` write those
 through, so connection changes keep one path.
-
-## The tab token
-
-The REST API is the browser's; agents use MCP. Every `/api/*` call sends the tab
-token (`qv_tab`) as `X-QV-Tab`, and the server answers `403` unless that tab
-holds the session. An agent knows the session id but not the token, so it can't
-use REST to get around MCP's limits, such as the
-[connection dialogs](./connect.md#session-connections). Open routes: `/health`
-and `/sessions/attach`, `/select`, `/release` (how a tab gets and gives up a
-session). A tab may patch or lock only its own session; the release beacon
-writes only to sessions its tab holds.
-
-Not covered:
-
-- **Global data.** Anyone can attach a session of their own and use the API as
-  its tab: workspaces, git sync, import/export, saved queries, dashboards.
-- **Taking over.** `select` with `force` takes a session from another tab, as
-  **Use it here** must, and the taker can then do anything that tab could,
-  confirming dialogs included. The tab it was taken from greys out at once, so
-  it is never silent.
-
-A claim lapsed by a long sleep refuses calls until reclaimed; `apiFetch`
-reclaims it on the first `403` and retries. A reload keeps the tab token, so its
-`pagehide` beacon can land after the new page's `attach`: the beacon carries
-the claim time its page last saw (`claimed_at`), and a claim renewed since is
-kept.

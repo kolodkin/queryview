@@ -180,7 +180,7 @@ function DashboardView({
     async function loadDashboard(): Promise<DashboardPush | null> {
       if (localPush && localPush.name === name) return localPush
       try {
-        const res = await apiFetch(
+        const res = await fetch(
           `/api/dashboards/${encodeURIComponent(name)}?workspace=${encodeURIComponent(activeWorkspace())}`,
         )
         if (!res.ok) {

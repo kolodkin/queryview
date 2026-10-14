@@ -9,7 +9,6 @@ import base64
 import json
 import os
 import time
-import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -519,71 +518,9 @@ async def promote_connection(sid: str, name: str) -> dict[str, Any]:
     return {"ok": True}
 
 
-@dataclass
-class _PendingAdd:
-    id: str
-    name: str
-    type: str
-    config: DriverConfig  # password included; never leaves the server
-
-
-# The agent's add request awaiting the user, one per session: a new request
-# replaces the previous one.
-_pending_adds: dict[str, _PendingAdd] = {}
-
-
-def _take(sid: str, rid: str) -> _PendingAdd | None:
-    """Remove and return the held request if `rid` is still its id."""
-    req = _pending_adds.get(sid)
-    if req is None or req.id != rid:
-        return None
-    return _pending_adds.pop(sid)
-
-
-async def request_add(sid: str, name: str, config: DriverConfig, conn_type: str) -> tuple[str | None, str | None]:
-    """Hold an agent's session connection until the user confirms it: (request
-    id, None), or (None, error) for a taken name. Nothing connects yet."""
-    if (taken := await _name_taken(sid, name)) is not None:
-        return None, taken
-    req = _PendingAdd(uuid.uuid4().hex, name, conn_type, config)
-    _pending_adds[sid] = req
-    return req.id, None
-
-
-def add_ask(sid: str) -> dict[str, Any] | None:
-    """The dialog payload for the held add request, also what a reloaded tab
-    reopens. Shows the driver's fields minus the password."""
-    req = _pending_adds.get(sid)
-    if req is None:
-        return None
-    details = {k: v for k, v in DRIVERS[req.type].config_to_dict(req.config).items() if k != "password"}
-    return {
-        "type": "connection",
-        "action": "add",
-        "name": req.name,
-        "id": req.id,
-        "driver": req.type,
-        "details": details,
-    }
-
-
-def drop_add(sid: str, rid: str) -> None:
-    _take(sid, rid)
-
-
-async def confirm_add(sid: str, rid: str) -> dict[str, Any]:
-    """The user confirmed an agent's add request: add it as the agent's."""
-    req = _take(sid, rid)
-    if req is None:
-        return {"ok": False, "message": "no such request"}
-    state, message = await add_session_connection(sid, req.name, req.config, req.type, "agent")
-    return {"ok": True, "name": req.name} if state is not None else {"ok": False, "message": message}
-
-
 def forget_session(sid: str) -> None:
     """Drop a deleted session's in-memory state, its session connections too."""
     _session_conns.pop(sid, None)
-    _pending_adds.pop(sid, None)
     _sessions.pop(sid, None)
 
 

@@ -80,50 +80,31 @@ def test_push_dashboard_on_disconnected_session_fails_without_pushing():
 
 
 def _agent_add(sid: str, name: str) -> dict:
-    """add_connection, then the user confirming its dialog."""
-    from queryview import connect
-    from queryview.mcp_server import add_connection
+    """A session connection the agent owns. In-memory DuckDB keeps it offline;
+    add_connection itself refuses DuckDB, so it is added directly."""
+    from queryview.connect import add_session_connection
 
-    rid = remote.register(sid)
-    try:
-        assert _run(add_connection(sid, name, "duckdb", {"path": ":memory:"}))["ok"]
-        msg = _run(remote.next_message(rid, 1.0)) or {}
-    finally:
-        remote.unregister(rid)
-    assert msg["action"] == "add" and msg["details"] == {"path": ":memory:"}
-    assert name not in connect._session_conns.get(sid, {})  # nothing until confirmed
-    return _run(connect.confirm_add(sid, msg["id"]))
+    state, message = _run(add_session_connection(sid, name, DuckConfig(":memory:"), "duckdb", "agent"))
+    return {"ok": state is not None, "message": message}
 
 
-def test_add_connection_dialog_hides_the_password_and_needs_an_armed_session():
-    from queryview import connect
-    from queryview.mcp_server import add_connection
+def test_add_connection_refuses_duckdb_and_adds_a_network_one_directly(monkeypatch):
+    from queryview.drivers import DRIVERS
+    from queryview.drivers.base import DatabasesResult
+    from queryview.mcp_server import add_connection, list_connections
 
+    async def two_dbs(config):
+        return DatabasesResult(databases=["a", "b"])
+
+    monkeypatch.setattr(DRIVERS["clickhouse"], "list_databases", two_dbs)
     sid = _run(sessions.create_session()).id
-    cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "secret"}
-    assert _run(add_connection(sid, "ag-ch", "clickhouse", cfg))["message"] == "unknown or inactive session"
-    assert not connect._pending_adds.get(sid)
-    rid = remote.register(sid)
-    try:
-        assert _run(add_connection(sid, "ag-ch", "clickhouse", cfg))["ok"]
-        msg = _run(remote.next_message(rid, 1.0)) or {}
-    finally:
-        remote.unregister(rid)
-    assert "password" not in msg["details"] and msg["details"]["host"] == "db.example.internal"
-    assert connect.add_ask(sid) == msg  # a reloaded tab reopens the same dialog
-    assert _run(connect.confirm_add(sid, "bogus"))["ok"] is False
-    # A new request replaces the held one: the old id can no longer be confirmed.
-    rid = remote.register(sid)
-    try:
-        assert _run(add_connection(sid, "ag-ch2", "clickhouse", cfg))["ok"]
-    finally:
-        remote.unregister(rid)
-    assert _run(connect.confirm_add(sid, msg["id"]))["message"] == "no such request"
-    msg = connect.add_ask(sid) or {}
-    assert msg["name"] == "ag-ch2"
-    connect.drop_add(sid, msg["id"])  # the user cancelled
-    assert connect.add_ask(sid) is None
-    assert _run(connect.confirm_add(sid, msg["id"]))["message"] == "no such request"
+    out = _run(add_connection(sid, "ag-duck", "duckdb", {"path": "/etc/passwd"}))
+    assert out["ok"] is False and "clickhouse or postgres" in out["message"]
+    cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
+    out = _run(add_connection(sid, "ag-ch", "clickhouse", cfg))
+    assert out == {"ok": True, "name": "ag-ch", "type": "clickhouse", "databases": ["a", "b"]}
+    entry = _names(_run(list_connections(sid)))["ag-ch"]
+    assert entry["scope"] == "session" and entry["created_by"] == "agent"
 
 
 def _names(out):
@@ -165,7 +146,8 @@ def test_add_connection_refuses_a_taken_name_and_bad_input():
 
     _run(_save_active_connection("ag-taken", DuckConfig(":memory:"), "duckdb"))
     sid = _run(sessions.create_session()).id
-    assert "already exists" in _run(add_connection(sid, "ag-taken", "duckdb", {"path": ":memory:"}))["message"]
+    cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
+    assert "already exists" in _run(add_connection(sid, "ag-taken", "clickhouse", cfg))["message"]
     assert _run(add_connection(sid, "x", "nope", {}))["ok"] is False
     assert _run(add_connection(sid, "x", "clickhouse", {"host": "h", "port": 0}))["ok"] is False
 

@@ -36,7 +36,7 @@ export async function fetchExport(
   kind: ExportKind,
   opts: { name?: string; connType?: string; workspace?: string } = {},
 ): Promise<{ ok: boolean; filename?: string; text?: string; message?: string }> {
-  const res = await apiFetch(exportPath(kind, opts))
+  const res = await fetch(exportPath(kind, opts))
   if (!res.ok) {
     try {
       const data = await res.json()

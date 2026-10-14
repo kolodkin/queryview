@@ -2,13 +2,13 @@
 stored copy, then import the downloaded file back and verify it overwrote the
 drift. Needs no external services — only the app itself."""
 
-from conftest import api
+import httpx
 from playwright.sync_api import Page, expect
 
 
 def test_dashboard_export_import_round_trip(page: Page, base_url: str, tmp_path, shot):
     # Seed v1 via the API.
-    api(base_url).post(
+    httpx.post(
         f"{base_url}/api/dashboards",
         json={
             "name": "yio e2e",
@@ -30,7 +30,7 @@ def test_dashboard_export_import_round_trip(page: Page, base_url: str, tmp_path,
     assert "kind: dashboard" in text and "v1" in text
 
     # Drift the stored copy to v2, then import the downloaded v1 file back.
-    api(base_url).post(
+    httpx.post(
         f"{base_url}/api/dashboards",
         json={
             "name": "yio e2e",
@@ -41,6 +41,6 @@ def test_dashboard_export_import_round_trip(page: Page, base_url: str, tmp_path,
     page.get_by_test_id("yaml-import-file").set_input_files(str(saved))
     expect(page.get_by_test_id("yaml-import")).to_have_text("Imported")
     shot("imported yaml overwrote the drifted copy")
-    d = api(base_url).get(f"{base_url}/api/dashboards/yio%20e2e").json()
+    d = httpx.get(f"{base_url}/api/dashboards/yio%20e2e").json()
     assert "v1" in d["html"]
     assert d["queries"] == {"q": "SELECT 1"}

@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import asyncio
 
-from queryview.conftest import tab_client
+from fastapi.testclient import TestClient
+
+from queryview.main import app
 
 # The git_env fixture (bare repo + redirected clone base) lives in conftest.py.
 
@@ -22,17 +24,17 @@ def _default_ws_id() -> int:
 
 def test_status_reports_unconfigured():
     # Outside git_env the default workspace has no remote configured.
-    c = tab_client()
+    c = TestClient(app)
     assert c.get("/api/git/status").json() == {"configured": False, "conflicts": []}
 
 
 def test_status_reports_configured(git_env):
-    c = tab_client()
+    c = TestClient(app)
     assert c.get("/api/git/status").json() == {"configured": True, "conflicts": []}
 
 
 def test_store_validation_400():
-    c = tab_client()
+    c = TestClient(app)
     assert c.post("/api/git/store", json={}).status_code == 400
     assert c.post("/api/git/store", json={"kind": "nope", "name": "x"}).status_code == 400
     # queries require conn_type
@@ -42,7 +44,7 @@ def test_store_validation_400():
 def test_store_history_restore_round_trip(git_env):
     from queryview.queries import list_predefined_queries, save_predefined_query
 
-    c = tab_client()
+    c = TestClient(app)
     _run(save_predefined_query("api rt", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
     r1 = c.post(
         "/api/git/store",
@@ -73,7 +75,7 @@ def test_store_history_restore_round_trip(git_env):
 
 
 def test_restore_unknown_entity_404(git_env):
-    c = tab_client()
+    c = TestClient(app)
     r = c.post(
         "/api/git/restore",
         json={"kind": "query", "name": "never stored api", "conn_type": "clickhouse"},
@@ -82,6 +84,6 @@ def test_restore_unknown_entity_404(git_env):
 
 
 def test_sync_merges_on_demand_and_needs_a_remote():
-    c = tab_client()
+    c = TestClient(app)
     r = c.post("/api/git/sync", json={})
     assert r.status_code == 409  # the default workspace has no remote here

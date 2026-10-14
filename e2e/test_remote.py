@@ -1,4 +1,5 @@
-from conftest import api, arm_remote, connect_clickhouse_test_db, mcp_call, open_query_panel
+import httpx
+from conftest import arm_remote, connect_clickhouse_test_db, mcp_call, open_query_panel
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -41,7 +42,7 @@ def test_mcp_push_to_live_session(seeded_test_db, page: Page, base_url: str) -> 
     session_id = arm_remote(page)
 
     # Push a query the way an MCP client would (via the REST surface).
-    res = api(base_url).post(
+    res = httpx.post(
         f"{base_url}/api/remote/push",
         json={
             "session_id": session_id,
@@ -69,7 +70,7 @@ def test_mcp_push_to_live_session(seeded_test_db, page: Page, base_url: str) -> 
     expect(page.get_by_test_id("remote-session-id")).to_have_count(0)
 
     # ...and a push to an unknown/inactive id is reported as not delivered.
-    res2 = api(base_url).post(
+    res2 = httpx.post(
         f"{base_url}/api/remote/push",
         json={"session_id": "deadbeef", "query": "SELECT 1"},
         timeout=10.0,

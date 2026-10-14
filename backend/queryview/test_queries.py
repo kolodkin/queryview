@@ -128,9 +128,11 @@ def test_same_name_is_distinct_per_workspace(default_ws_id):
 
 
 def test_api_unknown_workspace_is_404():
-    from queryview.conftest import tab_client
+    from fastapi.testclient import TestClient
 
-    c = tab_client()
+    from queryview.main import app
+
+    c = TestClient(app)
     r = c.get("/api/predefined-queries", params={"workspace": "nope-t3"})
     assert r.status_code == 404
 
@@ -277,10 +279,11 @@ def test_deleted_queries_dont_keep_a_workspace_alive():
 
 
 def test_api_rename_delete_and_undelete(default_ws_id):
+    from fastapi.testclient import TestClient
 
-    from queryview.conftest import tab_client
+    from queryview.main import app
 
-    c = tab_client()
+    c = TestClient(app)
     c.post("/api/predefined-queries", json={"query_name": "api rn", "type": "clickhouse", "query": "SELECT 1"})
     c.post("/api/predefined-queries", json={"query_name": "api taken", "type": "clickhouse", "query": "SELECT 2"})
 

@@ -12,11 +12,6 @@ tabs can be on two different connections at once. `/session`, `/connect`,
 `/open` and `/database` act on the header's session. Saved connections are
 shared (SQLite). See [session.md](./session.md).
 
-**Tab only:** every route except `/health` and `/sessions/attach`, `/select`,
-`/release` also needs `X-QV-Tab`, the token of the browser tab holding that
-session, or it answers `403`. The REST API is the browser's; agents use MCP
-(see [session.md](./session.md#the-tab-token)).
-
 | Method | Path                        | Body                                   | Description |
 | ------ | --------------------------- | -------------------------------------- | ----------- |
 | GET    | `/api/health`               | —                                      | Service health check. |

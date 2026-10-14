@@ -22,12 +22,9 @@ from fastapi.responses import (
 from . import gitsync, remote, sessions, workspaces, yamlio
 from .connect import (
     _ensure_schema,
-    add_ask,
-    confirm_add,
     connect_new,
     describe_query,
     disconnect,
-    drop_add,
     execute_script,
     export_csv,
     forget_session,
@@ -136,25 +133,11 @@ async def mcp_slash_redirect() -> RedirectResponse:
     return RedirectResponse("/mcp/", status_code=307)
 
 
-# How a tab gets or gives up its session (the tab token rides in the body), and
-# the health probe: the only /api routes a caller without a held session may use.
-_UNGATED = {"/api/health", "/api/sessions/attach", "/api/sessions/select", "/api/sessions/release"}
-
-
 @app.middleware("http")
 async def session_header(request: Request, call_next):
-    """Name the session (X-QV-Session; no cookie) and refuse any /api call not
-    from the tab holding it (X-QV-Tab), which an agent never sees. The SSE
-    stream, which can't send headers, passes both as query params. See
-    docs/session.md#the-tab-token."""
-    request.state.sid = request.headers.get("X-QV-Session") or request.query_params.get("session") or ""
-    path = request.url.path
-    if path.startswith("/api/") and path not in _UNGATED:
-        tab = request.headers.get("X-QV-Tab") or request.query_params.get("tab") or ""
-        if not await sessions.held_by(request.state.sid, tab):
-            return JSONResponse(
-                {"ok": False, "message": "only the session's own browser tab may do this"}, status_code=403
-            )
+    """Identify the session from the header the SPA sends on every /api call.
+    There is no cookie: a session is named by its id, not by the browser."""
+    request.state.sid = request.headers.get("X-QV-Session") or ""
     return await call_next(request)
 
 
@@ -199,7 +182,6 @@ def _session_payload(rec: sessions.SessionRec) -> dict[str, Any]:
         "workspace": rec.workspace,
         "url": rec.url,
         "ui": rec.ui,
-        "claimed_at": rec.claim_seen_at,
     }
 
 
@@ -240,9 +222,6 @@ async def sessions_list() -> dict[str, Any]:
 
 @app.patch("/api/sessions/{sid}")
 async def sessions_patch(sid: str, request: Request):
-    # The gate proves the caller holds its own session, not this one.
-    if sid != request.state.sid:
-        return JSONResponse({"ok": False, "message": "a tab may patch only its own session"}, status_code=403)
     b = await _read_json(request) or {}
     ui = b.get("ui")
     rec = await sessions.patch_session(
@@ -275,16 +254,17 @@ async def sessions_release(request: Request):
     tab = _clean_str(b.get("tab"))
     if not tab:
         return {"ok": True}
-    seen = b.get("claimed_at")
-    ui = b.get("ui")
-    await sessions.release(
-        tab,
-        seen if isinstance(seen, int) else None,
-        url=_str_or_none(b, "url"),
-        ui=ui if isinstance(ui, dict) else None,
-        label=_str_or_none(b, "label"),
-        workspace=_str_or_none(b, "workspace"),
-    )
+    sid = _clean_str(b.get("session_id"))
+    if sid:
+        ui = b.get("ui")
+        await sessions.patch_session(
+            sid,
+            url=_str_or_none(b, "url"),
+            ui=ui if isinstance(ui, dict) else None,
+            label=_str_or_none(b, "label"),
+            workspace=_str_or_none(b, "workspace"),
+        )
+    await sessions.release(tab)
     return {"ok": True}
 
 
@@ -298,30 +278,6 @@ async def db_disconnect(request: Request) -> dict[str, Any]:
 @app.get("/api/db/connections")
 async def db_connections(request: Request) -> dict[str, Any]:
     return {"connections": await list_connections_for(request.state.sid)}
-
-
-# Add an agent's session connection (its add dialog, confirmed by the user).
-@app.post("/api/db/confirm-add")
-async def db_confirm_add(request: Request):
-    b = await _read_json(request)
-    rid = _clean_str(b.get("id")) if isinstance(b, dict) else ""
-    if not rid:
-        return JSONResponse({"ok": False, "message": "id required"}, status_code=400)
-    return await confirm_add(request.state.sid, rid)
-
-
-# An agent's add request still awaiting the user, so a reloaded tab reopens its dialog.
-@app.get("/api/db/pending-add")
-async def db_pending_add(request: Request):
-    return {"ask": add_ask(request.state.sid)}
-
-
-# The user cancelled an agent's add dialog: forget the held request.
-@app.post("/api/db/cancel-add")
-async def db_cancel_add(request: Request):
-    b = await _read_json(request)
-    drop_add(request.state.sid, _clean_str(b.get("id")) if isinstance(b, dict) else "")
-    return {"ok": True}
 
 
 # Save a session connection to the connections table (the agent's promote
@@ -617,7 +573,7 @@ async def _event_stream(remote_id: str, request: Request):
 async def remote_events(request: Request):
     # EventSource cannot send headers, so the browser passes its session id in
     # the query string; other callers still identify by header.
-    remote_id = remote.register(request.state.sid)
+    remote_id = remote.register(request.query_params.get("session") or request.state.sid)
     return StreamingResponse(
         _event_stream(remote_id, request),
         media_type="text/event-stream",
@@ -676,9 +632,6 @@ async def remote_lock(request: Request):
             {"ok": False, "message": "session_id and action (acquire|release) required"},
             status_code=400,
         )
-    # The gate proved the caller holds its own session, not the one in the body.
-    if session_id != request.state.sid:
-        return JSONResponse({"ok": False, "message": "a tab may lock only its own session"}, status_code=403)
     if action == "acquire":
         ok, message = remote.acquire(session_id, "human")
     else:

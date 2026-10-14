@@ -15,8 +15,6 @@ import {
   isReady,
   openSaved,
   promoteConnection,
-  cancelAdd,
-  confirmAdd,
   selectDatabase,
   toConnection,
   type Connection,
@@ -43,9 +41,7 @@ import {
   type SessionState,
 } from './session'
 import { apiFetch } from './api'
-import { TAB_KEY, tabRead } from './tabStorage'
 import { listWorkspaces } from './workspace'
-import { labelOf } from './savedConnections'
 
 // Ends the connection; the last entry of the pill's menu.
 function DisconnectButton({ onDisconnect }: { onDisconnect: () => void }) {
@@ -104,24 +100,12 @@ function DatabaseMenu({
 // An agent's connection request, confirmed by the user (docs/connect.md#session-connections).
 type ConnectionAsk = {
   name: string
-  action: 'pick' | 'promote' | 'add'
+  action: 'pick' | 'promote'
   database?: string | null
-  // add only: the request id, driver, and its fields minus the password.
-  id?: string
-  driver?: string
-  details?: Record<string, unknown>
 }
 
 // The dialog's question, an optional note, and its confirm button's label.
 function askText(ask: ConnectionAsk): { question: string; note: string | null; confirm: string } {
-  if (ask.action === 'add') {
-    const where = Object.values(ask.details ?? {}).join(' · ')
-    return {
-      question: `The agent asks to add session connection “${ask.name}”.`,
-      note: `${labelOf(ask.driver ?? '')}: ${where}`,
-      confirm: 'Add',
-    }
-  }
   if (ask.action === 'promote') {
     return {
       question: `The agent asks to save session connection “${ask.name}”.`,
@@ -153,8 +137,6 @@ function Shell() {
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [connectionAsk, setConnectionAsk] = useState<ConnectionAsk | null>(null)
-  // Bumped to reopen the remote-control stream after a refused connect.
-  const [sseRetry, setSseRetry] = useState(0)
   const [dbOpen, setDbOpen] = useState(false)
   // Seeded from the session once it attaches.
   const [workspace, setWorkspace] = useState('')
@@ -273,11 +255,6 @@ function Shell() {
         } else if (restored.connection) {
           await refreshConnection()
         }
-        // An agent's add request survives a reload: reopen its dialog.
-        apiFetch('/api/db/pending-add')
-          .then((r) => r.json())
-          .then((d) => d.ask && setConnectionAsk(d.ask as ConnectionAsk))
-          .catch(() => {})
         stopRows = onSessionRow(followRow)
         stopHeartbeat = startHeartbeat({
           onChanged: applySession,
@@ -314,19 +291,12 @@ function Shell() {
   // matching page.
   useEffect(() => {
     if (!armed) return
-    // EventSource cannot send headers, so the session id and tab token travel in the query
+    // EventSource cannot send headers, so the session id travels in the query
     // string; the backend falls back to X-QV-Session for other callers.
     const es = new EventSource(
-      `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}&tab=${encodeURIComponent(tabRead(TAB_KEY) ?? '')}`,
+      `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}`,
     )
     es.addEventListener('ready', () => setChannelOpen(true))
-    // A refused connect (403 while the claim lapsed) closes an EventSource for
-    // good; reopen it after a heartbeat has had time to reclaim the session.
-    let retry: ReturnType<typeof setTimeout> | undefined
-    es.onerror = () => {
-      if (es.readyState === EventSource.CLOSED)
-        retry = setTimeout(() => setSseRetry((n) => n + 1), 10_000)
-    }
     function on<T>(event: string, apply: (payload: T) => void) {
       es.addEventListener(event, (e) => {
         try {
@@ -346,26 +316,18 @@ function Shell() {
       setToast('Agent updated the script')
       navigate('/scripts')
     })
-    // A new ask replaces the open one; a replaced add request is cancelled, so
-    // it doesn't come back on the next reload.
-    on<ConnectionAsk>('connection', (next) =>
-      setConnectionAsk((prev) => {
-        if (prev?.id && prev.id !== next.id) cancelAdd(prev.id)
-        return next
-      }),
-    )
+    on<ConnectionAsk>('connection', setConnectionAsk)
     on<DashboardPush>('dashboard', (payload) => {
       setDashboardPush(payload)
       setToast('Agent updated the dashboard')
       navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
     })
     return () => {
-      clearTimeout(retry)
       es.close()
       setChannelOpen(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [armed, sseRetry])
+  }, [armed])
 
   function toggleArm(e: React.ChangeEvent<HTMLInputElement>) {
     setArmed(e.target.checked)
@@ -396,10 +358,6 @@ function Shell() {
   // session connection.
   async function confirmAsk(ask: ConnectionAsk) {
     setConnectionAsk(null)
-    if (ask.action === 'add') {
-      setToast((await confirmAdd(ask.id ?? '')) ?? `Added ${ask.name}`)
-      return
-    }
     if (ask.action === 'promote') {
       setToast((await promoteConnection(ask.name)) ?? `Saved ${ask.name}`)
       return
@@ -699,10 +657,7 @@ function Shell() {
             <button
               type="button"
               data-testid="connection-ask-cancel"
-              onClick={() => {
-                if (connectionAsk.id) cancelAdd(connectionAsk.id)
-                setConnectionAsk(null)
-              }}
+              onClick={() => setConnectionAsk(null)}
               className="glass-btn px-3 py-1.5"
             >
               Cancel

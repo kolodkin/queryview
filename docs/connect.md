@@ -162,16 +162,13 @@ deleted or the backend restarts (the session then reads as disconnected).
   (`agent` | `user`); session cards get a badge.
 - A user adds one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved and session connections.
-- The REST routes behind these dialogs answer only the browser tab holding the
-  session, so an agent can't confirm its own request over HTTP. See
-  [session.md](./session.md#the-tab-token).
-- The agent adds a session connection only through a dialog the user confirms.
-  It shows the fields, never the password, and reopens after a reload. One
-  request is held per session; a new one replaces it, and the dialog's confirm
-  button waits a second after any change. The agent may then switch
-  to and remove the ones it added. Switching to anything else
-  (`pick_connection`) or saving one (`promote_connection`) is also a dialog. See
+- The agent may add (ClickHouse or Postgres only: DuckDB reads local files),
+  switch to and remove its own session connections. Switching to anything else
+  (`pick_connection`) or saving one (`promote_connection`) is a dialog the user
+  confirms; its confirm button waits a second after the dialog changes. See
   [remote.md](./remote.md#mcp-tools).
+- This keeps a cooperating agent in its lane; it is not a security boundary.
+  The REST API trusts the session id, which the agent knows.
 
 ## Sessions & reconnecting
 
@@ -212,9 +209,6 @@ session.
 | POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
 | POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
 | GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by}]}`: this session's connections, then the saved ones most recent first (never the config) |
-| POST   | `/api/db/confirm-add` | `{id}`                                 | `{ok, name}` \| `{ok:false, message}`; adds the agent's session connection the user confirmed |
-| GET    | `/api/db/pending-add` | —                                      | `{ask}`: the agent add request awaiting the user (or null), so a reload reopens its dialog |
-| POST   | `/api/db/cancel-add`  | `{id}`                                 | `{ok}`; forgets an agent's add request the user cancelled |
 | POST   | `/api/db/promote`     | `{name}`                               | `{ok}` \| `{ok:false, message}`; saves a session connection |
 | POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card) |
 | POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database |

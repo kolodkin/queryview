@@ -231,38 +231,37 @@ async def list_connections(session_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def add_connection(session_id: str, name: str, type: str, config: dict[str, Any]) -> dict[str, Any]:
-    """Ask the user, in a dialog in the armed browser, to add a session
-    connection: kept in this session's memory only, never saved, gone when the
-    session is deleted or QueryView restarts. Returns once the dialog is shown;
-    once confirmed it appears in list_connections as yours, and use_connection
-    switches to it.
+    """Add a session connection of your own: kept in this session's memory
+    only, never saved, gone when the session is deleted or QueryView restarts.
+    Checks it connects; use_connection then switches to it.
 
     Args:
         session_id: The session id shown in the QueryView popover.
         name: A name no saved or session connection uses yet.
-        type: The driver: "clickhouse" | "postgres" | "duckdb".
-        config: The driver's fields — clickhouse/postgres: {host, port,
-            username, password}; duckdb: {path} (or ":memory:").
+        type: "clickhouse" or "postgres" (DuckDB is refused: it reads local files).
+        config: {host, port, username, password}.
 
-    Returns {"ok", "message"}; not ok for a bad config, a taken name, or a
-    session that is not armed.
+    Returns {"ok": True, "name", "type", "databases"} or {"ok": False, "message"}.
     """
-    from .connect import add_ask, drop_add, parse_driver_config, request_add
+    from .connect import add_session_connection, parse_driver_config
 
     if await sessions.get_session_rec(session_id) is None:
         return {"ok": False, "message": "unknown session"}
+    if type not in _AGENT_DRIVERS:
+        return {"ok": False, "message": f"the agent may add only {' or '.join(_AGENT_DRIVERS)} connections"}
     if not name.strip():
         return {"ok": False, "message": "name required"}
     _, parsed, error = parse_driver_config({**(config if isinstance(config, dict) else {}), "type": type})
     if error or parsed is None:
         return {"ok": False, "message": error or "invalid config"}
-    rid, error = await request_add(session_id, name.strip(), parsed, type)
-    if rid is None:
-        return {"ok": False, "message": error}
-    r = _push_ask(session_id, add_ask(session_id) or {})
-    if not r["ok"]:
-        drop_add(session_id, rid)
-    return r
+    state, message = await add_session_connection(session_id, name.strip(), parsed, type, "agent")
+    if state is None:
+        return {"ok": False, "message": message}
+    return {"ok": True, "name": state.name, "type": type, "databases": state.databases}
+
+
+# Network drivers only: DuckDB's SQL reads any file the backend can.
+_AGENT_DRIVERS = ("clickhouse", "postgres")
 
 
 @mcp.tool()
@@ -359,12 +358,7 @@ async def _ask(session_id: str, name: str, extra: dict[str, Any]) -> dict[str, A
 
     if _session_conn(session_id, name) is None and name not in await list_connection_names():
         return {"ok": False, "message": await unknown_connection_message(name)}
-    return _push_ask(session_id, {"type": "connection", "name": name, **extra})
-
-
-def _push_ask(session_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Show a confirm dialog in the armed browser; it returns before the user answers."""
-    ok, message = remote.push(session_id, payload)
+    ok, message = remote.push(session_id, {"type": "connection", "name": name, **extra})
     return {"ok": ok, "message": "waiting for the user to confirm" if ok else message}
 
 

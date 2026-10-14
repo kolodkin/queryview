@@ -4,17 +4,19 @@ in test_workspaces.py."""
 
 from __future__ import annotations
 
-from queryview.conftest import tab_client
+from fastapi.testclient import TestClient
+
+from queryview.main import app
 
 
 def test_list_includes_default():
-    c = tab_client()
+    c = TestClient(app)
     names = [w["name"] for w in c.get("/api/workspaces").json()["workspaces"]]
     assert "default" in names
 
 
 def test_create_list_update_delete_round_trip():
-    c = tab_client()
+    c = TestClient(app)
     r = c.post(
         "/api/workspaces",
         json={"name": "t6-rt", "remote": "https://u:tok@example.test/r.git", "branch": "dev"},
@@ -44,14 +46,14 @@ def test_create_list_update_delete_round_trip():
 
 
 def test_create_validation_and_conflict():
-    c = tab_client()
+    c = TestClient(app)
     assert c.post("/api/workspaces", json={}).status_code == 400
     c.post("/api/workspaces", json={"name": "t6-dup"})
     assert c.post("/api/workspaces", json={"name": "t6-dup"}).status_code == 409
 
 
 def test_autosave_set_on_create_and_toggled_by_patch():
-    c = tab_client()
+    c = TestClient(app)
     assert c.post("/api/workspaces", json={"name": "t6-auto", "autosave": True}).json()["ok"] is True
     listed = {w["name"]: w for w in c.get("/api/workspaces").json()["workspaces"]}
     assert listed["t6-auto"]["autosave"] is True

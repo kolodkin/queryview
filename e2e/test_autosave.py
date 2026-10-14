@@ -4,7 +4,8 @@ backend tests (test_dashboards.py). Uses a uniquely-named workspace per run."""
 
 import uuid
 
-from conftest import api, arm_remote, mcp_call, open_query_panel
+import httpx
+from conftest import arm_remote, mcp_call, open_query_panel
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -12,11 +13,9 @@ DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
 def _stored_sql(base_url: str, ws: str, name: str) -> str | None:
-    queries = (
-        api(base_url)
-        .get(f"{base_url}/api/predefined-queries", params={"type": "duckdb", "workspace": ws})
-        .json()["queries"]
-    )
+    queries = httpx.get(f"{base_url}/api/predefined-queries", params={"type": "duckdb", "workspace": ws}).json()[
+        "queries"
+    ]
     return next((q["query"] for q in queries if q["query_name"] == name), None)
 
 
@@ -31,7 +30,7 @@ def _wait_stored(page: Page, base_url: str, ws: str, name: str, sql: str) -> Non
 
 def test_autosave_saves_successful_runs_and_hides_save(seeded_duckdb, page: Page, base_url: str, shot) -> None:
     ws = f"e2e-auto-{uuid.uuid4().hex[:6]}"
-    api(base_url).post(f"{base_url}/api/workspaces", json={"name": ws, "autosave": True}).raise_for_status()
+    httpx.post(f"{base_url}/api/workspaces", json={"name": ws, "autosave": True}).raise_for_status()
 
     _connect(page, DUCK, seeded_duckdb)
     page.get_by_test_id("workspace-switcher").click()
@@ -59,12 +58,10 @@ def test_autosave_saves_successful_runs_and_hides_save(seeded_duckdb, page: Page
     # named one saves under its name.
     session_id = arm_remote(page)
     push = {"session_id": session_id, "query": "SELECT name FROM items"}
-    api(base_url).post(f"{base_url}/api/remote/push", json=push, timeout=10.0).raise_for_status()
+    httpx.post(f"{base_url}/api/remote/push", json=push, timeout=10.0).raise_for_status()
     expect(page.get_by_test_id("query-input")).to_have_value("SELECT name FROM items")
     expect(page.get_by_test_id("query-output")).to_be_visible()
-    api(base_url).post(
-        f"{base_url}/api/remote/push", json={**push, "name": "pushed q"}, timeout=10.0
-    ).raise_for_status()
+    httpx.post(f"{base_url}/api/remote/push", json={**push, "name": "pushed q"}, timeout=10.0).raise_for_status()
     _wait_stored(page, base_url, ws, "pushed q", "SELECT name FROM items")
     assert _stored_sql(base_url, ws, "auto q") == "SELECT id, name FROM items ORDER BY id"
 
@@ -86,7 +83,7 @@ def test_turning_autosave_on_saves_open_drafts(seeded_duckdb, page: Page, base_u
     """With autosave off nothing persists until Save; turning it on saves the
     open view's unsaved work before its Save button disappears."""
     ws = f"e2e-auto-{uuid.uuid4().hex[:6]}"
-    api(base_url).post(f"{base_url}/api/workspaces", json={"name": ws}).raise_for_status()
+    httpx.post(f"{base_url}/api/workspaces", json={"name": ws}).raise_for_status()
 
     _connect(page, DUCK, seeded_duckdb)
     page.get_by_test_id("workspace-switcher").click()
@@ -112,7 +109,7 @@ def test_turning_autosave_on_saves_open_drafts(seeded_duckdb, page: Page, base_u
     _wait_stored(page, base_url, ws, "draft q", "SELECT id FROM items")
 
     # Dashboards: an agent draft is kept when autosave goes on.
-    api(base_url).patch(f"{base_url}/api/workspaces/{ws}", json={"autosave": False}).raise_for_status()
+    httpx.patch(f"{base_url}/api/workspaces/{ws}", json={"autosave": False}).raise_for_status()
     page.reload()
     session_id = arm_remote(page)
     # Through the real MCP endpoint: there's no REST route that drafts without persisting.
@@ -122,7 +119,7 @@ def test_turning_autosave_on_saves_open_drafts(seeded_duckdb, page: Page, base_u
     expect(page.get_by_test_id("dashboard-save")).to_be_visible()
 
     def stored_dashboards() -> list[str]:
-        r = api(base_url).get(f"{base_url}/api/dashboards", params={"workspace": ws}).json()
+        r = httpx.get(f"{base_url}/api/dashboards", params={"workspace": ws}).json()
         return [d["name"] for d in r["dashboards"]]
 
     assert "draft dash" not in stored_dashboards()

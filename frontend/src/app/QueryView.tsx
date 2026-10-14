@@ -316,7 +316,7 @@ function QueryPanel({
   // doesn't have to wait a render for the state to catch up.
   const loadPredefined = useCallback(async (): Promise<PredefinedQuery[]> => {
     try {
-      const res = await apiFetch(
+      const res = await fetch(
         `/api/predefined-queries?type=${encodeURIComponent(connectionType)}&workspace=${encodeURIComponent(activeWorkspace())}&include_deleted=1`,
       )
       const data = await res.json()

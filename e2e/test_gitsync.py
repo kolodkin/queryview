@@ -3,13 +3,13 @@ remote that conftest points the default workspace at, so the full UI
 commit/restore round trip runs; on an unconfigured stack that test skips and we
 assert the controls render disabled."""
 
+import httpx
 import pytest
-from conftest import api
 from playwright.sync_api import Page, expect
 
 
 def _configured(base_url: str) -> bool:
-    return bool(api(base_url).get(f"{base_url}/api/git/status").json().get("configured"))
+    return bool(httpx.get(f"{base_url}/api/git/status").json().get("configured"))
 
 
 def test_controls_disabled_when_unconfigured(page: Page, base_url: str):
@@ -27,7 +27,7 @@ def test_commit_and_restore_dashboard_round_trip(page: Page, base_url: str):
         pytest.skip("git sync is not configured for this stack")
 
     # Seed v1 via the API, then commit it from the UI.
-    api(base_url).post(
+    httpx.post(
         f"{base_url}/api/dashboards",
         json={
             "name": "gs e2e",
@@ -41,7 +41,7 @@ def test_commit_and_restore_dashboard_round_trip(page: Page, base_url: str):
     expect(page.get_by_test_id("git-commit")).to_have_text("Committed")
 
     # Drift the local copy to v2, then restore v1 from the revision list.
-    api(base_url).post(
+    httpx.post(
         f"{base_url}/api/dashboards",
         json={
             "name": "gs e2e",
@@ -56,6 +56,6 @@ def test_commit_and_restore_dashboard_round_trip(page: Page, base_url: str):
     rows.first.get_by_test_id("git-revision-restore").click()
     # The picker closes on a successful restore; only then check the store.
     expect(page.get_by_test_id("git-revisions")).to_be_hidden()
-    d = api(base_url).get(f"{base_url}/api/dashboards/gs%20e2e").json()
+    d = httpx.get(f"{base_url}/api/dashboards/gs%20e2e").json()
     assert "v1" in d["html"]
     assert d["queries"] == {"q": "SELECT 1"}

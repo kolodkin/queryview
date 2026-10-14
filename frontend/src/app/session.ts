@@ -15,9 +15,6 @@ export type SessionState = {
   workspace: string
   url: string
   ui: Record<string, Record<string, unknown>>
-  // When the server last renewed this tab's claim; the release beacon sends it
-  // back so a reload's late beacon can't free the new page's claim.
-  claimed_at?: number | null
 }
 
 export type SessionSummary = {
@@ -92,8 +89,6 @@ function adopt(next: SessionState): SessionState {
 function adoptIfCurrent(gen: number, next: SessionState, what: string): SessionState {
   if (state && gen !== localGen) {
     console.debug(`session: dropped stale ${what} reply`)
-    // The claim time is the server's alone, never a local edit: keep it fresh.
-    if (next.id === state.id) state = { ...state, claimed_at: next.claimed_at }
     return state
   }
   return adopt(next)
@@ -188,7 +183,7 @@ export function releaseSession(): void {
   const tab = tabRead(TAB_KEY)
   if (!tab) return
   clearTimeout(timer)
-  const payload: Record<string, unknown> = { tab, claimed_at: state?.claimed_at, ...pending }
+  const payload: Record<string, unknown> = { tab, ...pending }
   // The URL goes along even when it isn't pending: a navigation's own PATCH
   // may still be in flight, and the unload cancels it.
   if (state?.id && !taken) Object.assign(payload, { session_id: state.id, url: state.url })
