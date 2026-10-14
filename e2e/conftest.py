@@ -110,6 +110,21 @@ def mcp_call(base_url: str, tool: str, args: dict[str, Any]) -> dict[str, Any]:
         return pool.submit(asyncio.run, call()).result(timeout=30)
 
 
+def api(base_url: str) -> httpx.Client:
+    """An API client acting as the tab holding a fresh session of its own: every
+    /api route but session attach/select/release answers only that tab
+    (docs/session.md). For calls that are not about any one page's session."""
+    tab = f"e2e-api-{uuid.uuid4().hex}"
+    sid = httpx.post(f"{base_url}/api/sessions/select", json={"tab": tab}).json()["session"]["id"]
+    return httpx.Client(headers={"X-QV-Session": sid, "X-QV-Tab": tab}, timeout=10.0)
+
+
+def page_api(page) -> httpx.Client:
+    """An API client acting as this page's own tab, for calls on its session."""
+    sid, tab = page.evaluate("() => [sessionStorage.getItem('qv_session'), sessionStorage.getItem('qv_tab')]")
+    return httpx.Client(headers={"X-QV-Session": sid, "X-QV-Tab": tab}, timeout=10.0)
+
+
 @pytest.fixture
 def context(context, base_url: str):
     """Give every test its own session.
@@ -189,7 +204,7 @@ def _git_sync_remote(base_url: str) -> None:
     git sync disabled and its round-trip test skipped."""
     remote = os.environ.get("E2E_GIT_REMOTE")
     if remote:
-        r = httpx.patch(f"{base_url}/api/workspaces/default", json={"remote": remote})
+        r = api(base_url).patch(f"{base_url}/api/workspaces/default", json={"remote": remote})
         r.raise_for_status()
 
 

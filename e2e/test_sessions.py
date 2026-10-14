@@ -10,7 +10,7 @@ import uuid
 
 import httpx
 import pytest
-from conftest import open_query_panel
+from conftest import api, open_query_panel
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -140,7 +140,7 @@ def left_behind(base_url: str):
     ui = {"query": {"sql": "SELECT 'left behind'"}}
     httpx.post(f"{base_url}/api/sessions/release", json={"tab": tab, "session_id": sid, "ui": ui})
     yield sid
-    httpx.delete(f"{base_url}/api/sessions/{sid}")
+    api(base_url).delete(f"{base_url}/api/sessions/{sid}")
 
 
 def test_each_test_starts_on_a_fresh_session(left_behind: str, page: Page) -> None:

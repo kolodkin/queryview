@@ -7,16 +7,14 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from fastapi.testclient import TestClient
-
 from queryview import remote, sessions
+from queryview.conftest import tab_client
 from queryview.dashboards import (
     _upsert_and_push,
     get_dashboard,
     list_dashboards,
     upsert_dashboard,
 )
-from queryview.main import app
 
 
 def _run(coro):
@@ -85,7 +83,7 @@ def test_upsert_and_push_delivers_to_registered_session(default_ws_id):
 
 
 def test_runqueries_requires_queries():
-    client = TestClient(app)
+    client = tab_client()
     assert client.post("/api/runqueries", json={}).status_code == 400
     assert client.post("/api/runqueries", json={"queries": {}}).status_code == 400
 
@@ -93,20 +91,20 @@ def test_runqueries_requires_queries():
 def test_runqueries_on_a_disconnected_session_is_409():
     """A dashboard runs on the viewing session's connection; with none there
     is nothing to run on, and the session (not the request) must change."""
-    client = TestClient(app)
+    client = tab_client()
     r = client.post("/api/runqueries", json={"queries": {"q": "SELECT 1"}})
     assert r.status_code == 409
     assert r.json()["ok"] is False and r.json()["reason"] == "no-session"
 
 
 def test_dashboards_upsert_requires_fields():
-    client = TestClient(app)
+    client = tab_client()
     r = client.post("/api/dashboards", json={"name": "x"})  # no html
     assert r.status_code == 400
 
 
 def test_dashboards_upsert_persists_and_lists_and_gets():
-    client = TestClient(app)
+    client = tab_client()
     r = client.post(
         "/api/dashboards",
         json={
@@ -128,14 +126,14 @@ def test_dashboards_upsert_persists_and_lists_and_gets():
 
 
 def test_dashboards_get_missing_returns_404():
-    client = TestClient(app)
+    client = tab_client()
     assert client.get("/api/dashboards/missing-one").status_code == 404
 
 
 def test_dashboards_upsert_pushes_to_registered_session():
     rid = remote.register(uuid.uuid4().hex)
     try:
-        client = TestClient(app)
+        client = tab_client()
         r = client.post(
             "/api/dashboards",
             json={

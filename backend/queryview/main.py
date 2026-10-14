@@ -136,11 +136,30 @@ async def mcp_slash_redirect() -> RedirectResponse:
     return RedirectResponse("/mcp/", status_code=307)
 
 
+# How a tab gets or gives up its session (the tab token rides in the body), and
+# the health probe: the only /api routes a caller without a held session may use.
+_UNGATED = {"/api/health", "/api/sessions/attach", "/api/sessions/select", "/api/sessions/release"}
+
+
 @app.middleware("http")
 async def session_header(request: Request, call_next):
-    """Identify the session from the header the SPA sends on every /api call.
-    There is no cookie: a session is named by its id, not by the browser."""
+    """Identify the session from the header the SPA sends on every /api call
+    (there is no cookie: a session is named by its id, not by the browser), and
+    refuse the call unless it comes from the tab holding that session.
+
+    The REST API is the browser's; agents use MCP. An agent knows the session
+    id but never the tab token (X-QV-Tab), so it cannot use this API to get
+    around MCP's limits. EventSource cannot send headers, so the SSE stream
+    passes both as `?session=` and `?tab=`. See docs/session.md."""
     request.state.sid = request.headers.get("X-QV-Session") or ""
+    path = request.url.path
+    if path.startswith("/api/") and path not in _UNGATED:
+        sid = request.state.sid or request.query_params.get("session") or ""
+        tab = request.headers.get("X-QV-Tab") or request.query_params.get("tab") or ""
+        if not await sessions.held_by(sid, tab):
+            return JSONResponse(
+                {"ok": False, "message": "only the session's own browser tab may do this"}, status_code=403
+            )
     return await call_next(request)
 
 
@@ -185,6 +204,7 @@ def _session_payload(rec: sessions.SessionRec) -> dict[str, Any]:
         "workspace": rec.workspace,
         "url": rec.url,
         "ui": rec.ui,
+        "claimed_at": rec.claim_seen_at,
     }
 
 
@@ -225,6 +245,9 @@ async def sessions_list() -> dict[str, Any]:
 
 @app.patch("/api/sessions/{sid}")
 async def sessions_patch(sid: str, request: Request):
+    # The gate proves the caller holds its own session, not this one.
+    if sid != request.state.sid:
+        return JSONResponse({"ok": False, "message": "a tab may patch only its own session"}, status_code=403)
     b = await _read_json(request) or {}
     ui = b.get("ui")
     rec = await sessions.patch_session(
@@ -258,7 +281,8 @@ async def sessions_release(request: Request):
     if not tab:
         return {"ok": True}
     sid = _clean_str(b.get("session_id"))
-    if sid:
+    # Ungated route: write only to a session this tab really holds.
+    if sid and await sessions.held_by(sid, tab):
         ui = b.get("ui")
         await sessions.patch_session(
             sid,
@@ -267,7 +291,8 @@ async def sessions_release(request: Request):
             label=_str_or_none(b, "label"),
             workspace=_str_or_none(b, "workspace"),
         )
-    await sessions.release(tab)
+    seen = b.get("claimed_at")
+    await sessions.release(tab, seen if isinstance(seen, int) else None)
     return {"ok": True}
 
 
@@ -275,16 +300,6 @@ async def sessions_release(request: Request):
 @app.post("/api/db/disconnect")
 async def db_disconnect(request: Request) -> dict[str, Any]:
     return await disconnect(request.state.sid)
-
-
-async def _tab_only(request: Request) -> JSONResponse | None:
-    """403 unless the request comes from the browser tab holding its session
-    (X-QV-Tab). An agent knows the session id but never the tab token, so this
-    keeps adding, opening and saving connections, and confirming its requests,
-    human-only. See docs/connect.md#session-connections."""
-    if await sessions.held_by(request.state.sid, request.headers.get("X-QV-Tab") or ""):
-        return None
-    return JSONResponse({"ok": False, "message": "only the session's own browser tab may do this"}, status_code=403)
 
 
 # This session's connections and the saved ones, for the Connect page's cards.
@@ -296,8 +311,6 @@ async def db_connections(request: Request) -> dict[str, Any]:
 # Add an agent's session connection (its add dialog, confirmed by the user).
 @app.post("/api/db/confirm-add")
 async def db_confirm_add(request: Request):
-    if (denied := await _tab_only(request)) is not None:
-        return denied
     b = await _read_json(request)
     rid = _clean_str(b.get("id")) if isinstance(b, dict) else ""
     if not rid:
@@ -308,16 +321,12 @@ async def db_confirm_add(request: Request):
 # An agent's add request still awaiting the user, so a reloaded tab reopens its dialog.
 @app.get("/api/db/pending-add")
 async def db_pending_add(request: Request):
-    if (denied := await _tab_only(request)) is not None:
-        return denied
     return {"ask": add_ask(request.state.sid)}
 
 
 # The user cancelled an agent's add dialog: forget the held request.
 @app.post("/api/db/cancel-add")
 async def db_cancel_add(request: Request):
-    if (denied := await _tab_only(request)) is not None:
-        return denied
     b = await _read_json(request)
     drop_add(request.state.sid, _clean_str(b.get("id")) if isinstance(b, dict) else "")
     return {"ok": True}
@@ -327,8 +336,6 @@ async def db_cancel_add(request: Request):
 # dialog, confirmed by the user).
 @app.post("/api/db/promote")
 async def db_promote(request: Request):
-    if (denied := await _tab_only(request)) is not None:
-        return denied
     b = await _read_json(request)
     name = _clean_str(b.get("name")) if isinstance(b, dict) else ""
     if not name:
@@ -358,8 +365,6 @@ async def db_test(request: Request):
 # Create + open a connection for this session.
 @app.post("/api/db/connect")
 async def db_connect(request: Request):
-    if (denied := await _tab_only(request)) is not None:
-        return denied
     body = await _read_json(request)
     resolved = _driver_and_config(body)
     if isinstance(resolved, JSONResponse):
@@ -374,8 +379,6 @@ async def db_connect(request: Request):
 # Open a saved connection by name for this session (a Connect page card).
 @app.post("/api/db/open")
 async def db_open(request: Request):
-    if (denied := await _tab_only(request)) is not None:
-        return denied
     b = await _read_json(request) or {}
     raw_name = b.get("name") if isinstance(b, dict) else None
     name = raw_name.strip() if isinstance(raw_name, str) else ""

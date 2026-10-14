@@ -2,10 +2,8 @@ import asyncio
 import time
 import uuid
 
-from fastapi.testclient import TestClient
-
 from queryview import remote, sessions
-from queryview.main import app
+from queryview.conftest import tab_client
 
 
 def test_register_returns_the_session_id_it_was_given():
@@ -47,13 +45,13 @@ def test_next_message_times_out_to_none():
 
 
 def test_push_endpoint_requires_query():
-    client = TestClient(app)
+    client = tab_client()
     r = client.post("/api/remote/push", json={"session_id": "x", "query": ""})
     assert r.status_code == 400
 
 
 def test_push_endpoint_unknown_session_returns_not_delivered():
-    client = TestClient(app)
+    client = tab_client()
     r = client.post(
         "/api/remote/push",
         json={"session_id": "deadbeef", "query": "SELECT 1"},
@@ -66,7 +64,7 @@ def test_push_endpoint_delivers_to_registered_session():
 
     rid = remote.register(uuid.uuid4().hex)
     try:
-        client = TestClient(app)
+        client = tab_client()
         r = client.post(
             "/api/remote/push",
             json={
@@ -93,7 +91,7 @@ def test_push_endpoint_forwards_cell_view():
 
     rid = remote.register(uuid.uuid4().hex)
     try:
-        client = TestClient(app)
+        client = tab_client()
         yaml = "source:\n  type: custom\n  value: <span>{cell}</span>\n"
         r = client.post(
             "/api/remote/push",
@@ -111,7 +109,7 @@ def test_lock_endpoint_acquire_blocks_push():
 
     rid = remote.register(uuid.uuid4().hex)
     try:
-        client = TestClient(app)
+        client = tab_client()
         r = client.post("/api/remote/lock", json={"session_id": rid, "action": "acquire"})
         assert r.json()["ok"] is True
         ok, msg = remote.push(rid, {"type": "query", "query": "SELECT 1"})
@@ -128,7 +126,7 @@ def test_lock_endpoint_bad_action_400():
 
     rid = remote.register(uuid.uuid4().hex)
     try:
-        client = TestClient(app)
+        client = tab_client()
         r = client.post("/api/remote/lock", json={"session_id": rid, "action": "nope"})
         assert r.status_code == 400
     finally:
@@ -194,7 +192,7 @@ def test_push_endpoint_blank_cell_view_is_none():
 
     rid = remote.register(uuid.uuid4().hex)
     try:
-        client = TestClient(app)
+        client = tab_client()
         r = client.post(
             "/api/remote/push",
             json={"session_id": rid, "query": "SELECT 1", "cell_view": "   "},

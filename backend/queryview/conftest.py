@@ -13,6 +13,22 @@ from pathlib import Path
 import pytest
 
 
+def tab_client(**kwargs):
+    """A TestClient acting as the browser tab that holds a fresh session: every
+    /api route but session attach/select/release answers only that tab."""
+    import asyncio
+    import uuid
+
+    from fastapi.testclient import TestClient
+
+    from queryview import sessions
+    from queryview.main import app
+
+    tab = uuid.uuid4().hex
+    rec, _ = asyncio.run(sessions.attach(tab, None, force_new=True))
+    return TestClient(app, headers={"X-QV-Session": rec.id, "X-QV-Tab": tab}, **kwargs)
+
+
 @pytest.fixture
 def clone_base(tmp_path, monkeypatch) -> Path:
     """Redirect every workspace's sync clone into this test's tmpdir, so clones

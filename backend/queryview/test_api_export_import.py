@@ -6,9 +6,8 @@ from __future__ import annotations
 import asyncio
 
 import yaml
-from fastapi.testclient import TestClient
 
-from queryview.main import app
+from queryview.conftest import tab_client
 
 
 def _run(coro):
@@ -16,7 +15,7 @@ def _run(coro):
 
 
 def test_export_validation_400():
-    c = TestClient(app)
+    c = tab_client()
     assert c.get("/api/export").status_code == 400
     assert c.get("/api/export", params={"kind": "nope", "name": "x"}).status_code == 400
     assert c.get("/api/export", params={"kind": "dashboard"}).status_code == 400  # name required
@@ -25,19 +24,19 @@ def test_export_validation_400():
 
 
 def test_export_unknown_entity_404():
-    c = TestClient(app)
+    c = tab_client()
     r = c.get("/api/export", params={"kind": "dashboard", "name": "never saved"})
     assert r.status_code == 404
 
 
 def test_export_unknown_workspace_404():
-    c = TestClient(app)
+    c = tab_client()
     r = c.get("/api/export", params={"kind": "workspace", "workspace": "no such ws"})
     assert r.status_code == 404
 
 
 def test_import_requires_body_and_valid_yaml():
-    c = TestClient(app)
+    c = tab_client()
     assert c.post("/api/import", content=b"").status_code == 400
     assert c.post("/api/import", content=b"kind: nope\n").status_code == 400
 
@@ -45,7 +44,7 @@ def test_import_requires_body_and_valid_yaml():
 def test_query_export_headers_and_round_trip(default_ws_id):
     from queryview.queries import list_predefined_queries, save_predefined_query
 
-    c = TestClient(app)
+    c = tab_client()
     _run(save_predefined_query("api yio", "clickhouse", "SELECT 1", workspace_id=default_ws_id))
     r = c.get("/api/export", params={"kind": "query", "name": "api yio", "conn_type": "clickhouse"})
     assert r.status_code == 200
@@ -65,7 +64,7 @@ def test_query_export_headers_and_round_trip(default_ws_id):
 def test_workspace_export_import_between_workspaces(default_ws_id, wipe_workspace_entities):
     from queryview.dashboards import upsert_dashboard
 
-    c = TestClient(app)
+    c = tab_client()
     _run(upsert_dashboard("api ws dash", "<p>v1</p>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
     r = c.get("/api/export", params={"kind": "workspace"})
     assert r.status_code == 200

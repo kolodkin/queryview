@@ -1,7 +1,6 @@
 import re
 
-import httpx
-from conftest import arm_remote, connect_clickhouse_test_db
+from conftest import api, arm_remote, connect_clickhouse_test_db
 from playwright.sync_api import Page, expect
 
 
@@ -38,7 +37,7 @@ def test_dashboard_push_and_reopen(seeded_test_db, page: Page, base_url: str, sh
     shot("remote control armed")
 
     # Push a dashboard the way the MCP tool would (via the REST mirror).
-    res = httpx.post(
+    res = api(base_url).post(
         f"{base_url}/api/dashboards",
         json={
             "session_id": session_id,
@@ -76,7 +75,7 @@ def test_dashboard_runqueries_error_shows_banner(seeded_test_db, page: Page, bas
     # Persist a dashboard whose query is invalid; reopening it should surface a
     # fail-fast error banner instead of rendering the iframe.
     _connect_and_select_test_db(page)
-    res = httpx.post(
+    res = api(base_url).post(
         f"{base_url}/api/dashboards",
         json={
             "name": "broken",
@@ -98,7 +97,7 @@ def test_a_dashboard_runs_on_the_viewing_sessions_connection(seeded_test_db, pag
     """A saved dashboard names no connection: a disconnected session is told to
     connect rather than failing on some connection the dashboard remembers."""
     _connect_and_select_test_db(page)
-    httpx.post(
+    api(base_url).post(
         f"{base_url}/api/dashboards",
         json={"name": "portable", "html": _DASHBOARD_HTML, "queries": {"items": "SELECT name FROM items ORDER BY id"}},
         timeout=10.0,
@@ -134,7 +133,7 @@ _PARAMS_HTML = (
 
 def test_dashboard_params_resolve_and_rerun_through_set_params(seeded_test_db, page: Page, base_url: str) -> None:
     _connect_and_select_test_db(page)
-    httpx.post(
+    api(base_url).post(
         f"{base_url}/api/dashboards",
         json={
             "name": "picker",

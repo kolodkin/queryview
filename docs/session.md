@@ -64,7 +64,7 @@ session**. Any session change re-syncs the whole shell.
 
 The row is also the truth for the connection and its database. Every row the tab
 adopts is checked against the connection it shows, so a switch made elsewhere
-(another tab, an API caller) reaches it within a beat, and every view follows —
+(the agent over MCP, a server-side call) reaches it within a beat, and every view follows —
 the explorer reloads its tables, the dashboard and the query panel re-run what
 is on screen. A switch the tab makes itself holds the heartbeat off, so no beat
 that read the row before it lands after it with the old database.
@@ -126,8 +126,34 @@ a view can remember a new setting without a migration.
 Every `/api/*` request names its session with an `X-QV-Session` header. There is
 no session cookie — a session is named by its id, not by the browser it is open
 in, which is what lets two tabs sit on two different databases. The one
-exception is the remote-control SSE stream, which takes `?session=` because
-`EventSource` cannot send headers.
+exception is the remote-control SSE stream, which takes `?session=` (and
+`?tab=`) because `EventSource` cannot send headers.
+
+## The tab token
+
+The REST API is the browser's; agents use MCP. Every `/api/*` call also sends
+the tab token (`qv_tab`) as `X-QV-Tab`, and the server answers `403` unless that
+tab holds the session. An agent knows the session id, never the tab token, so
+it can't use REST to get around MCP's limits — such as the confirm dialogs for
+connections ([connect.md](./connect.md#session-connections)). Only `/health`
+and `/sessions/attach`, `/select` and `/release`, how a tab gets and gives up a
+session, are open; the release beacon writes only to a session its tab holds,
+and a tab patches only its own session.
+
+What it does **not** cover:
+
+- **Global data.** Anyone who can reach the server can attach a session of
+  their own and then use the API as that session's tab: workspaces, git sync,
+  import/export, saved queries, dashboards. Only *your* session is protected.
+- **Taking over.** `select` with `force` still takes a session from another
+  tab, as **Use it here** must. The tab it was taken from greys out, so it is
+  never silent.
+- **A lapsed claim.** After a long sleep the claim can expire; calls get `403`
+  until the next heartbeat (at most 10s) reclaims it.
+
+A reload keeps the tab token, so its `pagehide` beacon can land after the new
+page's `attach`. The beacon carries the claim time its page last saw
+(`claimed_at`), and a claim renewed since is the new page's, so it is kept.
 
 **Nothing is written while you are still typing.** Leaving the query panel is
 what "done editing" means, so that is when its state is written — the same

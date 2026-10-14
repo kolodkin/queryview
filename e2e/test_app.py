@@ -1,6 +1,5 @@
 import re
 
-import httpx
 from conftest import (
     CH_DB,
     CH_HOST,
@@ -11,6 +10,7 @@ from conftest import (
     connect_clickhouse_test_db,
     open_connect,
     open_query_panel,
+    page_api,
     start_new_connection,
 )
 from playwright.sync_api import Page, expect
@@ -173,13 +173,13 @@ def test_a_database_switch_reruns_with_the_new_database_param_options(seeded_tes
 def test_a_database_switched_elsewhere_reaches_the_tab_on_its_heartbeat(
     seeded_test_db, page: Page, base_url: str
 ) -> None:
-    """A switch this tab did not make (an API caller here; another tab is the
-    same path) reaches its pill and views on the next heartbeat."""
+    """A switch the page's views did not make (a server-side call here, the
+    agent's MCP select_database is the same path) reaches its pill and views on
+    the next heartbeat."""
     connect_clickhouse_test_db(page)
     expect(page.locator('[data-testid="explorer-table"][data-table="items"]')).to_be_visible()
 
-    sid = page.evaluate("() => sessionStorage.getItem('qv_session')")
-    r = httpx.post(f"{base_url}/api/db/database", json={"database": "system"}, headers={"X-QV-Session": sid})
+    r = page_api(page).post(f"{base_url}/api/db/database", json={"database": "system"})
     assert r.json() == {"ok": True}
 
     status = page.get_by_test_id("connection-status")
@@ -240,16 +240,10 @@ def test_disconnected_lands_on_connect(page: Page) -> None:
 
 
 def _save_connections(page: Page, base_url: str, configs: list[dict]) -> None:
-    """Save connections through the API as the page's session."""
-    # Connecting is tab-only (docs/connect.md#session-connections): act as the page's tab.
-    sid, tab = page.evaluate("() => [sessionStorage.getItem('qv_session'), sessionStorage.getItem('qv_tab')]")
+    """Save connections through the API as the page's own tab."""
+    client = page_api(page)
     for config in configs:
-        httpx.post(
-            f"{base_url}/api/db/connect",
-            json=config,
-            headers={"X-QV-Session": sid, "X-QV-Tab": tab},
-            timeout=10.0,
-        ).raise_for_status()
+        client.post(f"{base_url}/api/db/connect", json=config).raise_for_status()
 
 
 def test_many_connections(seeded_test_db, page: Page, base_url: str) -> None:

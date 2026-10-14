@@ -43,6 +43,7 @@ import {
   type SessionState,
 } from './session'
 import { apiFetch } from './api'
+import { TAB_KEY, tabRead } from './tabStorage'
 import { listWorkspaces } from './workspace'
 import { labelOf } from './savedConnections'
 
@@ -307,10 +308,10 @@ function Shell() {
   // matching page.
   useEffect(() => {
     if (!armed) return
-    // EventSource cannot send headers, so the session id travels in the query
+    // EventSource cannot send headers, so the session id and tab token travel in the query
     // string; the backend falls back to X-QV-Session for other callers.
     const es = new EventSource(
-      `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}`,
+      `/api/remote/events?session=${encodeURIComponent(sessionId() ?? '')}&tab=${encodeURIComponent(tabRead(TAB_KEY) ?? '')}`,
     )
     es.addEventListener('ready', () => setChannelOpen(true))
     function on<T>(event: string, apply: (payload: T) => void) {

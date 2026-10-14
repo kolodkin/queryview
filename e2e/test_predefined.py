@@ -4,8 +4,7 @@ Uses DuckDB and a uniquely-named workspace per run."""
 
 import uuid
 
-import httpx
-from conftest import open_query_panel
+from conftest import api, open_query_panel
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -14,7 +13,7 @@ DUCK = next(c for c in CASES if c.id == "duckdb")
 
 def _names(base_url: str, ws: str, deleted: bool = False) -> list[str]:
     params = {"type": "duckdb", "workspace": ws, "include_deleted": "1"}
-    r = httpx.get(f"{base_url}/api/predefined-queries", params=params)
+    r = api(base_url).get(f"{base_url}/api/predefined-queries", params=params)
     return [q["query_name"] for q in r.json()["queries"] if (q["deleted_at"] is not None) == deleted]
 
 
@@ -22,10 +21,10 @@ def _open_new_workspace(page: Page, base_url: str, seeded_duckdb: str, queries: 
     """Create a uniquely-named workspace saving `queries` (name -> saved fields),
     connect DuckDB, switch to it and open the query panel. Returns its name."""
     ws = f"e2e-pq-{uuid.uuid4().hex[:6]}"
-    httpx.post(f"{base_url}/api/workspaces", json={"name": ws}).raise_for_status()
+    api(base_url).post(f"{base_url}/api/workspaces", json={"name": ws}).raise_for_status()
     for name, fields in (queries or {}).items():
         body = {"query_name": name, "type": "duckdb", "workspace": ws, **fields}
-        httpx.post(f"{base_url}/api/predefined-queries", json=body).raise_for_status()
+        api(base_url).post(f"{base_url}/api/predefined-queries", json=body).raise_for_status()
 
     _connect(page, DUCK, seeded_duckdb)
     page.get_by_test_id("workspace-switcher").click()
