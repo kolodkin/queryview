@@ -45,8 +45,8 @@ tools (among others):
   discovery. The agent switches only to its own session connections (below).
 - Connections ([access rule](./connect.md#session-connections)):
   `list_connections(session_id)` tags each with `scope`, `created_by`,
-  `active`. `add_connection(session_id, name, type, config)` adds a session
-  connection; `use_connection(session_id, name, database?)` and
+  `active`. `add_connection(session_id, name, type, config)` asks the user to add
+  a session connection; `use_connection(session_id, name, database?)` and
   `remove_connection(session_id, name)` act only on the agent's own.
   `select_database(session_id, database)` is direct on those, a dialog
   otherwise. `pick_connection(session_id, name, database?)` and

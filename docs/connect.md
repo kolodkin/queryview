@@ -162,9 +162,10 @@ deleted or the backend restarts (the session then reads as disconnected).
   (`agent` | `user`); session cards get a badge.
 - A user adds one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved and session connections.
-- The agent may add, remove and switch to only the session connections it
-  created. Switching to anything else (`pick_connection`) or saving one
-  (`promote_connection`) is a dialog the user confirms. See
+- The agent adds a session connection only through a dialog the user confirms
+  (the dialog shows its fields, never the password). It may then switch to and
+  remove the ones it added. Switching to anything else (`pick_connection`) or
+  saving one (`promote_connection`) is also a dialog. See
   [remote.md](./remote.md#mcp-tools).
 
 ## Sessions & reconnecting
@@ -206,6 +207,7 @@ session.
 | POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
 | POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
 | GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by}]}`: this session's connections, then the saved ones most recent first (never the config) |
+| POST   | `/api/db/confirm-add` | `{id}`                                 | `{ok, name}` \| `{ok:false, message}`; adds the agent's session connection the user confirmed |
 | POST   | `/api/db/promote`     | `{name}`                               | `{ok}` \| `{ok:false, message}`; saves a session connection |
 | POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card) |
 | POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database |

@@ -79,6 +79,40 @@ def test_push_dashboard_on_disconnected_session_fails_without_pushing():
         remote.unregister(rid)
 
 
+def _agent_add(sid: str, name: str) -> dict:
+    """add_connection, then the user confirming its dialog."""
+    from queryview import connect
+    from queryview.mcp_server import add_connection
+
+    rid = remote.register(sid)
+    try:
+        assert _run(add_connection(sid, name, "duckdb", {"path": ":memory:"}))["ok"]
+        msg = _run(remote.next_message(rid, 1.0)) or {}
+    finally:
+        remote.unregister(rid)
+    assert msg["action"] == "add" and msg["details"] == {"path": ":memory:"}
+    assert name not in connect._session_conns.get(sid, {})  # nothing until confirmed
+    return _run(connect.confirm_add(sid, msg["id"]))
+
+
+def test_add_connection_dialog_hides_the_password_and_needs_an_armed_session():
+    from queryview import connect
+    from queryview.mcp_server import add_connection
+
+    sid = _run(sessions.create_session()).id
+    cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "secret"}
+    assert _run(add_connection(sid, "ag-ch", "clickhouse", cfg))["message"] == "unknown or inactive session"
+    assert not connect._pending_adds.get(sid)
+    rid = remote.register(sid)
+    try:
+        assert _run(add_connection(sid, "ag-ch", "clickhouse", cfg))["ok"]
+        msg = _run(remote.next_message(rid, 1.0)) or {}
+    finally:
+        remote.unregister(rid)
+    assert "password" not in msg["details"] and msg["details"]["host"] == "db.example.internal"
+    assert _run(connect.confirm_add(sid, "bogus"))["ok"] is False
+
+
 def _names(out):
     return {c["name"]: c for c in out["connections"]}
 
@@ -86,11 +120,11 @@ def _names(out):
 def test_agent_session_connection_lifecycle():
     """Added in memory only, usable and removable by the agent, never saved."""
     from queryview import connect
-    from queryview.mcp_server import add_connection, list_connections, remove_connection, run_query, use_connection
+    from queryview.mcp_server import list_connections, remove_connection, run_query, use_connection
 
     sid = _run(sessions.create_session()).id
     other = _run(sessions.create_session()).id
-    out = _run(add_connection(sid, "ag-mem", "duckdb", {"path": ":memory:"}))
+    out = _agent_add(sid, "ag-mem")
     assert out["ok"] is True
     assert "ag-mem" not in _run(connect.list_connection_names())
     assert "ag-mem" not in _names(_run(list_connections(other)))
@@ -104,7 +138,7 @@ def test_agent_session_connection_lifecycle():
     assert any(r["id"] == sid and r["connection"] == "ag-mem" for r in _run(sessions.list_sessions()))
 
     # A bad database fails before the session switches.
-    assert _run(add_connection(sid, "ag-mem2", "duckdb", {"path": ":memory:"}))["ok"]
+    assert _agent_add(sid, "ag-mem2")["ok"]
     assert _run(use_connection(sid, "ag-mem2", "nope"))["message"] == "unknown database"
     assert _names(_run(list_connections(sid)))["ag-mem"]["active"] is True
 
@@ -137,7 +171,7 @@ def test_agent_cannot_use_or_remove_saved_or_user_connections():
 
 def test_select_database_direct_on_own_connection_else_a_dialog():
     from queryview import connect
-    from queryview.mcp_server import add_connection, select_database, use_connection
+    from queryview.mcp_server import select_database, use_connection
 
     sid = _connected_session("ag-seldb")
     connect._sessions[sid].databases = ["memory"]  # DuckDB lists none; fake a picker
@@ -155,7 +189,7 @@ def test_select_database_direct_on_own_connection_else_a_dialog():
     finally:
         remote.unregister(rid)
 
-    assert _run(add_connection(sid, "ag-seldb-own", "duckdb", {"path": ":memory:"}))["ok"]
+    assert _agent_add(sid, "ag-seldb-own")["ok"]
     assert _run(use_connection(sid, "ag-seldb-own"))["ok"]
     connect._sessions[sid].databases = ["memory"]
     assert _run(select_database(sid, "memory"))["ok"] is True
@@ -166,10 +200,10 @@ def test_select_database_direct_on_own_connection_else_a_dialog():
 
 def test_pick_and_promote_push_a_dialog_and_promote_saves():
     from queryview import connect
-    from queryview.mcp_server import add_connection, pick_connection, promote_connection
+    from queryview.mcp_server import pick_connection, promote_connection
 
     sid = _connected_session("ag-pick")
-    assert _run(add_connection(sid, "ag-promo", "duckdb", {"path": ":memory:"}))["ok"]
+    assert _agent_add(sid, "ag-promo")["ok"]
     assert _run(pick_connection(sid, "ag-pick"))["message"] == "unknown or inactive session"
     rid = remote.register(sid)
     try:

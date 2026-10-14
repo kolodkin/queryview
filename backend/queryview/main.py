@@ -22,6 +22,7 @@ from fastapi.responses import (
 from . import gitsync, remote, sessions, workspaces, yamlio
 from .connect import (
     _ensure_schema,
+    confirm_add,
     connect_new,
     describe_query,
     disconnect,
@@ -278,6 +279,16 @@ async def db_disconnect(request: Request) -> dict[str, Any]:
 @app.get("/api/db/connections")
 async def db_connections(request: Request) -> dict[str, Any]:
     return {"connections": await list_connections_for(request.state.sid)}
+
+
+# Add an agent's session connection (its add dialog, confirmed by the user).
+@app.post("/api/db/confirm-add")
+async def db_confirm_add(request: Request):
+    b = await _read_json(request)
+    rid = _clean_str(b.get("id")) if isinstance(b, dict) else ""
+    if not rid:
+        return JSONResponse({"ok": False, "message": "id required"}, status_code=400)
+    return await confirm_add(request.state.sid, rid)
 
 
 # Save a session connection to the connections table (the agent's promote

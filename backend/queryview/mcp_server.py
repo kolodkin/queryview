@@ -231,9 +231,11 @@ async def list_connections(session_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def add_connection(session_id: str, name: str, type: str, config: dict[str, Any]) -> dict[str, Any]:
-    """Add a session connection: kept in this session's memory only, never
-    saved, gone when the session is deleted or QueryView restarts. Checks it
-    connects first; does not switch to it (use_connection does).
+    """Ask the user, in a dialog in the armed browser, to add a session
+    connection: kept in this session's memory only, never saved, gone when the
+    session is deleted or QueryView restarts. Returns once the dialog is shown;
+    once confirmed it appears in list_connections as yours, and use_connection
+    switches to it.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -242,9 +244,10 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
         config: The driver's fields — clickhouse/postgres: {host, port,
             username, password}; duckdb: {path} (or ":memory:").
 
-    Returns {"ok": True, "name", "type", "databases"} or {"ok": False, "message"}.
+    Returns {"ok", "message"}; not ok for a bad config, a taken name, or a
+    session that is not armed.
     """
-    from .connect import add_session_connection, parse_driver_config
+    from .connect import add_summary, drop_add, parse_driver_config, request_add
 
     if await sessions.get_session_rec(session_id) is None:
         return {"ok": False, "message": "unknown session"}
@@ -253,10 +256,14 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
     _, parsed, error = parse_driver_config({**(config if isinstance(config, dict) else {}), "type": type})
     if error or parsed is None:
         return {"ok": False, "message": error or "invalid config"}
-    state, message = await add_session_connection(session_id, name.strip(), parsed, type, "agent")
-    if state is None:
-        return {"ok": False, "message": message}
-    return {"ok": True, "name": state.name, "type": type, "databases": state.databases}
+    rid, error = await request_add(session_id, name.strip(), parsed, type)
+    if rid is None:
+        return {"ok": False, "message": error}
+    payload = {"type": "connection", "action": "add", "name": name.strip(), "id": rid, "driver": type}
+    ok, message = remote.push(session_id, {**payload, "details": add_summary(type, parsed)})
+    if not ok:
+        drop_add(session_id, rid)
+    return {"ok": ok, "message": "waiting for the user to confirm" if ok else message}
 
 
 @mcp.tool()

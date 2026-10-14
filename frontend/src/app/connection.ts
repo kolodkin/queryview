@@ -58,6 +58,17 @@ export async function openSaved(
   }
 }
 
+// Add the agent's session connection whose add request the user confirmed;
+// the error message on failure, else null.
+export async function confirmAdd(id: string): Promise<string | null> {
+  try {
+    const data = await (await postJson('/api/db/confirm-add', { id })).json()
+    return data.ok ? null : (data.message ?? 'add failed')
+  } catch {
+    return 'add failed'
+  }
+}
+
 // Save a session connection to the saved connections (the agent's promote
 // dialog); the error message on failure, else null.
 export async function promoteConnection(name: string): Promise<string | null> {

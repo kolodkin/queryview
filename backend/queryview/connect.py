@@ -9,6 +9,7 @@ import base64
 import json
 import os
 import time
+import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -511,9 +512,45 @@ async def promote_connection(sid: str, name: str) -> dict[str, Any]:
     return {"ok": True}
 
 
+# Agent add requests awaiting the user's confirmation: sid -> request id ->
+# (name, type, config). The config (password included) never leaves the server.
+# shortcut: a cancelled request stays until the session is deleted; expire them if they pile up.
+_pending_adds: dict[str, dict[str, tuple[str, str, DriverConfig]]] = {}
+
+
+async def request_add(sid: str, name: str, config: DriverConfig, conn_type: str) -> tuple[str | None, str | None]:
+    """Hold an agent's session connection until the user confirms it: (request
+    id, None), or (None, error) for a taken name. Nothing connects yet."""
+    if _session_conn(sid, name) is not None or name in await list_connection_names():
+        return None, f'a connection named "{name}" already exists'
+    rid = uuid.uuid4().hex
+    _pending_adds.setdefault(sid, {})[rid] = (name, conn_type, config)
+    return rid, None
+
+
+def add_summary(conn_type: str, config: DriverConfig) -> dict[str, Any]:
+    """What the confirm dialog shows: the driver's fields minus the password."""
+    return {k: v for k, v in DRIVERS[conn_type].config_to_dict(config).items() if k != "password"}
+
+
+def drop_add(sid: str, rid: str) -> None:
+    _pending_adds.get(sid, {}).pop(rid, None)
+
+
+async def confirm_add(sid: str, rid: str) -> dict[str, Any]:
+    """The user confirmed an agent's add request: add it as the agent's."""
+    req = _pending_adds.get(sid, {}).pop(rid, None)
+    if req is None:
+        return {"ok": False, "message": "no such request"}
+    name, conn_type, config = req
+    state, message = await add_session_connection(sid, name, config, conn_type, "agent")
+    return {"ok": True, "name": name} if state is not None else {"ok": False, "message": message}
+
+
 def forget_session(sid: str) -> None:
     """Drop a deleted session's in-memory state, its session connections too."""
     _session_conns.pop(sid, None)
+    _pending_adds.pop(sid, None)
     _sessions.pop(sid, None)
 
 

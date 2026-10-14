@@ -15,6 +15,7 @@ import {
   isReady,
   openSaved,
   promoteConnection,
+  confirmAdd,
   selectDatabase,
   toConnection,
   type Connection,
@@ -42,6 +43,7 @@ import {
 } from './session'
 import { apiFetch } from './api'
 import { listWorkspaces } from './workspace'
+import { labelOf } from './savedConnections'
 
 // Ends the connection; the last entry of the pill's menu.
 function DisconnectButton({ onDisconnect }: { onDisconnect: () => void }) {
@@ -98,7 +100,36 @@ function DatabaseMenu({
 }
 
 // An agent's connection request, confirmed by the user (docs/connect.md#session-connections).
-type ConnectionAsk = { name: string; action: 'pick' | 'promote'; database?: string | null }
+type ConnectionAsk = {
+  name: string
+  action: 'pick' | 'promote' | 'add'
+  database?: string | null
+  // add only: the request id, driver, and its fields minus the password.
+  id?: string
+  driver?: string
+  details?: Record<string, unknown>
+}
+
+// The dialog's question, an optional note, and its confirm button.
+function askText(ask: ConnectionAsk): [string, string | null, string] {
+  if (ask.action === 'add') {
+    const where = Object.values(ask.details ?? {}).join(' · ')
+    return [
+      `The agent asks to add session connection “${ask.name}”.`,
+      `${labelOf(ask.driver ?? '')}: ${where}`,
+      'Add',
+    ]
+  }
+  if (ask.action === 'promote') {
+    return [
+      `The agent asks to save session connection “${ask.name}”.`,
+      'Saved connections are shared by every session.',
+      'Save',
+    ]
+  }
+  const db = ask.database ? ` / ${ask.database}` : ''
+  return [`The agent asks to switch to “${ask.name}”${db}.`, null, 'Switch']
+}
 
 // App shell: routing, shared connection state, the connection pill + agent
 // popover, and the armed/SSE remote-control channel. Pages: /connect,
@@ -337,6 +368,10 @@ function Shell() {
   // session connection.
   async function confirmAsk(ask: ConnectionAsk) {
     setConnectionAsk(null)
+    if (ask.action === 'add') {
+      setToast((await confirmAdd(ask.id ?? '')) ?? `Added ${ask.name}`)
+      return
+    }
     if (ask.action === 'promote') {
       setToast((await promoteConnection(ask.name)) ?? `Saved ${ask.name}`)
       return
@@ -620,15 +655,9 @@ function Shell() {
       <Toast message={toast} onDone={() => setToast(null)} />
       {connectionAsk && (
         <Dialog label="Agent connection request" testid="connection-ask">
-          <p className="font-medium text-slate-100">
-            {connectionAsk.action === 'promote'
-              ? `The agent asks to save session connection “${connectionAsk.name}”.`
-              : `The agent asks to switch to “${connectionAsk.name}”${
-                  connectionAsk.database ? ` / ${connectionAsk.database}` : ''
-                }.`}
-          </p>
-          {connectionAsk.action === 'promote' && (
-            <p className="text-slate-400">Saved connections are shared by every session.</p>
+          <p className="font-medium text-slate-100">{askText(connectionAsk)[0]}</p>
+          {askText(connectionAsk)[1] && (
+            <p className="break-all text-slate-400">{askText(connectionAsk)[1]}</p>
           )}
           <div className="flex gap-2">
             <button
@@ -638,7 +667,7 @@ function Shell() {
               className="glass-btn-primary px-3 py-1.5"
               autoFocus
             >
-              {connectionAsk.action === 'promote' ? 'Save' : 'Switch'}
+              {askText(connectionAsk)[2]}
             </button>
             <button
               type="button"
