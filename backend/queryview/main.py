@@ -26,6 +26,7 @@ from .connect import (
     connect_new,
     describe_query,
     disconnect,
+    drop_add,
     execute_script,
     export_csv,
     forget_session,
@@ -289,6 +290,14 @@ async def db_confirm_add(request: Request):
     if not rid:
         return JSONResponse({"ok": False, "message": "id required"}, status_code=400)
     return await confirm_add(request.state.sid, rid)
+
+
+# The user cancelled an agent's add dialog: forget the held request.
+@app.post("/api/db/cancel-add")
+async def db_cancel_add(request: Request) -> dict[str, Any]:
+    b = await _read_json(request)
+    drop_add(request.state.sid, _clean_str(b.get("id")) if isinstance(b, dict) else "")
+    return {"ok": True}
 
 
 # Save a session connection to the connections table (the agent's promote

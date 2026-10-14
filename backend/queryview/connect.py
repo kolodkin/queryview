@@ -514,7 +514,6 @@ async def promote_connection(sid: str, name: str) -> dict[str, Any]:
 
 # Agent add requests awaiting the user's confirmation: sid -> request id ->
 # (name, type, config). The config (password included) never leaves the server.
-# shortcut: a cancelled request stays until the session is deleted; expire them if they pile up.
 _pending_adds: dict[str, dict[str, tuple[str, str, DriverConfig]]] = {}
 
 

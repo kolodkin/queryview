@@ -69,6 +69,11 @@ export async function confirmAdd(id: string): Promise<string | null> {
   }
 }
 
+// Forget the agent's add request the user cancelled (best-effort).
+export function cancelAdd(id: string): void {
+  postJson('/api/db/cancel-add', { id }).catch(() => {})
+}
+
 // Save a session connection to the saved connections (the agent's promote
 // dialog); the error message on failure, else null.
 export async function promoteConnection(name: string): Promise<string | null> {

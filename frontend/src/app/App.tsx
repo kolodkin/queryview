@@ -15,6 +15,7 @@ import {
   isReady,
   openSaved,
   promoteConnection,
+  cancelAdd,
   confirmAdd,
   selectDatabase,
   toConnection,
@@ -672,7 +673,10 @@ function Shell() {
             <button
               type="button"
               data-testid="connection-ask-cancel"
-              onClick={() => setConnectionAsk(null)}
+              onClick={() => {
+                if (connectionAsk.id) cancelAdd(connectionAsk.id)
+                setConnectionAsk(null)
+              }}
               className="glass-btn px-3 py-1.5"
             >
               Cancel

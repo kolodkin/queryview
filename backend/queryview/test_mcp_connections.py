@@ -111,6 +111,8 @@ def test_add_connection_dialog_hides_the_password_and_needs_an_armed_session():
         remote.unregister(rid)
     assert "password" not in msg["details"] and msg["details"]["host"] == "db.example.internal"
     assert _run(connect.confirm_add(sid, "bogus"))["ok"] is False
+    connect.drop_add(sid, msg["id"])  # the user cancelled
+    assert _run(connect.confirm_add(sid, msg["id"]))["message"] == "no such request"
 
 
 def _names(out):
