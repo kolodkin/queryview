@@ -179,6 +179,44 @@ describe('activeWorkspace', () => {
   })
 })
 
+describe('patchSession', () => {
+  it('ignores a late reply to an earlier patch that would undo a workspace switch', async () => {
+    stubTabStorage()
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, session: SESSION }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { attachSession, patchSession, activeWorkspace } = await import('./session')
+    await attachSession()
+    let answerFirst!: () => void
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerFirst = () =>
+            resolve({
+              ok: true,
+              json: async () => ({ ok: true, session: { ...SESSION, url: '/explorer' } }),
+            })
+        }),
+    )
+    const first = patchSession({ url: '/explorer' })
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        session: { ...SESSION, url: '/explorer', workspace: 'sales_reporting' },
+      }),
+    })
+    await patchSession({ workspace: 'sales_reporting' })
+
+    answerFirst() // carries the row from before the switch: workspace "default"
+    await first
+
+    expect(activeWorkspace()).toBe('sales_reporting')
+  })
+})
+
 describe('releaseSession', () => {
   it('beacons whatever the debounce has not flushed yet', async () => {
     // A reload fires pagehide inside the 400ms window, so an unflushed setting
@@ -346,6 +384,34 @@ describe('startHeartbeat', () => {
     expect(await switched).toBe(true)
     await vi.advanceTimersByTimeAsync(10_000)
     expect(urls().filter((u) => u.includes('/attach'))).toHaveLength(3)
+    stop()
+  })
+
+  it('ignores a beat that straddles a workspace switch', async () => {
+    const { attachSession, startHeartbeat, patchSession, activeWorkspace } =
+      await import('./session')
+    await attachSession()
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn() })
+    let answerBeat!: () => void
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerBeat = () =>
+            resolve({ ok: true, status: 200, json: async () => ({ ok: true, session: SESSION }) })
+        }),
+    )
+    await vi.advanceTimersByTimeAsync(10_000)
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, session: { ...SESSION, workspace: 'sales_reporting' } }),
+    })
+    await patchSession({ workspace: 'sales_reporting' })
+
+    answerBeat()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(activeWorkspace()).toBe('sales_reporting')
     stop()
   })
 

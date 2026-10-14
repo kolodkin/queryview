@@ -46,6 +46,10 @@ let taken = false
 let beating: Promise<void> | null = null
 let holds = 0
 let pending: PendingPatch = {}
+// Bumped by every local row change. A request adopts its reply only if this
+// hasn't moved since it was sent, so a late reply to an earlier PATCH or beat
+// can't roll back a newer workspace or url.
+let localGen = 0
 let timer: ReturnType<typeof setTimeout> | undefined
 // Subscribers to every row the mirror adopts, whatever brought it.
 const rowListeners = new Set<(row: SessionState) => void>()
@@ -98,6 +102,7 @@ export async function attachSession(keep = false): Promise<SessionState> {
   const known = tabRead(SESSION_KEY)
   if (known) body.session_id = known
   if (keep) body.keep = true
+  const gen = localGen
   const res = await apiFetch('/api/sessions/attach', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -106,6 +111,7 @@ export async function attachSession(keep = false): Promise<SessionState> {
   if (keep && res.status === 409) throw new SessionTakenError()
   const data = await res.json()
   if (!data?.session) throw new Error('attach returned no session')
+  if (state && gen !== localGen) return state
   return adopt(data.session as SessionState)
 }
 
@@ -196,6 +202,7 @@ export async function flushPatches(): Promise<void> {
   const body = pending
   pending = {}
   if (!sid || taken || Object.keys(body).length === 0) return
+  const gen = localGen
   try {
     const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
       method: 'PATCH',
@@ -203,7 +210,7 @@ export async function flushPatches(): Promise<void> {
       body: JSON.stringify(body),
     })
     const data = await res.json()
-    if (data?.session) adopt(data.session as SessionState)
+    if (data?.session && gen === localGen) adopt(data.session as SessionState)
   } catch {
     /* a lost patch costs a remembered preference, never live work */
   }
@@ -242,6 +249,7 @@ export function patchSession(changes: SessionPatch): Promise<void> {
   if (!state) return Promise.resolve()
   state = { ...state, ...changes } as SessionState
   pending = { ...pending, ...changes }
+  localGen++
   return flushPatches()
 }
 
