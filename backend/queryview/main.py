@@ -143,14 +143,10 @@ _UNGATED = {"/api/health", "/api/sessions/attach", "/api/sessions/select", "/api
 
 @app.middleware("http")
 async def session_header(request: Request, call_next):
-    """Identify the session from the header the SPA sends on every /api call
-    (there is no cookie: a session is named by its id, not by the browser), and
-    refuse the call unless it comes from the tab holding that session.
-
-    The REST API is the browser's; agents use MCP. An agent knows the session
-    id but never the tab token (X-QV-Tab), so it cannot use this API to get
-    around MCP's limits. EventSource cannot send headers, so the SSE stream
-    passes both as `?session=` and `?tab=`. See docs/session.md."""
+    """Name the session (X-QV-Session; no cookie) and refuse any /api call not
+    from the tab holding it (X-QV-Tab), which an agent never sees. The SSE
+    stream, which can't send headers, passes both as query params. See
+    docs/session.md#the-tab-token."""
     request.state.sid = request.headers.get("X-QV-Session") or request.query_params.get("session") or ""
     path = request.url.path
     if path.startswith("/api/") and path not in _UNGATED:
