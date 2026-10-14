@@ -88,7 +88,7 @@ def test_execute_runs_a_script_per_statement(tmp_path):
     assert all(isinstance(x["elapsed_ms"], int) for x in results)
 
 
-def test_session_only_connect_lists_for_its_session_and_promotes():
+def test_session_only_connect_lists_for_its_session_only():
     c = TestClient(app, headers={"X-QV-Session": "session-only-test"})
     other = TestClient(app, headers={"X-QV-Session": "session-only-other"})
     r = c.post("/api/db/connect", json={"type": "duckdb", "name": "so-duck", "path": ":memory:", "session": True})
@@ -97,7 +97,3 @@ def test_session_only_connect_lists_for_its_session_and_promotes():
     mine = {x["name"]: x for x in c.get("/api/db/connections").json()["connections"]}
     assert mine["so-duck"]["scope"] == "session" and mine["so-duck"]["created_by"] == "user"
     assert "so-duck" not in {x["name"] for x in other.get("/api/db/connections").json()["connections"]}
-
-    assert c.post("/api/db/promote", json={"name": "so-duck"}).json() == {"ok": True}
-    assert c.get("/api/session").json()["scope"] == "saved"
-    assert other.get("/api/db/connections").json()["connections"][0]["name"] == "so-duck"

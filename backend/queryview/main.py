@@ -33,7 +33,6 @@ from .connect import (
     list_tables,
     open_saved,
     parse_driver_config,
-    promote_connection,
     run_query,
     select_database,
 )
@@ -278,17 +277,6 @@ async def db_disconnect(request: Request) -> dict[str, Any]:
 @app.get("/api/db/connections")
 async def db_connections(request: Request) -> dict[str, Any]:
     return {"connections": await list_connections_for(request.state.sid)}
-
-
-# Save a session connection to the connections table (the agent's promote
-# dialog, confirmed by the user).
-@app.post("/api/db/promote")
-async def db_promote(request: Request):
-    b = await _read_json(request)
-    name = _clean_str(b.get("name")) if isinstance(b, dict) else ""
-    if not name:
-        return JSONResponse({"ok": False, "message": "name required"}, status_code=400)
-    return await promote_connection(request.state.sid, name)
 
 
 def _driver_and_config(body: Any):

@@ -161,64 +161,26 @@ def test_agent_cannot_use_or_remove_saved_or_user_connections():
     for name in ("ag-saved", "ag-user"):
         for tool in (use_connection, remove_connection):
             out = _run(tool(sid, name))
-            assert out["ok"] is False and "pick_connection" in out["message"]
+            assert out["ok"] is False and "ask the user" in out["message"]
 
 
-def test_select_database_direct_on_own_connection_else_a_dialog():
+def test_select_database_only_on_the_agents_own_connection():
     from queryview import connect
     from queryview.mcp_server import select_database, use_connection
 
     sid = _connected_session("ag-seldb")
     connect._sessions[sid].databases = ["memory"]  # DuckDB lists none; fake a picker
-    assert _run(select_database(sid, "nope"))["message"] == "unknown database"
-    rid = remote.register(sid)
-    try:
-        out = _run(select_database(sid, "memory"))
-        assert out["ok"] is True and out["message"] == "waiting for the user to confirm"
-        assert _run(remote.next_message(rid, 1.0)) == {
-            "type": "connection",
-            "name": "ag-seldb",
-            "action": "pick",
-            "database": "memory",
-        }
-    finally:
-        remote.unregister(rid)
+    out = _run(select_database(sid, "memory"))
+    assert out["ok"] is False and "ask the user" in out["message"]
 
     assert _agent_add(sid, "ag-seldb-own")["ok"]
     assert _run(use_connection(sid, "ag-seldb-own"))["ok"]
     connect._sessions[sid].databases = ["memory"]
+    assert _run(select_database(sid, "nope"))["message"] == "unknown database"
     assert _run(select_database(sid, "memory"))["ok"] is True
     assert _run(sessions.database_of(sid)) == "memory"
     rec = _run(sessions.create_session())
     assert _run(select_database(rec.id, "memory"))["message"] == "not connected"
-
-
-def test_pick_and_promote_push_a_dialog_and_promote_saves():
-    from queryview import connect
-    from queryview.mcp_server import pick_connection, promote_connection
-
-    sid = _connected_session("ag-pick")
-    assert _agent_add(sid, "ag-promo")["ok"]
-    assert _run(pick_connection(sid, "ag-pick"))["message"] == "unknown or inactive session"
-    rid = remote.register(sid)
-    try:
-        assert _run(pick_connection(sid, "ag-pick", "main"))["ok"] is True
-        assert _run(remote.next_message(rid, 1.0)) == {
-            "type": "connection",
-            "name": "ag-pick",
-            "action": "pick",
-            "database": "main",
-        }
-        assert _run(pick_connection(sid, "ag-absent"))["ok"] is False
-        assert _run(promote_connection(sid, "ag-pick"))["ok"] is False  # saved already
-        assert _run(promote_connection(sid, "ag-promo"))["ok"] is True
-        assert (_run(remote.next_message(rid, 1.0)) or {}).get("action") == "promote"
-    finally:
-        remote.unregister(rid)
-    # Nothing is saved until the user confirms (the browser calls promote).
-    assert "ag-promo" not in _run(connect.list_connection_names())
-    assert _run(connect.promote_connection(sid, "ag-promo"))["ok"] is True
-    assert "ag-promo" in _run(connect.list_connection_names())
 
 
 def test_open_saved_unknown_connection_lists_available_names():

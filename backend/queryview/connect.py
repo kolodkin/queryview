@@ -488,7 +488,7 @@ def agent_owned_error(sid: str, name: str) -> str | None:
     if sc is not None and sc.created_by == "agent":
         return None
     whose = "a session connection the user added" if sc is not None else "not one of your session connections"
-    return f'"{name}" is {whose}; use pick_connection to ask the user'
+    return f'"{name}" is {whose}; ask the user to switch in QueryView'
 
 
 async def remove_session_connection(sid: str, name: str) -> dict[str, Any]:
@@ -499,22 +499,6 @@ async def remove_session_connection(sid: str, name: str) -> dict[str, Any]:
     rec = await sessions.get_session_rec(sid)
     if rec is not None and rec.connection_name == name:
         await disconnect(sid)
-    return {"ok": True}
-
-
-async def promote_connection(sid: str, name: str) -> dict[str, Any]:
-    """Save a session connection to the connections table, keeping its name,
-    so it stops being session-only."""
-    sc = _session_conn(sid, name)
-    if sc is None:
-        return {"ok": False, "message": f'no session connection named "{name}"'}
-    if name in await list_connection_names():
-        return {"ok": False, "message": f'a saved connection named "{name}" already exists'}
-    await _save_active_connection(name, sc.config, sc.type)
-    del _session_conns[sid][name]
-    s = _get_session_entry(sid)
-    if s is not None and s.name == name and s.database:
-        await _save_selected_database(name, s.database)
     return {"ok": True}
 
 

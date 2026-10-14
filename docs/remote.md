@@ -46,12 +46,9 @@ tools (among others):
 - Connections ([access rule](./connect.md#session-connections)):
   `list_connections(session_id)` tags each with `scope`, `created_by`,
   `active`. `add_connection(session_id, name, type, config)` adds a ClickHouse or
-  Postgres session connection; `use_connection(session_id, name, database?)` and
-  `remove_connection(session_id, name)` act only on the agent's own.
-  `select_database(session_id, database)` is direct on those, a dialog
-  otherwise. `pick_connection(session_id, name, database?)` and
-  `promote_connection(session_id, name)` show a dialog and return before the
-  user answers.
+  Postgres session connection; `use_connection(session_id, name, database?)`,
+  `select_database(session_id, database)` and `remove_connection(session_id,
+  name)` act only on the agent's own.
 - `run_query(session_id, query, limit?=1000, offset?=0)` — run a read-only
   query on the session's connection and selected database, returning rows to
   the agent (not the browser): `{ok, database, columns, types, rows}`, values

@@ -203,8 +203,8 @@ async def list_connections(session_id: str) -> dict[str, Any]:
     ("session" | "saved"), "created_by" ("agent" | "user") and "active".
 
     You may use_connection / remove_connection only scope="session",
-    created_by="agent" entries; for anything else ask the user with
-    pick_connection.
+    created_by="agent" entries; for anything else ask the user to switch in
+    QueryView.
 
     Returns {"ok": True, "connections": [{name, type, scope, created_by,
     active}]} or {"ok": False, "message"} for an unknown session.
@@ -284,7 +284,7 @@ async def use_connection(session_id: str, name: str, database: str | None = None
     """Switch the session to a session connection you added, optionally
     selecting `database` (ClickHouse/Postgres need one before querying). The
     browser follows within a few seconds. Anything else is refused — ask the
-    user with pick_connection.
+    user to switch in QueryView.
 
     Returns {"ok": True, "name", "type", "databases", "database"} or
     {"ok": False, "message"}.
@@ -301,41 +301,12 @@ async def use_connection(session_id: str, name: str, database: str | None = None
 
 
 @mcp.tool()
-async def pick_connection(session_id: str, name: str, database: str | None = None) -> dict[str, Any]:
-    """Ask the user, in a dialog in the armed browser, to switch the session to
-    connection `name` (and optionally `database`). Use this for any connection
-    you may not use_connection yourself. It returns once the dialog is shown,
-    not when answered: check session_info afterwards.
-
-    Returns {"ok", "message"}; not ok when the name is unknown or the session
-    is not armed.
-    """
-    return await _ask(session_id, name, {"action": "pick", "database": database})
-
-
-@mcp.tool()
-async def promote_connection(session_id: str, name: str) -> dict[str, Any]:
-    """Ask the user, in a dialog in the armed browser, to save session
-    connection `name` to the saved connections (shared by every session). Only
-    the user's confirmation saves it. Returns once the dialog is shown.
-
-    Returns {"ok", "message"}.
-    """
-    from .connect import _session_conn
-
-    if _session_conn(session_id, name) is None:
-        return {"ok": False, "message": f'no session connection named "{name}"'}
-    return await _ask(session_id, name, {"action": "promote"})
-
-
-@mcp.tool()
 async def select_database(session_id: str, database: str) -> dict[str, Any]:
-    """Switch the session's database on its active connection. Direct on a
-    session connection you added; otherwise it asks the user in a dialog in the
-    armed browser and returns once the dialog is shown (check session_info).
+    """Switch the database of the session's active connection, if it is a
+    session connection you added; otherwise ask the user to switch in QueryView.
 
-    Returns {"ok", "message", "database"}; not ok when disconnected or the
-    database is not in session_info's "databases".
+    Returns {"ok", "message", "database"}; not ok when disconnected, not your
+    connection, or the database is not in session_info's "databases".
     """
     from .connect import agent_owned_error, get_session
     from .connect import select_database as _select_database
@@ -343,23 +314,13 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
     cur = await get_session(session_id)
     if not cur["connected"]:
         return {"ok": False, "message": "not connected", "database": None}
-    if database not in cur["databases"]:
-        return {"ok": False, "message": "unknown database", "database": cur["database"]}
-    if agent_owned_error(session_id, cur["name"]) is None:
-        r = await _select_database(session_id, database)
-        return {"ok": r["ok"], "message": r.get("message", "selected"), "database": database}
-    r = await _ask(session_id, cur["name"], {"action": "pick", "database": database})
-    return {**r, "database": cur["database"]}
-
-
-async def _ask(session_id: str, name: str, extra: dict[str, Any]) -> dict[str, Any]:
-    """Push a connection dialog for the user to confirm in the browser."""
-    from .connect import _session_conn, list_connection_names, unknown_connection_message
-
-    if _session_conn(session_id, name) is None and name not in await list_connection_names():
-        return {"ok": False, "message": await unknown_connection_message(name)}
-    ok, message = remote.push(session_id, {"type": "connection", "name": name, **extra})
-    return {"ok": ok, "message": "waiting for the user to confirm" if ok else message}
+    err = agent_owned_error(session_id, cur["name"])
+    if err is not None:
+        return {"ok": False, "message": err, "database": cur["database"]}
+    r = await _select_database(session_id, database)
+    if not r["ok"]:
+        return {"ok": False, "message": r["message"], "database": cur["database"]}
+    return {"ok": True, "message": "selected", "database": database}
 
 
 async def _session_workspace_rec(session_id: str | None):
