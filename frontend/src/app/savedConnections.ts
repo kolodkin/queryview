@@ -8,6 +8,9 @@ export type SavedConnection = {
   type: string
   database: string | null
   last_active_at: number
+  // "session": this session's memory only, never saved (docs/connect.md).
+  scope?: 'saved' | 'session'
+  created_by?: 'user' | 'agent'
 }
 
 // Past this many saved connections the page switches to its "many" layout.

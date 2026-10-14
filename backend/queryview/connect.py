@@ -245,6 +245,22 @@ class _SessionState:
     config: DriverConfig
     databases: list[str]
     database: str | None
+    scope: str = "saved"  # "saved" (connections table) | "session" (_session_conns)
+    created_by: str = "user"  # "user" | "agent"
+
+
+@dataclass
+class _SessionConn:
+    type: str
+    config: DriverConfig
+    created_by: str
+    added_at: int
+
+
+# Session connections: sid -> name -> connection. Memory only — never written to
+# the connections table, invisible to other sessions, gone on restart or when
+# the session is deleted. See docs/connect.md#session-connections.
+_session_conns: dict[str, dict[str, _SessionConn]] = {}
 
 
 # LRU-capped so the map can't grow unbounded (every fresh cookie adds one). An
@@ -288,7 +304,12 @@ def _with_localhost_hint(message: str, config: DriverConfig) -> str:
 
 
 async def _build_session(
-    name: str, config: DriverConfig, database: str | None, conn_type: str = "clickhouse"
+    name: str,
+    config: DriverConfig,
+    database: str | None,
+    conn_type: str = "clickhouse",
+    scope: str = "saved",
+    created_by: str = "user",
 ) -> tuple[_SessionState | None, str | None]:
     """List a connection's databases and build a session object."""
     r = await DRIVERS[conn_type].list_databases(config)
@@ -302,6 +323,8 @@ async def _build_session(
             config=config,
             databases=databases,
             database=database if database and database in databases else None,
+            scope=scope,
+            created_by=created_by,
         ),
         None,
     )
@@ -315,6 +338,12 @@ async def _ensure_session(sid: str) -> None:
         return
     rec = await sessions.get_session_rec(sid)
     if rec is None or rec.connection_name is None:
+        return
+    sc = _session_conns.get(sid, {}).get(rec.connection_name)
+    if sc is not None:
+        state, _ = await _build_session(rec.connection_name, sc.config, rec.database, sc.type, "session", sc.created_by)
+        if state is not None:
+            _set_session_entry(sid, state)
         return
     stored = await _connection_by_name(rec.connection_name)
     if stored is None:
@@ -340,11 +369,19 @@ async def get_session(sid: str) -> dict[str, Any]:
         "database": s.database,
         # How this dialect quotes a table/column (dashboard `identifier` params).
         "ident_quote": DRIVERS[s.type].ident_quote,
+        "scope": s.scope,
+        "created_by": s.created_by,
     }
 
 
-async def connect_new(sid: str, name: str, config: DriverConfig, conn_type: str) -> dict[str, Any]:
-    """Create: open a config, save + activate it for this session."""
+async def connect_new(
+    sid: str, name: str, config: DriverConfig, conn_type: str, session_only: bool = False
+) -> dict[str, Any]:
+    """Create: open a config, save + activate it for this session. With
+    `session_only` it becomes a session connection instead of being saved."""
+    if session_only:
+        added = await add_session_connection(sid, name, config, conn_type, "user")
+        return await open_saved(sid, name) if added["ok"] else added
     state, message = await _build_session(name, config, None, conn_type)
     if state is None:
         return {"ok": False, "message": message}
@@ -355,7 +392,16 @@ async def connect_new(sid: str, name: str, config: DriverConfig, conn_type: str)
 
 
 async def open_saved(sid: str, name: str) -> dict[str, Any]:
-    """Open a saved connection by name for this session."""
+    """Open a connection by name for this session: one of its session
+    connections, else a saved one."""
+    sc = _session_conns.get(sid, {}).get(name)
+    if sc is not None:
+        state, message = await _build_session(name, sc.config, None, sc.type, "session", sc.created_by)
+        if state is None:
+            return {"ok": False, "message": message}
+        _set_session_entry(sid, state)
+        await sessions.set_connection(sid, name)
+        return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
     stored = await _connection_by_name(name)
     if stored is None:
         return {
@@ -381,6 +427,81 @@ async def disconnect(sid: str) -> dict[str, Any]:
     return {"ok": True}
 
 
+async def list_connections_for(sid: str) -> list[dict[str, Any]]:
+    """This session's connections, then the saved ones, each tagged with its
+    scope and creator."""
+    own = [
+        {
+            "name": n,
+            "type": c.type,
+            "database": None,
+            "last_active_at": c.added_at,
+            "scope": "session",
+            "created_by": c.created_by,
+        }
+        for n, c in _session_conns.get(sid, {}).items()
+    ]
+    return own + [{**c, "scope": "saved", "created_by": "user"} for c in await list_connections()]
+
+
+async def add_session_connection(
+    sid: str, name: str, config: DriverConfig, conn_type: str, created_by: str
+) -> dict[str, Any]:
+    """Add a session connection after checking it connects. A name already used
+    by a saved or session connection is refused, so a name means one thing."""
+    if name in await list_connection_names() or name in _session_conns.get(sid, {}):
+        return {"ok": False, "message": f'a connection named "{name}" already exists'}
+    state, message = await _build_session(name, config, None, conn_type)
+    if state is None:
+        return {"ok": False, "message": message}
+    _session_conns.setdefault(sid, {})[name] = _SessionConn(conn_type, config, created_by, _now_ms())
+    return {"ok": True, "name": name, "type": conn_type, "databases": state.databases}
+
+
+def agent_owned_error(sid: str, name: str) -> str | None:
+    """Why the agent may not change `name` directly, or None for a session
+    connection it created itself."""
+    sc = _session_conns.get(sid, {}).get(name)
+    if sc is not None and sc.created_by == "agent":
+        return None
+    whose = "a session connection the user added" if sc is not None else "not one of your session connections"
+    return f'"{name}" is {whose}; use pick_connection to ask the user'
+
+
+async def remove_session_connection(sid: str, name: str) -> dict[str, Any]:
+    """Drop a session connection, disconnecting the session if it is active."""
+    if _session_conns.get(sid, {}).pop(name, None) is None:
+        return {"ok": False, "message": f'no session connection named "{name}"'}
+    s = _get_session_entry(sid)
+    if s is not None and s.scope == "session" and s.name == name:
+        await disconnect(sid)
+    return {"ok": True}
+
+
+async def promote_connection(sid: str, name: str) -> dict[str, Any]:
+    """Save a session connection to the connections table, keeping its name,
+    so it stops being session-only."""
+    sc = _session_conns.get(sid, {}).get(name)
+    if sc is None:
+        return {"ok": False, "message": f'no session connection named "{name}"'}
+    if name in await list_connection_names():
+        return {"ok": False, "message": f'a saved connection named "{name}" already exists'}
+    await _save_active_connection(name, sc.config, sc.type)
+    del _session_conns[sid][name]
+    s = _get_session_entry(sid)
+    if s is not None and s.scope == "session" and s.name == name:
+        s.scope, s.created_by = "saved", "user"
+        if s.database:
+            await _save_selected_database(name, s.database)
+    return {"ok": True}
+
+
+def forget_session(sid: str) -> None:
+    """Drop a deleted session's in-memory state, its session connections too."""
+    _session_conns.pop(sid, None)
+    _sessions.pop(sid, None)
+
+
 async def select_database(sid: str, database: str) -> dict[str, Any]:
     """Select this session's active connection's database."""
     s = _get_session_entry(sid)
@@ -389,7 +510,8 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
     if not database or database not in s.databases:
         return {"ok": False, "message": "unknown database", "reason": "unknown"}
     s.database = database
-    await _save_selected_database(s.name, database)
+    if s.scope == "saved":
+        await _save_selected_database(s.name, database)
     await sessions.set_database(sid, database)
     return {"ok": True}
 

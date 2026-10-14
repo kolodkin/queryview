@@ -1,4 +1,5 @@
-"""MCP tools take the connection from the session; the agent never names one."""
+"""MCP tools run on the session's connection; the agent switches only to
+session connections it added itself."""
 
 from __future__ import annotations
 
@@ -78,10 +79,83 @@ def test_push_dashboard_on_disconnected_session_fails_without_pushing():
         remote.unregister(rid)
 
 
-def test_no_list_connections_tool():
-    from queryview.mcp_server import mcp
+def _names(out):
+    return {c["name"]: c for c in out["connections"]}
 
-    assert "list_connections" not in {t.name for t in _run(mcp.list_tools())}
+
+def test_agent_session_connection_lifecycle():
+    """Added in memory only, usable and removable by the agent, never saved."""
+    from queryview import connect
+    from queryview.mcp_server import add_connection, list_connections, remove_connection, run_query, use_connection
+
+    sid = _run(sessions.create_session()).id
+    other = _run(sessions.create_session()).id
+    out = _run(add_connection(sid, "ag-mem", "duckdb", {"path": ":memory:"}))
+    assert out["ok"] is True
+    assert "ag-mem" not in _run(connect.list_connection_names())
+    assert "ag-mem" not in _names(_run(list_connections(other)))
+
+    entry = _names(_run(list_connections(sid)))["ag-mem"]
+    assert entry["scope"] == "session" and entry["created_by"] == "agent" and entry["active"] is False
+
+    assert _run(use_connection(sid, "ag-mem"))["ok"] is True
+    assert _names(_run(list_connections(sid)))["ag-mem"]["active"] is True
+    assert _run(run_query(sid, "SELECT 1 AS one"))["rows"] == [[1]]
+    assert _run(sessions.get_session_rec(sid)).connection_name == "ag-mem"
+
+    assert _run(remove_connection(sid, "ag-mem"))["ok"] is True
+    assert "ag-mem" not in _names(_run(list_connections(sid)))
+    assert _run(run_query(sid, "SELECT 1")) == {"ok": False, "message": "not connected"}
+
+
+def test_add_connection_refuses_a_taken_name_and_bad_input():
+    from queryview.mcp_server import add_connection
+
+    _run(_save_active_connection("ag-taken", DuckConfig(":memory:"), "duckdb"))
+    sid = _run(sessions.create_session()).id
+    assert "already exists" in _run(add_connection(sid, "ag-taken", "duckdb", {"path": ":memory:"}))["message"]
+    assert _run(add_connection(sid, "x", "nope", {}))["ok"] is False
+    assert _run(add_connection(sid, "x", "clickhouse", {"host": "h", "port": 0}))["ok"] is False
+
+
+def test_agent_cannot_use_or_remove_saved_or_user_connections():
+    from queryview.connect import add_session_connection
+    from queryview.mcp_server import remove_connection, use_connection
+
+    sid = _connected_session("ag-saved")
+    _run(add_session_connection(sid, "ag-user", DuckConfig(":memory:"), "duckdb", "user"))
+    for name in ("ag-saved", "ag-user"):
+        for tool in (use_connection, remove_connection):
+            out = _run(tool(sid, name))
+            assert out["ok"] is False and "pick_connection" in out["message"]
+
+
+def test_pick_and_promote_push_a_dialog_and_promote_saves():
+    from queryview import connect
+    from queryview.mcp_server import add_connection, pick_connection, promote_connection
+
+    sid = _connected_session("ag-pick")
+    assert _run(add_connection(sid, "ag-promo", "duckdb", {"path": ":memory:"}))["ok"]
+    assert _run(pick_connection(sid, "ag-pick"))["message"] == "unknown or inactive session"
+    rid = remote.register(sid)
+    try:
+        assert _run(pick_connection(sid, "ag-pick", "main"))["ok"] is True
+        assert _run(remote.next_message(rid, 1.0)) == {
+            "type": "connection",
+            "name": "ag-pick",
+            "action": "pick",
+            "database": "main",
+        }
+        assert _run(pick_connection(sid, "ag-absent"))["ok"] is False
+        assert _run(promote_connection(sid, "ag-pick"))["ok"] is False  # saved already
+        assert _run(promote_connection(sid, "ag-promo"))["ok"] is True
+        assert _run(remote.next_message(rid, 1.0))["action"] == "promote"
+    finally:
+        remote.unregister(rid)
+    # Nothing is saved until the user confirms (the browser calls promote).
+    assert "ag-promo" not in _run(connect.list_connection_names())
+    assert _run(connect.promote_connection(sid, "ag-promo"))["ok"] is True
+    assert "ag-promo" in _run(connect.list_connection_names())
 
 
 def test_open_saved_unknown_connection_lists_available_names():

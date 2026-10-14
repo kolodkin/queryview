@@ -168,14 +168,16 @@ async def session_info(session_id: str) -> dict[str, Any]:
     databases it can switch to, its workspace, and the selected database's
     tables. Start here to discover schema; then run_query on the same session.
 
-    The agent never picks a server or database — the user does, in the UI
-    (connection pill). Fully-qualify tables as db.table to reach another one.
+    The user picks the server and database in the UI (connection pill); the
+    agent may only switch to session connections it added itself (see
+    list_connections). Fully-qualify tables as db.table to reach another one.
 
     Args:
         session_id: The session id shown in the QueryView popover.
 
-    Returns {"ok": True, "connected", "connection", "type", "database",
-    "databases", "workspace", "tables": [{name, ...}]}; a disconnected session
+    Returns {"ok": True, "connected", "connection", "type", "scope",
+    "created_by", "database", "databases", "workspace", "tables": [{name, ...}]};
+    a disconnected session
     has "connected": False and no connection fields; "tables" is empty until a
     database is selected. Unknown session → {"ok": False, "message"}.
     """
@@ -192,6 +194,150 @@ async def session_info(session_id: str) -> dict[str, Any]:
         # The browse SELECT is for the Explorer UI; the agent writes its own SQL.
         info["tables"] = [{k: v for k, v in t.items() if k != "query"} for t in tables]
     return info
+
+
+@mcp.tool()
+async def list_connections(session_id: str) -> dict[str, Any]:
+    """List the connections a session can use: its session connections (memory
+    only, this session only) and the saved ones, each tagged with "scope"
+    ("session" | "saved"), "created_by" ("agent" | "user") and "active".
+
+    You may use_connection / remove_connection only scope="session",
+    created_by="agent" entries; for anything else ask the user with
+    pick_connection.
+
+    Returns {"ok": True, "connections": [{name, type, scope, created_by,
+    active}]} or {"ok": False, "message"} for an unknown session.
+    """
+    from .connect import get_session, list_connections_for
+
+    if await sessions.get_session_rec(session_id) is None:
+        return {"ok": False, "message": "unknown session"}
+    cur = await get_session(session_id)
+    active = (cur.get("name"), cur.get("scope"))
+    return {
+        "ok": True,
+        "connections": [
+            {
+                "name": c["name"],
+                "type": c["type"],
+                "scope": c["scope"],
+                "created_by": c["created_by"],
+                "active": (c["name"], c["scope"]) == active,
+            }
+            for c in await list_connections_for(session_id)
+        ],
+    }
+
+
+@mcp.tool()
+async def add_connection(session_id: str, name: str, type: str, config: dict[str, Any]) -> dict[str, Any]:
+    """Add a session connection: kept in this session's memory only, never
+    saved, gone when the session is deleted or QueryView restarts. Checks it
+    connects first; does not switch to it (use_connection does).
+
+    Args:
+        session_id: The session id shown in the QueryView popover.
+        name: A name no saved or session connection uses yet.
+        type: The driver: "clickhouse" | "postgres" | "duckdb".
+        config: The driver's fields — clickhouse/postgres: {host, port,
+            username, password}; duckdb: {path} (or ":memory:").
+
+    Returns {"ok": True, "name", "type", "databases"} or {"ok": False, "message"}.
+    """
+    from .connect import add_session_connection
+    from .drivers import DRIVERS
+
+    if await sessions.get_session_rec(session_id) is None:
+        return {"ok": False, "message": "unknown session"}
+    driver = DRIVERS.get(type)
+    if driver is None:
+        return {"ok": False, "message": f"unknown connection type: {type}; available: {', '.join(DRIVERS)}"}
+    if not name.strip():
+        return {"ok": False, "message": "name required"}
+    parsed, error = driver.parse_config(config if isinstance(config, dict) else {})
+    if error or parsed is None:
+        return {"ok": False, "message": error or "invalid config"}
+    return await add_session_connection(session_id, name.strip(), parsed, type, "agent")
+
+
+@mcp.tool()
+async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
+    """Remove a session connection you added (disconnecting the session if it
+    was active). Saved and user-added connections are refused.
+
+    Returns {"ok": True} or {"ok": False, "message"}.
+    """
+    from .connect import agent_owned_error, remove_session_connection
+
+    err = agent_owned_error(session_id, name)
+    if err is not None:
+        return {"ok": False, "message": err}
+    return await remove_session_connection(session_id, name)
+
+
+@mcp.tool()
+async def use_connection(session_id: str, name: str, database: str | None = None) -> dict[str, Any]:
+    """Switch the session to a session connection you added, optionally
+    selecting `database` (ClickHouse/Postgres need one before querying). The
+    browser follows within a few seconds. Anything else is refused — ask the
+    user with pick_connection.
+
+    Returns {"ok": True, "name", "type", "databases", "database"} or
+    {"ok": False, "message"}.
+    """
+    from .connect import agent_owned_error, open_saved, select_database
+
+    err = agent_owned_error(session_id, name)
+    if err is not None:
+        return {"ok": False, "message": err}
+    r = await open_saved(session_id, name)
+    if not r["ok"]:
+        return {"ok": False, "message": r["message"]}
+    if database is not None:
+        picked = await select_database(session_id, database)
+        if not picked["ok"]:
+            return {"ok": False, "message": picked["message"]}
+    return {**r, "database": database}
+
+
+@mcp.tool()
+async def pick_connection(session_id: str, name: str, database: str | None = None) -> dict[str, Any]:
+    """Ask the user, in a dialog in the armed browser, to switch the session to
+    connection `name` (and optionally `database`). Use this for any connection
+    you may not use_connection yourself. It returns once the dialog is shown,
+    not when answered: check session_info afterwards.
+
+    Returns {"ok", "message"}; not ok when the name is unknown or the session
+    is not armed.
+    """
+    return await _ask(session_id, name, {"action": "pick", "database": database})
+
+
+@mcp.tool()
+async def promote_connection(session_id: str, name: str) -> dict[str, Any]:
+    """Ask the user, in a dialog in the armed browser, to save session
+    connection `name` to the saved connections (shared by every session). Only
+    the user's confirmation saves it. Returns once the dialog is shown.
+
+    Returns {"ok", "message"}.
+    """
+    from .connect import list_connections_for
+
+    conns = await list_connections_for(session_id)
+    if not any(c["name"] == name and c["scope"] == "session" for c in conns):
+        return {"ok": False, "message": f'no session connection named "{name}"'}
+    return await _ask(session_id, name, {"action": "promote"})
+
+
+async def _ask(session_id: str, name: str, extra: dict[str, Any]) -> dict[str, Any]:
+    """Push a connection dialog for the user to confirm in the browser."""
+    from .connect import list_connections_for
+
+    if not any(c["name"] == name for c in await list_connections_for(session_id)):
+        return {"ok": False, "message": f'no connection named "{name}"; see list_connections'}
+    ok, message = remote.push(session_id, {"type": "connection", "name": name, **extra})
+    return {"ok": ok, "message": "waiting for the user to confirm" if ok else message}
 
 
 async def _session_workspace_rec(session_id: str | None):

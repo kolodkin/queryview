@@ -401,7 +401,14 @@ function SavedCard({
         <DriverMark type={conn.type} />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium text-slate-100">{conn.name}</span>
-          <span className="block text-xs text-slate-400">{label}</span>
+          <span className="block text-xs text-slate-400">
+            {label}
+            {conn.scope === 'session' && (
+              <span data-testid="conn-session-badge" className="ml-2 text-amber-300">
+                session{conn.created_by === 'agent' ? ' · agent' : ''}
+              </span>
+            )}
+          </span>
         </span>
         {busy ? (
           <Spinner />
@@ -436,9 +443,11 @@ function ConnectionForm({
   )
   const [result, setResult] = useState<TestResult | null>(null)
   const [busy, setBusy] = useState(false)
+  // Session only: kept in this session's memory, never saved.
+  const [sessionOnly, setSessionOnly] = useState(false)
 
   function body() {
-    return JSON.stringify({ type: meta.type, ...values })
+    return JSON.stringify({ type: meta.type, ...values, session: sessionOnly })
   }
 
   async function testConnection() {
@@ -511,6 +520,16 @@ function ConnectionForm({
           />
         </label>
       ))}
+
+      <label className="flex items-center gap-2 text-sm text-slate-300">
+        <input
+          type="checkbox"
+          checked={sessionOnly}
+          onChange={(e) => setSessionOnly(e.target.checked)}
+          data-testid="conn-session-only"
+        />
+        Session only — don't save
+      </label>
 
       <div className="flex gap-2">
         <button

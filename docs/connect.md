@@ -152,6 +152,25 @@ If the key changes (or a row predates encryption) the value can't be decrypted;
 a session on that connection reads as disconnected and the user reconnects,
 which re-encrypts it with the current key.
 
+## Session connections
+
+A **session connection** lives only in the memory of one QueryView session. It
+is never written to the connections table, does not appear in other sessions,
+and is gone when the session is deleted or the backend restarts (a session on
+one then reads as disconnected). Saved connections are the rows in SQLite.
+
+Every connection carries `scope` (`session` | `saved`) and `created_by`
+(`agent` | `user`); the Connect page badges session cards. A user creates one
+with **Session only — don't save** on the new-connection form. A name is
+unique across saved and session connections, so it always means one thing.
+
+The agent may add, remove and switch to session connections it created itself.
+Everything else is read-only to it: it can list saved and user-added
+connections and query whichever is active, but switching to one goes through
+`pick_connection`, and saving a session connection through
+`promote_connection`, both dialogs the user confirms. MCP tools are in
+[remote.md](./remote.md#mcp-tools).
+
 ## Sessions & reconnecting
 
 Each **session** has one active connection, recorded on the session's own row in
@@ -189,8 +208,9 @@ session.
 | Method | Path                          | Body                                   | Result |
 | ------ | ----------------------------- | -------------------------------------- | ------ |
 | POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
-| POST   | `/api/db/connect`     | `{type, name, …driver config}`         | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form) |
-| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at}]}`, most recent first; the saved cards (never the config) |
+| POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
+| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by}]}`: this session's connections, then the saved ones most recent first (never the config) |
+| POST   | `/api/db/promote`     | `{name}`                               | `{ok}` \| `{ok:false, message}`; saves a session connection |
 | POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a saved connection (a saved card) |
 | POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database |
 | POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |

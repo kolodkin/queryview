@@ -27,10 +27,12 @@ from .connect import (
     disconnect,
     execute_script,
     export_csv,
+    forget_session,
     get_session,
-    list_connections,
+    list_connections_for,
     list_tables,
     open_saved,
+    promote_connection,
     run_query,
     select_database,
 )
@@ -238,6 +240,7 @@ async def sessions_delete(sid: str):
     ok, reason = await sessions.delete_session(sid)
     if not ok:
         return _session_error(reason)
+    forget_session(sid)
     return {"ok": True}
 
 
@@ -270,10 +273,22 @@ async def db_disconnect(request: Request) -> dict[str, Any]:
     return await disconnect(request.state.sid)
 
 
-# Saved connections, for the Connect page's cards.
+# This session's connections and the saved ones, for the Connect page's cards.
 @app.get("/api/db/connections")
-async def db_connections() -> dict[str, Any]:
-    return {"connections": await list_connections()}
+async def db_connections(request: Request) -> dict[str, Any]:
+    return {"connections": await list_connections_for(request.state.sid)}
+
+
+# Save a session connection to the connections table (the agent's promote
+# dialog, confirmed by the user).
+@app.post("/api/db/promote")
+async def db_promote(request: Request):
+    b = await _read_json(request) or {}
+    raw_name = b.get("name") if isinstance(b, dict) else None
+    name = raw_name.strip() if isinstance(raw_name, str) else ""
+    if not name:
+        return JSONResponse({"ok": False, "message": "name required"}, status_code=400)
+    return await promote_connection(request.state.sid, name)
 
 
 def _driver_and_config(body: Any):
@@ -313,7 +328,7 @@ async def db_connect(request: Request):
     b = body if isinstance(body, dict) else {}
     raw_name = b.get("name")
     name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else driver.type
-    return await connect_new(request.state.sid, name, config, driver.type)
+    return await connect_new(request.state.sid, name, config, driver.type, session_only=b.get("session") is True)
 
 
 # Open a saved connection by name for this session (a Connect page card).

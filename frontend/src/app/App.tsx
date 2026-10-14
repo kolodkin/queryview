@@ -96,6 +96,9 @@ function DatabaseMenu({
   )
 }
 
+// An agent's connection request, confirmed by the user (docs/connect.md#session-connections).
+type ConnectionAsk = { name: string; action: 'pick' | 'promote'; database?: string | null }
+
 // App shell: routing, shared connection state, the connection pill + agent
 // popover, and the armed/SSE remote-control channel. Pages: /connect,
 // /queryview, /scripts, /explorer, /dashboard.
@@ -111,6 +114,7 @@ function Shell() {
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [connectionAsk, setConnectionAsk] = useState<ConnectionAsk | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   // Seeded from the session once it attaches.
   const [workspace, setWorkspace] = useState('')
@@ -290,6 +294,7 @@ function Shell() {
       setToast('Agent updated the script')
       navigate('/scripts')
     })
+    on<ConnectionAsk>('connection', setConnectionAsk)
     on<DashboardPush>('dashboard', (payload) => {
       setDashboardPush(payload)
       setToast('Agent updated the dashboard')
@@ -325,6 +330,38 @@ function Shell() {
     }
     setConnection(null)
     navigate('/connect')
+  }
+
+  // The user confirmed an agent's connection request: switch to it, or save a
+  // session connection.
+  async function confirmAsk(ask: ConnectionAsk) {
+    setConnectionAsk(null)
+    if (ask.action === 'promote') {
+      try {
+        const r = await (
+          await apiFetch('/api/db/promote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: ask.name }),
+          })
+        ).json()
+        setToast(r.ok ? `Saved ${ask.name}` : (r.message ?? 'save failed'))
+      } catch {
+        setToast('save failed')
+      }
+      return
+    }
+    const r = await openSaved(ask.name)
+    if (!r.ok) {
+      setToast(r.message)
+      return
+    }
+    let next = r.connection
+    if (ask.database && (await selectDatabase(ask.database))) {
+      next = { ...next, database: ask.database }
+    }
+    setConnection(next)
+    navigate(isReady(next) ? '/explorer' : '/connect')
   }
 
   // The channel is keyed by this session, so the agent's id is the session's own.
@@ -585,6 +622,47 @@ function Shell() {
         <Loading label="Restoring session…" testid="session-loading" />
       )}
       <Toast message={toast} onDone={() => setToast(null)} />
+      {connectionAsk && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Agent connection request"
+          data-testid="connection-ask"
+          className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm"
+        >
+          <div className="glass-popover w-80 space-y-3 p-5 text-sm">
+            <p className="font-medium text-slate-100">
+              {connectionAsk.action === 'promote'
+                ? `The agent asks to save session connection “${connectionAsk.name}”.`
+                : `The agent asks to switch to “${connectionAsk.name}”${
+                    connectionAsk.database ? ` / ${connectionAsk.database}` : ''
+                  }.`}
+            </p>
+            {connectionAsk.action === 'promote' && (
+              <p className="text-slate-400">Saved connections are shared by every session.</p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                data-testid="connection-ask-confirm"
+                onClick={() => void confirmAsk(connectionAsk)}
+                className="glass-btn-primary px-3 py-1.5"
+                autoFocus
+              >
+                {connectionAsk.action === 'promote' ? 'Save' : 'Switch'}
+              </button>
+              <button
+                type="button"
+                data-testid="connection-ask-cancel"
+                onClick={() => setConnectionAsk(null)}
+                className="glass-btn px-3 py-1.5"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {taken && (
         <div
           role="dialog"
