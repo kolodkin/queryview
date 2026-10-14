@@ -32,6 +32,7 @@ from .connect import (
     list_connections_for,
     list_tables,
     open_saved,
+    parse_driver_config,
     promote_connection,
     run_query,
     select_database,
@@ -283,9 +284,8 @@ async def db_connections(request: Request) -> dict[str, Any]:
 # dialog, confirmed by the user).
 @app.post("/api/db/promote")
 async def db_promote(request: Request):
-    b = await _read_json(request) or {}
-    raw_name = b.get("name") if isinstance(b, dict) else None
-    name = raw_name.strip() if isinstance(raw_name, str) else ""
+    b = await _read_json(request)
+    name = _clean_str(b.get("name")) if isinstance(b, dict) else ""
     if not name:
         return JSONResponse({"ok": False, "message": "name required"}, status_code=400)
     return await promote_connection(request.state.sid, name)
@@ -294,17 +294,10 @@ async def db_promote(request: Request):
 def _driver_and_config(body: Any):
     """Resolve (driver, config) from a request body's `type`, or the 400
     response to return for an unknown type / invalid config."""
-    b = body if isinstance(body, dict) else {}
-    raw_type = b.get("type")
-    conn_type = raw_type if isinstance(raw_type, str) else ""
-    driver = DRIVERS.get(conn_type)
-    if driver is None:
-        message = f"unknown connection type: {conn_type or '(none)'}"
-        return JSONResponse({"ok": False, "message": message}, status_code=400)
-    config, error = driver.parse_config(b)
+    conn_type, config, error = parse_driver_config(body if isinstance(body, dict) else {})
     if error or config is None:
         return JSONResponse({"ok": False, "message": error}, status_code=400)
-    return driver, config
+    return DRIVERS[conn_type], config
 
 
 # Test only: a throwaway connectivity check, no save, no activation.

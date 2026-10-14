@@ -58,6 +58,17 @@ export async function openSaved(
   }
 }
 
+// Save a session connection to the saved connections (the agent's promote
+// dialog); the error message on failure, else null.
+export async function promoteConnection(name: string): Promise<string | null> {
+  try {
+    const data = await (await postJson('/api/db/promote', { name })).json()
+    return data.ok ? null : (data.message ?? 'save failed')
+  } catch {
+    return 'save failed'
+  }
+}
+
 // Select this session's database; false when the switch failed. Held off the
 // heartbeat, since the shell follows the row's database (withoutHeartbeat).
 export function selectDatabase(database: string): Promise<boolean> {

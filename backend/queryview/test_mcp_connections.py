@@ -101,7 +101,7 @@ def test_agent_session_connection_lifecycle():
     assert _run(use_connection(sid, "ag-mem"))["ok"] is True
     assert _names(_run(list_connections(sid)))["ag-mem"]["active"] is True
     assert _run(run_query(sid, "SELECT 1 AS one"))["rows"] == [[1]]
-    assert _run(sessions.get_session_rec(sid)).connection_name == "ag-mem"
+    assert any(r["id"] == sid and r["connection"] == "ag-mem" for r in _run(sessions.list_sessions()))
 
     assert _run(remove_connection(sid, "ag-mem"))["ok"] is True
     assert "ag-mem" not in _names(_run(list_connections(sid)))
@@ -154,7 +154,7 @@ def test_select_database_direct_on_own_connection_else_a_dialog():
     assert _run(use_connection(sid, "ag-seldb-own"))["ok"]
     connect._sessions[sid].databases = ["memory"]
     assert _run(select_database(sid, "memory"))["ok"] is True
-    assert _run(sessions.get_session_rec(sid)).database == "memory"
+    assert _run(sessions.database_of(sid)) == "memory"
     rec = _run(sessions.create_session())
     assert _run(select_database(rec.id, "memory"))["message"] == "not connected"
 
@@ -178,7 +178,7 @@ def test_pick_and_promote_push_a_dialog_and_promote_saves():
         assert _run(pick_connection(sid, "ag-absent"))["ok"] is False
         assert _run(promote_connection(sid, "ag-pick"))["ok"] is False  # saved already
         assert _run(promote_connection(sid, "ag-promo"))["ok"] is True
-        assert _run(remote.next_message(rid, 1.0))["action"] == "promote"
+        assert (_run(remote.next_message(rid, 1.0)) or {}).get("action") == "promote"
     finally:
         remote.unregister(rid)
     # Nothing is saved until the user confirms (the browser calls promote).

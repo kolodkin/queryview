@@ -209,12 +209,11 @@ async def list_connections(session_id: str) -> dict[str, Any]:
     Returns {"ok": True, "connections": [{name, type, scope, created_by,
     active}]} or {"ok": False, "message"} for an unknown session.
     """
-    from .connect import get_session, list_connections_for
+    from .connect import list_connections_for
 
-    if await sessions.get_session_rec(session_id) is None:
+    rec = await sessions.get_session_rec(session_id)
+    if rec is None:
         return {"ok": False, "message": "unknown session"}
-    cur = await get_session(session_id)
-    active = (cur.get("name"), cur.get("scope"))
     return {
         "ok": True,
         "connections": [
@@ -223,7 +222,7 @@ async def list_connections(session_id: str) -> dict[str, Any]:
                 "type": c["type"],
                 "scope": c["scope"],
                 "created_by": c["created_by"],
-                "active": (c["name"], c["scope"]) == active,
+                "active": c["name"] == rec.connection_name,  # names are unique
             }
             for c in await list_connections_for(session_id)
         ],
@@ -245,20 +244,19 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
 
     Returns {"ok": True, "name", "type", "databases"} or {"ok": False, "message"}.
     """
-    from .connect import add_session_connection
-    from .drivers import DRIVERS
+    from .connect import add_session_connection, parse_driver_config
 
     if await sessions.get_session_rec(session_id) is None:
         return {"ok": False, "message": "unknown session"}
-    driver = DRIVERS.get(type)
-    if driver is None:
-        return {"ok": False, "message": f"unknown connection type: {type}; available: {', '.join(DRIVERS)}"}
     if not name.strip():
         return {"ok": False, "message": "name required"}
-    parsed, error = driver.parse_config(config if isinstance(config, dict) else {})
+    _, parsed, error = parse_driver_config({**(config if isinstance(config, dict) else {}), "type": type})
     if error or parsed is None:
         return {"ok": False, "message": error or "invalid config"}
-    return await add_session_connection(session_id, name.strip(), parsed, type, "agent")
+    state, message = await add_session_connection(session_id, name.strip(), parsed, type, "agent")
+    if state is None:
+        return {"ok": False, "message": message}
+    return {"ok": True, "name": state.name, "type": type, "databases": state.databases}
 
 
 @mcp.tool()
@@ -322,10 +320,9 @@ async def promote_connection(session_id: str, name: str) -> dict[str, Any]:
 
     Returns {"ok", "message"}.
     """
-    from .connect import list_connections_for
+    from .connect import _session_conn
 
-    conns = await list_connections_for(session_id)
-    if not any(c["name"] == name and c["scope"] == "session" for c in conns):
+    if _session_conn(session_id, name) is None:
         return {"ok": False, "message": f'no session connection named "{name}"'}
     return await _ask(session_id, name, {"action": "promote"})
 
@@ -356,10 +353,10 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
 
 async def _ask(session_id: str, name: str, extra: dict[str, Any]) -> dict[str, Any]:
     """Push a connection dialog for the user to confirm in the browser."""
-    from .connect import list_connections_for
+    from .connect import _session_conn, list_connection_names, unknown_connection_message
 
-    if not any(c["name"] == name for c in await list_connections_for(session_id)):
-        return {"ok": False, "message": f'no connection named "{name}"; see list_connections'}
+    if _session_conn(session_id, name) is None and name not in await list_connection_names():
+        return {"ok": False, "message": await unknown_connection_message(name)}
     ok, message = remote.push(session_id, {"type": "connection", "name": name, **extra})
     return {"ok": ok, "message": "waiting for the user to confirm" if ok else message}
 

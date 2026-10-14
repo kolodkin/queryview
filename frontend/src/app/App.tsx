@@ -14,6 +14,7 @@ import {
   connectionKey,
   isReady,
   openSaved,
+  promoteConnection,
   selectDatabase,
   toConnection,
   type Connection,
@@ -337,18 +338,7 @@ function Shell() {
   async function confirmAsk(ask: ConnectionAsk) {
     setConnectionAsk(null)
     if (ask.action === 'promote') {
-      try {
-        const r = await (
-          await apiFetch('/api/db/promote', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: ask.name }),
-          })
-        ).json()
-        setToast(r.ok ? `Saved ${ask.name}` : (r.message ?? 'save failed'))
-      } catch {
-        setToast('save failed')
-      }
+      setToast((await promoteConnection(ask.name)) ?? `Saved ${ask.name}`)
       return
     }
     // Only the database changes: keep the open connection rather than reopen it.
@@ -628,83 +618,94 @@ function Shell() {
       )}
       <Toast message={toast} onDone={() => setToast(null)} />
       {connectionAsk && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Agent connection request"
-          data-testid="connection-ask"
-          className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm"
-        >
-          <div className="glass-popover w-80 space-y-3 p-5 text-sm">
-            <p className="font-medium text-slate-100">
-              {connectionAsk.action === 'promote'
-                ? `The agent asks to save session connection “${connectionAsk.name}”.`
-                : `The agent asks to switch to “${connectionAsk.name}”${
-                    connectionAsk.database ? ` / ${connectionAsk.database}` : ''
-                  }.`}
-            </p>
-            {connectionAsk.action === 'promote' && (
-              <p className="text-slate-400">Saved connections are shared by every session.</p>
-            )}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                data-testid="connection-ask-confirm"
-                onClick={() => void confirmAsk(connectionAsk)}
-                className="glass-btn-primary px-3 py-1.5"
-                autoFocus
-              >
-                {connectionAsk.action === 'promote' ? 'Save' : 'Switch'}
-              </button>
-              <button
-                type="button"
-                data-testid="connection-ask-cancel"
-                onClick={() => setConnectionAsk(null)}
-                className="glass-btn px-3 py-1.5"
-              >
-                Cancel
-              </button>
-            </div>
+        <Dialog label="Agent connection request" testid="connection-ask">
+          <p className="font-medium text-slate-100">
+            {connectionAsk.action === 'promote'
+              ? `The agent asks to save session connection “${connectionAsk.name}”.`
+              : `The agent asks to switch to “${connectionAsk.name}”${
+                  connectionAsk.database ? ` / ${connectionAsk.database}` : ''
+                }.`}
+          </p>
+          {connectionAsk.action === 'promote' && (
+            <p className="text-slate-400">Saved connections are shared by every session.</p>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              data-testid="connection-ask-confirm"
+              onClick={() => void confirmAsk(connectionAsk)}
+              className="glass-btn-primary px-3 py-1.5"
+              autoFocus
+            >
+              {connectionAsk.action === 'promote' ? 'Save' : 'Switch'}
+            </button>
+            <button
+              type="button"
+              data-testid="connection-ask-cancel"
+              onClick={() => setConnectionAsk(null)}
+              className="glass-btn px-3 py-1.5"
+            >
+              Cancel
+            </button>
           </div>
-        </div>
+        </Dialog>
       )}
       {taken && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Session open in another tab"
-          data-testid="session-taken"
-          className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm backdrop-grayscale"
-        >
-          <div className="glass-popover w-80 space-y-3 p-5 text-sm">
-            <p className="font-medium text-slate-100">{sessionLabel} is open in another tab.</p>
-            <p className="text-slate-400">
-              This tab is paused so the two don't overwrite each other.
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                data-testid="session-take-over"
-                onClick={() =>
-                  void selectSession(sessionId(), true).then((n) => n && applySession(n))
-                }
-                className="glass-btn-primary px-3 py-1.5"
-              >
-                Use it here
-              </button>
-              <button
-                type="button"
-                data-testid="session-taken-new"
-                onClick={() => void selectSession(null).then((n) => n && applySession(n))}
-                className="glass-btn px-3 py-1.5"
-              >
-                New session
-              </button>
-            </div>
+        <Dialog label="Session open in another tab" testid="session-taken" grayscale>
+          <p className="font-medium text-slate-100">{sessionLabel} is open in another tab.</p>
+          <p className="text-slate-400">
+            This tab is paused so the two don't overwrite each other.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              data-testid="session-take-over"
+              onClick={() =>
+                void selectSession(sessionId(), true).then((n) => n && applySession(n))
+              }
+              className="glass-btn-primary px-3 py-1.5"
+            >
+              Use it here
+            </button>
+            <button
+              type="button"
+              data-testid="session-taken-new"
+              onClick={() => void selectSession(null).then((n) => n && applySession(n))}
+              className="glass-btn px-3 py-1.5"
+            >
+              New session
+            </button>
           </div>
-        </div>
+        </Dialog>
       )}
     </main>
+  )
+}
+
+// A centered modal card over a dimmed page.
+function Dialog({
+  label,
+  testid,
+  grayscale,
+  children,
+}: {
+  label: string
+  testid: string
+  grayscale?: boolean
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={label}
+      data-testid={testid}
+      className={`fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm ${
+        grayscale ? 'backdrop-grayscale' : ''
+      }`}
+    >
+      <div className="glass-popover w-80 space-y-3 p-5 text-sm">{children}</div>
+    </div>
   )
 }
 
