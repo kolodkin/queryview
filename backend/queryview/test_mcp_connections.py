@@ -1,4 +1,5 @@
-"""MCP tools take the connection from the session; the agent never names one."""
+"""MCP tools run on the session's connection; the agent switches only to
+session connections it added itself."""
 
 from __future__ import annotations
 
@@ -78,10 +79,108 @@ def test_push_dashboard_on_disconnected_session_fails_without_pushing():
         remote.unregister(rid)
 
 
-def test_no_list_connections_tool():
-    from queryview.mcp_server import mcp
+def _agent_add(sid: str, name: str) -> dict:
+    """A session connection the agent owns. In-memory DuckDB keeps it offline;
+    add_connection itself refuses DuckDB, so it is added directly."""
+    from queryview.connect import add_session_connection
 
-    assert "list_connections" not in {t.name for t in _run(mcp.list_tools())}
+    state, message = _run(add_session_connection(sid, name, DuckConfig(":memory:"), "duckdb", "agent"))
+    return {"ok": state is not None, "message": message}
+
+
+def test_add_connection_refuses_duckdb_and_adds_a_network_one_directly(monkeypatch):
+    from queryview.drivers import DRIVERS
+    from queryview.drivers.base import DatabasesResult
+    from queryview.mcp_server import add_connection, list_connections
+
+    async def two_dbs(config):
+        return DatabasesResult(databases=["a", "b"])
+
+    monkeypatch.setattr(DRIVERS["clickhouse"], "list_databases", two_dbs)
+    sid = _run(sessions.create_session()).id
+    out = _run(add_connection(sid, "ag-duck", "duckdb", {"path": "/etc/passwd"}))
+    assert out["ok"] is False and "clickhouse or postgres" in out["message"]
+    cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
+    out = _run(add_connection(sid, "ag-ch", "clickhouse", cfg))
+    assert out == {"ok": True, "name": "ag-ch", "type": "clickhouse", "databases": ["a", "b"]}
+    entry = _names(_run(list_connections(sid)))["ag-ch"]
+    assert entry["scope"] == "session" and entry["created_by"] == "agent"
+
+
+def _names(out):
+    return {c["name"]: c for c in out["connections"]}
+
+
+def test_agent_session_connection_lifecycle():
+    """Added in memory only, usable and removable by the agent, never saved."""
+    from queryview import connect
+    from queryview.mcp_server import list_connections, remove_connection, run_query, use_connection
+
+    sid = _run(sessions.create_session()).id
+    other = _run(sessions.create_session()).id
+    out = _agent_add(sid, "ag-mem")
+    assert out["ok"] is True
+    assert "ag-mem" not in _run(connect.list_connection_names())
+    assert "ag-mem" not in _names(_run(list_connections(other)))
+
+    entry = _names(_run(list_connections(sid)))["ag-mem"]
+    assert entry["scope"] == "session" and entry["created_by"] == "agent" and entry["active"] is False
+
+    assert _run(use_connection(sid, "ag-mem"))["ok"] is True
+    assert _names(_run(list_connections(sid)))["ag-mem"]["active"] is True
+    assert _run(run_query(sid, "SELECT 1 AS one"))["rows"] == [[1]]
+    assert any(r["id"] == sid and r["connection"] == "ag-mem" for r in _run(sessions.list_sessions()))
+
+    # A bad database fails before the session switches.
+    assert _agent_add(sid, "ag-mem2")["ok"]
+    assert _run(use_connection(sid, "ag-mem2", "nope"))["message"] == "unknown database"
+    assert _names(_run(list_connections(sid)))["ag-mem"]["active"] is True
+
+    assert _run(remove_connection(sid, "ag-mem"))["ok"] is True
+    assert "ag-mem" not in _names(_run(list_connections(sid)))
+    assert _run(run_query(sid, "SELECT 1")) == {"ok": False, "message": "not connected"}
+
+
+def test_add_connection_refuses_a_taken_name_and_bad_input():
+    from queryview.mcp_server import add_connection
+
+    _run(_save_active_connection("ag-taken", DuckConfig(":memory:"), "duckdb"))
+    sid = _run(sessions.create_session()).id
+    cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
+    assert "already exists" in _run(add_connection(sid, "ag-taken", "clickhouse", cfg))["message"]
+    assert _run(add_connection(sid, "x", "nope", {}))["ok"] is False
+    assert _run(add_connection(sid, "x", "clickhouse", {"host": "h", "port": 0}))["ok"] is False
+
+
+def test_agent_cannot_use_or_remove_saved_or_user_connections():
+    from queryview.connect import add_session_connection
+    from queryview.mcp_server import remove_connection, use_connection
+
+    sid = _connected_session("ag-saved")
+    _run(add_session_connection(sid, "ag-user", DuckConfig(":memory:"), "duckdb", "user"))
+    for name in ("ag-saved", "ag-user"):
+        for tool in (use_connection, remove_connection):
+            out = _run(tool(sid, name))
+            assert out["ok"] is False and "ask the user" in out["message"]
+
+
+def test_select_database_only_on_the_agents_own_connection():
+    from queryview import connect
+    from queryview.mcp_server import select_database, use_connection
+
+    sid = _connected_session("ag-seldb")
+    connect._sessions[sid].databases = ["memory"]  # DuckDB lists none; fake a picker
+    out = _run(select_database(sid, "memory"))
+    assert out["ok"] is False and "ask the user" in out["message"]
+
+    assert _agent_add(sid, "ag-seldb-own")["ok"]
+    assert _run(use_connection(sid, "ag-seldb-own"))["ok"]
+    connect._sessions[sid].databases = ["memory"]
+    assert _run(select_database(sid, "nope"))["message"] == "unknown database"
+    assert _run(select_database(sid, "memory"))["ok"] is True
+    assert _run(sessions.database_of(sid)) == "memory"
+    rec = _run(sessions.create_session())
+    assert _run(select_database(rec.id, "memory"))["message"] == "not connected"
 
 
 def test_open_saved_unknown_connection_lists_available_names():
@@ -129,3 +228,26 @@ def test_session_info_on_a_disconnected_or_unknown_session():
     out = _run(session_info(rec.id))
     assert out["ok"] is True and out["connected"] is False and "tables" not in out
     assert _run(session_info("no-such-session"))["ok"] is False
+
+
+def test_saved_connect_refuses_a_session_connection_name():
+    from queryview.connect import add_session_connection, connect_new
+
+    sid = _run(sessions.create_session()).id
+    _run(add_session_connection(sid, "ag-clash", DuckConfig(":memory:"), "duckdb", "user"))
+    out = _run(connect_new(sid, "ag-clash", DuckConfig(":memory:"), "duckdb"))
+    assert out["ok"] is False and "already exists" in out["message"]
+
+
+def test_session_connection_names_are_unique_across_sessions():
+    from queryview.connect import add_session_connection, connect_new, open_saved
+
+    a = _run(sessions.create_session()).id
+    b = _run(sessions.create_session()).id
+    _run(add_session_connection(a, "ag-shared", DuckConfig(":memory:"), "duckdb", "user"))
+    assert "already exists" in _run(connect_new(b, "ag-shared", DuckConfig(":memory:"), "duckdb"))["message"]
+    state, message = _run(add_session_connection(b, "ag-shared", DuckConfig(":memory:"), "duckdb", "user"))
+    assert state is None and "already exists" in (message or "")
+    assert _run(add_session_connection("", "ag-nosid", DuckConfig(":memory:"), "duckdb", "user"))[1] == "no session"
+    # The unknown-name error lists the session's own connections too.
+    assert "ag-shared" in _run(open_saved(a, "ag-absent"))["message"]

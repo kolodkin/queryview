@@ -42,7 +42,13 @@ tools (among others):
 - `session_info(session_id)` — what the session is on: `{ok, connected,
   connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
-  discovery; the user, not the agent, picks connection and database.
+  discovery. The agent switches only to its own session connections (below).
+- Connections ([access rule](./connect.md#session-connections)):
+  `list_connections(session_id)` tags each with `scope`, `created_by`,
+  `active`. `add_connection(session_id, name, type, config)` adds a ClickHouse or
+  Postgres session connection; `use_connection(session_id, name, database?)`,
+  `select_database(session_id, database)` and `remove_connection(session_id,
+  name)` act only on the agent's own.
 - `run_query(session_id, query, limit?=1000, offset?=0)` — run a read-only
   query on the session's connection and selected database, returning rows to
   the agent (not the browser): `{ok, database, columns, types, rows}`, values

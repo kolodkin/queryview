@@ -27,10 +27,12 @@ from .connect import (
     disconnect,
     execute_script,
     export_csv,
+    forget_session,
     get_session,
-    list_connections,
+    list_connections_for,
     list_tables,
     open_saved,
+    parse_driver_config,
     run_query,
     select_database,
 )
@@ -238,6 +240,7 @@ async def sessions_delete(sid: str):
     ok, reason = await sessions.delete_session(sid)
     if not ok:
         return _session_error(reason)
+    forget_session(sid)
     return {"ok": True}
 
 
@@ -270,26 +273,19 @@ async def db_disconnect(request: Request) -> dict[str, Any]:
     return await disconnect(request.state.sid)
 
 
-# Saved connections, for the Connect page's cards.
+# This session's connections and the saved ones, for the Connect page's cards.
 @app.get("/api/db/connections")
-async def db_connections() -> dict[str, Any]:
-    return {"connections": await list_connections()}
+async def db_connections(request: Request) -> dict[str, Any]:
+    return {"connections": await list_connections_for(request.state.sid)}
 
 
 def _driver_and_config(body: Any):
     """Resolve (driver, config) from a request body's `type`, or the 400
     response to return for an unknown type / invalid config."""
-    b = body if isinstance(body, dict) else {}
-    raw_type = b.get("type")
-    conn_type = raw_type if isinstance(raw_type, str) else ""
-    driver = DRIVERS.get(conn_type)
-    if driver is None:
-        message = f"unknown connection type: {conn_type or '(none)'}"
-        return JSONResponse({"ok": False, "message": message}, status_code=400)
-    config, error = driver.parse_config(b)
+    conn_type, config, error = parse_driver_config(body if isinstance(body, dict) else {})
     if error or config is None:
         return JSONResponse({"ok": False, "message": error}, status_code=400)
-    return driver, config
+    return DRIVERS[conn_type], config
 
 
 # Test only: a throwaway connectivity check, no save, no activation.
@@ -313,7 +309,7 @@ async def db_connect(request: Request):
     b = body if isinstance(body, dict) else {}
     raw_name = b.get("name")
     name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else driver.type
-    return await connect_new(request.state.sid, name, config, driver.type)
+    return await connect_new(request.state.sid, name, config, driver.type, session_only=b.get("session") is True)
 
 
 # Open a saved connection by name for this session (a Connect page card).

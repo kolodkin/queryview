@@ -207,10 +207,10 @@ async def list_connection_names() -> list[str]:
     return [c["name"] for c in await list_connections()]
 
 
-async def unknown_connection_message(name: str) -> str:
-    """The error for an unresolvable connection name, listing the valid ones so
-    a caller (typically an agent) can retry without guessing."""
-    names = await list_connection_names()
+async def unknown_connection_message(name: str, sid: str = "") -> str:
+    """The error for an unresolvable connection name, listing the valid ones (the
+    session's own first) so a caller (typically an agent) can retry without guessing."""
+    names = [*_session_conns.get(sid, {}), *await list_connection_names()]
     return f'no connection named "{name}"; available: {", ".join(names) if names else "(none)"}'
 
 
@@ -245,6 +245,44 @@ class _SessionState:
     config: DriverConfig
     databases: list[str]
     database: str | None
+
+
+@dataclass
+class _SessionConn:
+    type: str
+    config: DriverConfig
+    created_by: str
+    added_at: int
+
+
+# Session connections: sid -> name -> connection. Memory only — never written to
+# the connections table, invisible to other sessions, gone on restart or when
+# the session is deleted. See docs/connect.md#session-connections.
+_session_conns: dict[str, dict[str, _SessionConn]] = {}
+
+
+def _session_conn(sid: str, name: str) -> _SessionConn | None:
+    return _session_conns.get(sid, {}).get(name)
+
+
+async def _resolve(sid: str, name: str) -> tuple[str, DriverConfig] | None:
+    """A connection's (type, config) by name: this session's own, else saved."""
+    sc = _session_conn(sid, name)
+    if sc is not None:
+        return sc.type, sc.config
+    stored = await _connection_by_name(name)
+    return (stored.type, stored.config) if stored is not None else None
+
+
+def parse_driver_config(body: dict[str, Any]) -> tuple[str, DriverConfig | None, str | None]:
+    """(type, config, error) from a body's `type` and driver fields."""
+    raw_type = body.get("type")
+    conn_type = raw_type if isinstance(raw_type, str) else ""
+    driver = DRIVERS.get(conn_type)
+    if driver is None:
+        return conn_type, None, f"unknown connection type: {conn_type or '(none)'}"
+    config, error = driver.parse_config(body)
+    return conn_type, config, error if error or config is None else None
 
 
 # LRU-capped so the map can't grow unbounded (every fresh cookie adds one). An
@@ -316,12 +354,14 @@ async def _ensure_session(sid: str) -> None:
     rec = await sessions.get_session_rec(sid)
     if rec is None or rec.connection_name is None:
         return
-    stored = await _connection_by_name(rec.connection_name)
-    if stored is None:
-        # The connection was deleted, or its config no longer decrypts. The
-        # session stays as it is and reads as disconnected; the user reconnects.
+    found = await _resolve(sid, rec.connection_name)
+    if found is None:
+        # The connection was deleted, its config no longer decrypts, or it was a
+        # session connection lost to a restart. The session reads as
+        # disconnected; the user reconnects.
         return
-    state, _ = await _build_session(stored.name, stored.config, rec.database, stored.type)
+    conn_type, config = found
+    state, _ = await _build_session(rec.connection_name, config, rec.database, conn_type)
     if state is not None:
         _set_session_entry(sid, state)
 
@@ -332,6 +372,7 @@ async def get_session(sid: str) -> dict[str, Any]:
     s = _get_session_entry(sid)
     if s is None:
         return {"connected": False}
+    sc = _session_conn(sid, s.name)
     return {
         "connected": True,
         "name": s.name,
@@ -340,37 +381,56 @@ async def get_session(sid: str) -> dict[str, Any]:
         "database": s.database,
         # How this dialect quotes a table/column (dashboard `identifier` params).
         "ident_quote": DRIVERS[s.type].ident_quote,
+        "scope": "session" if sc else "saved",
+        "created_by": sc.created_by if sc else "user",
     }
 
 
-async def connect_new(sid: str, name: str, config: DriverConfig, conn_type: str) -> dict[str, Any]:
-    """Create: open a config, save + activate it for this session."""
+async def connect_new(
+    sid: str, name: str, config: DriverConfig, conn_type: str, session_only: bool = False
+) -> dict[str, Any]:
+    """Create: open a config, save + activate it for this session. With
+    `session_only` it becomes a session connection instead of being saved."""
+    if session_only:
+        state, message = await add_session_connection(sid, name, config, conn_type, "user")
+    elif _session_name_taken(name):
+        state, message = None, f'a connection named "{name}" already exists'
+    else:
+        state, message = await _build_session(name, config, None, conn_type)
+    if state is None:
+        return {"ok": False, "message": message}
+    _set_session_entry(sid, state)
+    if not session_only:
+        await _save_active_connection(name, config, conn_type)
+    await sessions.set_connection(sid, name)
+    return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
+
+
+async def open_saved(sid: str, name: str, database: str | None = None) -> dict[str, Any]:
+    """Open a connection by name for this session: one of its session
+    connections, else a saved one. A `database` not on it fails before the
+    session switches."""
+    found = await _resolve(sid, name)
+    if found is None:
+        return {
+            "ok": False,
+            "message": await unknown_connection_message(name, sid),
+            "not_found": True,
+        }
+    conn_type, config = found
+    # Reset the database so opening always lands on the picker.
     state, message = await _build_session(name, config, None, conn_type)
     if state is None:
         return {"ok": False, "message": message}
+    if database is not None and database not in state.databases:
+        return {"ok": False, "message": "unknown database"}
     _set_session_entry(sid, state)
-    await _save_active_connection(name, config, conn_type)
+    if _session_conn(sid, name) is None:
+        await _touch_connection(name)
     await sessions.set_connection(sid, name)
-    return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
-
-
-async def open_saved(sid: str, name: str) -> dict[str, Any]:
-    """Open a saved connection by name for this session."""
-    stored = await _connection_by_name(name)
-    if stored is None:
-        return {
-            "ok": False,
-            "message": await unknown_connection_message(name),
-            "not_found": True,
-        }
-    # Reset the database so opening always lands on the picker.
-    state, message = await _build_session(stored.name, stored.config, None, stored.type)
-    if state is None:
-        return {"ok": False, "message": message}
-    _set_session_entry(sid, state)
-    await _touch_connection(name)
-    await sessions.set_connection(sid, name)
-    return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
+    if database is not None:
+        await select_database(sid, database)
+    return {"ok": True, "name": name, "type": state.type, "databases": state.databases, "database": database}
 
 
 async def disconnect(sid: str) -> dict[str, Any]:
@@ -381,6 +441,69 @@ async def disconnect(sid: str) -> dict[str, Any]:
     return {"ok": True}
 
 
+async def list_connections_for(sid: str) -> list[dict[str, Any]]:
+    """This session's connections, then the saved ones, each tagged with its
+    scope and creator."""
+    own = [
+        {
+            "name": n,
+            "type": c.type,
+            "database": None,
+            "last_active_at": c.added_at,
+            "scope": "session",
+            "created_by": c.created_by,
+        }
+        for n, c in _session_conns.get(sid, {}).items()
+    ]
+    return own + [{**c, "scope": "saved", "created_by": "user"} for c in await list_connections()]
+
+
+def _session_name_taken(name: str) -> bool:
+    """Any session's: a session row keeps naming its connection after a restart
+    empties memory, and must not then resolve to someone's saved namesake."""
+    return any(name in conns for conns in _session_conns.values())
+
+
+async def _name_taken(name: str) -> str | None:
+    """Names are unique across saved and every session's connections."""
+    if _session_name_taken(name) or name in await list_connection_names():
+        return f'a connection named "{name}" already exists'
+    return None
+
+
+async def add_session_connection(
+    sid: str, name: str, config: DriverConfig, conn_type: str, created_by: str
+) -> tuple[_SessionState | None, str | None]:
+    """Add a session connection after checking it connects; its built state, or
+    the error. A name already used by a saved or session connection is refused,
+    so a name means one thing."""
+    if not sid:
+        return None, "no session"
+    if (taken := await _name_taken(name)) is not None:
+        return None, taken
+    state, message = await _build_session(name, config, None, conn_type)
+    if state is not None:
+        _session_conns.setdefault(sid, {})[name] = _SessionConn(conn_type, config, created_by, _now_ms())
+    return state, message
+
+
+async def remove_session_connection(sid: str, name: str) -> dict[str, Any]:
+    """Drop a session connection, disconnecting the session if it is active."""
+    if _session_conns.get(sid, {}).pop(name, None) is None:
+        return {"ok": False, "message": f'no session connection named "{name}"'}
+    # The row, not the LRU cache: an evicted session must not keep pointing here.
+    rec = await sessions.get_session_rec(sid)
+    if rec is not None and rec.connection_name == name:
+        await disconnect(sid)
+    return {"ok": True}
+
+
+def forget_session(sid: str) -> None:
+    """Drop a deleted session's in-memory state, its session connections too."""
+    _session_conns.pop(sid, None)
+    _sessions.pop(sid, None)
+
+
 async def select_database(sid: str, database: str) -> dict[str, Any]:
     """Select this session's active connection's database."""
     s = _get_session_entry(sid)
@@ -389,7 +512,8 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
     if not database or database not in s.databases:
         return {"ok": False, "message": "unknown database", "reason": "unknown"}
     s.database = database
-    await _save_selected_database(s.name, database)
+    if _session_conn(sid, s.name) is None:
+        await _save_selected_database(s.name, database)
     await sessions.set_database(sid, database)
     return {"ok": True}
 

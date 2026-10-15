@@ -152,6 +152,21 @@ If the key changes (or a row predates encryption) the value can't be decrypted;
 a session on that connection reads as disconnected and the user reconnects,
 which re-encrypts it with the current key.
 
+## Session connections
+
+A **session connection** lives only in one session's memory: never saved,
+invisible to other sessions, gone when the session is deleted or the backend
+restarts (the session then reads as disconnected).
+
+- Each carries `scope` (`session` | `saved`) and `created_by` (`agent` |
+  `user`); session cards get a badge.
+- You add one with **Session only — don't save** on the new-connection form.
+- Names are unique across saved connections and all sessions' ones.
+- The agent may add (ClickHouse or Postgres only: DuckDB reads local files),
+  switch to, pick the database of and remove its own. Anything else it may only
+  list, and query while active. See [remote.md](./remote.md#mcp-tools).
+- This keeps a cooperating agent in its lane; it is not a security boundary.
+
 ## Sessions & reconnecting
 
 Each **session** has one active connection, recorded on the session's own row in
@@ -189,9 +204,9 @@ session.
 | Method | Path                          | Body                                   | Result |
 | ------ | ----------------------------- | -------------------------------------- | ------ |
 | POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
-| POST   | `/api/db/connect`     | `{type, name, …driver config}`         | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form) |
-| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at}]}`, most recent first; the saved cards (never the config) |
-| POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a saved connection (a saved card) |
+| POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
+| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by}]}`: this session's connections, then the saved ones most recent first (never the config) |
+| POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card) |
 | POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database |
 | POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |
 | GET    | `/api/predefined-queries`     | `?type=<connType>`                     | `{queries:[{query_name, query}]}`; global predefined queries by connection type |
