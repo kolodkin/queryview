@@ -541,6 +541,29 @@ async def store(
         return {"committed": True, "sha": sha, "message": "stored", **merged}
 
 
+async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
+    """Drop a deleted query's `.deleted` marker before its row is purged, so no
+    instance imports it back; a live .yaml (delete never committed) stays."""
+    _require_remote(ws)
+    row = await _load_entity(ws, "query", name, conn_type)
+    if row["deleted_at"] is None:
+        raise GitSyncError(f"deleted query {name!r} not found", status=404)
+    marker = deleted_relpath(conn_type, name)
+    async with _lock(ws):
+        wd = await _ensure_repo(ws)
+        head = await _origin_head(wd, ws)
+        if head is None:
+            return
+        await _git("reset", "--hard", head, cwd=wd)
+        if not (wd / marker).exists():
+            return
+        # Agreeing on the marker keeps sync from importing an identical one back.
+        await _agree(ws, wd, head, "query", name, conn_type)
+        await _git("rm", "-q", "--", marker, cwd=wd)
+        await _git("commit", "-m", f"purge query {conn_type}/{name}", cwd=wd)
+        await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
+
+
 async def history(
     ws: WorkspaceRec,
     kind: str,
