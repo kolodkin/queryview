@@ -154,21 +154,18 @@ which re-encrypts it with the current key.
 
 ## Session connections
 
-A **session connection** lives only in one QueryView session's memory: never
-in the connections table, invisible to other sessions, gone when the session is
-deleted or the backend restarts (the session then reads as disconnected).
+A **session connection** lives only in one session's memory: never saved,
+invisible to other sessions, gone when the session is deleted or the backend
+restarts (the session then reads as disconnected).
 
-- Each connection carries `scope` (`session` | `saved`) and `created_by`
-  (`agent` | `user`); session cards get a badge.
-- A user adds one with **Session only — don't save** on the new-connection form.
-- Names are unique across saved connections and every session's session
-  connections.
+- Each carries `scope` (`session` | `saved`) and `created_by` (`agent` |
+  `user`); session cards get a badge.
+- You add one with **Session only — don't save** on the new-connection form.
+- Names are unique across saved connections and all sessions' ones.
 - The agent may add (ClickHouse or Postgres only: DuckDB reads local files),
-  switch to, pick the database of, and remove its own session connections.
-  Anything else it may only list and query while active; to switch to another
-  connection it asks the user. See [remote.md](./remote.md#mcp-tools).
+  switch to, pick the database of and remove its own. Anything else it may only
+  list, and query while active. See [remote.md](./remote.md#mcp-tools).
 - This keeps a cooperating agent in its lane; it is not a security boundary.
-  The REST API trusts the session id, which the agent knows.
 
 ## Sessions & reconnecting
 
