@@ -82,7 +82,8 @@ Changing a workspace's remote or branch drops its clone and that file.
   for a `.deleted` marker with the same content (`delete query {type}/{name}`);
   once undeleted, Commit swaps it back.
 - **Purge** removes the marker (`purge query {type}/{name}`) before the row,
-  so no instance imports it back.
+  so no instance imports it back. Only Purge does: deleting a workspace removes
+  its deleted queries locally and leaves their markers in the repo.
 - Other instances delete their copy on sync; one edited locally becomes a
   conflict, where **Restore** takes the deletion.
 - History spans both paths: restoring an older revision brings the query back

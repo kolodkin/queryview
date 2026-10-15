@@ -24,7 +24,8 @@ without a remote is a pure namespace: its git controls are disabled.
 
 Deleting a workspace requires it to be empty (409 otherwise); its
 [deleted queries](./query.md#deleted-queries) don't count and are removed with
-it. The git remote keeps its history either way.
+it, locally only: their [`.deleted` markers](./gitsync.md#deleted-queries)
+stay in the git remote, which keeps its history either way.
 
 ## Autosave
 
