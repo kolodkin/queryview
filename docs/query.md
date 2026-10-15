@@ -113,10 +113,9 @@ and drops out of the selector, MCP `list_queries` and
 
 - **Show deleted (N)** in the selector lists them in a *Deleted* group; picking
   one loads and runs its SQL, **Undelete** makes it live.
-- **Purge** confirms, then removes it for good. With a
-  [git remote](./gitsync.md#deleted-queries) it also commits removing the
-  query's `.deleted` marker; a committed live copy stays, so commit the
-  delete first.
+- **Purge** confirms, then removes it for good, its
+  [`.deleted` marker](./gitsync.md#deleted-queries) included; a committed live
+  copy stays, so commit the delete first.
 - Saving under a deleted name brings it back with the new content. An
   [autosave](./workspace.md#autosave) run never does.
 - They don't block deleting their workspace and go with it.

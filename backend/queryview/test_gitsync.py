@@ -651,6 +651,13 @@ def test_purging_a_committed_deletion_drops_its_marker(other_instance):
     _run(gitsync.sync(other_instance))  # a fresh instance has nothing to import back
     assert "gs purged" not in _deleted_names(other_instance.id)
 
+    # Another instance committing the same deletion again doesn't bring it back here.
+    _run(save_predefined_query("gs purged", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
+    _delete("gs purged", other_instance.id)
+    _run(gitsync.store(other_instance, "query", "gs purged", "clickhouse"))
+    _run(gitsync.sync(_default_ws()))
+    assert "gs purged" not in _deleted_names(_default_ws_id())
+
 
 def test_a_renamed_query_leaves_no_copy_under_its_old_name(git_env):
     from queryview.queries import get_predefined_query, rename_predefined_query, save_predefined_query

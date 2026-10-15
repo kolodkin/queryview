@@ -542,9 +542,8 @@ async def store(
 
 
 async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
-    """Before a deleted query is purged, drop its `.deleted` marker from the
-    repo (`purge query {type}/{name}`) so no instance imports it back. History
-    keeps it; a live .yaml (the delete never committed) stays."""
+    """Drop a deleted query's `.deleted` marker before its row is purged, so no
+    instance imports it back; a live .yaml (delete never committed) stays."""
     _require_remote(ws)
     row = await _load_entity(ws, "query", name, conn_type)
     if row["deleted_at"] is None:
@@ -558,12 +557,11 @@ async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
         await _git("reset", "--hard", head, cwd=wd)
         if not (wd / marker).exists():
             return
+        # Agreeing on the marker keeps sync from importing an identical one back.
+        await _agree(ws, wd, head, "query", name, conn_type)
         await _git("rm", "-q", "--", marker, cwd=wd)
         await _git("commit", "-m", f"purge query {conn_type}/{name}", cwd=wd)
         await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
-        state = _load_state(ws)
-        state["agreed"].pop(_key("query", name, conn_type), None)
-        _save_state(ws, state)
 
 
 async def history(
