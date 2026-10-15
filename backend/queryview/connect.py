@@ -326,10 +326,7 @@ def _with_localhost_hint(message: str, config: DriverConfig) -> str:
 
 
 async def _build_session(
-    name: str,
-    config: DriverConfig,
-    database: str | None,
-    conn_type: str = "clickhouse",
+    name: str, config: DriverConfig, database: str | None, conn_type: str = "clickhouse"
 ) -> tuple[_SessionState | None, str | None]:
     """List a connection's databases and build a session object."""
     r = await DRIVERS[conn_type].list_databases(config)
@@ -397,7 +394,7 @@ async def connect_new(
     if session_only:
         state, message = await add_session_connection(sid, name, config, conn_type, "user")
     elif _session_conn(sid, name) is not None:
-        state, message = None, f'a session connection named "{name}" already exists'
+        state, message = None, f'a connection named "{name}" already exists'
     else:
         state, message = await _build_session(name, config, None, conn_type)
     if state is None:
@@ -420,8 +417,9 @@ async def open_saved(sid: str, name: str, database: str | None = None) -> dict[s
             "message": await unknown_connection_message(name),
             "not_found": True,
         }
+    conn_type, config = found
     # Reset the database so opening always lands on the picker.
-    state, message = await _build_session(name, found[1], None, found[0])
+    state, message = await _build_session(name, config, None, conn_type)
     if state is None:
         return {"ok": False, "message": message}
     if database is not None and database not in state.databases:
@@ -479,16 +477,6 @@ async def add_session_connection(
     if state is not None:
         _session_conns.setdefault(sid, {})[name] = _SessionConn(conn_type, config, created_by, _now_ms())
     return state, message
-
-
-def agent_owned_error(sid: str, name: str) -> str | None:
-    """Why the agent may not change `name` directly, or None for a session
-    connection it created itself."""
-    sc = _session_conn(sid, name)
-    if sc is not None and sc.created_by == "agent":
-        return None
-    whose = "a session connection the user added" if sc is not None else "not one of your session connections"
-    return f'"{name}" is {whose}; ask the user to switch in QueryView'
 
 
 async def remove_session_connection(sid: str, name: str) -> dict[str, Any]:

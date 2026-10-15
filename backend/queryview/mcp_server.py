@@ -229,6 +229,22 @@ async def list_connections(session_id: str) -> dict[str, Any]:
     }
 
 
+# Network drivers only: DuckDB's SQL reads any file the backend can.
+_AGENT_DRIVERS = ("clickhouse", "postgres")
+
+
+def _not_yours(session_id: str, name: str) -> str | None:
+    """Why the agent may not change `name`, or None for a session connection
+    it added itself."""
+    from .connect import _session_conn
+
+    sc = _session_conn(session_id, name)
+    if sc is not None and sc.created_by == "agent":
+        return None
+    whose = "a session connection the user added" if sc is not None else "not one of your session connections"
+    return f'"{name}" is {whose}; ask the user to switch in QueryView'
+
+
 @mcp.tool()
 async def add_connection(session_id: str, name: str, type: str, config: dict[str, Any]) -> dict[str, Any]:
     """Add a session connection of your own: kept in this session's memory
@@ -260,10 +276,6 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
     return {"ok": True, "name": state.name, "type": type, "databases": state.databases}
 
 
-# Network drivers only: DuckDB's SQL reads any file the backend can.
-_AGENT_DRIVERS = ("clickhouse", "postgres")
-
-
 @mcp.tool()
 async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
     """Remove a session connection you added (disconnecting the session if it
@@ -271,9 +283,9 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
 
     Returns {"ok": True} or {"ok": False, "message"}.
     """
-    from .connect import agent_owned_error, remove_session_connection
+    from .connect import remove_session_connection
 
-    err = agent_owned_error(session_id, name)
+    err = _not_yours(session_id, name)
     if err is not None:
         return {"ok": False, "message": err}
     return await remove_session_connection(session_id, name)
@@ -289,15 +301,12 @@ async def use_connection(session_id: str, name: str, database: str | None = None
     Returns {"ok": True, "name", "type", "databases", "database"} or
     {"ok": False, "message"}.
     """
-    from .connect import agent_owned_error, open_saved
+    from .connect import open_saved
 
-    err = agent_owned_error(session_id, name)
+    err = _not_yours(session_id, name)
     if err is not None:
         return {"ok": False, "message": err}
-    r = await open_saved(session_id, name, database)
-    if not r["ok"]:
-        return {"ok": False, "message": r["message"]}
-    return r
+    return await open_saved(session_id, name, database)
 
 
 @mcp.tool()
@@ -308,13 +317,13 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
     Returns {"ok", "message", "database"}; not ok when disconnected, not your
     connection, or the database is not in session_info's "databases".
     """
-    from .connect import agent_owned_error, get_session
+    from .connect import get_session
     from .connect import select_database as _select_database
 
     cur = await get_session(session_id)
     if not cur["connected"]:
         return {"ok": False, "message": "not connected", "database": None}
-    err = agent_owned_error(session_id, cur["name"])
+    err = _not_yours(session_id, cur["name"])
     if err is not None:
         return {"ok": False, "message": err, "database": cur["database"]}
     r = await _select_database(session_id, database)
