@@ -512,10 +512,12 @@ async def predefined_queries_delete(request: Request):
         return ws
     try:
         if q.get("purge") in ("1", "true"):
+            if gitsync.configured(ws):  # repo first: a failed push leaves the query to retry
+                await gitsync.purge(ws, conn_type, name)
             await purge_predefined_query(conn_type, name, workspace_id=ws.id)
         else:
             await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
-    except PredefinedQueryError as e:
+    except (PredefinedQueryError, gitsync.GitSyncError) as e:
         return _status_error(e)
     return {"ok": True}
 
