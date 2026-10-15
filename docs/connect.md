@@ -161,7 +161,8 @@ deleted or the backend restarts (the session then reads as disconnected).
 - Each connection carries `scope` (`session` | `saved`) and `created_by`
   (`agent` | `user`); session cards get a badge.
 - A user adds one with **Session only — don't save** on the new-connection form.
-- Names are unique across saved and session connections.
+- Names are unique across saved connections and every session's session
+  connections.
 - The agent may add (ClickHouse or Postgres only: DuckDB reads local files),
   switch to, pick the database of, and remove its own session connections.
   Anything else it may only list and query while active; to switch to another

@@ -237,3 +237,17 @@ def test_saved_connect_refuses_a_session_connection_name():
     _run(add_session_connection(sid, "ag-clash", DuckConfig(":memory:"), "duckdb", "user"))
     out = _run(connect_new(sid, "ag-clash", DuckConfig(":memory:"), "duckdb"))
     assert out["ok"] is False and "already exists" in out["message"]
+
+
+def test_session_connection_names_are_unique_across_sessions():
+    from queryview.connect import add_session_connection, connect_new, open_saved
+
+    a = _run(sessions.create_session()).id
+    b = _run(sessions.create_session()).id
+    _run(add_session_connection(a, "ag-shared", DuckConfig(":memory:"), "duckdb", "user"))
+    assert "already exists" in _run(connect_new(b, "ag-shared", DuckConfig(":memory:"), "duckdb"))["message"]
+    state, message = _run(add_session_connection(b, "ag-shared", DuckConfig(":memory:"), "duckdb", "user"))
+    assert state is None and "already exists" in (message or "")
+    assert _run(add_session_connection("", "ag-nosid", DuckConfig(":memory:"), "duckdb", "user"))[1] == "no session"
+    # The unknown-name error lists the session's own connections too.
+    assert "ag-shared" in _run(open_saved(a, "ag-absent"))["message"]

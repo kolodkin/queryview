@@ -207,10 +207,10 @@ async def list_connection_names() -> list[str]:
     return [c["name"] for c in await list_connections()]
 
 
-async def unknown_connection_message(name: str) -> str:
-    """The error for an unresolvable connection name, listing the valid ones so
-    a caller (typically an agent) can retry without guessing."""
-    names = await list_connection_names()
+async def unknown_connection_message(name: str, sid: str = "") -> str:
+    """The error for an unresolvable connection name, listing the valid ones (the
+    session's own first) so a caller (typically an agent) can retry without guessing."""
+    names = [*_session_conns.get(sid, {}), *await list_connection_names()]
     return f'no connection named "{name}"; available: {", ".join(names) if names else "(none)"}'
 
 
@@ -393,7 +393,7 @@ async def connect_new(
     `session_only` it becomes a session connection instead of being saved."""
     if session_only:
         state, message = await add_session_connection(sid, name, config, conn_type, "user")
-    elif _session_conn(sid, name) is not None:
+    elif _session_name_taken(name):
         state, message = None, f'a connection named "{name}" already exists'
     else:
         state, message = await _build_session(name, config, None, conn_type)
@@ -414,7 +414,7 @@ async def open_saved(sid: str, name: str, database: str | None = None) -> dict[s
     if found is None:
         return {
             "ok": False,
-            "message": await unknown_connection_message(name),
+            "message": await unknown_connection_message(name, sid),
             "not_found": True,
         }
     conn_type, config = found
@@ -458,9 +458,15 @@ async def list_connections_for(sid: str) -> list[dict[str, Any]]:
     return own + [{**c, "scope": "saved", "created_by": "user"} for c in await list_connections()]
 
 
-async def _name_taken(sid: str, name: str) -> str | None:
-    """Names are unique across saved and session connections."""
-    if _session_conn(sid, name) is not None or name in await list_connection_names():
+def _session_name_taken(name: str) -> bool:
+    """Any session's: a session row keeps naming its connection after a restart
+    empties memory, and must not then resolve to someone's saved namesake."""
+    return any(name in conns for conns in _session_conns.values())
+
+
+async def _name_taken(name: str) -> str | None:
+    """Names are unique across saved and every session's connections."""
+    if _session_name_taken(name) or name in await list_connection_names():
         return f'a connection named "{name}" already exists'
     return None
 
@@ -471,7 +477,9 @@ async def add_session_connection(
     """Add a session connection after checking it connects; its built state, or
     the error. A name already used by a saved or session connection is refused,
     so a name means one thing."""
-    if (taken := await _name_taken(sid, name)) is not None:
+    if not sid:
+        return None, "no session"
+    if (taken := await _name_taken(name)) is not None:
         return None, taken
     state, message = await _build_session(name, config, None, conn_type)
     if state is not None:
