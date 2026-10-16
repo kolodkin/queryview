@@ -278,15 +278,18 @@ def test_use_connection_marks_the_switch_as_the_agents():
     """The row tells every tab who switched; only an agent switch toasts."""
     from queryview.mcp_server import remove_connection, use_connection
 
+    def who(sid: str) -> tuple[str | None, str | None]:
+        rec = _run(sessions.get_session_rec(sid))
+        assert rec is not None
+        return rec.connection_name, rec.connection_by
+
     sid = _connected_session("sc-by-user")
-    assert _run(sessions.get_session_rec(sid)).connection_by == "user"
+    assert who(sid) == ("sc-by-user", "user")
     assert _agent_add(sid, "ag-switch")["ok"]
     try:
         assert _run(use_connection(sid, "ag-switch"))["ok"]
-        rec = _run(sessions.get_session_rec(sid))
-        assert (rec.connection_name, rec.connection_by) == ("ag-switch", "agent")
+        assert who(sid) == ("ag-switch", "agent")
         assert _run(remove_connection(sid, "ag-switch"))["ok"]
-        rec = _run(sessions.get_session_rec(sid))
-        assert (rec.connection_name, rec.connection_by) == (None, "agent")
+        assert who(sid) == (None, "agent")
     finally:
         _run(remove_connection(sid, "ag-switch"))
