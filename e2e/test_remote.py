@@ -1,5 +1,17 @@
+import uuid
+
 import httpx
-from conftest import arm_remote, connect_clickhouse_test_db, mcp_call, open_query_panel
+from conftest import (
+    CH_DB,
+    CH_HOST,
+    CH_PASSWORD,
+    CH_PORT,
+    CH_USER,
+    arm_remote,
+    connect_clickhouse_test_db,
+    mcp_call,
+    open_query_panel,
+)
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -76,3 +88,23 @@ def test_mcp_push_to_live_session(seeded_test_db, page: Page, base_url: str) -> 
         timeout=10.0,
     )
     assert res2.json()["ok"] is False
+
+
+def test_agent_switch_names_the_connection_and_toasts(seeded_test_db, page: Page, base_url: str) -> None:
+    """use_connection reaches an unarmed tab by heartbeat: the pill names the
+    agent's connection, a toast says the agent switched, the menu badges it."""
+    connect_clickhouse_test_db(page)
+    sid = page.evaluate("() => sessionStorage.getItem('qv_session')")
+    name = f"agent-ch-{uuid.uuid4().hex[:6]}"
+    cfg = {"host": CH_HOST, "port": int(CH_PORT), "username": CH_USER, "password": CH_PASSWORD}
+    assert mcp_call(base_url, "add_connection", {"session_id": sid, "name": name, "type": "clickhouse", "config": cfg})[
+        "ok"
+    ]
+    assert mcp_call(base_url, "use_connection", {"session_id": sid, "name": name, "database": CH_DB})["ok"]
+
+    expect(page.get_by_test_id("connection-status")).to_contain_text(f"{name} · {CH_DB}", timeout=15_000)
+    expect(page.get_by_test_id("agent-toast")).to_contain_text(f"Agent switched to {name}")
+    page.get_by_test_id("connection-status").click()
+    entry = page.locator(f'[data-testid="pill-conn"][data-conn="{name}"]')
+    expect(entry).to_have_attribute("data-active", "true")
+    expect(entry.get_by_test_id("conn-agent-badge")).to_have_text("agent")

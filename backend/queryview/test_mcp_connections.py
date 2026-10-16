@@ -251,3 +251,45 @@ def test_session_connection_names_are_unique_across_sessions():
     assert _run(add_session_connection("", "ag-nosid", DuckConfig(":memory:"), "duckdb", "user"))[1] == "no session"
     # The unknown-name error lists the session's own connections too.
     assert "ag-shared" in _run(open_saved(a, "ag-absent"))["message"]
+
+
+def test_add_and_remove_connection_tell_an_armed_browser_to_refresh(monkeypatch):
+    from queryview.drivers import DRIVERS
+    from queryview.drivers.base import DatabasesResult
+    from queryview.mcp_server import add_connection, remove_connection
+
+    async def one_db(config):
+        return DatabasesResult(databases=["a"])
+
+    monkeypatch.setattr(DRIVERS["clickhouse"], "list_databases", one_db)
+    sid = _run(sessions.create_session()).id
+    rid = remote.register(sid)
+    try:
+        cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
+        assert _run(add_connection(sid, "ag-notify", "clickhouse", cfg))["ok"]
+        assert _run(remote.next_message(rid, 1.0)) == {"type": "connections"}
+        assert _run(remove_connection(sid, "ag-notify"))["ok"]
+        assert _run(remote.next_message(rid, 1.0)) == {"type": "connections"}
+    finally:
+        remote.unregister(rid)
+
+
+def test_use_connection_marks_the_switch_as_the_agents():
+    """The row tells every tab who switched; only an agent switch toasts."""
+    from queryview.mcp_server import remove_connection, use_connection
+
+    def who(sid: str) -> tuple[str | None, str | None]:
+        rec = _run(sessions.get_session_rec(sid))
+        assert rec is not None
+        return rec.connection_name, rec.connection_by
+
+    sid = _connected_session("sc-by-user")
+    assert who(sid) == ("sc-by-user", "user")
+    assert _agent_add(sid, "ag-switch")["ok"]
+    try:
+        assert _run(use_connection(sid, "ag-switch"))["ok"]
+        assert who(sid) == ("ag-switch", "agent")
+        assert _run(remove_connection(sid, "ag-switch"))["ok"]
+        assert who(sid) == (None, "agent")
+    finally:
+        _run(remove_connection(sid, "ag-switch"))
