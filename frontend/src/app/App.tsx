@@ -73,6 +73,7 @@ function ConnectionList({
     ['Session', connections.filter((c) => c.scope === 'session')],
     ['Saved', connections.filter((c) => c.scope !== 'session')],
   ] as const
+  if (connections.length === 0) return null
   return (
     <div data-testid="pill-connections" className="mt-1 border-t border-white/10 pt-1">
       {groups.map(
@@ -251,6 +252,7 @@ function Shell() {
   async function openConnection(name: string) {
     const r = await openSaved(name)
     if (r.ok) setConnection(r.connection)
+    else setToast(r.message)
     navigate(r.ok && isReady(r.connection) ? '/explorer' : '/connect')
   }
 
@@ -274,15 +276,17 @@ function Shell() {
   useEffect(() => {
     connectionRef.current = connection
   }, [connection])
-  const lastRowId = useRef<string | null>(null)
+  const lastRow = useRef<SessionState | null>(null)
   function followRow(row: SessionState) {
     const c = connectionRef.current
-    const sameSession = lastRowId.current === row.id
-    lastRowId.current = row.id
+    const prev = lastRow.current
+    lastRow.current = row
     if (row.connection === (c?.name ?? null) && row.database === (c?.database ?? null)) return
     // Moved to another server from outside this tab (the agent, another tab):
     // say so, since the user may have been looking at another server's data.
-    if (sameSession && row.connection && row.connection !== c?.name) {
+    // Only on a change of the row itself: a row naming a connection that no
+    // longer resolves repeats on every heartbeat.
+    if (prev?.id === row.id && row.connection && row.connection !== prev.connection) {
       setToast(`Switched to ${row.connection}`)
     }
     if (c && row.connection === c.name) setConnection({ ...c, database: row.database })
@@ -294,6 +298,7 @@ function Shell() {
   // connection arrives through the row (followRow).
   function applySession(next: SessionState) {
     setTaken(false)
+    setConnections([])
     setWorkspace(next.workspace)
     setSessionLabel(next.label)
     setSessionKey(`${next.id}:${++adoptions.current}`)

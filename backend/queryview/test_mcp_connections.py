@@ -253,10 +253,10 @@ def test_session_connection_names_are_unique_across_sessions():
     assert "ag-shared" in _run(open_saved(a, "ag-absent"))["message"]
 
 
-def test_add_connection_tells_an_armed_browser_to_refresh_its_list(monkeypatch):
+def test_add_and_remove_connection_tell_an_armed_browser_to_refresh(monkeypatch):
     from queryview.drivers import DRIVERS
     from queryview.drivers.base import DatabasesResult
-    from queryview.mcp_server import add_connection
+    from queryview.mcp_server import add_connection, remove_connection
 
     async def one_db(config):
         return DatabasesResult(databases=["a"])
@@ -267,6 +267,8 @@ def test_add_connection_tells_an_armed_browser_to_refresh_its_list(monkeypatch):
     try:
         cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
         assert _run(add_connection(sid, "ag-notify", "clickhouse", cfg))["ok"]
+        assert _run(remote.next_message(rid, 1.0)) == {"type": "connections"}
+        assert _run(remove_connection(sid, "ag-notify"))["ok"]
         assert _run(remote.next_message(rid, 1.0)) == {"type": "connections"}
     finally:
         remote.unregister(rid)
