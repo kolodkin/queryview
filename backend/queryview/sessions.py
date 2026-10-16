@@ -9,7 +9,7 @@ import asyncio
 import json
 import uuid
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from sqlalchemy import column, table
 from sqlalchemy.orm import load_only
@@ -366,7 +366,7 @@ async def touch_for_test(
         await s.commit()
 
 
-async def set_connection(sid: str, connection_name: str | None, by: str = "user") -> None:
+async def set_connection(sid: str, connection_name: str | None, by: Literal["agent", "user"] = "user") -> None:
     """Record which connection a session is on, clearing its database — both
     connecting and disconnecting reset the picker. A None name is the durable
     disconnected state; there is no separate 'disconnected' set."""

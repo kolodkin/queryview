@@ -12,7 +12,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -406,7 +406,9 @@ async def connect_new(
     return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
 
 
-async def open_saved(sid: str, name: str, database: str | None = None, by: str = "user") -> dict[str, Any]:
+async def open_saved(
+    sid: str, name: str, database: str | None = None, by: Literal["agent", "user"] = "user"
+) -> dict[str, Any]:
     """Open a connection by name for this session: one of its session
     connections, else a saved one. A `database` not on it fails before the
     session switches."""
