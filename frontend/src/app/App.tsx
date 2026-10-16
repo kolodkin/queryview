@@ -329,7 +329,7 @@ function Shell() {
 
   // The channel is keyed by this session, so the agent's id is the session's own.
   const remoteId = channelOpen ? sessionId() : null
-  const agentCommand = `Use the queryview mcp to connect to session "${remoteId ?? ''}"`
+  const agentCommand = `Use the queryview mcp to connect to session "${remoteId ?? ''}" (${sessionLabel})`
 
   // The pages that query a database are Connect until there is one.
   const withDatabase = (page: React.ReactNode) =>
