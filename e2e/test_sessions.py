@@ -152,7 +152,7 @@ def test_each_test_starts_on_a_fresh_session(left_behind: str, page: Page) -> No
 
 def test_a_switch_made_elsewhere_names_the_new_connection(seeded_duckdb, page: Page, base_url: str) -> None:
     """A session connection opened outside this tab (the agent's path) shows in
-    the pill and the pill's connection list with its session badge; only the
+    the pill and the pill's connection list (no badge: the user added it); only the
     agent's use_connection toasts."""
     _connect_duckdb(page, seeded_duckdb)
     sid = page.evaluate("() => sessionStorage.getItem('qv_session')")
@@ -169,5 +169,5 @@ def test_a_switch_made_elsewhere_names_the_new_connection(seeded_duckdb, page: P
     status.click()
     entry = page.locator('[data-testid="pill-conn"][data-conn="side-duck"]')
     expect(entry).to_have_attribute("data-active", "true")
-    expect(entry).to_contain_text("session")
+    expect(entry.get_by_test_id("conn-agent-badge")).to_have_count(0)
     expect(page.locator('[data-testid="pill-conn"][data-conn="duckdb"]')).to_have_attribute("data-active", "false")

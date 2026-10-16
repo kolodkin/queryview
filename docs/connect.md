@@ -160,8 +160,9 @@ invisible to other sessions, gone when the session is deleted or the backend
 restarts (the session then reads as disconnected).
 
 - Each carries `scope` (`session` | `saved`) and `created_by` (`agent` |
-  `user`); session cards get a badge, as do entries in the pill menu's
-  connection list (session ones listed apart from saved, the active one marked).
+  `user`); connections the agent added get an `agent` badge on their card and
+  in the pill menu's connection list (session ones listed apart from saved, the
+  active one marked). The user's own get none.
 - When one is added or removed, an armed tab's lists refresh. The session row
   records who switched (`connection_by`: `agent` | `user`), so every tab on the
   session toasts "Agent switched to <name>" for the agent's `use_connection`

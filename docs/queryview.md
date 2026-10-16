@@ -47,7 +47,7 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
   showing 🟢 `connected - <connection> · <database>` (without `connected - ` below `md` width).
   Clicking it opens a searchable database switcher; each row's **copy** icon
   copies the name without switching. Below it, the connections (this session's
-  own with a `session`/`agent` badge, then saved; the active one marked) switch
+  own, the agent's badged `agent`, then saved; the active one marked) switch
   on click, and **Disconnect** at the bottom drops the connection and goes to
   `/connect` (a picker-less driver's menu has just these two).
   Next to it, an **agent icon** opens the remote-control popover (opt-in "Allow

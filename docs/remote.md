@@ -53,7 +53,7 @@ tools (among others):
   the session row `connection_by: agent`; every tab picks it up on its next
   heartbeat, toasts "Agent switched to <name>", and the pill reads
   `<connection> · <database>` with the menu entry marked active and badged
-  `session · agent`. Switches made in the UI never toast.
+  `agent`. Switches made in the UI never toast.
 - `run_query(session_id, query, limit?=1000, offset?=0)` — run a read-only
   query on the session's connection and selected database, returning rows to
   the agent (not the browser): `{ok, database, columns, types, rows}`, values

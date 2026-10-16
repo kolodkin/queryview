@@ -5,7 +5,7 @@ import { filterNames, useDismiss } from '../core'
 import { isReady, openSaved, selectDatabase, toConnection, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
-import { SessionBadge } from './controls/SessionBadge'
+import { AgentBadge } from './controls/AgentBadge'
 import { timeAgo } from './timeAgo'
 import {
   MANY_THRESHOLD,
@@ -407,7 +407,7 @@ function SavedCard({
           <span className="block truncate font-medium text-slate-100">{conn.name}</span>
           <span className="block text-xs text-slate-400">
             {label}
-            <SessionBadge conn={conn} className="ml-2" />
+            <AgentBadge conn={conn} className="ml-2" />
           </span>
         </span>
         {busy ? (

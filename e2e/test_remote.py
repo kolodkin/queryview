@@ -1,7 +1,17 @@
 import uuid
 
 import httpx
-from conftest import CH_DB, CH_HOST, CH_PASSWORD, CH_PORT, CH_USER, arm_remote, connect_clickhouse_test_db, mcp_call, open_query_panel
+from conftest import (
+    CH_DB,
+    CH_HOST,
+    CH_PASSWORD,
+    CH_PORT,
+    CH_USER,
+    arm_remote,
+    connect_clickhouse_test_db,
+    mcp_call,
+    open_query_panel,
+)
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
@@ -97,4 +107,4 @@ def test_agent_switch_names_the_connection_and_toasts(seeded_test_db, page: Page
     page.get_by_test_id("connection-status").click()
     entry = page.locator(f'[data-testid="pill-conn"][data-conn="{name}"]')
     expect(entry).to_have_attribute("data-active", "true")
-    expect(entry).to_contain_text("session · agent")
+    expect(entry.get_by_test_id("conn-agent-badge")).to_have_text("agent")
