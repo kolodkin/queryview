@@ -484,6 +484,7 @@ async def add_session_connection(
     state, message = await _build_session(name, config, None, conn_type)
     if state is not None:
         _session_conns.setdefault(sid, {})[name] = _SessionConn(conn_type, config, created_by, _now_ms())
+        remote.notify(sid, {"type": "connections"})
     return state, message
 
 
@@ -491,6 +492,7 @@ async def remove_session_connection(sid: str, name: str) -> dict[str, Any]:
     """Drop a session connection, disconnecting the session if it is active."""
     if _session_conns.get(sid, {}).pop(name, None) is None:
         return {"ok": False, "message": f'no session connection named "{name}"'}
+    remote.notify(sid, {"type": "connections"})
     # The row, not the LRU cache: an evicted session must not keep pointing here.
     rec = await sessions.get_session_rec(sid)
     if rec is not None and rec.connection_name == name:
@@ -626,4 +628,4 @@ async def export_csv(
 # Imported last, not at the top: sessions.py builds on this module's engine and
 # schema helpers, so a top-level import here would be a cycle. connect.py calls
 # into it only to write a session's connection through.
-from . import sessions  # noqa: E402
+from . import remote, sessions  # noqa: E402

@@ -41,7 +41,8 @@ import {
 } from './session'
 import { apiFetch } from './api'
 import { listWorkspaces } from './workspace'
-import type { SavedConnection } from './savedConnections'
+import { fetchConnections, type SavedConnection } from './savedConnections'
+import { SessionBadge } from './controls/SessionBadge'
 
 // Ends the connection; the last entry of the pill's menu.
 function DisconnectButton({ onDisconnect }: { onDisconnect: () => void }) {
@@ -94,11 +95,7 @@ function ConnectionList({
                   >
                     {c.name}
                   </span>
-                  {c.scope === 'session' && (
-                    <span className="shrink-0 text-xs text-amber-300">
-                      session{c.created_by === 'agent' ? ' · agent' : ''}
-                    </span>
-                  )}
+                  <SessionBadge conn={c} className="shrink-0 text-xs" />
                   {c.name === active && (
                     <span
                       className="ml-auto h-2 w-2 shrink-0 rounded-full bg-emerald-500"
@@ -229,9 +226,8 @@ function Shell() {
   useEffect(() => {
     if (!dbOpen) return
     let live = true
-    apiFetch('/api/db/connections')
-      .then((r) => r.json())
-      .then((data) => live && Array.isArray(data.connections) && setConnections(data.connections))
+    fetchConnections()
+      .then((list) => live && setConnections(list))
       .catch(() => {})
     return () => {
       live = false

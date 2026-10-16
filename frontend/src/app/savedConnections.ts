@@ -1,5 +1,6 @@
 // The Connect page's saved-connection list logic, kept pure for tests.
 
+import { apiFetch } from './api'
 import { DRIVERS } from './drivers'
 
 // A saved connection's card data, from /api/db/connections.
@@ -11,6 +12,12 @@ export type SavedConnection = {
   // "session": this session's memory only, never saved (docs/connect.md).
   scope?: 'saved' | 'session'
   created_by?: 'user' | 'agent'
+}
+
+// This session's connections then the saved ones; throws when unreachable.
+export async function fetchConnections(): Promise<SavedConnection[]> {
+  const data = await (await apiFetch('/api/db/connections')).json()
+  return Array.isArray(data.connections) ? (data.connections as SavedConnection[]) : []
 }
 
 // Past this many saved connections the page switches to its "many" layout.

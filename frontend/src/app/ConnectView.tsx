@@ -5,11 +5,13 @@ import { filterNames, useDismiss } from '../core'
 import { isReady, openSaved, selectDatabase, toConnection, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
+import { SessionBadge } from './controls/SessionBadge'
 import { timeAgo } from './timeAgo'
 import {
   MANY_THRESHOLD,
   RECENT_COUNT,
   driverCounts,
+  fetchConnections,
   labelOf,
   matchConnections,
   type SavedConnection,
@@ -54,8 +56,7 @@ function ConnectView({
 
   const refreshSaved = useCallback(async () => {
     try {
-      const data = await (await apiFetch('/api/db/connections')).json()
-      setSaved(Array.isArray(data.connections) ? (data.connections as SavedConnection[]) : [])
+      setSaved(await fetchConnections())
     } catch {
       setSaved((s) => s ?? [])
     }
@@ -406,11 +407,7 @@ function SavedCard({
           <span className="block truncate font-medium text-slate-100">{conn.name}</span>
           <span className="block text-xs text-slate-400">
             {label}
-            {conn.scope === 'session' && (
-              <span data-testid="conn-session-badge" className="ml-2 text-amber-300">
-                session{conn.created_by === 'agent' ? ' · agent' : ''}
-              </span>
-            )}
+            <SessionBadge conn={conn} className="ml-2" />
           </span>
         </span>
         {busy ? (
