@@ -276,17 +276,9 @@ function Shell() {
   useEffect(() => {
     connectionRef.current = connection
   }, [connection])
-  const lastRow = useRef<SessionState | null>(null)
   function followRow(row: SessionState) {
     const c = connectionRef.current
-    const prev = lastRow.current
-    lastRow.current = row
     if (row.connection === (c?.name ?? null) && row.database === (c?.database ?? null)) return
-    // Flag a server switch made outside this tab. Compare rows, not the screen:
-    // a row naming an unresolvable connection repeats every heartbeat.
-    if (prev?.id === row.id && row.connection && row.connection !== prev.connection) {
-      setToast(`Switched to ${row.connection}`)
-    }
     if (c && row.connection === c.name) setConnection({ ...c, database: row.database })
     else void refreshConnection()
   }
@@ -377,6 +369,11 @@ function Shell() {
       })
     }
     on('connections', () => setConnectionsNonce((n) => n + 1))
+    // The server says who switched, so the user's own switches never toast.
+    on<{ name: string }>('connection', ({ name }) => {
+      setToast(`Agent switched to ${name}`)
+      void refreshConnection()
+    })
     on<QueryPush>('query', (payload) => {
       setQueryPush(payload)
       setToast('Agent updated the query')

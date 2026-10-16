@@ -49,10 +49,11 @@ tools (among others):
   Postgres session connection; `use_connection(session_id, name, database?)`,
   `select_database(session_id, database)` and `remove_connection(session_id,
   name)` act only on the agent's own. In the browser, an add/remove refreshes an
-  armed tab's connection lists (pill menu, Connect); a `use_connection` reaches
-  the tab on its next heartbeat: the pill reads `<connection> · <database>`, a
-  "Switched to <name>" toast shows, and the pill menu marks it active with a
-  `session · agent` badge.
+  armed tab's connection lists (pill menu, Connect). A `use_connection` pushes a
+  `connection` event: an armed tab shows an "Agent switched to <name>" toast and
+  updates at once (others on their next heartbeat); the pill reads
+  `<connection> · <database>` and its menu marks it active with a
+  `session · agent` badge. Switches made in the UI never toast.
 - `run_query(session_id, query, limit?=1000, offset?=0)` — run a read-only
   query on the session's connection and selected database, returning rows to
   the agent (not the browser): `{ok, database, columns, types, rows}`, values

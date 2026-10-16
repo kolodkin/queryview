@@ -162,8 +162,8 @@ restarts (the session then reads as disconnected).
 - Each carries `scope` (`session` | `saved`) and `created_by` (`agent` |
   `user`); session cards get a badge, as do entries in the pill menu's
   connection list (session ones listed apart from saved, the active one marked).
-- When one is added or removed, an armed tab's lists refresh; a switch
-  made outside the tab (agent, another tab) shows a "Switched to <name>" toast.
+- When one is added or removed, an armed tab's lists refresh; the agent's
+  `use_connection` shows an "Agent switched to <name>" toast there.
 - You add one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved connections and all sessions' ones.
 - The agent may add (ClickHouse or Postgres only: DuckDB reads local files),

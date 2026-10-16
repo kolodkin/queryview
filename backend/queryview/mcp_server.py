@@ -306,7 +306,10 @@ async def use_connection(session_id: str, name: str, database: str | None = None
     err = _not_yours(session_id, name)
     if err is not None:
         return {"ok": False, "message": err}
-    return await open_saved(session_id, name, database)
+    out = await open_saved(session_id, name, database)
+    if out["ok"]:
+        remote.notify(session_id, {"type": "connection", "name": name})
+    return out
 
 
 @mcp.tool()
