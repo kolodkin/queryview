@@ -11,7 +11,7 @@ database is selected, an **agent icon** sits next to the connection status pill.
 Click it and toggle **Allow remote control**. The popover then shows this
 session's **id** and a copyable command, e.g.:
 
-> Use the queryview mcp to connect to session "a1b2c3"
+> Use the queryview mcp to connect to session "a1b2c3" (Session 1)
 
 Turning the toggle off (or closing the tab) disarms the session immediately —
 pushes to its id are then reported as not delivered.
