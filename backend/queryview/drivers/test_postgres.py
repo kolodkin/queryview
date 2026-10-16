@@ -234,3 +234,20 @@ def test_errors_become_err(monkeypatch):
     assert asyncio.run(d.run_query(cfg, "SELECT 1", "db", 10, 0, None)) == Err("refused")
     assert asyncio.run(d.export_csv(cfg, "SELECT 1", "db", 10, 0, None)) == Err("refused")
     assert asyncio.run(d.describe_query(cfg, "SELECT 1", "db")) == Err("refused")
+
+
+def test_to_rows_decodes_json_columns():
+    from queryview.drivers.postgres import _to_rows
+
+    def attr(name, type_name):
+        a = type("A", (), {"name": name})()
+        a.type = type("T", (), {"name": type_name})()
+        return a
+
+    attrs = (attr("doc", "jsonb"), attr("raw", "json"), attr("note", "text"))
+    records = [['{"a": [1, 9007199254740993]}', "[1, 2]", '{"x": 1}'], [None, None, None]]
+    assert _to_rows(attrs, records).data == [
+        [{"a": [1, "9007199254740993"]}, [1, 2], '{"x": 1}'],
+        [None, None, None],
+    ]
+    assert _to_rows(attrs, records, decode_json=False).data[0][0] == '{"a": [1, 9007199254740993]}'
