@@ -136,3 +136,23 @@ def test_fields_describe(case: DriverCase, request, page: Page, shot) -> None:
     expect(page.locator('[data-testid="field-toggle"][data-col="id"]')).to_be_visible()
     expect(page.locator('[data-testid="field-toggle"][data-col="name"]')).to_be_visible()
     shot(f"{case.id} describe fields")
+
+
+def test_postgres_jsonb_renders_structured(seeded_pg_db, page: Page, shot) -> None:
+    """jsonb arrives as a collection, so it gets the default list view (like a
+    ClickHouse JSON column), not the serialized text."""
+    _connect(page, CASES[1], seeded_pg_db)
+    open_query_panel(page)
+    page.get_by_test_id("query-input").fill(
+        "SELECT '{\"region\": \"emea\", \"tier\": 2}'::jsonb AS doc, "
+        "'[\"a\", \"b\", \"c\", \"d\", \"e\"]'::jsonb AS tags"
+    )
+    page.get_by_test_id("query-run").click()
+    output = page.get_by_test_id("query-output")
+    expect(output.get_by_test_id("cell-doc")).to_contain_text("region: emea")
+    expect(output.get_by_test_id("cell-doc")).to_contain_text("tier: 2")
+    expect(output.get_by_test_id("cell-tags-toggle")).to_be_visible()
+    shot("postgres jsonb default view")
+    output.get_by_test_id("cell-tags-toggle").click()
+    expect(output.get_by_test_id("cell-tags")).to_contain_text("e")
+    shot("postgres jsonb expanded")
