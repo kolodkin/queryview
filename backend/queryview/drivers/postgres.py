@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
+from decimal import Decimal
 from typing import Any
 
 import asyncpg
@@ -83,21 +84,27 @@ async def _connect(c: PgConfig, database: str | None, command_timeout: float = P
         await conn.close()
 
 
-_JSON_TYPES = ("json", "jsonb")
+# json/jsonb and their arrays (`_json`, `_jsonb`), which asyncpg hands over as text.
+_JSON_TYPES = {"json", "jsonb", "_json", "_jsonb"}
+
+
+def _decode_json(v: Any) -> Any:
+    """Parse json text (recursing into arrays) so documents arrive structured
+    like a ClickHouse JSON column; Decimal keeps the numbers' digits."""
+    if isinstance(v, list):
+        return [_decode_json(x) for x in v]
+    return json.loads(v, parse_float=Decimal) if isinstance(v, str) else v
 
 
 def _to_rows(attrs: Any, records: list[Any], decode_json: bool = True) -> QueryRows:
     """asyncpg's statement attributes and records as the shared result shape.
-    asyncpg hands json/jsonb over as text; decode it so documents arrive
-    structured like a ClickHouse JSON column (CSV keeps the text)."""
+    json columns are decoded unless `decode_json` is off (CSV keeps the text)."""
     meta = [Column(a.name, a.type.name) for a in attrs]
-    data = [[to_json_value(v) for v in r] for r in records]
-    json_cols = [i for i, c in enumerate(meta) if c.type in _JSON_TYPES] if decode_json else []
-    for row, record in zip(data, records, strict=True):
-        for i in json_cols:
-            if record[i] is not None:
-                row[i] = to_json_value(json.loads(record[i]))
-    return QueryRows(meta, data)
+    is_json = [decode_json and c.type in _JSON_TYPES for c in meta]
+    return QueryRows(
+        meta,
+        [[to_json_value(_decode_json(v) if j else v) for v, j in zip(r, is_json, strict=True)] for r in records],
+    )
 
 
 @asynccontextmanager

@@ -243,10 +243,13 @@ def test_to_rows_decodes_json_columns():
     def attr(name, type_name):
         return SimpleNamespace(name=name, type=SimpleNamespace(name=type_name))
 
-    attrs = (attr("doc", "jsonb"), attr("raw", "json"), attr("note", "text"))
-    records = [['{"a": [1, 9007199254740993]}', "[1, 2]", '{"x": 1}'], [None, None, None]]
-    assert _to_rows(attrs, records).data == [
-        [{"a": [1, "9007199254740993"]}, [1, 2], '{"x": 1}'],
-        [None, None, None],
+    attrs = (attr("doc", "jsonb"), attr("raw", "json"), attr("docs", "_jsonb"), attr("note", "text"))
+    records = [
+        ['{"a": [1, 9007199254740993], "f": 0.10000000000000000001}', "[1, 2]", ['{"x": 1}', None], '{"x": 1}'],
+        [None, None, None, None],
     ]
-    assert _to_rows(attrs, records, decode_json=False).data[0][0] == '{"a": [1, 9007199254740993]}'
+    assert _to_rows(attrs, records).data == [
+        [{"a": [1, "9007199254740993"], "f": "0.10000000000000000001"}, [1, 2], [{"x": 1}, None], '{"x": 1}'],
+        [None, None, None, None],
+    ]
+    assert _to_rows(attrs, records, decode_json=False).data[0][0] == records[0][0]

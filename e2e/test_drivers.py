@@ -141,7 +141,7 @@ def test_fields_describe(case: DriverCase, request, page: Page, shot) -> None:
 def test_postgres_jsonb_renders_structured(seeded_pg_db, page: Page, shot) -> None:
     """jsonb arrives as a collection, so it gets the default list view (like a
     ClickHouse JSON column), not the serialized text."""
-    _connect(page, CASES[1], seeded_pg_db)
+    _connect(page, next(c for c in CASES if c.id == "postgres"), seeded_pg_db)
     open_query_panel(page)
     page.get_by_test_id("query-input").fill(
         'SELECT \'{"region": "emea", "tier": 2}\'::jsonb AS doc, \'["a", "b", "c", "d", "e"]\'::jsonb AS tags'
@@ -150,8 +150,9 @@ def test_postgres_jsonb_renders_structured(seeded_pg_db, page: Page, shot) -> No
     output = page.get_by_test_id("query-output")
     expect(output.get_by_test_id("cell-doc")).to_contain_text("region: emea")
     expect(output.get_by_test_id("cell-doc")).to_contain_text("tier: 2")
-    expect(output.get_by_test_id("cell-tags-toggle")).to_be_visible()
+    items = output.get_by_test_id("cell-tags").locator(":scope > div")
+    expect(items).to_have_count(3)
     shot("postgres jsonb default view")
     output.get_by_test_id("cell-tags-toggle").click()
-    expect(output.get_by_test_id("cell-tags")).to_contain_text("e")
+    expect(items).to_have_count(5)
     shot("postgres jsonb expanded")
