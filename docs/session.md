@@ -105,6 +105,7 @@ id              TEXT PRIMARY KEY  -- also the agent channel id
 seq             INTEGER           -- stable ordinal behind "Session 3"
 label           TEXT              -- NULL = Session <n>; set = pinned by you
 connection_name TEXT              -- NULL is the durable "disconnected" state
+connection_by   TEXT              -- "agent" | "user": who switched it (agent → toast)
 database        TEXT
 workspace       TEXT
 url             TEXT              -- path + query string

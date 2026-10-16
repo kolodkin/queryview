@@ -276,9 +276,17 @@ function Shell() {
   useEffect(() => {
     connectionRef.current = connection
   }, [connection])
+  // The last agent switch toasted, so a row that can't resolve (and so never
+  // matches the screen) doesn't toast on every heartbeat.
+  const toasted = useRef('')
   function followRow(row: SessionState) {
     const c = connectionRef.current
     if (row.connection === (c?.name ?? null) && row.database === (c?.database ?? null)) return
+    const key = `${row.id}/${row.connection}`
+    if (row.connection_by === 'agent' && row.connection !== c?.name && key !== toasted.current) {
+      toasted.current = key
+      setToast(`Agent switched to ${row.connection}`)
+    }
     if (c && row.connection === c.name) setConnection({ ...c, database: row.database })
     else void refreshConnection()
   }
@@ -369,11 +377,6 @@ function Shell() {
       })
     }
     on('connections', () => setConnectionsNonce((n) => n + 1))
-    // The server says who switched, so the user's own switches never toast.
-    on<{ name: string }>('connection', ({ name }) => {
-      setToast(`Agent switched to ${name}`)
-      void refreshConnection()
-    })
     on<QueryPush>('query', (payload) => {
       setQueryPush(payload)
       setToast('Agent updated the query')

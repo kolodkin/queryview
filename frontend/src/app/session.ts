@@ -11,6 +11,8 @@ export type SessionState = {
   label: string
   pinned: boolean
   connection: string | null
+  // Who switched to it: an "agent" switch gets a toast in every tab.
+  connection_by: 'agent' | 'user' | null
   database: string | null
   workspace: string
   url: string

@@ -274,15 +274,16 @@ def test_add_and_remove_connection_tell_an_armed_browser_to_refresh(monkeypatch)
         remote.unregister(rid)
 
 
-def test_use_connection_tells_an_armed_browser_the_agent_switched():
+def test_use_connection_marks_the_switch_as_the_agents():
+    """The row tells every tab who switched; only an agent switch toasts."""
     from queryview.mcp_server import remove_connection, use_connection
 
-    sid = _run(sessions.create_session()).id
+    sid = _connected_session("sc-by-user")
+    assert _run(sessions.get_session_rec(sid)).connection_by == "user"
     assert _agent_add(sid, "ag-switch")["ok"]
-    rid = remote.register(sid)
     try:
         assert _run(use_connection(sid, "ag-switch"))["ok"]
-        assert _run(remote.next_message(rid, 1.0)) == {"type": "connection", "name": "ag-switch"}
+        rec = _run(sessions.get_session_rec(sid))
+        assert (rec.connection_name, rec.connection_by) == ("ag-switch", "agent")
     finally:
         _run(remove_connection(sid, "ag-switch"))
-        remote.unregister(rid)

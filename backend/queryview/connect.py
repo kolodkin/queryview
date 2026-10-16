@@ -406,7 +406,7 @@ async def connect_new(
     return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
 
 
-async def open_saved(sid: str, name: str, database: str | None = None) -> dict[str, Any]:
+async def open_saved(sid: str, name: str, database: str | None = None, by: str = "user") -> dict[str, Any]:
     """Open a connection by name for this session: one of its session
     connections, else a saved one. A `database` not on it fails before the
     session switches."""
@@ -427,7 +427,7 @@ async def open_saved(sid: str, name: str, database: str | None = None) -> dict[s
     _set_session_entry(sid, state)
     if _session_conn(sid, name) is None:
         await _touch_connection(name)
-    await sessions.set_connection(sid, name)
+    await sessions.set_connection(sid, name, by)
     if database is not None:
         await select_database(sid, database)
     return {"ok": True, "name": name, "type": state.type, "databases": state.databases, "database": database}

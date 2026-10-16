@@ -45,6 +45,7 @@ class Session(SQLModel, table=True):
     seq: int  # stable ordinal behind the "Session 3" fallback label
     label: str | None = Field(default=None)  # set = user-pinned name
     connection_name: str | None = Field(default=None)  # NULL = disconnected
+    connection_by: str | None = Field(default=None)  # "agent" | "user": who switched it
     database: str | None = Field(default=None)
     workspace: str = Field(default="default")
     url: str = Field(default=DEFAULT_URL)  # path + search
@@ -60,6 +61,7 @@ class SessionRec:
     seq: int
     label: str | None
     connection_name: str | None
+    connection_by: str | None
     database: str | None
     workspace: str
     url: str
@@ -90,6 +92,7 @@ def _to_rec(row: Session, now: int | None = None) -> SessionRec:
         seq=row.seq,
         label=row.label,
         connection_name=row.connection_name,
+        connection_by=row.connection_by,
         database=row.database,
         workspace=row.workspace,
         url=row.url,
@@ -363,7 +366,7 @@ async def touch_for_test(
         await s.commit()
 
 
-async def set_connection(sid: str, connection_name: str | None) -> None:
+async def set_connection(sid: str, connection_name: str | None, by: str = "user") -> None:
     """Record which connection a session is on, clearing its database — both
     connecting and disconnecting reset the picker. A None name is the durable
     disconnected state; there is no separate 'disconnected' set."""
@@ -373,6 +376,7 @@ async def set_connection(sid: str, connection_name: str | None) -> None:
         if row is None:
             return
         row.connection_name = connection_name
+        row.connection_by = by
         row.database = None
         row.last_active_at = _now_ms()
         s.add(row)
