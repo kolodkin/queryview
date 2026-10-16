@@ -91,14 +91,13 @@ def _to_rows(attrs: Any, records: list[Any], decode_json: bool = True) -> QueryR
     asyncpg hands json/jsonb over as text; decode it so documents arrive
     structured like a ClickHouse JSON column (CSV keeps the text)."""
     meta = [Column(a.name, a.type.name) for a in attrs]
-    decode = [decode_json and c.type in _JSON_TYPES for c in meta]
-    return QueryRows(
-        meta,
-        [
-            [to_json_value(json.loads(v) if d and v is not None else v) for v, d in zip(r, decode, strict=True)]
-            for r in records
-        ],
-    )
+    data = [[to_json_value(v) for v in r] for r in records]
+    json_cols = [i for i, c in enumerate(meta) if c.type in _JSON_TYPES] if decode_json else []
+    for row, record in zip(data, records, strict=True):
+        for i in json_cols:
+            if record[i] is not None:
+                row[i] = to_json_value(json.loads(record[i]))
+    return QueryRows(meta, data)
 
 
 @asynccontextmanager

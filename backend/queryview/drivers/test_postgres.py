@@ -6,6 +6,7 @@ connect/query/describe by e2e."""
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 from queryview.drivers.base import (
     SCRIPT_ROW_CAP,
@@ -240,9 +241,7 @@ def test_to_rows_decodes_json_columns():
     from queryview.drivers.postgres import _to_rows
 
     def attr(name, type_name):
-        a = type("A", (), {"name": name})()
-        a.type = type("T", (), {"name": type_name})()
-        return a
+        return SimpleNamespace(name=name, type=SimpleNamespace(name=type_name))
 
     attrs = (attr("doc", "jsonb"), attr("raw", "json"), attr("note", "text"))
     records = [['{"a": [1, 9007199254740993]}', "[1, 2]", '{"x": 1}'], [None, None, None]]
