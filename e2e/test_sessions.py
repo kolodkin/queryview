@@ -148,3 +148,25 @@ def test_each_test_starts_on_a_fresh_session(left_behind: str, page: Page) -> No
     test released along with its saved panel state."""
     page.goto("/", wait_until="networkidle")
     assert page.evaluate("() => sessionStorage.getItem('qv_session')") != left_behind
+
+
+def test_a_switch_made_elsewhere_names_the_new_connection(seeded_duckdb, page: Page, base_url: str) -> None:
+    """A session connection opened outside this tab (the agent's path) shows in
+    the pill, a toast and the pill's connection list with its session badge."""
+    _connect_duckdb(page, seeded_duckdb)
+    sid = page.evaluate("() => sessionStorage.getItem('qv_session')")
+    r = httpx.post(
+        f"{base_url}/api/db/connect",
+        json={"type": "duckdb", "path": seeded_duckdb, "name": "side-duck", "session": True},
+        headers={"X-QV-Session": sid},
+    )
+    assert r.json()["ok"] is True
+
+    status = page.get_by_test_id("connection-status")
+    expect(status).to_contain_text("side-duck", timeout=15_000)
+    expect(page.get_by_test_id("agent-toast")).to_contain_text("Switched to side-duck")
+    status.click()
+    entry = page.locator('[data-testid="pill-conn"][data-conn="side-duck"]')
+    expect(entry).to_have_attribute("data-active", "true")
+    expect(entry).to_contain_text("session")
+    expect(page.locator('[data-testid="pill-conn"][data-conn="duckdb"]')).to_have_attribute("data-active", "false")

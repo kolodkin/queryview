@@ -41,6 +41,7 @@ import {
 } from './session'
 import { apiFetch } from './api'
 import { listWorkspaces } from './workspace'
+import type { SavedConnection } from './savedConnections'
 
 // Ends the connection; the last entry of the pill's menu.
 function DisconnectButton({ onDisconnect }: { onDisconnect: () => void }) {
@@ -56,25 +57,97 @@ function DisconnectButton({ onDisconnect }: { onDisconnect: () => void }) {
   )
 }
 
-// The menu behind the connection pill: the database list, then Disconnect.
+// The pill menu's connection list: this session's own connections apart from
+// the saved ones, so a switch to an agent-added server is visible.
+function ConnectionList({
+  connections,
+  active,
+  onOpen,
+}: {
+  connections: SavedConnection[]
+  active: string
+  onOpen: (name: string) => void
+}) {
+  const groups = [
+    ['Session', connections.filter((c) => c.scope === 'session')],
+    ['Saved', connections.filter((c) => c.scope !== 'session')],
+  ] as const
+  return (
+    <div data-testid="pill-connections" className="mt-1 border-t border-white/10 pt-1">
+      {groups.map(
+        ([title, list]) =>
+          list.length > 0 && (
+            <div key={title}>
+              <div className="px-2 pt-1 text-xs text-slate-500">{title}</div>
+              {list.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  data-testid="pill-conn"
+                  data-conn={c.name}
+                  data-active={c.name === active}
+                  onClick={() => onOpen(c.name)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-white/10"
+                >
+                  <span
+                    className={`truncate ${c.name === active ? 'text-indigo-200' : 'text-slate-200'}`}
+                  >
+                    {c.name}
+                  </span>
+                  {c.scope === 'session' && (
+                    <span className="shrink-0 text-xs text-amber-300">
+                      session{c.created_by === 'agent' ? ' · agent' : ''}
+                    </span>
+                  )}
+                  {c.name === active && (
+                    <span
+                      className="ml-auto h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                      aria-label="active connection"
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+          ),
+      )}
+    </div>
+  )
+}
+
+// The menu behind the connection pill: the database list, the connections,
+// then Disconnect.
 // Long connections list hundreds of databases, so it carries the landing
 // picker's filter; a picker-less driver gets just Disconnect.
 function DatabaseMenu({
   connection,
+  connections,
   onSelect,
+  onOpenConnection,
   onDisconnect,
 }: {
   connection: Connection
+  connections: SavedConnection[]
   onSelect: (database: string) => void
+  onOpenConnection: (name: string) => void
   onDisconnect: () => void
 }) {
+  const footer = (
+    <>
+      <ConnectionList
+        connections={connections}
+        active={connection.name}
+        onOpen={onOpenConnection}
+      />
+      <DisconnectButton onDisconnect={onDisconnect} />
+    </>
+  )
   if (connection.databases.length === 0) {
     return (
       <div
         data-testid="db-select"
-        className="glass-popover absolute left-0 top-full z-10 mt-2 w-48 p-1 text-sm"
+        className="glass-popover absolute left-0 top-full z-10 mt-2 w-64 p-1 text-sm"
       >
-        <DisconnectButton onDisconnect={onDisconnect} />
+        {footer}
       </div>
     )
   }
@@ -91,7 +164,7 @@ function DatabaseMenu({
         <span className={`truncate ${current ? 'text-indigo-200' : 'text-slate-200'}`}>{db}</span>
       )}
       itemAction={(db) => <CopyName name={db} testid="db-copy" />}
-      footer={<DisconnectButton onDisconnect={onDisconnect} />}
+      footer={footer}
     />
   )
 }
@@ -112,6 +185,10 @@ function Shell() {
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
+  // The pill menu's connection list, refetched on open and on the agent's
+  // `connections` push (add/remove_connection); the nonce also reaches Connect.
+  const [connections, setConnections] = useState<SavedConnection[]>([])
+  const [connectionsNonce, setConnectionsNonce] = useState(0)
   // Seeded from the session once it attaches.
   const [workspace, setWorkspace] = useState('')
   // The active workspace's autosave flag (docs/workspace.md#autosave), bumped
@@ -148,6 +225,18 @@ function Shell() {
       live = false
     }
   }, [workspace, settingsNonce])
+
+  useEffect(() => {
+    if (!dbOpen) return
+    let live = true
+    apiFetch('/api/db/connections')
+      .then((r) => r.json())
+      .then((data) => live && Array.isArray(data.connections) && setConnections(data.connections))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [dbOpen, connectionsNonce])
 
   function switchWorkspace(name: string) {
     void patchSession({ workspace: name })
@@ -189,9 +278,17 @@ function Shell() {
   useEffect(() => {
     connectionRef.current = connection
   }, [connection])
+  const lastRowId = useRef<string | null>(null)
   function followRow(row: SessionState) {
     const c = connectionRef.current
+    const sameSession = lastRowId.current === row.id
+    lastRowId.current = row.id
     if (row.connection === (c?.name ?? null) && row.database === (c?.database ?? null)) return
+    // Moved to another server from outside this tab (the agent, another tab):
+    // say so, since the user may have been looking at another server's data.
+    if (sameSession && row.connection && row.connection !== c?.name) {
+      setToast(`Switched to ${row.connection}`)
+    }
     if (c && row.connection === c.name) setConnection({ ...c, database: row.database })
     else void refreshConnection()
   }
@@ -280,6 +377,7 @@ function Shell() {
         }
       })
     }
+    on('connections', () => setConnectionsNonce((n) => n + 1))
     on<QueryPush>('query', (payload) => {
       setQueryPush(payload)
       setToast('Agent updated the query')
@@ -363,14 +461,21 @@ function Shell() {
                 />
                 <span className="truncate">
                   <span className="hidden md:inline">connected - </span>
-                  {connection.database ?? connection.name}
+                  {connection.database
+                    ? `${connection.name} · ${connection.database}`
+                    : connection.name}
                 </span>
                 <span className="text-xs text-slate-400">▾</span>
               </button>
               {dbOpen && (
                 <DatabaseMenu
                   connection={connection}
+                  connections={connections}
                   onSelect={(db) => void switchDatabase(db)}
+                  onOpenConnection={(name) => {
+                    setDbOpen(false)
+                    if (name !== connection.name) void openConnection(name)
+                  }}
                   onDisconnect={() => void disconnect()}
                 />
               )}
@@ -559,7 +664,12 @@ function Shell() {
           <Route
             path="/connect"
             element={
-              <ConnectView key={sessionKey} connection={connection} setConnection={setConnection} />
+              <ConnectView
+                key={sessionKey}
+                connection={connection}
+                setConnection={setConnection}
+                listNonce={connectionsNonce}
+              />
             }
           />
           <Route path="/explorer" element={<ExplorerView connection={connection} />} />

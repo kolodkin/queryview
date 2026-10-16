@@ -89,6 +89,13 @@ def push(remote_id: str, payload: dict[str, Any]) -> tuple[bool, str]:
     return True, "delivered"
 
 
+def notify(remote_id: str, payload: dict[str, Any]) -> None:
+    """Best-effort UI refresh hint: no validation or lock, a no-op when unarmed."""
+    channel = _channels.get(remote_id)
+    if channel is not None:
+        channel.queue.put_nowait(payload)
+
+
 async def next_message(remote_id: str, timeout: float) -> dict[str, Any] | None:
     """Wait up to `timeout` seconds for the next payload on a channel. Returns
     None on timeout or if the channel is gone."""

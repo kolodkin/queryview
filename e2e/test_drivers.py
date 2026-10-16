@@ -31,7 +31,7 @@ CASES = [
         "clickhouse-form",
         "ch-connect",
         "seeded_test_db",
-        f"connected - {CH_DB}",
+        f"· {CH_DB}",
         db_option=CH_DB,
     ),
     DriverCase(
@@ -39,7 +39,7 @@ CASES = [
         "postgres-form",
         "pg-connect",
         "seeded_pg_db",
-        f"connected - {PG_DB}",
+        f"· {PG_DB}",
         db_option=PG_DB,
     ),
     DriverCase(

@@ -273,6 +273,7 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
     state, message = await add_session_connection(session_id, name.strip(), parsed, type, "agent")
     if state is None:
         return {"ok": False, "message": message}
+    remote.notify(session_id, {"type": "connections"})
     return {"ok": True, "name": state.name, "type": type, "databases": state.databases}
 
 
@@ -288,7 +289,9 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
     err = _not_yours(session_id, name)
     if err is not None:
         return {"ok": False, "message": err}
-    return await remove_session_connection(session_id, name)
+    out = await remove_session_connection(session_id, name)
+    remote.notify(session_id, {"type": "connections"})
+    return out
 
 
 @mcp.tool()

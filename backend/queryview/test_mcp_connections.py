@@ -251,3 +251,22 @@ def test_session_connection_names_are_unique_across_sessions():
     assert _run(add_session_connection("", "ag-nosid", DuckConfig(":memory:"), "duckdb", "user"))[1] == "no session"
     # The unknown-name error lists the session's own connections too.
     assert "ag-shared" in _run(open_saved(a, "ag-absent"))["message"]
+
+
+def test_add_connection_tells_an_armed_browser_to_refresh_its_list(monkeypatch):
+    from queryview.drivers import DRIVERS
+    from queryview.drivers.base import DatabasesResult
+    from queryview.mcp_server import add_connection
+
+    async def one_db(config):
+        return DatabasesResult(databases=["a"])
+
+    monkeypatch.setattr(DRIVERS["clickhouse"], "list_databases", one_db)
+    sid = _run(sessions.create_session()).id
+    rid = remote.register(sid)
+    try:
+        cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
+        assert _run(add_connection(sid, "ag-notify", "clickhouse", cfg))["ok"]
+        assert _run(remote.next_message(rid, 1.0)) == {"type": "connections"}
+    finally:
+        remote.unregister(rid)

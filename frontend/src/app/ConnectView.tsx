@@ -26,9 +26,12 @@ const cardGrid = 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
 function ConnectView({
   connection,
   setConnection,
+  listNonce,
 }: {
   connection: Connection | null
   setConnection: (c: Connection | null) => void
+  // Bumped when the agent adds or removes a session connection.
+  listNonce: number
 }) {
   const navigate = useNavigate()
   const [saved, setSaved] = useState<SavedConnection[] | null>(null)
@@ -61,7 +64,7 @@ function ConnectView({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshSaved()
-  }, [refreshSaved])
+  }, [refreshSaved, listNonce])
 
   const count = saved?.length ?? 0
   const many = count > MANY_THRESHOLD
