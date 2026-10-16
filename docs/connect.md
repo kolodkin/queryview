@@ -164,9 +164,8 @@ restarts (the session then reads as disconnected).
   in the pill menu's connection list (session ones listed apart from saved, the
   active one marked). The user's own get none.
 - When one is added or removed, an armed tab's lists refresh. The session row
-  records who switched (`connection_by`: `agent` | `user`), so every tab on the
-  session toasts "Agent switched to <name>" for the agent's `use_connection`
-  only, never for the user's own switch.
+  records who switched (`connection_by`: `agent` | `user`); a tab that sees the
+  agent's `use_connection` toasts "Agent switched to <name>", never the user's.
 - You add one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved connections and all sessions' ones.
 - The agent may add (ClickHouse or Postgres only: DuckDB reads local files),
