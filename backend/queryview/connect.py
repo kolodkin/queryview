@@ -435,11 +435,11 @@ async def open_saved(
     return {"ok": True, "name": name, "type": state.type, "databases": state.databases, "database": database}
 
 
-async def disconnect(sid: str) -> dict[str, Any]:
+async def disconnect(sid: str, by: Literal["agent", "user"] = "user") -> dict[str, Any]:
     """Drop this session's active connection. Saved connections are left intact
     — the Connect page still reopens them."""
     _sessions.pop(sid, None)
-    await sessions.set_connection(sid, None)
+    await sessions.set_connection(sid, None, by)
     return {"ok": True}
 
 
@@ -490,7 +490,7 @@ async def add_session_connection(
     return state, message
 
 
-async def remove_session_connection(sid: str, name: str) -> dict[str, Any]:
+async def remove_session_connection(sid: str, name: str, by: Literal["agent", "user"] = "user") -> dict[str, Any]:
     """Drop a session connection, disconnecting the session if it is active."""
     if _session_conns.get(sid, {}).pop(name, None) is None:
         return {"ok": False, "message": f'no session connection named "{name}"'}
@@ -498,7 +498,7 @@ async def remove_session_connection(sid: str, name: str) -> dict[str, Any]:
     # The row, not the LRU cache: an evicted session must not keep pointing here.
     rec = await sessions.get_session_rec(sid)
     if rec is not None and rec.connection_name == name:
-        await disconnect(sid)
+        await disconnect(sid, by)
     return {"ok": True}
 
 

@@ -285,5 +285,8 @@ def test_use_connection_marks_the_switch_as_the_agents():
         assert _run(use_connection(sid, "ag-switch"))["ok"]
         rec = _run(sessions.get_session_rec(sid))
         assert (rec.connection_name, rec.connection_by) == ("ag-switch", "agent")
+        assert _run(remove_connection(sid, "ag-switch"))["ok"]
+        rec = _run(sessions.get_session_rec(sid))
+        assert (rec.connection_name, rec.connection_by) == (None, "agent")
     finally:
         _run(remove_connection(sid, "ag-switch"))

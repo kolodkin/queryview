@@ -288,7 +288,7 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
     err = _not_yours(session_id, name)
     if err is not None:
         return {"ok": False, "message": err}
-    return await remove_session_connection(session_id, name)
+    return await remove_session_connection(session_id, name, by="agent")
 
 
 @mcp.tool()

@@ -276,17 +276,21 @@ function Shell() {
   useEffect(() => {
     connectionRef.current = connection
   }, [connection])
-  // The last agent switch toasted, so a row that can't resolve (and so never
-  // matches the screen) doesn't toast on every heartbeat.
-  const toasted = useRef('')
+  // connection_by stays on the row, so toast on the change this tab sees, not
+  // on the flag: not on load, a session switch, or a repeated heartbeat.
+  const lastRow = useRef<SessionState | null>(null)
   function followRow(row: SessionState) {
-    const c = connectionRef.current
-    if (row.connection === (c?.name ?? null) && row.database === (c?.database ?? null)) return
-    const key = `${row.id}/${row.connection}`
-    if (row.connection_by === 'agent' && row.connection !== c?.name && key !== toasted.current) {
-      toasted.current = key
+    const prev = lastRow.current
+    lastRow.current = row
+    if (
+      row.connection_by === 'agent' &&
+      prev?.id === row.id &&
+      row.connection !== prev.connection
+    ) {
       setToast(`Agent switched to ${row.connection}`)
     }
+    const c = connectionRef.current
+    if (row.connection === (c?.name ?? null) && row.database === (c?.database ?? null)) return
     if (c && row.connection === c.name) setConnection({ ...c, database: row.database })
     else void refreshConnection()
   }
