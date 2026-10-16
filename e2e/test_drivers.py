@@ -144,8 +144,7 @@ def test_postgres_jsonb_renders_structured(seeded_pg_db, page: Page, shot) -> No
     _connect(page, CASES[1], seeded_pg_db)
     open_query_panel(page)
     page.get_by_test_id("query-input").fill(
-        "SELECT '{\"region\": \"emea\", \"tier\": 2}'::jsonb AS doc, "
-        "'[\"a\", \"b\", \"c\", \"d\", \"e\"]'::jsonb AS tags"
+        'SELECT \'{"region": "emea", "tier": 2}\'::jsonb AS doc, \'["a", "b", "c", "d", "e"]\'::jsonb AS tags'
     )
     page.get_by_test_id("query-run").click()
     output = page.get_by_test_id("query-output")
