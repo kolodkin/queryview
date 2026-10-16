@@ -6,6 +6,7 @@ connect/query/describe by e2e."""
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 from queryview.drivers.base import (
     SCRIPT_ROW_CAP,
@@ -234,3 +235,21 @@ def test_errors_become_err(monkeypatch):
     assert asyncio.run(d.run_query(cfg, "SELECT 1", "db", 10, 0, None)) == Err("refused")
     assert asyncio.run(d.export_csv(cfg, "SELECT 1", "db", 10, 0, None)) == Err("refused")
     assert asyncio.run(d.describe_query(cfg, "SELECT 1", "db")) == Err("refused")
+
+
+def test_to_rows_decodes_json_columns():
+    from queryview.drivers.postgres import _to_rows
+
+    def attr(name, type_name):
+        return SimpleNamespace(name=name, type=SimpleNamespace(name=type_name))
+
+    attrs = (attr("doc", "jsonb"), attr("raw", "json"), attr("docs", "_jsonb"), attr("note", "text"))
+    records = [
+        ['{"a": [1, 9007199254740993], "f": 0.10000000000000000001}', "[1, 2]", ['{"x": 1}', None], '{"x": 1}'],
+        [None, None, None, None],
+    ]
+    assert _to_rows(attrs, records).data == [
+        [{"a": [1, "9007199254740993"], "f": "0.10000000000000000001"}, [1, 2], [{"x": 1}, None], '{"x": 1}'],
+        [None, None, None, None],
+    ]
+    assert _to_rows(attrs, records, decode_json=False).data[0][0] == records[0][0]

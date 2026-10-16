@@ -3,8 +3,10 @@ lists real databases and the selected one is where queries run."""
 
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
+from decimal import Decimal
 from typing import Any
 
 import asyncpg
@@ -82,10 +84,26 @@ async def _connect(c: PgConfig, database: str | None, command_timeout: float = P
         await conn.close()
 
 
-def _to_rows(attrs: Any, records: list[Any]) -> QueryRows:
-    """asyncpg's statement attributes and records as the shared result shape."""
+# json/jsonb and their arrays (`_json`, `_jsonb`), which asyncpg hands over as text.
+_JSON_TYPES = {"json", "jsonb", "_json", "_jsonb"}
+
+
+def _decode_json(v: Any) -> Any:
+    """Structured like a ClickHouse JSON column; Decimal keeps every digit."""
+    if isinstance(v, list):
+        return [_decode_json(x) for x in v]
+    return json.loads(v, parse_float=Decimal) if isinstance(v, str) else v
+
+
+def _to_rows(attrs: Any, records: list[Any], decode_json: bool = True) -> QueryRows:
+    """asyncpg's statement attributes and records as the shared result shape.
+    CSV passes `decode_json=False` to keep json as text."""
     meta = [Column(a.name, a.type.name) for a in attrs]
-    return QueryRows(meta, [[to_json_value(v) for v in r] for r in records])
+    is_json = [decode_json and c.type in _JSON_TYPES for c in meta]
+    return QueryRows(
+        meta,
+        [[to_json_value(_decode_json(v) if j else v) for v, j in zip(r, is_json, strict=True)] for r in records],
+    )
 
 
 @asynccontextmanager
@@ -159,12 +177,13 @@ class PostgresDriver:
         limit: int,
         offset: int,
         order_by: list[dict[str, Any]] | None,
+        decode_json: bool = True,
     ) -> QueryRows:
         order_clause = build_order_by(order_by, '"')
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias="_qv")
         async with _connect(config, database) as conn:
             stmt = await conn.prepare(paginated)
-            return _to_rows(stmt.get_attributes(), await stmt.fetch())
+            return _to_rows(stmt.get_attributes(), await stmt.fetch(), decode_json)
 
     async def run_query(
         self,
@@ -190,7 +209,7 @@ class PostgresDriver:
         order_by: list[dict[str, Any]] | None,
     ) -> TextResult | Err:
         try:
-            rows = await self._fetch_page(config, sql, database, limit, offset, order_by)
+            rows = await self._fetch_page(config, sql, database, limit, offset, order_by, decode_json=False)
         except Exception as e:  # noqa: BLE001
             return Err(str(e) or "connection failed")
         return TextResult(to_csv([c.name for c in rows.meta], rows.data))
