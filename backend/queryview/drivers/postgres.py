@@ -89,8 +89,7 @@ _JSON_TYPES = {"json", "jsonb", "_json", "_jsonb"}
 
 
 def _decode_json(v: Any) -> Any:
-    """Parse json text (recursing into arrays) so documents arrive structured
-    like a ClickHouse JSON column; Decimal keeps the numbers' digits."""
+    """Structured like a ClickHouse JSON column; Decimal keeps every digit."""
     if isinstance(v, list):
         return [_decode_json(x) for x in v]
     return json.loads(v, parse_float=Decimal) if isinstance(v, str) else v
@@ -98,7 +97,7 @@ def _decode_json(v: Any) -> Any:
 
 def _to_rows(attrs: Any, records: list[Any], decode_json: bool = True) -> QueryRows:
     """asyncpg's statement attributes and records as the shared result shape.
-    json columns are decoded unless `decode_json` is off (CSV keeps the text)."""
+    CSV passes `decode_json=False` to keep json as text."""
     meta = [Column(a.name, a.type.name) for a in attrs]
     is_json = [decode_json and c.type in _JSON_TYPES for c in meta]
     return QueryRows(
