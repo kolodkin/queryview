@@ -32,7 +32,7 @@ function ConnectView({
 }: {
   connection: Connection | null
   setConnection: (c: Connection | null) => void
-  // Bumped when the agent adds or removes a session connection.
+  // Bumped when a session connection is added or removed.
   listNonce: number
 }) {
   const navigate = useNavigate()

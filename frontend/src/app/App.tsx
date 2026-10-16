@@ -183,8 +183,8 @@ function Shell() {
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
-  // The pill menu's connection list, refetched on open and on the agent's
-  // `connections` push (add/remove_connection); the nonce also reaches Connect.
+  // The pill menu's connection list, refetched on open and on a `connections`
+  // push; the nonce also refreshes Connect.
   const [connections, setConnections] = useState<SavedConnection[]>([])
   const [connectionsNonce, setConnectionsNonce] = useState(0)
   // Seeded from the session once it attaches.
@@ -282,10 +282,8 @@ function Shell() {
     const prev = lastRow.current
     lastRow.current = row
     if (row.connection === (c?.name ?? null) && row.database === (c?.database ?? null)) return
-    // Moved to another server from outside this tab (the agent, another tab):
-    // say so, since the user may have been looking at another server's data.
-    // Only on a change of the row itself: a row naming a connection that no
-    // longer resolves repeats on every heartbeat.
+    // Flag a server switch made outside this tab. Compare rows, not the screen:
+    // a row naming an unresolvable connection repeats every heartbeat.
     if (prev?.id === row.id && row.connection && row.connection !== prev.connection) {
       setToast(`Switched to ${row.connection}`)
     }
