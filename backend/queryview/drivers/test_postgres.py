@@ -299,6 +299,6 @@ def test_run_sql_runs_as_written_in_a_read_only_transaction(monkeypatch):
         return _Conn()
 
     monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
-    r = asyncio.run(PostgresDriver().run_sql(PgConfig("h", 5432, "u", ""), "SHOW search_path;", "mydb", 11))
+    r = asyncio.run(PostgresDriver().run_sql(PgConfig("h", 5432, "u", ""), "SHOW search_path", "mydb", 11))
     assert isinstance(r, RowsResult) and r.rows.data == [["alpha"]]
     assert captured == {"readonly": True, "sql": "SHOW search_path", "n": 11}

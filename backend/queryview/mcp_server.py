@@ -94,12 +94,12 @@ async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any
     from .validation import MAX_LIMIT
 
     limit = max(0, min(limit, MAX_LIMIT))
+    deadline = RUN_SQL_TIMEOUT_SECONDS + 10  # past the drivers' own limits: a backstop
     try:
-        # Hard deadline whatever the driver does, so a call can't hang the agent.
-        async with asyncio.timeout(RUN_SQL_TIMEOUT_SECONDS + 10):
+        async with asyncio.timeout(deadline):
             r = await _run_sql(session_id, sql, limit + 1)
     except TimeoutError:
-        return {"ok": False, "message": f"query timed out after {RUN_SQL_TIMEOUT_SECONDS + 10}s"}
+        return {"ok": False, "message": f"query timed out after {deadline}s"}
     if not r["ok"]:
         return {"ok": False, "message": r["message"]}
     rows = r["data"]

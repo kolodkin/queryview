@@ -127,10 +127,16 @@ async def ch_fetch(
     reuses a caller's connection across several queries."""
     url = f"http://{c.host}:{c.port}/"
     q = f"{query}\nFORMAT {clause}" if clause else query
-    params = dict(settings or {})
+    # Every query gets a logged query_id, to trace it in system.query_log, and
+    # a read is dropped server-side when we hang up (e.g. on a client timeout).
+    query_id = uuid.uuid4().hex
+    params = {"query_id": query_id, **(settings or {})}
+    if not write:
+        params["cancel_http_readonly_queries_on_client_close"] = "1"
     if database:
         params["database"] = database
     auth = (c.username, c.password)
+    log.info("clickhouse query_id=%s database=%s", query_id, database)
 
     async def send(cl: httpx.AsyncClient) -> httpx.Response:
         if write:
@@ -144,12 +150,12 @@ async def ch_fetch(
             async with httpx.AsyncClient(timeout=CH_TIMEOUT_SECONDS) as own:
                 res = await send(own)
     except httpx.TimeoutException:
-        return Err("connection timed out")
+        return Err(f"connection timed out (query_id {query_id})")
     except httpx.HTTPError as err:
         return Err(str(err) or "connection failed")
     text = res.text.strip()
     if not res.is_success:
-        return Err(f"ClickHouse responded {res.status_code}: {text[:200]}")
+        return Err(f"ClickHouse responded {res.status_code}: {text[:200]} (query_id {query_id})")
     return text
 
 
@@ -159,9 +165,10 @@ async def ch_query(
     kind: type[R],
     database: str | None = None,
     settings: dict[str, str] | None = None,
+    client: httpx.AsyncClient | None = None,
 ) -> R | Err:
     """Run `query` asking for `kind`'s format and decode the body into it."""
-    text = await ch_fetch(c, query, kind.clause, database, {**kind.settings, **(settings or {})})
+    text = await ch_fetch(c, query, kind.clause, database, {**kind.settings, **(settings or {})}, client=client)
     if isinstance(text, Err):
         return text
     return kind.from_text(text)
@@ -249,27 +256,15 @@ class ClickHouseDriver:
         return await ch_query(config, paginated, ChRows, database=database)
 
     async def run_sql(self, config: ChConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
-        # The server stops past max_rows and at the time limit, and drops the
-        # query if we hang up; query_id traces it in system.query_log.
-        query_id = uuid.uuid4().hex
+        # Stop past max_rows (between blocks, so the caller trims) and at the time limit.
         settings = {
-            **JSON_COMPACT_SETTINGS,
-            "query_id": query_id,
             "max_result_rows": str(max_rows),
             "result_overflow_mode": "break",
             "max_execution_time": str(RUN_SQL_TIMEOUT_SECONDS),
-            "cancel_http_readonly_queries_on_client_close": "1",
         }
-        log.info("run_sql query_id=%s database=%s", query_id, database)
         timeout = httpx.Timeout(CH_TIMEOUT_SECONDS, read=RUN_SQL_TIMEOUT_SECONDS + CH_TIMEOUT_SECONDS)
         async with httpx.AsyncClient(timeout=timeout) as client:
-            text = await ch_fetch(config, sql.rstrip().rstrip(";"), ChRows.clause, database, settings, client=client)
-        if isinstance(text, Err):
-            return Err(f"{text.message} (query_id {query_id})")
-        r = ChRows.from_text(text)
-        if isinstance(r, ChRows):  # break mode can overshoot by up to a block
-            r.rows.data[max_rows:] = []
-        return r
+            return await ch_query(config, sql, ChRows, database, settings, client=client)
 
     async def export_csv(
         self,

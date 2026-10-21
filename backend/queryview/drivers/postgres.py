@@ -206,7 +206,7 @@ class PostgresDriver:
                 _connect(config, database, RUN_SQL_TIMEOUT_SECONDS) as conn,
                 conn.transaction(readonly=True),  # unwrapped SQL could otherwise write
             ):
-                stmt = await conn.prepare(sql.rstrip().rstrip(";"))
+                stmt = await conn.prepare(sql)
                 records = await (await stmt.cursor()).fetch(max_rows)
                 return RowsResult(_to_rows(stmt.get_attributes(), records))
         except Exception as e:  # noqa: BLE001

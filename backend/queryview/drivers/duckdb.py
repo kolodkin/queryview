@@ -4,12 +4,14 @@ library is driven in a worker thread so the event loop is never blocked."""
 from __future__ import annotations
 
 import asyncio
+import threading
 from dataclasses import asdict, dataclass
 from typing import Any
 
 import duckdb
 
 from .base import (
+    RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_ROW_CAP,
     Column,
     DatabasesResult,
@@ -165,13 +167,13 @@ class DuckDBDriver:
     async def run_sql(self, config: DuckConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
         def _work() -> QueryRows:
             con = _open(config.path)
+            timer = threading.Timer(RUN_SQL_TIMEOUT_SECONDS, con.interrupt)  # DuckDB has no server-side limit
+            timer.start()
             try:
-                rel = con.sql(sql.rstrip().rstrip(";"))
-                if rel is None:  # a statement without a result set
-                    return QueryRows([], [])
-                meta = [Column(name, str(t)) for name, t in zip(rel.columns, rel.types, strict=True)]
-                return QueryRows(meta, [[to_json_value(v) for v in row] for row in rel.fetchmany(max_rows)])
+                rel = con.sql(sql)
+                return QueryRows([], []) if rel is None else _rel_rows(rel.limit(max_rows))
             finally:
+                timer.cancel()
                 con.close()
 
         try:

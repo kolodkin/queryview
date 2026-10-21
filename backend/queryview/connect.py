@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from alembic.config import Config
 
 from .drivers import DRIVERS
-from .drivers.base import DriverConfig, Err, select_all_sql
+from .drivers.base import DriverConfig, Err, RowsResult, select_all_sql
 
 # --- Storage (SQLite, lazily opened) --------------------------------------
 
@@ -579,9 +579,7 @@ async def run_query(
     if s is None:
         return err  # type: ignore[return-value]
     r = await DRIVERS[s.type].run_query(s.config, sql, s.database, limit, offset, order_by)
-    if isinstance(r, Err):
-        return {"ok": False, "message": r.message}
-    return {"ok": True, "database": s.database, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
+    return _rows_reply(s, r)
 
 
 async def run_sql(sid: str, sql: str, max_rows: int) -> dict[str, Any]:
@@ -591,7 +589,11 @@ async def run_sql(sid: str, sql: str, max_rows: int) -> dict[str, Any]:
     s, err = await _gated_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
-    r = await DRIVERS[s.type].run_sql(s.config, sql, s.database, max_rows)
+    r = await DRIVERS[s.type].run_sql(s.config, sql.rstrip().rstrip(";"), s.database, max_rows)
+    return _rows_reply(s, r)
+
+
+def _rows_reply(s: _SessionState, r: RowsResult | Err) -> dict[str, Any]:
     if isinstance(r, Err):
         return {"ok": False, "message": r.message}
     return {"ok": True, "database": s.database, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
