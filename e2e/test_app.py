@@ -141,6 +141,26 @@ def test_the_pill_menu_relists_databases_on_open(seeded_test_db, page: Page) -> 
         ch_exec(f"DROP DATABASE IF EXISTS {fresh}")
 
 
+def test_database_names_copy_from_the_picker_and_the_pill(seeded_test_db, page: Page) -> None:
+    """A database name copies from its picker row (without selecting it) and,
+    once selected, from the status pill."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    open_connect(page)
+    start_new_connection(page, "clickhouse")
+    page.get_by_test_id("ch-connect").click()
+    expect(page.get_by_test_id("db-picker")).to_be_visible()
+    page.locator(f'[data-db="{CH_DB}"]').locator("xpath=..").get_by_test_id("db-option-copy").click()
+    assert page.evaluate("navigator.clipboard.readText()") == CH_DB
+    expect(page.get_by_test_id("db-picker")).to_be_visible()
+
+    page.locator(f'[data-db="{CH_DB}"]').click()
+    expect(page.get_by_test_id("connection-status")).to_contain_text(CH_DB)
+    page.evaluate("navigator.clipboard.writeText('')")
+    page.get_by_test_id("status-db-copy").click()
+    assert page.evaluate("navigator.clipboard.readText()") == CH_DB
+    expect(page.get_by_test_id("db-select")).to_have_count(0)
+
+
 def _switch_database_from_pill(page: Page, database: str) -> None:
     page.get_by_test_id("connection-status").click()
     page.get_by_test_id("db-select-filter").fill(database)
@@ -322,6 +342,7 @@ def test_many_connections(seeded_test_db, page: Page, base_url: str) -> None:
     second = cards.nth(1)
     expect(second).to_have_attribute("data-highlighted", "true")
     name = second.get_attribute("data-conn")
+    assert name
     page.keyboard.press("Enter")
     expect(page).to_have_url(re.compile(r"/explorer"))
-    expect(page.get_by_test_id("connection-status")).to_contain_text(f"connected - {name}")
+    expect(page.get_by_test_id("connection-status")).to_contain_text(name)

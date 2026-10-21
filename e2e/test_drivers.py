@@ -47,7 +47,7 @@ CASES = [
         "duckdb-form",
         "duck-connect",
         "seeded_duckdb",
-        "connected - duckdb",
+        "duckdb",
         path_field="duck-path",
     ),
 ]

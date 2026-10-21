@@ -54,7 +54,7 @@ fails, the error suggests `host.docker.internal` (see the README's
 - **Active connection** — held at the **session** level (see
   [queryview.md](./queryview.md)). One per session.
 - **Database selection** — after connecting, the user picks a database. Only
-  then does the top-left indicator read `🟢 connected - <connection> · <database>`. The choice
+  then does the top-left indicator read `🟢 <connection> · <database>`. The choice
   is remembered with the connection.
 
 ## Creating a connection
@@ -87,7 +87,7 @@ cards ── "New connection" card ──▶ connection form
                                               │
                               pick a database  │
                                               ▼
-                              🟢 connected - <connection> · <database>  (explorer)
+                              🟢 <connection> · <database>  (explorer)
 
 cards ── saved card ──▶ opens <name>, activates it ──▶ database picker ──▶ pick
 ```
@@ -98,16 +98,16 @@ After connecting, the picker lists the databases (`SHOW DATABASES`), the last
 one used highlighted; **← Connections** returns to the cards, leaving the
 connection open. A filter input (focused on open) narrows the list by case-insensitive
 substring; **Enter** selects the first remaining match, and an empty result
-shows "No databases match". Selecting a database:
+shows "No databases match". Each row has a copy icon for its name. Selecting a database:
 
 - sets the session's selected database,
 - persists it on the saved connection (`POST /api/db/database`),
-- collapses the picker and shows the top-left indicator `🟢 connected - <connection> · <database>`,
+- collapses the picker and shows the top-left indicator `🟢 <connection> · <database>`,
 - makes the query panel available on QueryView (see [query.md](./query.md)),
 - and lands on the explorer (see
   [queryview.md](./queryview.md#landing-page)).
 
-Clicking the `🟢 connected - <connection> · <database>` pill reopens the same list as a
+Clicking the `🟢 <connection> · <database>` pill reopens the same list as a
 dropdown — same filter, plus **Escape** to close — so the database can be
 switched from any page without going back to Connect. Below the databases it
 lists the connections; clicking one opens it. Both the dropdown and the picker
@@ -231,5 +231,5 @@ interface with HTTP Basic auth and a 5s timeout.
 
 CI runs a real `clickhouse/clickhouse-server` service container so the e2e suite
 exercises an actual connection: it asserts that connecting succeeds, a database
-can be selected, the indicator shows `connected - <connection> · <database>`, and a query
+can be selected, the indicator shows `<connection> · <database>`, and a query
 against a seeded `test` database returns its rows.

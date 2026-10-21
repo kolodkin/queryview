@@ -13,6 +13,7 @@ import {
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
 import { AgentBadge } from './controls/AgentBadge'
+import { CopyName } from './controls/CopyName'
 import { timeAgo } from './timeAgo'
 import {
   MANY_THRESHOLD,
@@ -640,17 +641,19 @@ function DatabasePicker({
       )}
       <div className="mt-3 flex flex-wrap gap-2">
         {visible.map((db) => (
-          <button
-            key={db}
-            type="button"
-            onClick={() => onSelect(db)}
-            data-testid="db-option"
-            data-db={db}
-            title={db === remembered ? 'Last used' : undefined}
-            className={`glass-toggle px-3 py-1.5 text-sm ${db === remembered ? 'is-active-soft' : ''}`}
-          >
-            {db}
-          </button>
+          <div key={db} className="group flex items-center">
+            <button
+              type="button"
+              onClick={() => onSelect(db)}
+              data-testid="db-option"
+              data-db={db}
+              title={db === remembered ? 'Last used' : undefined}
+              className={`glass-toggle px-3 py-1.5 text-sm ${db === remembered ? 'is-active-soft' : ''}`}
+            >
+              {db}
+            </button>
+            <CopyName name={db} testid="db-option-copy" />
+          </div>
         ))}
       </div>
     </section>

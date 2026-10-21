@@ -11,7 +11,7 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
 
 ```
 ┌───────────────────────────────────────────────────────────┐
-│ 🟢 connected - default   ← connection status               │
+│ 🟢 default               ← connection status               │
 │                                                           │
 │                        QueryView                          │
 │                   Choose a connection                     │
@@ -44,7 +44,7 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
 - **← Connections** — on the form and the picker; back to the cards.
 - **Connection status** — the one element that persists across every page: a
   pill in the **top-left** corner, hidden until a database is selected, then
-  showing 🟢 `connected - <connection> · <database>` (without `connected - ` below `md` width).
+  showing 🟢 `<connection> · <database>`, with a copy icon for the database name.
   Clicking it opens a searchable database switcher; each row's **copy** icon
   copies the name without switching. Below it, the connections (this session's
   own, the agent's badged `agent`, then saved; the active one marked) switch

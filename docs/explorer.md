@@ -11,7 +11,7 @@ order-by select the query panel uses.
 
 ```
 ┌───────────────────────────────────────────────────┐
-│ 🟢 connected - test      QueryView Explorer Dashboard │
+│ 🟢 test                  QueryView Explorer Dashboard │
 │                                                     │
 │ ┌────────┐ ┌─────────────────────────────────────┐ │
 │ │ Tables │ │ items ↻    Limit [100] ← Prev Next → │ │
