@@ -504,6 +504,23 @@ def forget_session(sid: str) -> None:
     _sessions.pop(sid, None)
 
 
+async def refresh_databases(sid: str) -> dict[str, Any]:
+    """Re-list this session's connection's databases. The list is cached at
+    connect time, so one created since is invisible until the next connect;
+    the pill menu and the Connect-page picker call this when they open. The
+    selected database is kept even if it is no longer listed: the session is
+    still on it, and the next select tells the user."""
+    await _ensure_session(sid)
+    s = _get_session_entry(sid)
+    if s is None:
+        return {"ok": False, "message": "not connected", "reason": "no-session"}
+    r = await DRIVERS[s.type].list_databases(s.config)
+    if isinstance(r, Err):
+        return {"ok": False, "message": _with_localhost_hint(r.message, s.config)}
+    s.databases = r.databases
+    return {"ok": True, "databases": s.databases}
+
+
 async def select_database(sid: str, database: str) -> dict[str, Any]:
     """Select this session's active connection's database."""
     s = _get_session_entry(sid)

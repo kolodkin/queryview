@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { filterNames, useDismiss } from '../core'
-import { isReady, openSaved, selectDatabase, toConnection, type Connection } from './connection'
+import { isReady, listDatabases, openSaved, selectDatabase, toConnection, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
 import { timeAgo } from './timeAgo'
@@ -28,7 +28,7 @@ function ConnectView({
   setConnection,
 }: {
   connection: Connection | null
-  setConnection: (c: Connection | null) => void
+  setConnection: React.Dispatch<React.SetStateAction<Connection | null>>
 }) {
   const navigate = useNavigate()
   const [saved, setSaved] = useState<SavedConnection[] | null>(null)
@@ -143,6 +143,20 @@ function ConnectView({
     !!connection &&
     connection.database === null &&
     connection.databases.length > 0
+
+  // The picker may show a list from an earlier connect (a reload, or coming
+  // back from the cards), so re-list each time it comes up. Opening a card
+  // already re-lists; this covers arriving here with the picker already due.
+  useEffect(() => {
+    if (!picking) return
+    let live = true
+    void listDatabases().then((databases) => {
+      if (live && databases) setConnection((c) => (c ? { ...c, databases } : c))
+    })
+    return () => {
+      live = false
+    }
+  }, [picking, setConnection])
 
   const heading = (
     <div className="mb-8 text-center">

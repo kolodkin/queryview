@@ -69,3 +69,15 @@ export function selectDatabase(database: string): Promise<boolean> {
     }
   })
 }
+
+// Re-list this session's databases, fresh from the server (the cached list
+// dates from the connect). null when the request failed; the caller keeps
+// what it has.
+export async function listDatabases(): Promise<string[] | null> {
+  try {
+    const data = await (await apiFetch('/api/db/databases')).json()
+    return data.ok ? (data.databases as string[]) : null
+  } catch {
+    return null
+  }
+}

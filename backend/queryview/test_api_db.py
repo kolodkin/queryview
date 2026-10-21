@@ -97,3 +97,11 @@ def test_session_only_connect_lists_for_its_session_only():
     mine = {x["name"]: x for x in c.get("/api/db/connections").json()["connections"]}
     assert mine["so-duck"]["scope"] == "session" and mine["so-duck"]["created_by"] == "user"
     assert "so-duck" not in {x["name"] for x in other.get("/api/db/connections").json()["connections"]}
+
+
+def test_databases_without_session_is_409():
+    c = TestClient(app)
+    c.post("/api/db/disconnect")
+    r = c.get("/api/db/databases")
+    assert r.status_code == 409
+    assert r.json()["ok"] is False

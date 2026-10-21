@@ -7,6 +7,7 @@ from conftest import (
     CH_PASSWORD,
     CH_PORT,
     CH_USER,
+    _ch_exec,
     author_params_yaml,
     connect_clickhouse_test_db,
     open_connect,
@@ -123,6 +124,22 @@ def test_a_database_switch_reruns_the_query_on_screen(seeded_test_db, page: Page
     expect(output).not_to_contain_text(CH_DB)
     expect(output).not_to_contain_text("edited")
     expect(page.get_by_test_id("query-input")).to_have_value("SELECT 'edited'")
+
+
+def test_the_pill_menu_relists_databases_on_open(seeded_test_db, page: Page) -> None:
+    """A database created after connecting shows up the next time the pill
+    menu opens, without reconnecting."""
+    fresh = f"{CH_DB}_fresh"
+    connect_clickhouse_test_db(page)
+    _ch_exec(f"DROP DATABASE IF EXISTS {fresh}")
+    try:
+        _ch_exec(f"CREATE DATABASE {fresh}")
+        page.get_by_test_id("connection-status").click()
+        page.get_by_test_id("db-select-filter").fill(fresh)
+        expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_count(1)
+        expect(page.get_by_test_id("db-select")).to_contain_text(fresh)
+    finally:
+        _ch_exec(f"DROP DATABASE IF EXISTS {fresh}")
 
 
 def _switch_database_from_pill(page: Page, database: str) -> None:

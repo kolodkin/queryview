@@ -13,6 +13,7 @@ import { SearchPanel, useDismiss } from '../core'
 import {
   connectionKey,
   isReady,
+  listDatabases,
   openSaved,
   selectDatabase,
   toConnection,
@@ -132,6 +133,20 @@ function Shell() {
   const [taken, setTaken] = useState(false)
 
   const dbRef = useDismiss<HTMLDivElement>(dbOpen, () => setDbOpen(false))
+
+  // The menu's list dates from the connect, so a database created since is
+  // missing until it is re-listed: do that each time the menu opens. A failed
+  // re-list keeps the list on screen.
+  useEffect(() => {
+    if (!dbOpen) return
+    let live = true
+    void listDatabases().then((databases) => {
+      if (live && databases) setConnection((c) => (c ? { ...c, databases } : c))
+    })
+    return () => {
+      live = false
+    }
+  }, [dbOpen])
   const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
   const [navOpen, setNavOpen] = useState(false)
   const navRef = useDismiss<HTMLDivElement>(navOpen, () => setNavOpen(false))
