@@ -54,7 +54,7 @@ tools (among others):
   heartbeat, toasts "Agent switched to <name>", and the pill reads
   `<connection> · <database>` with the menu entry marked active and badged
   `agent`. Switches made in the UI never toast.
-- `run_query(session_id, query, limit?=1000)` — run one read-only statement
+- `run_sql(session_id, sql, limit?=1000)` — run one read-only statement
   as written (no pagination wrapper, so `DESCRIBE`/`SHOW`/`EXPLAIN` work; page
   with your own `LIMIT`/`OFFSET`) on the session's connection and selected
   database, returning rows to the agent (not the browser): `{ok, database,

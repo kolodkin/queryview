@@ -45,7 +45,7 @@ shared (SQLite). See [session.md](./session.md).
 **MCP:** a FastMCP server is mounted at `/mcp/` (Streamable HTTP) exposing
 `push_query` (push SQL to a session's query panel), `push_script` (push a script
 to a session's Scripts editor), `push_dashboard` (push a dashboard draft to a
-session), `session_info`, `run_query`, `run_script`, `list_queries` / `list_dashboards`
+session), `session_info`, `run_sql`, `run_script`, `list_queries` / `list_dashboards`
 and `git_store` / `git_history` / `git_restore`. They delegate to the in-process
 hubs the matching REST endpoints call. See [remote.md](./remote.md) and
 [dashboard.md](./dashboard.md).

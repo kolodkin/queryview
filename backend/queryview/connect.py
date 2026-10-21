@@ -585,7 +585,7 @@ async def run_query(
 
 
 async def run_sql(sid: str, sql: str, max_rows: int) -> dict[str, Any]:
-    """Run one read-only statement as written (the agent's run_query) on this
+    """Run one read-only statement as written (the agent's MCP run_sql) on this
     session's selected database: `{ok, database, meta, data}`, at most
     `max_rows` rows."""
     s, err = await _gated_session(sid)
