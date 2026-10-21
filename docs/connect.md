@@ -111,9 +111,8 @@ Clicking the `🟢 connected - <connection> · <database>` pill reopens the same
 dropdown — same filter, plus **Escape** to close — so the database can be
 switched from any page without going back to Connect. Below the databases it
 lists the connections; clicking one opens it. Both the dropdown and the picker
-re-list the databases (`GET /api/db/databases`) each time they open, so one
-created since the connect appears without reconnecting; a failed re-list keeps
-the list on screen.
+re-list the databases on open, so one created since the connect appears; a
+failed re-list keeps the list on screen.
 
 ## Persistence (SQLite)
 
