@@ -54,7 +54,7 @@ fails, the error suggests `host.docker.internal` (see the README's
 - **Active connection** — held at the **session** level (see
   [queryview.md](./queryview.md)). One per session.
 - **Database selection** — after connecting, the user picks a database. Only
-  then does the top-left indicator read `🟢 connected - <database>`. The choice
+  then does the top-left indicator read `🟢 connected - <connection> · <database>`. The choice
   is remembered with the connection.
 
 ## Creating a connection
@@ -87,7 +87,7 @@ cards ── "New connection" card ──▶ connection form
                                               │
                               pick a database  │
                                               ▼
-                              🟢 connected - <database>  (explorer)
+                              🟢 connected - <connection> · <database>  (explorer)
 
 cards ── saved card ──▶ opens <name>, activates it ──▶ database picker ──▶ pick
 ```
@@ -102,17 +102,18 @@ shows "No databases match". Selecting a database:
 
 - sets the session's selected database,
 - persists it on the saved connection (`POST /api/db/database`),
-- collapses the picker and shows the top-left indicator `🟢 connected - <database>`,
+- collapses the picker and shows the top-left indicator `🟢 connected - <connection> · <database>`,
 - makes the query panel available on QueryView (see [query.md](./query.md)),
 - and lands on the explorer (see
   [queryview.md](./queryview.md#landing-page)).
 
-Clicking the `🟢 connected - <database>` pill reopens the same list as a
+Clicking the `🟢 connected - <connection> · <database>` pill reopens the same list as a
 dropdown — same filter, plus **Escape** to close — so the database can be
-switched from any page without going back to Connect. Both the dropdown and the
-picker re-list the databases (`GET /api/db/databases`) each time they open, so
-one created since the connect appears without reconnecting; a failed re-list
-keeps the list on screen.
+switched from any page without going back to Connect. Below the databases it
+lists the connections; clicking one opens it. Both the dropdown and the picker
+re-list the databases (`GET /api/db/databases`) each time they open, so one
+created since the connect appears without reconnecting; a failed re-list keeps
+the list on screen.
 
 ## Persistence (SQLite)
 
@@ -162,7 +163,12 @@ invisible to other sessions, gone when the session is deleted or the backend
 restarts (the session then reads as disconnected).
 
 - Each carries `scope` (`session` | `saved`) and `created_by` (`agent` |
-  `user`); session cards get a badge.
+  `user`); connections the agent added get an `agent` badge on their card and
+  in the pill menu's connection list (session ones listed apart from saved, the
+  active one marked). The user's own get none.
+- When one is added or removed, an armed tab's lists refresh. The session row
+  records who switched (`connection_by`: `agent` | `user`); a tab that sees the
+  agent's `use_connection` toasts "Agent switched to <name>", never the user's.
 - You add one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved connections and all sessions' ones.
 - The agent may add (ClickHouse or Postgres only: DuckDB reads local files),
@@ -226,5 +232,5 @@ interface with HTTP Basic auth and a 5s timeout.
 
 CI runs a real `clickhouse/clickhouse-server` service container so the e2e suite
 exercises an actual connection: it asserts that connecting succeeds, a database
-can be selected, the indicator shows `connected - <database>`, and a query
+can be selected, the indicator shows `connected - <connection> · <database>`, and a query
 against a seeded `test` database returns its rows.

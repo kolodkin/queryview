@@ -58,7 +58,7 @@ def connect_clickhouse_test_db(page: Page) -> None:
     page.get_by_test_id("ch-connect").click()
     expect(page.get_by_test_id("db-picker")).to_be_visible()
     page.locator(f'[data-db="{CH_DB}"]').click()
-    expect(page.get_by_test_id("connection-status")).to_contain_text(f"connected - {CH_DB}")
+    expect(page.get_by_test_id("connection-status")).to_contain_text(f"· {CH_DB}")
 
 
 def author_params_yaml(page: Page, name: str, sql: str, params_yaml: str) -> None:

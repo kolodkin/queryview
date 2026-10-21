@@ -12,7 +12,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -406,7 +406,9 @@ async def connect_new(
     return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
 
 
-async def open_saved(sid: str, name: str, database: str | None = None) -> dict[str, Any]:
+async def open_saved(
+    sid: str, name: str, database: str | None = None, by: Literal["agent", "user"] = "user"
+) -> dict[str, Any]:
     """Open a connection by name for this session: one of its session
     connections, else a saved one. A `database` not on it fails before the
     session switches."""
@@ -427,17 +429,17 @@ async def open_saved(sid: str, name: str, database: str | None = None) -> dict[s
     _set_session_entry(sid, state)
     if _session_conn(sid, name) is None:
         await _touch_connection(name)
-    await sessions.set_connection(sid, name)
+    await sessions.set_connection(sid, name, by)
     if database is not None:
         await select_database(sid, database)
     return {"ok": True, "name": name, "type": state.type, "databases": state.databases, "database": database}
 
 
-async def disconnect(sid: str) -> dict[str, Any]:
+async def disconnect(sid: str, by: Literal["agent", "user"] = "user") -> dict[str, Any]:
     """Drop this session's active connection. Saved connections are left intact
     — the Connect page still reopens them."""
     _sessions.pop(sid, None)
-    await sessions.set_connection(sid, None)
+    await sessions.set_connection(sid, None, by)
     return {"ok": True}
 
 
@@ -484,17 +486,19 @@ async def add_session_connection(
     state, message = await _build_session(name, config, None, conn_type)
     if state is not None:
         _session_conns.setdefault(sid, {})[name] = _SessionConn(conn_type, config, created_by, _now_ms())
+        remote.notify(sid, {"type": "connections"})
     return state, message
 
 
-async def remove_session_connection(sid: str, name: str) -> dict[str, Any]:
+async def remove_session_connection(sid: str, name: str, by: Literal["agent", "user"] = "user") -> dict[str, Any]:
     """Drop a session connection, disconnecting the session if it is active."""
     if _session_conns.get(sid, {}).pop(name, None) is None:
         return {"ok": False, "message": f'no session connection named "{name}"'}
+    remote.notify(sid, {"type": "connections"})
     # The row, not the LRU cache: an evicted session must not keep pointing here.
     rec = await sessions.get_session_rec(sid)
     if rec is not None and rec.connection_name == name:
-        await disconnect(sid)
+        await disconnect(sid, by)
     return {"ok": True}
 
 
@@ -643,4 +647,4 @@ async def export_csv(
 # Imported last, not at the top: sessions.py builds on this module's engine and
 # schema helpers, so a top-level import here would be a cycle. connect.py calls
 # into it only to write a session's connection through.
-from . import sessions  # noqa: E402
+from . import remote, sessions  # noqa: E402

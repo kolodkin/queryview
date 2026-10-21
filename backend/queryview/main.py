@@ -178,6 +178,7 @@ def _session_payload(rec: sessions.SessionRec) -> dict[str, Any]:
         "label": sessions.display_label(rec),
         "pinned": rec.label is not None,
         "connection": rec.connection_name,
+        "connection_by": rec.connection_by,
         "database": rec.database,
         "workspace": rec.workspace,
         "url": rec.url,

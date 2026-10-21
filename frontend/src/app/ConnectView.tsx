@@ -5,11 +5,13 @@ import { filterNames, useDismiss } from '../core'
 import { isReady, listDatabases, openSaved, selectDatabase, toConnection, type Connection } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
+import { AgentBadge } from './controls/AgentBadge'
 import { timeAgo } from './timeAgo'
 import {
   MANY_THRESHOLD,
   RECENT_COUNT,
   driverCounts,
+  fetchConnections,
   labelOf,
   matchConnections,
   type SavedConnection,
@@ -26,9 +28,12 @@ const cardGrid = 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
 function ConnectView({
   connection,
   setConnection,
+  listNonce,
 }: {
   connection: Connection | null
   setConnection: React.Dispatch<React.SetStateAction<Connection | null>>
+  // Bumped when a session connection is added or removed.
+  listNonce: number
 }) {
   const navigate = useNavigate()
   const [saved, setSaved] = useState<SavedConnection[] | null>(null)
@@ -51,8 +56,7 @@ function ConnectView({
 
   const refreshSaved = useCallback(async () => {
     try {
-      const data = await (await apiFetch('/api/db/connections')).json()
-      setSaved(Array.isArray(data.connections) ? (data.connections as SavedConnection[]) : [])
+      setSaved(await fetchConnections())
     } catch {
       setSaved((s) => s ?? [])
     }
@@ -61,7 +65,7 @@ function ConnectView({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshSaved()
-  }, [refreshSaved])
+  }, [refreshSaved, listNonce])
 
   const count = saved?.length ?? 0
   const many = count > MANY_THRESHOLD
@@ -417,11 +421,7 @@ function SavedCard({
           <span className="block truncate font-medium text-slate-100">{conn.name}</span>
           <span className="block text-xs text-slate-400">
             {label}
-            {conn.scope === 'session' && (
-              <span data-testid="conn-session-badge" className="ml-2 text-amber-300">
-                session{conn.created_by === 'agent' ? ' · agent' : ''}
-              </span>
-            )}
+            <AgentBadge conn={conn} className="ml-2" />
           </span>
         </span>
         {busy ? (

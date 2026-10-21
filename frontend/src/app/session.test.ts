@@ -17,6 +17,7 @@ const SESSION = {
   label: 'Session 1',
   pinned: false,
   connection: null,
+  connection_by: null,
   database: null,
   workspace: 'default',
   url: '/queryview',

@@ -288,7 +288,7 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
     err = _not_yours(session_id, name)
     if err is not None:
         return {"ok": False, "message": err}
-    return await remove_session_connection(session_id, name)
+    return await remove_session_connection(session_id, name, by="agent")
 
 
 @mcp.tool()
@@ -306,7 +306,7 @@ async def use_connection(session_id: str, name: str, database: str | None = None
     err = _not_yours(session_id, name)
     if err is not None:
         return {"ok": False, "message": err}
-    return await open_saved(session_id, name, database)
+    return await open_saved(session_id, name, database, by="agent")
 
 
 @mcp.tool()

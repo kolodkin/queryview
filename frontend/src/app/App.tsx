@@ -42,6 +42,8 @@ import {
 } from './session'
 import { apiFetch } from './api'
 import { listWorkspaces } from './workspace'
+import { fetchConnections, type SavedConnection } from './savedConnections'
+import { AgentBadge } from './controls/AgentBadge'
 
 // Ends the connection; the last entry of the pill's menu.
 function DisconnectButton({ onDisconnect }: { onDisconnect: () => void }) {
@@ -57,25 +59,94 @@ function DisconnectButton({ onDisconnect }: { onDisconnect: () => void }) {
   )
 }
 
-// The menu behind the connection pill: the database list, then Disconnect.
+// The pill menu's connection list: this session's own connections apart from
+// the saved ones, so a switch to an agent-added server is visible.
+function ConnectionList({
+  connections,
+  active,
+  onOpen,
+}: {
+  connections: SavedConnection[]
+  active: string
+  onOpen: (name: string) => void
+}) {
+  const groups = [
+    ['Session', connections.filter((c) => c.scope === 'session')],
+    ['Saved', connections.filter((c) => c.scope !== 'session')],
+  ] as const
+  if (connections.length === 0) return null
+  return (
+    <div data-testid="pill-connections" className="mt-1 border-t border-white/10 pt-1">
+      {groups.map(
+        ([title, list]) =>
+          list.length > 0 && (
+            <div key={title}>
+              <div className="px-2 pt-1 text-xs text-slate-500">{title}</div>
+              {list.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  data-testid="pill-conn"
+                  data-conn={c.name}
+                  data-active={c.name === active}
+                  onClick={() => onOpen(c.name)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-white/10"
+                >
+                  <span
+                    className={`truncate ${c.name === active ? 'text-indigo-200' : 'text-slate-200'}`}
+                  >
+                    {c.name}
+                  </span>
+                  <AgentBadge conn={c} className="shrink-0 text-xs" />
+                  {c.name === active && (
+                    <span
+                      className="ml-auto h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                      aria-label="active connection"
+                    />
+                  )}
+                </button>
+              ))}
+            </div>
+          ),
+      )}
+    </div>
+  )
+}
+
+// The menu behind the connection pill: the database list, the connections,
+// then Disconnect.
 // Long connections list hundreds of databases, so it carries the landing
 // picker's filter; a picker-less driver gets just Disconnect.
 function DatabaseMenu({
   connection,
+  connections,
   onSelect,
+  onOpenConnection,
   onDisconnect,
 }: {
   connection: Connection
+  connections: SavedConnection[]
   onSelect: (database: string) => void
+  onOpenConnection: (name: string) => void
   onDisconnect: () => void
 }) {
+  const footer = (
+    <>
+      <ConnectionList
+        connections={connections}
+        active={connection.name}
+        onOpen={onOpenConnection}
+      />
+      <DisconnectButton onDisconnect={onDisconnect} />
+    </>
+  )
   if (connection.databases.length === 0) {
     return (
       <div
         data-testid="db-select"
-        className="glass-popover absolute left-0 top-full z-10 mt-2 w-48 p-1 text-sm"
+        className="glass-popover absolute left-0 top-full z-10 mt-2 w-64 p-1 text-sm"
       >
-        <DisconnectButton onDisconnect={onDisconnect} />
+        {footer}
       </div>
     )
   }
@@ -92,7 +163,7 @@ function DatabaseMenu({
         <span className={`truncate ${current ? 'text-indigo-200' : 'text-slate-200'}`}>{db}</span>
       )}
       itemAction={(db) => <CopyName name={db} testid="db-copy" />}
-      footer={<DisconnectButton onDisconnect={onDisconnect} />}
+      footer={footer}
     />
   )
 }
@@ -113,6 +184,10 @@ function Shell() {
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
+  // The pill menu's connection list, refetched on open and on a `connections`
+  // push; the nonce also refreshes Connect.
+  const [connections, setConnections] = useState<SavedConnection[]>([])
+  const [connectionsNonce, setConnectionsNonce] = useState(0)
   // Seeded from the session once it attaches.
   const [workspace, setWorkspace] = useState('')
   // The active workspace's autosave flag (docs/workspace.md#autosave), bumped
@@ -164,6 +239,17 @@ function Shell() {
     }
   }, [workspace, settingsNonce])
 
+  useEffect(() => {
+    if (!dbOpen) return
+    let live = true
+    fetchConnections()
+      .then((list) => live && setConnections(list))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [dbOpen, connectionsNonce])
+
   function switchWorkspace(name: string) {
     void patchSession({ workspace: name })
     setWorkspace(name)
@@ -181,6 +267,7 @@ function Shell() {
   async function openConnection(name: string) {
     const r = await openSaved(name)
     if (r.ok) setConnection(r.connection)
+    else setToast(r.message)
     navigate(r.ok && isReady(r.connection) ? '/explorer' : '/connect')
   }
 
@@ -204,7 +291,19 @@ function Shell() {
   useEffect(() => {
     connectionRef.current = connection
   }, [connection])
+  // connection_by stays on the row, so toast on the change this tab sees, not
+  // on the flag: not on load, a session switch, or a repeated heartbeat.
+  const lastRow = useRef<SessionState | null>(null)
   function followRow(row: SessionState) {
+    const prev = lastRow.current
+    lastRow.current = row
+    if (
+      row.connection_by === 'agent' &&
+      prev?.id === row.id &&
+      row.connection !== prev.connection
+    ) {
+      setToast(`Agent switched to ${row.connection}`)
+    }
     const c = connectionRef.current
     if (row.connection === (c?.name ?? null) && row.database === (c?.database ?? null)) return
     if (c && row.connection === c.name) setConnection({ ...c, database: row.database })
@@ -216,6 +315,7 @@ function Shell() {
   // connection arrives through the row (followRow).
   function applySession(next: SessionState) {
     setTaken(false)
+    setConnections([])
     setWorkspace(next.workspace)
     setSessionLabel(next.label)
     setSessionKey(`${next.id}:${++adoptions.current}`)
@@ -295,6 +395,7 @@ function Shell() {
         }
       })
     }
+    on('connections', () => setConnectionsNonce((n) => n + 1))
     on<QueryPush>('query', (payload) => {
       setQueryPush(payload)
       setToast('Agent updated the query')
@@ -344,7 +445,7 @@ function Shell() {
 
   // The channel is keyed by this session, so the agent's id is the session's own.
   const remoteId = channelOpen ? sessionId() : null
-  const agentCommand = `Use the queryview mcp to connect to session "${remoteId ?? ''}"`
+  const agentCommand = `Use the queryview mcp to connect to session "${remoteId ?? ''}" (${sessionLabel})`
 
   // The pages that query a database are Connect until there is one.
   const withDatabase = (page: React.ReactNode) =>
@@ -378,14 +479,21 @@ function Shell() {
                 />
                 <span className="truncate">
                   <span className="hidden md:inline">connected - </span>
-                  {connection.database ?? connection.name}
+                  {connection.database
+                    ? `${connection.name} · ${connection.database}`
+                    : connection.name}
                 </span>
                 <span className="text-xs text-slate-400">▾</span>
               </button>
               {dbOpen && (
                 <DatabaseMenu
                   connection={connection}
+                  connections={connections}
                   onSelect={(db) => void switchDatabase(db)}
+                  onOpenConnection={(name) => {
+                    setDbOpen(false)
+                    if (name !== connection.name) void openConnection(name)
+                  }}
                   onDisconnect={() => void disconnect()}
                 />
               )}
@@ -574,7 +682,12 @@ function Shell() {
           <Route
             path="/connect"
             element={
-              <ConnectView key={sessionKey} connection={connection} setConnection={setConnection} />
+              <ConnectView
+                key={sessionKey}
+                connection={connection}
+                setConnection={setConnection}
+                listNonce={connectionsNonce}
+              />
             }
           />
           <Route path="/explorer" element={<ExplorerView connection={connection} />} />

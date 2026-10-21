@@ -54,7 +54,7 @@ def test_queryview_e2e(page: Page) -> None:
     with page.expect_response(lambda r: r.request.method == "PATCH" and "/api/sessions/" in r.url):
         page.locator('[data-db="default"]').click()
     expect(page.get_by_test_id("connection-indicator")).to_be_visible()
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - default")
+    expect(page.get_by_test_id("connection-status")).to_contain_text("· default")
     expect(page).to_have_url(re.compile(r"/explorer"))
     expect(page.get_by_test_id("explorer-tables")).to_be_visible()
 
@@ -62,7 +62,7 @@ def test_queryview_e2e(page: Page) -> None:
     page.goto("/", wait_until="networkidle")
     # Resume: came back connected to the previously selected database, and the
     # landing redirect picks the explorer over Connect.
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - default")
+    expect(page.get_by_test_id("connection-status")).to_contain_text("· default")
     expect(page).to_have_url(re.compile(r"/explorer"))
     # The saved connection's card, marked active and showing its database,
     # reopens the picker; choose a different database.
@@ -83,7 +83,7 @@ def test_queryview_e2e(page: Page) -> None:
     expect(page.locator('[data-db="default"]')).to_have_count(0)
     expect(page.locator('[data-db="system"]')).to_be_visible()
     page.keyboard.press("Enter")
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - system")
+    expect(page.get_by_test_id("connection-status")).to_contain_text("· system")
 
     # opening with ?connection=<name> opens that connection. The database is
     # not picked yet, so this stays on Connect rather than the explorer.
@@ -93,7 +93,7 @@ def test_queryview_e2e(page: Page) -> None:
     # click the exact one.
     page.get_by_test_id("db-filter").fill("information_schema")
     page.locator('[data-db="information_schema"]').click()
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - information_schema")
+    expect(page.get_by_test_id("connection-status")).to_contain_text("· information_schema")
 
     # the connection pill's database menu carries the same filter
     page.get_by_test_id("connection-status").click()
@@ -104,7 +104,7 @@ def test_queryview_e2e(page: Page) -> None:
     menu_filter.fill("sys")
     expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_count(1)
     page.keyboard.press("Enter")
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - system")
+    expect(page.get_by_test_id("connection-status")).to_contain_text("· system")
 
 
 def test_a_database_switch_reruns_the_query_on_screen(seeded_test_db, page: Page) -> None:
@@ -146,7 +146,7 @@ def _switch_database_from_pill(page: Page, database: str) -> None:
     page.get_by_test_id("connection-status").click()
     page.get_by_test_id("db-select-filter").fill(database)
     page.keyboard.press("Enter")
-    expect(page.get_by_test_id("connection-status")).to_contain_text(f"connected - {database}")
+    expect(page.get_by_test_id("connection-status")).to_contain_text(f"· {database}")
 
 
 def test_a_database_switch_refreshes_param_options(seeded_test_db, page: Page) -> None:
@@ -200,7 +200,7 @@ def test_a_database_switched_elsewhere_reaches_the_tab_on_its_heartbeat(
     assert r.json() == {"ok": True}
 
     status = page.get_by_test_id("connection-status")
-    expect(status).to_contain_text("connected - system", timeout=15_000)
+    expect(status).to_contain_text("· system", timeout=15_000)
     # The explorer reloads its sidebar for the new database.
     expect(page.locator('[data-testid="explorer-table"][data-table="items"]')).to_have_count(0)
     expect(page.locator('[data-testid="explorer-table"][data-table="databases"]')).to_be_visible()
