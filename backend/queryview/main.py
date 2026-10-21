@@ -337,7 +337,7 @@ async def db_databases(request: Request):
     r = await refresh_databases(request.state.sid)
     if not r["ok"]:
         return _gate_error(r, ("no-session",))
-    return {"ok": True, "databases": r["databases"]}
+    return {"ok": True, "name": r["name"], "databases": r["databases"]}
 
 
 # Select this session's active connection's database.

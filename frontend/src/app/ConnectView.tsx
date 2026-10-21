@@ -57,9 +57,6 @@ function ConnectView({
   const [formType, setFormType] = useState<string | null>(null)
   // Back from the picker to the cards; the opened connection stays.
   const [browsing, setBrowsing] = useState(false)
-  // Whether the picker's list may predate this mount (a reload, a return to
-  // the page); a card open or a connect lists on its own.
-  const [stale, setStale] = useState(true)
   // The card being opened, for its spinner; and the last open's failure.
   const [opening, setOpening] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -127,7 +124,6 @@ function ConnectView({
   // since a new connection isn't in it yet).
   function adopt(opened: Connection) {
     setConnection(opened)
-    setStale(false)
     setFormType(null)
     setBrowsing(false)
     setError(null)
@@ -159,7 +155,8 @@ function ConnectView({
     connection.database === null &&
     connection.databases.length > 0
 
-  useFreshDatabases(picking && stale, setConnection)
+  // A list that did not come with the connection (a reload) may be stale.
+  useFreshDatabases(picking && !connection?.listed, setConnection)
 
   const heading = (
     <div className="mb-8 text-center">
@@ -491,7 +488,7 @@ function ConnectionForm({
       })
       const data = await res.json()
       if (data.ok) {
-        onConnected(toConnection({ type: meta.type, ...data }))
+        onConnected({ ...toConnection({ type: meta.type, ...data }), listed: true })
       } else {
         setResult({ ok: false, message: data.message ?? 'connect failed' })
       }

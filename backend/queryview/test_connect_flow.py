@@ -243,7 +243,7 @@ def test_refresh_databases_relists_and_keeps_the_selected_database(monkeypatch):
     driver.databases.append("gamma")
 
     out = _run(connect.refresh_databases(rec.id))
-    assert out == {"ok": True, "databases": ["alpha", "beta", "gamma"]}
+    assert out == {"ok": True, "name": "reporting", "databases": ["alpha", "beta", "gamma"]}
     state = _run(connect.get_session(rec.id))
     assert state["databases"] == ["alpha", "beta", "gamma"]
     assert state["database"] == "beta"
@@ -274,3 +274,7 @@ def test_select_database_relists_on_a_miss(monkeypatch):
     assert _run(connect.get_session(rec.id))["database"] == "gamma"
     out = _run(connect.select_database(rec.id, "delta"))
     assert out["ok"] is False and out["message"] == "unknown database"
+    # A re-list that fails is reported as such, not as a missing database.
+    driver.fail = True
+    out = _run(connect.select_database(rec.id, "epsilon"))
+    assert out["ok"] is False and out["message"] == "listing failed"
