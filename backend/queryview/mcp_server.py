@@ -73,9 +73,9 @@ async def push_query(
 async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any]:
     """Run one read-only SQL statement on the session's connection and selected
     database, returning the rows to the agent (push_query only fills a browser
-    panel). Use it to explore schema and data before a push. The statement runs
-    as written — SELECT, DESCRIBE, SHOW, EXPLAIN... — so page with your own
-    LIMIT/OFFSET; it is given up on after a minute.
+    panel). Use it to explore schema and data before a push. Runs as written
+    (SELECT, DESCRIBE, SHOW, EXPLAIN...): page with your own LIMIT/OFFSET.
+    Stops after a minute.
 
     Returns {"ok": True, "database", "columns", "types", "rows": [[...]],
     "truncated"} — values typed as the driver returns them (64-bit integers and

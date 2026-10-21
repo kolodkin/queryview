@@ -54,16 +54,14 @@ tools (among others):
   heartbeat, toasts "Agent switched to <name>", and the pill reads
   `<connection> · <database>` with the menu entry marked active and badged
   `agent`. Switches made in the UI never toast.
-- `run_sql(session_id, sql, limit?=1000)` — run one read-only statement
-  as written (no pagination wrapper, so `DESCRIBE`/`SHOW`/`EXPLAIN` work; page
-  with your own `LIMIT`/`OFFSET`) on the session's connection and selected
-  database, returning rows to the agent (not the browser): `{ok, database,
-  columns, types, rows, truncated}`, values typed as the driver returns them
-  (64-bit integers and decimals as strings, collections as JSON); `truncated`
-  means rows past `limit` were dropped. `database` tells the agent whether to
-  fully-qualify tables. A disconnected session fails with `not connected`. The
-  statement is given up on after 60s (server-side too); on ClickHouse each run
-  names its `query_id` in errors, to look up in `system.query_log`.
+- `run_sql(session_id, sql, limit?=1000)` — run one read-only statement as
+  written (so `DESCRIBE`/`SHOW`/`EXPLAIN` work; page with your own
+  `LIMIT`/`OFFSET`) on the session's connection and database, returning
+  `{ok, database, columns, types, rows, truncated}` to the agent. Values are
+  typed as the driver returns them (64-bit integers and decimals as strings,
+  collections as JSON); `truncated` means rows past `limit` were dropped. Fails
+  with `not connected` on a disconnected session; stops after 60s, server-side
+  too. ClickHouse errors name the `query_id` to look up in `system.query_log`.
 - `run_script(session_id, sql)` — run a script like the [Scripts](./scripts.md)
   page's Run all, **writes included**, returning `{ok, database, results: [{sql,
   ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
