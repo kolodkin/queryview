@@ -79,7 +79,7 @@ function QueryView({
   autosave?: boolean
 }) {
   return (
-    <div className="viewport-page flex w-full max-w-[80vw] flex-col">
+    <div className="viewport-page flex w-full flex-col">
       <div className="mb-6 flex items-center justify-center">
         <h1 className="text-3xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           QueryView

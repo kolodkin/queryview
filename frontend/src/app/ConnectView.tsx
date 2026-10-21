@@ -2,10 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { filterNames, useDismiss } from '../core'
-import { isReady, openSaved, selectDatabase, toConnection, type Connection } from './connection'
+import {
+  isReady,
+  useFreshDatabases,
+  openSaved,
+  selectDatabase,
+  toConnection,
+  type Connection,
+} from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
 import { AgentBadge } from './controls/AgentBadge'
+import { CopyName } from './controls/CopyName'
 import { timeAgo } from './timeAgo'
 import {
   MANY_THRESHOLD,
@@ -31,7 +39,7 @@ function ConnectView({
   listNonce,
 }: {
   connection: Connection | null
-  setConnection: (c: Connection | null) => void
+  setConnection: React.Dispatch<React.SetStateAction<Connection | null>>
   // Bumped when a session connection is added or removed.
   listNonce: number
 }) {
@@ -147,6 +155,9 @@ function ConnectView({
     !!connection &&
     connection.database === null &&
     connection.databases.length > 0
+
+  // A list that did not come with the connection (a reload) may be stale.
+  useFreshDatabases(picking && !connection?.listed, setConnection)
 
   const heading = (
     <div className="mb-8 text-center">
@@ -478,7 +489,7 @@ function ConnectionForm({
       })
       const data = await res.json()
       if (data.ok) {
-        onConnected(toConnection({ type: meta.type, ...data }))
+        onConnected({ ...toConnection({ type: meta.type, ...data }), listed: true })
       } else {
         setResult({ ok: false, message: data.message ?? 'connect failed' })
       }
@@ -630,17 +641,19 @@ function DatabasePicker({
       )}
       <div className="mt-3 flex flex-wrap gap-2">
         {visible.map((db) => (
-          <button
-            key={db}
-            type="button"
-            onClick={() => onSelect(db)}
-            data-testid="db-option"
-            data-db={db}
-            title={db === remembered ? 'Last used' : undefined}
-            className={`glass-toggle px-3 py-1.5 text-sm ${db === remembered ? 'is-active-soft' : ''}`}
-          >
-            {db}
-          </button>
+          <div key={db} className="group flex items-center">
+            <button
+              type="button"
+              onClick={() => onSelect(db)}
+              data-testid="db-option"
+              data-db={db}
+              title={db === remembered ? 'Last used' : undefined}
+              className={`glass-toggle px-3 py-1.5 text-sm ${db === remembered ? 'is-active-soft' : ''}`}
+            >
+              {db}
+            </button>
+            <CopyName name={db} testid="db-option-copy" />
+          </div>
         ))}
       </div>
     </section>

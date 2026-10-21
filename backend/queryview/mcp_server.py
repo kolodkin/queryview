@@ -315,7 +315,8 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
     session connection you added; otherwise ask the user to switch in QueryView.
 
     Returns {"ok", "message", "database"}; not ok when disconnected, not your
-    connection, or the database is not in session_info's "databases".
+    connection, or the database does not exist (a name missing from
+    session_info's "databases" is re-checked against the server first).
     """
     from .connect import get_session
     from .connect import select_database as _select_database

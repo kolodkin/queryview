@@ -217,6 +217,11 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     if (selected) void runQuery(selected.query, limit, Math.max(0, nextOffset), orderBy)
   }
 
+  // The ↻ after the table name: the same page, read again.
+  function reload() {
+    page(offset)
+  }
+
   // Edge drag. Each move paints the width straight onto the panel rather than
   // going through state, which would rebuild the results table (100+ rows) and
   // the table list every frame; state and the storage write happen once, on
@@ -292,7 +297,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   }
 
   return (
-    <div className="viewport-page flex w-full max-w-[85vw] gap-4">
+    <div className="viewport-page flex w-full gap-4">
       <aside
         ref={asideRef}
         data-testid="explorer-tables"
@@ -433,6 +438,17 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               >
                 {table}
               </h2>
+              <button
+                type="button"
+                onClick={reload}
+                disabled={busy}
+                data-testid="explorer-refresh"
+                aria-label="Refresh rows"
+                title="Refresh rows"
+                className="glass-btn px-2 py-2 text-sm"
+              >
+                ↻
+              </button>
               {busy && result !== null && (
                 <span data-testid="explorer-busy" role="status" aria-label="Loading rows">
                   <Spinner />

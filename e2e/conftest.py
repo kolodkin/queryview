@@ -241,7 +241,7 @@ _WORKER_SUFFIX = os.environ.get("PYTEST_XDIST_WORKER", "")
 CH_DB = f"qvtest_{_WORKER_SUFFIX}" if _WORKER_SUFFIX else "qvtest"
 
 
-def _ch_exec(sql: str) -> None:
+def ch_exec(sql: str) -> None:
     """Run a statement against ClickHouse over HTTP. POST allows writes (the GET
     interface is read-only by default), so seeding/teardown go through here."""
     res = httpx.post(
@@ -260,12 +260,12 @@ def seeded_test_db():
 
     Drops it up front too, so seeding is idempotent and never accumulates rows
     from an earlier run that left the database behind."""
-    _ch_exec(f"DROP DATABASE IF EXISTS {CH_DB}")
-    _ch_exec(f"CREATE DATABASE {CH_DB}")
-    _ch_exec(f"CREATE TABLE {CH_DB}.items (id UInt32, name String) ENGINE = MergeTree ORDER BY id")
-    _ch_exec(f"INSERT INTO {CH_DB}.items (id, name) VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')")
+    ch_exec(f"DROP DATABASE IF EXISTS {CH_DB}")
+    ch_exec(f"CREATE DATABASE {CH_DB}")
+    ch_exec(f"CREATE TABLE {CH_DB}.items (id UInt32, name String) ENGINE = MergeTree ORDER BY id")
+    ch_exec(f"INSERT INTO {CH_DB}.items (id, name) VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')")
     yield
-    _ch_exec(f"DROP DATABASE IF EXISTS {CH_DB}")
+    ch_exec(f"DROP DATABASE IF EXISTS {CH_DB}")
 
 
 # --- Postgres seeding for query tests -------------------------------------

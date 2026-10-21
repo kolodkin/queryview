@@ -33,6 +33,7 @@ from .connect import (
     list_tables,
     open_saved,
     parse_driver_config,
+    refresh_databases,
     run_query,
     select_database,
 )
@@ -328,6 +329,15 @@ async def db_open(request: Request):
             status_code=404 if r.get("not_found") else 200,
         )
     return {"ok": True, "name": r["name"], "type": r["type"], "databases": r["databases"]}
+
+
+# Re-list this session's connection's databases, refreshing the cached list.
+@app.get("/api/db/databases")
+async def db_databases(request: Request):
+    r = await refresh_databases(request.state.sid)
+    if not r["ok"]:
+        return _gate_error(r, ("no-session",))
+    return {"ok": True, "name": r["name"], "databases": r["databases"]}
 
 
 # Select this session's active connection's database.

@@ -1,3 +1,5 @@
+import { useEffect, type Dispatch, type SetStateAction } from 'react'
+
 import { apiFetch } from './api'
 import { withoutHeartbeat } from './session'
 
@@ -10,6 +12,8 @@ export type Connection = {
   database: string | null
   // The dialect's identifier quote (`"` or a backtick), for dashboard params.
   identQuote?: string
+  // The databases came with this object (an open or a connect just listed).
+  listed?: true
 }
 
 // Ready to query when a database is selected, or the driver has no picker
@@ -51,7 +55,7 @@ export async function openSaved(
   try {
     const data = await (await postJson('/api/db/open', { name })).json()
     return data.ok
-      ? { ok: true, connection: toConnection(data) }
+      ? { ok: true, connection: { ...toConnection(data), listed: true } }
       : { ok: false, message: data.message ?? `could not open “${name}”` }
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : 'request failed' }
@@ -68,4 +72,42 @@ export function selectDatabase(database: string): Promise<boolean> {
       return false
     }
   })
+}
+
+// This session's databases, fresh from the server, with the connection they
+// belong to; null when the request failed.
+async function listDatabases(): Promise<{ name: string; databases: string[] } | null> {
+  try {
+    const data = await (await apiFetch('/api/db/databases')).json()
+    return data.ok ? { name: data.name as string, databases: data.databases as string[] } : null
+  } catch {
+    return null
+  }
+}
+
+// While `open` (a database list on screen), re-list once and adopt the fresh
+// list; an unchanged list leaves the connection object as is, a failed re-list
+// keeps the list on screen, and a list landing after close, or for a
+// connection the session has since left, is dropped.
+export function useFreshDatabases(
+  open: boolean,
+  setConnection: Dispatch<SetStateAction<Connection | null>>,
+): void {
+  useEffect(() => {
+    if (!open) return
+    let live = true
+    void listDatabases().then((fresh) => {
+      if (!live || !fresh) return
+      const { name, databases } = fresh
+      setConnection((c) => {
+        if (!c || c.name !== name) return c
+        const same =
+          databases.length === c.databases.length && databases.every((d, i) => d === c.databases[i])
+        return same ? c : { ...c, databases }
+      })
+    })
+    return () => {
+      live = false
+    }
+  }, [open, setConnection])
 }

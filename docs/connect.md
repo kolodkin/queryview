@@ -54,7 +54,7 @@ fails, the error suggests `host.docker.internal` (see the README's
 - **Active connection** — held at the **session** level (see
   [queryview.md](./queryview.md)). One per session.
 - **Database selection** — after connecting, the user picks a database. Only
-  then does the top-left indicator read `🟢 connected - <connection> · <database>`. The choice
+  then does the top-left indicator read `🟢 <connection> · <database>`. The choice
   is remembered with the connection.
 
 ## Creating a connection
@@ -87,7 +87,7 @@ cards ── "New connection" card ──▶ connection form
                                               │
                               pick a database  │
                                               ▼
-                              🟢 connected - <connection> · <database>  (explorer)
+                              🟢 <connection> · <database>  (explorer)
 
 cards ── saved card ──▶ opens <name>, activates it ──▶ database picker ──▶ pick
 ```
@@ -98,19 +98,21 @@ After connecting, the picker lists the databases (`SHOW DATABASES`), the last
 one used highlighted; **← Connections** returns to the cards, leaving the
 connection open. A filter input (focused on open) narrows the list by case-insensitive
 substring; **Enter** selects the first remaining match, and an empty result
-shows "No databases match". Selecting a database:
+shows "No databases match". Each row has a copy icon for its name. Selecting a database:
 
 - sets the session's selected database,
 - persists it on the saved connection (`POST /api/db/database`),
-- collapses the picker and shows the top-left indicator `🟢 connected - <connection> · <database>`,
+- collapses the picker and shows the top-left indicator `🟢 <connection> · <database>`,
 - makes the query panel available on QueryView (see [query.md](./query.md)),
 - and lands on the explorer (see
   [queryview.md](./queryview.md#landing-page)).
 
-Clicking the `🟢 connected - <connection> · <database>` pill reopens the same list as a
+Clicking the `🟢 <connection> · <database>` pill reopens the same list as a
 dropdown — same filter, plus **Escape** to close — so the database can be
 switched from any page without going back to Connect. Below the databases it
-lists the connections; clicking one opens it.
+lists the connections; clicking one opens it. Both the dropdown and the picker
+re-list the databases on open, so one created since the connect appears; a
+failed re-list keeps the list on screen.
 
 ## Persistence (SQLite)
 
@@ -213,7 +215,8 @@ session.
 | POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
 | GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by}]}`: this session's connections, then the saved ones most recent first (never the config) |
 | POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card) |
-| POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database |
+| GET    | `/api/db/databases`   | —                                      | `{ok, name, databases}` \| `{ok:false, message}`; re-lists the session's connection's databases, refreshing the cached list; no session → `409` |
+| POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database (a name missing from the cached list is re-listed once before failing) |
 | POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |
 | GET    | `/api/predefined-queries`     | `?type=<connType>`                     | `{queries:[{query_name, query}]}`; global predefined queries by connection type |
 | POST   | `/api/predefined-queries`     | `{query_name, type, query}`            | `{ok}`; upserts a global predefined query |
@@ -228,5 +231,5 @@ interface with HTTP Basic auth and a 5s timeout.
 
 CI runs a real `clickhouse/clickhouse-server` service container so the e2e suite
 exercises an actual connection: it asserts that connecting succeeds, a database
-can be selected, the indicator shows `connected - <connection> · <database>`, and a query
+can be selected, the indicator shows `<connection> · <database>`, and a query
 against a seeded `test` database returns its rows.

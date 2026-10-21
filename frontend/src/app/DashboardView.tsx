@@ -265,7 +265,7 @@ function DashboardView({
 
   return (
     // mt clears the floating header when the page is taller than the window.
-    <div className="mt-10 w-full max-w-[80vw]" data-testid="dashboard-view">
+    <div className="mt-10 w-full" data-testid="dashboard-view">
       <div className="mb-4 flex items-center justify-center gap-3">
         <h1 className="text-2xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           Dashboard
