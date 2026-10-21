@@ -12,6 +12,7 @@ from typing import Any
 import asyncpg
 
 from .base import (
+    RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_ROW_CAP,
     SCRIPT_TIMEOUT_SECONDS,
     Column,
@@ -196,6 +197,18 @@ class PostgresDriver:
     ) -> RowsResult | Err:
         try:
             return RowsResult(await self._fetch_page(config, sql, database, limit, offset, order_by))
+        except Exception as e:  # noqa: BLE001
+            return Err(str(e) or "connection failed")
+
+    async def run_sql(self, config: PgConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
+        try:
+            async with (
+                _connect(config, database, RUN_SQL_TIMEOUT_SECONDS) as conn,
+                conn.transaction(readonly=True),  # unwrapped SQL could otherwise write
+            ):
+                stmt = await conn.prepare(sql.rstrip().rstrip(";"))
+                records = await (await stmt.cursor()).fetch(max_rows)
+                return RowsResult(_to_rows(stmt.get_attributes(), records))
         except Exception as e:  # noqa: BLE001
             return Err(str(e) or "connection failed")
 

@@ -256,3 +256,22 @@ def test_execute_script_shows_non_json_output_as_status(monkeypatch):
     monkeypatch.setattr("queryview.drivers.clickhouse.ch_fetch", fake_ch_fetch)
     results = asyncio.run(d.execute_script(CFG, "SELECT 1 FORMAT CSV", None))
     assert results[0].ok and results[0].rows is None and results[0].status == "1,a\n2,b"
+
+
+def test_run_sql_sends_statement_unwrapped_with_server_limits(monkeypatch):
+    seen = {}
+    _capture(monkeypatch, seen, _json_compact(["name"], [["a"], ["b"], ["c"]]))
+    r = asyncio.run(ClickHouseDriver().run_sql(CFG, "DESCRIBE TABLE t;", "db", 2))
+    assert isinstance(r, RowsResult)
+    assert r.rows.data == [["a"], ["b"]]  # break mode's overshoot is trimmed
+    assert seen["query"] == "DESCRIBE TABLE t"
+    assert seen["clause"] == "JSONCompact"
+    s = seen["settings"]
+    assert s["max_result_rows"] == "2" and s["result_overflow_mode"] == "break"
+    assert s["max_execution_time"] == "60" and len(s["query_id"]) == 32
+
+
+def test_run_sql_error_names_query_id(monkeypatch):
+    _fail(monkeypatch, "connection timed out")
+    r = asyncio.run(ClickHouseDriver().run_sql(CFG, "SELECT 1", "db", 10))
+    assert isinstance(r, Err) and "query_id" in r.message

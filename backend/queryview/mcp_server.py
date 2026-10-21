@@ -4,6 +4,7 @@ in-process remote.py hub."""
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -69,37 +70,46 @@ async def push_query(
 
 
 @mcp.tool()
-async def run_query(
-    session_id: str,
-    query: str,
-    limit: int = 1000,
-    offset: int = 0,
-) -> dict[str, Any]:
-    """Run a read-only SQL query on the session's connection and selected
+async def run_query(session_id: str, query: str, limit: int = 1000) -> dict[str, Any]:
+    """Run one read-only SQL statement on the session's connection and selected
     database, returning the rows to the agent (push_query only fills a browser
-    panel). Use it to explore schema and data before a push.
+    panel). Use it to explore schema and data before a push. The statement runs
+    as written — SELECT, DESCRIBE, SHOW, EXPLAIN... — so page with your own
+    LIMIT/OFFSET; it is given up on after a minute.
 
-    Returns {"ok": True, "database", "columns", "types", "rows": [[...]]} —
-    values typed as the driver returns them (64-bit integers and decimals as
-    strings) — or {"ok": False, "message"} (e.g. "not connected", "select a
-    database first"). The user can switch `database` from the connection pill;
-    check it before deciding whether to fully-qualify tables as db.table.
+    Returns {"ok": True, "database", "columns", "types", "rows": [[...]],
+    "truncated"} — values typed as the driver returns them (64-bit integers and
+    decimals as strings), `truncated` when rows past `limit` were dropped — or
+    {"ok": False, "message"} (e.g. "not connected", "select a database first").
+    The user can switch `database` from the connection pill; check it before
+    deciding whether to fully-qualify tables as db.table.
 
     Args:
         session_id: The session id shown in the QueryView popover.
-        query: The SQL to run.
-        limit: Page size (default 1000, max 10000).
-        offset: Row offset (default 0).
+        query: The SQL statement to run.
+        limit: Most rows to return (default 1000, max 10000).
     """
-    from .connect import run_query as _run_query
+    from .connect import run_sql
+    from .drivers.base import RUN_SQL_TIMEOUT_SECONDS
     from .validation import MAX_LIMIT
 
     limit = max(0, min(limit, MAX_LIMIT))
-    offset = max(0, offset)
-    r = await _run_query(session_id, query, limit, offset)
+    try:
+        # Hard deadline whatever the driver does, so a call can't hang the agent.
+        async with asyncio.timeout(RUN_SQL_TIMEOUT_SECONDS + 10):
+            r = await run_sql(session_id, query, limit + 1)
+    except TimeoutError:
+        return {"ok": False, "message": f"query timed out after {RUN_SQL_TIMEOUT_SECONDS + 10}s"}
     if not r["ok"]:
         return {"ok": False, "message": r["message"]}
-    return {"ok": True, "database": r["database"], **_columns(r["meta"]), "rows": r["data"]}
+    rows = r["data"]
+    return {
+        "ok": True,
+        "database": r["database"],
+        **_columns(r["meta"]),
+        "rows": rows[:limit],
+        "truncated": len(rows) > limit,
+    }
 
 
 def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:

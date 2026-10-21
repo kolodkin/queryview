@@ -162,6 +162,23 @@ class DuckDBDriver:
         except Exception as e:  # noqa: BLE001
             return Err(str(e))
 
+    async def run_sql(self, config: DuckConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
+        def _work() -> QueryRows:
+            con = _open(config.path)
+            try:
+                rel = con.sql(sql.rstrip().rstrip(";"))
+                if rel is None:  # a statement without a result set
+                    return QueryRows([], [])
+                meta = [Column(name, str(t)) for name, t in zip(rel.columns, rel.types, strict=True)]
+                return QueryRows(meta, [[to_json_value(v) for v in row] for row in rel.fetchmany(max_rows)])
+            finally:
+                con.close()
+
+        try:
+            return RowsResult(await asyncio.to_thread(_work))
+        except Exception as e:  # noqa: BLE001
+            return Err(str(e))
+
     async def export_csv(
         self,
         config: DuckConfig,

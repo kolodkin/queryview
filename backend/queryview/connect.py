@@ -584,6 +584,19 @@ async def run_query(
     return {"ok": True, "database": s.database, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
 
 
+async def run_sql(sid: str, sql: str, max_rows: int) -> dict[str, Any]:
+    """Run one read-only statement as written (the agent's run_query) on this
+    session's selected database: `{ok, database, meta, data}`, at most
+    `max_rows` rows."""
+    s, err = await _gated_session(sid)
+    if s is None:
+        return err  # type: ignore[return-value]
+    r = await DRIVERS[s.type].run_sql(s.config, sql, s.database, max_rows)
+    if isinstance(r, Err):
+        return {"ok": False, "message": r.message}
+    return {"ok": True, "database": s.database, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
+
+
 async def execute_script(sid: str, sql: str) -> dict[str, Any]:
     """Run a script as written on this session's selected database (the Scripts
     page): `{ok, results}`, one entry per statement run — see docs/api.md."""

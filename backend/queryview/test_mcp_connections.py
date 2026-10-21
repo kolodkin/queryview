@@ -35,6 +35,16 @@ def test_run_query_uses_the_session_connection():
     assert "connection" not in out
 
 
+def test_run_query_runs_non_select_and_flags_truncation():
+    from queryview.mcp_server import run_query
+
+    sid = _connected_session("sc-duck-raw")
+    out = _run(run_query(sid, "DESCRIBE SELECT 1 AS a, 2 AS b"))
+    assert out["ok"] is True and [r[0] for r in out["rows"]] == ["a", "b"]
+    out = _run(run_query(sid, "SELECT * FROM range(5)", limit=3))
+    assert out["rows"] == [[0], [1], [2]] and out["truncated"] is True
+
+
 def test_run_query_on_disconnected_session_fails():
     from queryview.mcp_server import run_query
 

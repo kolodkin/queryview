@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from dataclasses import asdict, dataclass
 from typing import Any, ClassVar, Self, TypeVar
@@ -10,6 +11,7 @@ from typing import Any, ClassVar, Self, TypeVar
 import httpx
 
 from .base import (
+    RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_ROW_CAP,
     SCRIPT_TIMEOUT_SECONDS,
     Column,
@@ -29,6 +31,8 @@ from .base import (
 )
 
 CH_TIMEOUT_SECONDS = 5.0
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -243,6 +247,29 @@ class ClickHouseDriver:
         order_clause = build_order_by(order_by, "`")
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias=None)
         return await ch_query(config, paginated, ChRows, database=database)
+
+    async def run_sql(self, config: ChConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
+        # The server stops past max_rows and at the time limit, and drops the
+        # query if we hang up; query_id traces it in system.query_log.
+        query_id = uuid.uuid4().hex
+        settings = {
+            **JSON_COMPACT_SETTINGS,
+            "query_id": query_id,
+            "max_result_rows": str(max_rows),
+            "result_overflow_mode": "break",
+            "max_execution_time": str(RUN_SQL_TIMEOUT_SECONDS),
+            "cancel_http_readonly_queries_on_client_close": "1",
+        }
+        log.info("run_sql query_id=%s database=%s", query_id, database)
+        timeout = httpx.Timeout(CH_TIMEOUT_SECONDS, read=RUN_SQL_TIMEOUT_SECONDS + CH_TIMEOUT_SECONDS)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            text = await ch_fetch(config, sql.rstrip().rstrip(";"), ChRows.clause, database, settings, client=client)
+        if isinstance(text, Err):
+            return Err(f"{text.message} (query_id {query_id})")
+        r = ChRows.from_text(text)
+        if isinstance(r, ChRows):  # break mode can overshoot by up to a block
+            r.rows.data[max_rows:] = []
+        return r
 
     async def export_csv(
         self,
