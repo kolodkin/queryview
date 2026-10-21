@@ -158,7 +158,7 @@ function DatabaseMenu({
       testid="db-select"
       isSelected={(db) => db === connection.database}
       onPick={onSelect}
-      className="left-0 w-64"
+      className="left-0 w-96 max-h-[75vh]"
       renderItem={(db, current) => (
         <span className={`truncate ${current ? 'text-indigo-200' : 'text-slate-200'}`}>{db}</span>
       )}
@@ -447,7 +447,7 @@ function Shell() {
     }`
 
   return (
-    <main className="relative flex min-h-screen items-center-safe justify-center-safe px-6 py-10 text-slate-100">
+    <main className="relative flex min-h-screen items-center-safe justify-center-safe px-3 py-10 text-slate-100">
       {/* One row: labels truncate as the window narrows instead of the two
           groups overlapping. */}
       <header className="absolute inset-x-4 top-4 z-10 flex items-center gap-2">
