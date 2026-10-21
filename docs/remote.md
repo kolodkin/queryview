@@ -63,7 +63,7 @@ tools (among others):
   means rows past `limit` were dropped. `database` tells the agent whether to
   fully-qualify tables. A disconnected session fails with `not connected`. The
   statement is given up on after 60s (server-side too); on ClickHouse each run
-  logs its `query_id`, also named in errors, to look up in `system.query_log`.
+  names its `query_id` in errors, to look up in `system.query_log`.
 - `run_script(session_id, sql)` — run a script like the [Scripts](./scripts.md)
   page's Run all, **writes included**, returning `{ok, database, results: [{sql,
   ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the

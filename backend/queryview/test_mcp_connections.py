@@ -43,6 +43,9 @@ def test_run_query_runs_non_select_and_flags_truncation():
     assert out["ok"] is True and [r[0] for r in out["rows"]] == ["a", "b"]
     out = _run(run_sql(sid, "SELECT * FROM range(5)", limit=3))
     assert out["rows"] == [[0], [1], [2]] and out["truncated"] is True
+    # read_only alone would let COPY write a file, or a second statement ride along
+    for sql in ("COPY (SELECT 1) TO 'x.csv'", "SELECT 1; SELECT 2"):
+        assert _run(run_sql(sid, sql))["ok"] is False
 
 
 def test_run_query_on_disconnected_session_fails():

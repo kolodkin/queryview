@@ -48,6 +48,9 @@ def _open(path: str, read_only: bool = True):
     return duckdb.connect(path, read_only=(read_only and path != ":memory:"))
 
 
+_READ_STATEMENTS = {duckdb.StatementType.SELECT, duckdb.StatementType.EXPLAIN}
+
+
 def _rel_rows(rel: duckdb.DuckDBPyRelation) -> QueryRows:
     """A relation's rows as the shared result shape; it exposes DuckDB's own
     type names alongside the rows."""
@@ -170,6 +173,11 @@ class DuckDBDriver:
             timer = threading.Timer(RUN_SQL_TIMEOUT_SECONDS, con.interrupt)  # DuckDB has no server-side limit
             timer.start()
             try:
+                # read_only still lets COPY ... TO, ATTACH or INSTALL write, so
+                # only a single query-shaped statement runs (DESCRIBE/SHOW parse as SELECT).
+                stmts = con.extract_statements(sql)
+                if len(stmts) != 1 or stmts[0].type not in _READ_STATEMENTS:
+                    raise ValueError("run_sql runs one read-only query (SELECT, DESCRIBE, SHOW, EXPLAIN...)")
                 rel = con.sql(sql)
                 return QueryRows([], []) if rel is None else _rel_rows(rel.limit(max_rows))
             finally:

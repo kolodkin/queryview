@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import uuid
 from dataclasses import asdict, dataclass
 from typing import Any, ClassVar, Self, TypeVar
@@ -31,8 +30,6 @@ from .base import (
 )
 
 CH_TIMEOUT_SECONDS = 5.0
-
-log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -127,7 +124,7 @@ async def ch_fetch(
     reuses a caller's connection across several queries."""
     url = f"http://{c.host}:{c.port}/"
     q = f"{query}\nFORMAT {clause}" if clause else query
-    # Every query gets a logged query_id, to trace it in system.query_log, and
+    # Every query gets a query_id, named in errors to trace it in system.query_log, and
     # a read is dropped server-side when we hang up (e.g. on a client timeout).
     query_id = uuid.uuid4().hex
     params = {"query_id": query_id, **(settings or {})}
@@ -136,7 +133,6 @@ async def ch_fetch(
     if database:
         params["database"] = database
     auth = (c.username, c.password)
-    log.info("clickhouse query_id=%s database=%s", query_id, database)
 
     async def send(cl: httpx.AsyncClient) -> httpx.Response:
         if write:
@@ -152,7 +148,7 @@ async def ch_fetch(
     except httpx.TimeoutException:
         return Err(f"connection timed out (query_id {query_id})")
     except httpx.HTTPError as err:
-        return Err(str(err) or "connection failed")
+        return Err(f"{str(err) or 'connection failed'} (query_id {query_id})")
     text = res.text.strip()
     if not res.is_success:
         return Err(f"ClickHouse responded {res.status_code}: {text[:200]} (query_id {query_id})")
