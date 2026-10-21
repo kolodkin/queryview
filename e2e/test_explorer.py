@@ -120,6 +120,43 @@ def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: 
     expect(output.locator("tbody tr").first).to_contain_text("gamma")
 
 
+def test_refresh_reloads_the_rows_from_the_database(seeded_test_db, page: Page) -> None:
+    """The refresh button next to the table name re-runs the browse query: a row
+    inserted since the last load appears, and the loader shows while the
+    request is in flight."""
+    from conftest import CH_DB, _ch_exec
+
+    table = f"{CH_DB}.fresh_rows"
+    _ch_exec(f"DROP TABLE IF EXISTS {table}")
+    _ch_exec(f"CREATE TABLE {table} (id UInt32, name String) ENGINE = MergeTree ORDER BY id")
+    _ch_exec(f"INSERT INTO {table} VALUES (1, 'first')")
+    try:
+        _connect(page, CASES[0], seeded_test_db)  # ClickHouse
+        page.get_by_test_id("nav-explorer").click()
+        page.locator('[data-testid="explorer-table"][data-table="fresh_rows"]').click()
+        output = page.get_by_test_id("explorer-output")
+        expect(output).to_contain_text("first")
+        expect(output).not_to_contain_text("second")
+
+        _ch_exec(f"INSERT INTO {table} VALUES (2, 'second')")
+
+        def slow(route):
+            page.wait_for_timeout(1000)
+            try:
+                route.continue_()
+            except Exception:
+                pass
+
+        page.route("**/api/db/query", slow)
+        page.get_by_test_id("explorer-refresh").click()
+        expect(page.get_by_test_id("explorer-busy")).to_be_visible()
+        expect(output).to_contain_text("second")
+        expect(page.get_by_test_id("explorer-busy")).to_have_count(0)
+        page.unroute_all(behavior="ignoreErrors")
+    finally:
+        _ch_exec(f"DROP TABLE IF EXISTS {table}")
+
+
 # Driver-independent, so these run once against DuckDB (a file, no service).
 DUCK = next(c for c in CASES if c.id == "duckdb")
 

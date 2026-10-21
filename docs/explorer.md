@@ -14,7 +14,7 @@ order-by select the query panel uses.
 │ 🟢 connected - test      QueryView Explorer Dashboard │
 │                                                     │
 │ ┌────────┐ ┌─────────────────────────────────────┐ │
-│ │ Tables │ │ items      Limit [100] ← Prev Next → │ │
+│ │ Tables │ │ items ↻    Limit [100] ← Prev Next → │ │
 │ │ events │ │ ┌─────────────────────────────────┐ │ │
 │ │ items ◀│ │ │ Fields 2/2 ▾ Order by ▾ 1.id ASC│ │ │
 │ │ users  │ │ └─────────────────────────────────┘ │ │
@@ -62,6 +62,9 @@ semantics:
 - **Order by** — server-side `ORDER BY`; toggling a column or flipping its
   ASC/DESC direction re-runs the query immediately (browsing wants instant
   feedback, so unlike the query panel there is no separate Run button).
+- **Refresh** — the ↻ after the table name re-runs the browse query at the
+  current offset, with the row loader shown while it is in flight; rows
+  inserted since the last load appear.
 - **Pagination** — Limit (applies on blur) plus Previous/Next, mapping to the
   query API's `limit`/`offset`.
 - **Long values** — columns are a fixed 50 characters wide; longer values scroll

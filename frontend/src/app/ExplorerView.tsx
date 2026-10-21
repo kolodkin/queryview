@@ -433,6 +433,17 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               >
                 {table}
               </h2>
+              <button
+                type="button"
+                onClick={() => page(offset)}
+                disabled={busy}
+                data-testid="explorer-refresh"
+                aria-label="Refresh rows"
+                title="Refresh rows"
+                className="glass-btn px-2 py-2 text-sm"
+              >
+                ↻
+              </button>
               {busy && result !== null && (
                 <span data-testid="explorer-busy" role="status" aria-label="Loading rows">
                   <Spinner />
