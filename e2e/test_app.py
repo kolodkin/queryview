@@ -7,8 +7,8 @@ from conftest import (
     CH_PASSWORD,
     CH_PORT,
     CH_USER,
-    _ch_exec,
     author_params_yaml,
+    ch_exec,
     connect_clickhouse_test_db,
     open_connect,
     open_query_panel,
@@ -131,15 +131,14 @@ def test_the_pill_menu_relists_databases_on_open(seeded_test_db, page: Page) -> 
     menu opens, without reconnecting."""
     fresh = f"{CH_DB}_fresh"
     connect_clickhouse_test_db(page)
-    _ch_exec(f"DROP DATABASE IF EXISTS {fresh}")
     try:
-        _ch_exec(f"CREATE DATABASE {fresh}")
+        ch_exec(f"CREATE DATABASE IF NOT EXISTS {fresh}")
         page.get_by_test_id("connection-status").click()
         page.get_by_test_id("db-select-filter").fill(fresh)
         expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_count(1)
         expect(page.get_by_test_id("db-select")).to_contain_text(fresh)
     finally:
-        _ch_exec(f"DROP DATABASE IF EXISTS {fresh}")
+        ch_exec(f"DROP DATABASE IF EXISTS {fresh}")
 
 
 def _switch_database_from_pill(page: Page, database: str) -> None:

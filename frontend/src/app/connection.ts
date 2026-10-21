@@ -1,3 +1,5 @@
+import { useEffect, type Dispatch, type SetStateAction } from 'react'
+
 import { apiFetch } from './api'
 import { withoutHeartbeat } from './session'
 
@@ -73,11 +75,36 @@ export function selectDatabase(database: string): Promise<boolean> {
 // Re-list this session's databases, fresh from the server (the cached list
 // dates from the connect). null when the request failed; the caller keeps
 // what it has.
-export async function listDatabases(): Promise<string[] | null> {
+async function listDatabases(): Promise<string[] | null> {
   try {
     const data = await (await apiFetch('/api/db/databases')).json()
     return data.ok ? (data.databases as string[]) : null
   } catch {
     return null
   }
+}
+
+// While `open` (a database list on screen), re-list once and adopt the fresh
+// list; an unchanged list leaves the connection object as is, a failed re-list
+// keeps the list on screen, and a list landing after close is dropped.
+export function useFreshDatabases(
+  open: boolean,
+  setConnection: Dispatch<SetStateAction<Connection | null>>,
+): void {
+  useEffect(() => {
+    if (!open) return
+    let live = true
+    void listDatabases().then((databases) => {
+      if (!live || !databases) return
+      setConnection((c) => {
+        if (!c) return c
+        const same =
+          databases.length === c.databases.length && databases.every((d, i) => d === c.databases[i])
+        return same ? c : { ...c, databases }
+      })
+    })
+    return () => {
+      live = false
+    }
+  }, [open, setConnection])
 }

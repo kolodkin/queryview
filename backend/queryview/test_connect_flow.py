@@ -222,8 +222,6 @@ def test_build_session_err_keeps_localhost_hint(monkeypatch):
 class _GrowingDriver(_FakeDriver):
     """A picker driver whose database list changes under a live session."""
 
-    requires_database = True
-
     def __init__(self):
         self.databases = ["alpha", "beta"]
         self.fail = False
@@ -263,7 +261,16 @@ def test_refresh_databases_keeps_the_old_list_when_listing_fails(monkeypatch):
     assert _run(connect.get_session(rec.id))["databases"] == ["alpha", "beta"]
 
 
-def test_refresh_databases_when_disconnected(monkeypatch):
+def test_select_database_relists_on_a_miss(monkeypatch):
+    """A database created after connecting can be selected without a reconnect:
+    a miss on the cached list re-lists once before failing."""
+    driver = _GrowingDriver()
+    monkeypatch.setitem(DRIVERS, "growing", driver)
     rec = _run(sessions.create_session())
-    out = _run(connect.refresh_databases(rec.id))
-    assert out["ok"] is False and out["message"] == "not connected"
+    _run(connect.connect_new(rec.id, "reporting", {"v": 1}, "growing"))
+    driver.databases.append("gamma")
+
+    assert _run(connect.select_database(rec.id, "gamma")) == {"ok": True}
+    assert _run(connect.get_session(rec.id))["database"] == "gamma"
+    out = _run(connect.select_database(rec.id, "delta"))
+    assert out["ok"] is False and out["message"] == "unknown database"

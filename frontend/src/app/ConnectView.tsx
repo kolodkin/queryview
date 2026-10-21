@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { filterNames, useDismiss } from '../core'
-import { isReady, listDatabases, openSaved, selectDatabase, toConnection, type Connection } from './connection'
+import {
+  isReady,
+  useFreshDatabases,
+  openSaved,
+  selectDatabase,
+  toConnection,
+  type Connection,
+} from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
 import { AgentBadge } from './controls/AgentBadge'
@@ -50,6 +57,9 @@ function ConnectView({
   const [formType, setFormType] = useState<string | null>(null)
   // Back from the picker to the cards; the opened connection stays.
   const [browsing, setBrowsing] = useState(false)
+  // Whether the picker's list may predate this mount (a reload, a return to
+  // the page); a card open or a connect lists on its own.
+  const [stale, setStale] = useState(true)
   // The card being opened, for its spinner; and the last open's failure.
   const [opening, setOpening] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -117,6 +127,7 @@ function ConnectView({
   // since a new connection isn't in it yet).
   function adopt(opened: Connection) {
     setConnection(opened)
+    setStale(false)
     setFormType(null)
     setBrowsing(false)
     setError(null)
@@ -148,19 +159,7 @@ function ConnectView({
     connection.database === null &&
     connection.databases.length > 0
 
-  // The picker may show a list from an earlier connect (a reload, or coming
-  // back from the cards), so re-list each time it comes up. Opening a card
-  // already re-lists; this covers arriving here with the picker already due.
-  useEffect(() => {
-    if (!picking) return
-    let live = true
-    void listDatabases().then((databases) => {
-      if (live && databases) setConnection((c) => (c ? { ...c, databases } : c))
-    })
-    return () => {
-      live = false
-    }
-  }, [picking, setConnection])
+  useFreshDatabases(picking && stale, setConnection)
 
   const heading = (
     <div className="mb-8 text-center">

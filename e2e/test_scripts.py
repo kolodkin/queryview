@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
-from conftest import CH_DB, PG_DB, PG_HOST, PG_PASSWORD, PG_PORT, PG_USER, _ch_exec
+from conftest import CH_DB, PG_DB, PG_HOST, PG_PASSWORD, PG_PORT, PG_USER, ch_exec
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, DriverCase, _connect
 
@@ -33,7 +33,7 @@ def _drop_table(case: DriverCase, seed: str, table: str) -> None:
     """Drop a table the test created, straight on the server, whatever state
     the UI was left in."""
     if case.id == "clickhouse":
-        _ch_exec(f"DROP TABLE IF EXISTS {CH_DB}.{table}")
+        ch_exec(f"DROP TABLE IF EXISTS {CH_DB}.{table}")
     elif case.id == "postgres":
         import asyncio
         import concurrent.futures

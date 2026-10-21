@@ -177,6 +177,7 @@ def test_select_database_only_on_the_agents_own_connection():
     assert _run(use_connection(sid, "ag-seldb-own"))["ok"]
     connect._sessions[sid].databases = ["memory"]
     assert _run(select_database(sid, "nope"))["message"] == "unknown database"
+    connect._sessions[sid].databases = ["memory"]  # the miss re-listed (none again)
     assert _run(select_database(sid, "memory"))["ok"] is True
     assert _run(sessions.database_of(sid)) == "memory"
     rec = _run(sessions.create_session())

@@ -325,14 +325,21 @@ def _with_localhost_hint(message: str, config: DriverConfig) -> str:
     return message
 
 
+async def _list_databases(conn_type: str, config: DriverConfig) -> tuple[list[str] | None, str | None]:
+    """The driver's database list, or (None, message) with the localhost hint."""
+    r = await DRIVERS[conn_type].list_databases(config)
+    if isinstance(r, Err):
+        return None, _with_localhost_hint(r.message, config)
+    return r.databases, None
+
+
 async def _build_session(
     name: str, config: DriverConfig, database: str | None, conn_type: str = "clickhouse"
 ) -> tuple[_SessionState | None, str | None]:
     """List a connection's databases and build a session object."""
-    r = await DRIVERS[conn_type].list_databases(config)
-    if isinstance(r, Err):
-        return None, _with_localhost_hint(r.message, config)
-    databases = r.databases
+    databases, message = await _list_databases(conn_type, config)
+    if databases is None:
+        return None, message
     return (
         _SessionState(
             name=name,
@@ -509,27 +516,31 @@ def forget_session(sid: str) -> None:
 
 
 async def refresh_databases(sid: str) -> dict[str, Any]:
-    """Re-list this session's connection's databases. The list is cached at
-    connect time, so one created since is invisible until the next connect;
-    the pill menu and the Connect-page picker call this when they open. The
-    selected database is kept even if it is no longer listed: the session is
-    still on it, and the next select tells the user."""
+    """Re-list this session's connection's databases; the cached list dates
+    from the connect. The selected database is kept even if no longer listed:
+    the session is still on it, and the next select tells the user."""
+    cached = _get_session_entry(sid) is not None
     await _ensure_session(sid)
     s = _get_session_entry(sid)
     if s is None:
         return {"ok": False, "message": "not connected", "reason": "no-session"}
-    r = await DRIVERS[s.type].list_databases(s.config)
-    if isinstance(r, Err):
-        return {"ok": False, "message": _with_localhost_hint(r.message, s.config)}
-    s.databases = r.databases
+    if cached:  # a rebuild just listed
+        databases, message = await _list_databases(s.type, s.config)
+        if databases is None:
+            return {"ok": False, "message": message}
+        s.databases = databases
     return {"ok": True, "databases": s.databases}
 
 
 async def select_database(sid: str, database: str) -> dict[str, Any]:
-    """Select this session's active connection's database."""
+    """Select this session's active connection's database. A name not in the
+    cached list is checked against a fresh one first, so a database created
+    since the connect can be selected."""
     s = _get_session_entry(sid)
     if s is None:
         return {"ok": False, "message": "not connected", "reason": "no-session"}
+    if database and database not in s.databases:
+        await refresh_databases(sid)
     if not database or database not in s.databases:
         return {"ok": False, "message": "unknown database", "reason": "unknown"}
     s.database = database

@@ -331,7 +331,7 @@ async def db_open(request: Request):
     return {"ok": True, "name": r["name"], "type": r["type"], "databases": r["databases"]}
 
 
-# Re-list this session's connection's databases (the pill menu / picker on open).
+# Re-list this session's connection's databases, refreshing the cached list.
 @app.get("/api/db/databases")
 async def db_databases(request: Request):
     r = await refresh_databases(request.state.sid)
