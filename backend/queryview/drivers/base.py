@@ -79,6 +79,12 @@ SCRIPT_TIMEOUT_SECONDS = 600
 RUN_SQL_TIMEOUT_SECONDS = 60
 
 
+def error_message(e: BaseException) -> str:
+    """A driver failure as `ExceptionType: message`; the type alone when the
+    message is empty (e.g. a bare TimeoutError)."""
+    return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+
+
 class StatementResult(NamedTuple):
     """One statement of a script: its rows when it returned any, else the
     driver's status text (`OK`, Postgres's `INSERT 0 3`); `message` when it

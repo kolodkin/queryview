@@ -23,6 +23,7 @@ from .base import (
     TablesResult,
     TextResult,
     build_order_by,
+    error_message,
     run_script,
     to_csv,
     to_json_value,
@@ -92,7 +93,7 @@ class DuckDBDriver:
             val = await asyncio.to_thread(_work)
             return {"ok": True, "message": f"Connected — SELECT 1 returned {val}"}
         except Exception as e:  # noqa: BLE001
-            return {"ok": False, "message": str(e) or "connection failed"}
+            return {"ok": False, "message": error_message(e)}
 
     async def list_databases(self, config: DuckConfig) -> DatabasesResult | Err:
         # No picker: queries run directly against the file (schema-qualify in SQL).
@@ -130,7 +131,7 @@ class DuckDBDriver:
         try:
             return TablesResult(await asyncio.to_thread(_work))
         except Exception as e:  # noqa: BLE001
-            return Err(str(e))
+            return Err(error_message(e))
 
     async def _fetch_page(
         self,
@@ -165,7 +166,7 @@ class DuckDBDriver:
         try:
             return RowsResult(await self._fetch_page(config, sql, database, limit, offset, order_by))
         except Exception as e:  # noqa: BLE001
-            return Err(str(e))
+            return Err(error_message(e))
 
     async def run_sql(self, config: DuckConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
         def _work() -> QueryRows:
@@ -187,7 +188,7 @@ class DuckDBDriver:
         try:
             return RowsResult(await asyncio.to_thread(_work))
         except Exception as e:  # noqa: BLE001
-            return Err(str(e))
+            return Err(error_message(e))
 
     async def export_csv(
         self,
@@ -201,7 +202,7 @@ class DuckDBDriver:
         try:
             rows = await self._fetch_page(config, sql, database, limit, offset, order_by)
         except Exception as e:  # noqa: BLE001
-            return Err(str(e))
+            return Err(error_message(e))
         return TextResult(to_csv([c.name for c in rows.meta], rows.data))
 
     async def describe_query(self, config: DuckConfig, sql: str, database: str | None) -> FieldsResult | Err:
@@ -219,7 +220,7 @@ class DuckDBDriver:
             rows = await asyncio.to_thread(_work)
             return FieldsResult([{"name": r[0], "type": r[1]} for r in rows])
         except Exception as e:  # noqa: BLE001
-            return Err(str(e))
+            return Err(error_message(e))
 
     async def execute_script(self, config: DuckConfig, sql: str, database: str | None) -> list[StatementResult]:
         # Read-write, unlike every other open: this is the one path that writes.
@@ -235,13 +236,13 @@ class DuckDBDriver:
                     return StatementResult(stmt, True, status="OK")
                 return StatementResult(stmt, True, rows=_rel_rows(rel.limit(SCRIPT_ROW_CAP + 1)))
             except Exception as e:  # noqa: BLE001
-                return StatementResult(stmt, False, message=str(e))
+                return StatementResult(stmt, False, message=error_message(e))
 
         try:
             con = await asyncio.to_thread(_open, config.path, False)
         except Exception as e:  # noqa: BLE001
             # The open itself failed: report it against the whole script.
-            return [StatementResult(sql, False, message=str(e))]
+            return [StatementResult(sql, False, message=error_message(e))]
         try:
             return await run_script(sql, lambda stmt: asyncio.to_thread(run_one_sync, con, stmt))
         finally:

@@ -24,6 +24,7 @@ from .base import (
     TablesResult,
     TextResult,
     build_order_by,
+    error_message,
     parse_host_port_config,
     run_script,
     wrap_paginated,
@@ -148,7 +149,7 @@ async def ch_fetch(
     except httpx.TimeoutException:
         return Err(f"connection timed out (query_id {query_id})")
     except httpx.HTTPError as err:
-        return Err(f"{str(err) or 'connection failed'} (query_id {query_id})")
+        return Err(f"{error_message(err)} (query_id {query_id})")
     text = res.text.strip()
     if not res.is_success:
         return Err(f"ClickHouse responded {res.status_code}: {text[:200]} (query_id {query_id})")

@@ -230,11 +230,11 @@ def test_errors_become_err(monkeypatch):
 
     monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
     cfg = PgConfig("h", 5432, "u", "")
-    assert asyncio.run(d.list_databases(cfg)) == Err("refused")
-    assert asyncio.run(d.list_tables(cfg, "db")) == Err("refused")
-    assert asyncio.run(d.run_query(cfg, "SELECT 1", "db", 10, 0, None)) == Err("refused")
-    assert asyncio.run(d.export_csv(cfg, "SELECT 1", "db", 10, 0, None)) == Err("refused")
-    assert asyncio.run(d.describe_query(cfg, "SELECT 1", "db")) == Err("refused")
+    assert asyncio.run(d.list_databases(cfg)) == Err("RuntimeError: refused")
+    assert asyncio.run(d.list_tables(cfg, "db")) == Err("RuntimeError: refused")
+    assert asyncio.run(d.run_query(cfg, "SELECT 1", "db", 10, 0, None)) == Err("RuntimeError: refused")
+    assert asyncio.run(d.export_csv(cfg, "SELECT 1", "db", 10, 0, None)) == Err("RuntimeError: refused")
+    assert asyncio.run(d.describe_query(cfg, "SELECT 1", "db")) == Err("RuntimeError: refused")
 
 
 def test_to_rows_decodes_json_columns():

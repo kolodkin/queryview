@@ -25,6 +25,7 @@ from .base import (
     TablesResult,
     TextResult,
     build_order_by,
+    error_message,
     parse_host_port_config,
     run_script,
     to_csv,
@@ -137,7 +138,7 @@ class PostgresDriver:
                 val = await conn.fetchval("SELECT 1")
                 return {"ok": True, "message": f"Connected — SELECT 1 returned {val}"}
         except Exception as e:  # noqa: BLE001
-            return {"ok": False, "message": str(e) or "connection failed"}
+            return {"ok": False, "message": error_message(e)}
 
     async def list_databases(self, config: PgConfig) -> DatabasesResult | Err:
         try:
@@ -147,7 +148,7 @@ class PostgresDriver:
                 )
                 return DatabasesResult([r["datname"] for r in rows])
         except Exception as e:  # noqa: BLE001
-            return Err(str(e) or "connection failed")
+            return Err(error_message(e))
 
     async def list_tables(self, config: PgConfig, database: str | None) -> TablesResult | Err:
         # Tables and views of the public schema — what an unqualified name in
@@ -168,7 +169,7 @@ class PostgresDriver:
                 )
                 return TablesResult([{"name": r["name"], "rows": r["rows"], "bytes": r["bytes"]} for r in rows])
         except Exception as e:  # noqa: BLE001
-            return Err(str(e) or "connection failed")
+            return Err(error_message(e))
 
     async def _fetch_page(
         self,
@@ -198,7 +199,7 @@ class PostgresDriver:
         try:
             return RowsResult(await self._fetch_page(config, sql, database, limit, offset, order_by))
         except Exception as e:  # noqa: BLE001
-            return Err(str(e) or "connection failed")
+            return Err(error_message(e))
 
     async def run_sql(self, config: PgConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
         try:
@@ -211,7 +212,7 @@ class PostgresDriver:
                 records = await (await stmt.cursor()).fetch(max_rows)
                 return RowsResult(_to_rows(stmt.get_attributes(), records))
         except Exception as e:  # noqa: BLE001
-            return Err(str(e) or "connection failed")
+            return Err(error_message(e))
 
     async def export_csv(
         self,
@@ -225,7 +226,7 @@ class PostgresDriver:
         try:
             rows = await self._fetch_page(config, sql, database, limit, offset, order_by, decode_json=False)
         except Exception as e:  # noqa: BLE001
-            return Err(str(e) or "connection failed")
+            return Err(error_message(e))
         return TextResult(to_csv([c.name for c in rows.meta], rows.data))
 
     async def describe_query(self, config: PgConfig, sql: str, database: str | None) -> FieldsResult | Err:
@@ -235,7 +236,7 @@ class PostgresDriver:
                 stmt = await conn.prepare(inner)
                 return FieldsResult([{"name": a.name, "type": a.type.name} for a in stmt.get_attributes()])
         except Exception as e:  # noqa: BLE001
-            return Err(str(e) or "connection failed")
+            return Err(error_message(e))
 
     async def execute_script(self, config: PgConfig, sql: str, database: str | None) -> list[StatementResult]:
         try:
@@ -259,10 +260,10 @@ class PostgresDriver:
                             async with conn.transaction():
                                 records = await (await prepared.cursor()).fetch(SCRIPT_ROW_CAP + 1)
                     except Exception as e:  # noqa: BLE001
-                        return StatementResult(stmt, False, message=str(e))
+                        return StatementResult(stmt, False, message=error_message(e))
                     return StatementResult(stmt, True, rows=_to_rows(attrs, records))
 
                 return await run_script(sql, run_one)
         except Exception as e:  # noqa: BLE001
             # The connection itself failed: report it against the whole script.
-            return [StatementResult(sql, False, message=str(e) or "connection failed")]
+            return [StatementResult(sql, False, message=error_message(e))]
