@@ -4,6 +4,7 @@ in-process remote.py hub."""
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -33,7 +34,7 @@ async def push_query(
     The targeted browser fills its query panel and auto-runs the query against
     the session's own connection. Get the `session_id` from the QueryView UI:
     the agent icon next to the connection status pill, after enabling "Allow
-    remote control". To explore data first, use run_query with the same id.
+    remote control". To explore data first, use run_sql with the same id.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -69,37 +70,46 @@ async def push_query(
 
 
 @mcp.tool()
-async def run_query(
-    session_id: str,
-    query: str,
-    limit: int = 1000,
-    offset: int = 0,
-) -> dict[str, Any]:
-    """Run a read-only SQL query on the session's connection and selected
+async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any]:
+    """Run one read-only SQL statement on the session's connection and selected
     database, returning the rows to the agent (push_query only fills a browser
-    panel). Use it to explore schema and data before a push.
+    panel). Use it to explore schema and data before a push. Runs as written
+    (SELECT, DESCRIBE, SHOW, EXPLAIN...): page with your own LIMIT/OFFSET.
+    Stops after a minute.
 
-    Returns {"ok": True, "database", "columns", "types", "rows": [[...]]} —
-    values typed as the driver returns them (64-bit integers and decimals as
-    strings) — or {"ok": False, "message"} (e.g. "not connected", "select a
-    database first"). The user can switch `database` from the connection pill;
-    check it before deciding whether to fully-qualify tables as db.table.
+    Returns {"ok": True, "database", "columns", "types", "rows": [[...]],
+    "truncated"} — values typed as the driver returns them (64-bit integers and
+    decimals as strings), `truncated` when rows past `limit` were dropped — or
+    {"ok": False, "message"} (e.g. "not connected", "select a database first").
+    The user can switch `database` from the connection pill; check it before
+    deciding whether to fully-qualify tables as db.table.
 
     Args:
         session_id: The session id shown in the QueryView popover.
-        query: The SQL to run.
-        limit: Page size (default 1000, max 10000).
-        offset: Row offset (default 0).
+        sql: The SQL statement to run.
+        limit: Most rows to return (default 1000, max 10000).
     """
-    from .connect import run_query as _run_query
+    from .connect import run_sql as _run_sql
+    from .drivers.base import RUN_SQL_TIMEOUT_SECONDS
     from .validation import MAX_LIMIT
 
     limit = max(0, min(limit, MAX_LIMIT))
-    offset = max(0, offset)
-    r = await _run_query(session_id, query, limit, offset)
+    deadline = RUN_SQL_TIMEOUT_SECONDS + 10  # past the drivers' own limits: a backstop
+    try:
+        async with asyncio.timeout(deadline):
+            r = await _run_sql(session_id, sql, limit + 1)
+    except TimeoutError:
+        return {"ok": False, "message": f"query timed out after {deadline}s"}
     if not r["ok"]:
         return {"ok": False, "message": r["message"]}
-    return {"ok": True, "database": r["database"], **_columns(r["meta"]), "rows": r["data"]}
+    rows = r["data"]
+    return {
+        "ok": True,
+        "database": r["database"],
+        **_columns(r["meta"]),
+        "rows": rows[:limit],
+        "truncated": len(rows) > limit,
+    }
 
 
 def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
@@ -113,7 +123,7 @@ def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
 async def run_script(session_id: str, sql: str) -> dict[str, Any]:
     """Run a `;`-separated script on the session's connection and selected
     database, like the Scripts page's Run all, returning each statement's result.
-    WRITES ARE ALLOWED (use run_query to explore read-only). Stops at the first
+    WRITES ARE ALLOWED (use run_sql to explore read-only). Stops at the first
     error; rows per statement are capped and the script has a timeout.
 
     Returns {"ok": True, "database", "results": [{sql, ok, status, message,
@@ -166,7 +176,7 @@ async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str,
 async def session_info(session_id: str) -> dict[str, Any]:
     """What a QueryView session is on: its connection, selected database, the
     databases it can switch to, its workspace, and the selected database's
-    tables. Start here to discover schema; then run_query on the same session.
+    tables. Start here to discover schema; then run_sql on the same session.
 
     The user picks the server and database in the UI (connection pill); the
     agent may only switch to session connections it added itself (see

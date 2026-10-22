@@ -75,6 +75,14 @@ SCRIPT_ROW_CAP = 100
 # 5-second probe, and a timeout reported as a failure would leave the user
 # re-running a write the server finished anyway.
 SCRIPT_TIMEOUT_SECONDS = 600
+# How long an agent's read-only run_sql may run, server- and client-side.
+RUN_SQL_TIMEOUT_SECONDS = 60
+
+
+def error_message(e: BaseException) -> str:
+    """A driver failure as `ExceptionType: message`; the type alone when the
+    message is empty (e.g. a bare TimeoutError)."""
+    return f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
 
 
 class StatementResult(NamedTuple):
@@ -139,6 +147,11 @@ class Driver(Protocol):
         order_by: list[dict[str, Any]] | None,
     ) -> TextResult | Err: ...
     async def describe_query(self, config: DriverConfig, sql: str, database: str | None) -> FieldsResult | Err: ...
+    # Run one read-only statement as written (no pagination wrapper, so
+    # DESCRIBE/SHOW/EXPLAIN work), fetching at most `max_rows` rows.
+    async def run_sql(
+        self, config: DriverConfig, sql: str, database: str | None, max_rows: int
+    ) -> RowsResult | Err: ...
     # Run a `;`-separated script as written (no pagination wrapper, writes and
     # DDL included) on one connection — see run_script for the shared policy.
     async def execute_script(

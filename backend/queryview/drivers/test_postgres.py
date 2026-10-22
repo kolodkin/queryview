@@ -230,11 +230,11 @@ def test_errors_become_err(monkeypatch):
 
     monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
     cfg = PgConfig("h", 5432, "u", "")
-    assert asyncio.run(d.list_databases(cfg)) == Err("refused")
-    assert asyncio.run(d.list_tables(cfg, "db")) == Err("refused")
-    assert asyncio.run(d.run_query(cfg, "SELECT 1", "db", 10, 0, None)) == Err("refused")
-    assert asyncio.run(d.export_csv(cfg, "SELECT 1", "db", 10, 0, None)) == Err("refused")
-    assert asyncio.run(d.describe_query(cfg, "SELECT 1", "db")) == Err("refused")
+    assert asyncio.run(d.list_databases(cfg)) == Err("RuntimeError: refused")
+    assert asyncio.run(d.list_tables(cfg, "db")) == Err("RuntimeError: refused")
+    assert asyncio.run(d.run_query(cfg, "SELECT 1", "db", 10, 0, None)) == Err("RuntimeError: refused")
+    assert asyncio.run(d.export_csv(cfg, "SELECT 1", "db", 10, 0, None)) == Err("RuntimeError: refused")
+    assert asyncio.run(d.describe_query(cfg, "SELECT 1", "db")) == Err("RuntimeError: refused")
 
 
 def test_to_rows_decodes_json_columns():
@@ -253,3 +253,60 @@ def test_to_rows_decodes_json_columns():
         [None, None, None, None],
     ]
     assert _to_rows(attrs, records, decode_json=False).data[0][0] == records[0][0]
+
+
+def test_run_sql_runs_as_written_in_a_read_only_transaction(monkeypatch):
+    captured = {}
+
+    class _Cursor:
+        async def fetch(self, n):
+            captured["n"] = n
+            return [["alpha"]]
+
+    class _Stmt:
+        def get_attributes(self):
+            class _A:
+                name = "name"
+
+                class type:  # noqa: N801
+                    name = "text"
+
+            return (_A(),)
+
+        async def cursor(self):
+            return _Cursor()
+
+    class _Txn:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    class _Conn:
+        def transaction(self, readonly=False):
+            captured["readonly"] = readonly
+            return _Txn()
+
+        async def execute(self, sql):
+            captured["timeout"] = sql
+
+        async def prepare(self, sql):
+            captured["sql"] = sql
+            return _Stmt()
+
+        async def close(self):
+            pass
+
+    async def fake_connect(c, database, command_timeout=None):
+        return _Conn()
+
+    monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
+    r = asyncio.run(PostgresDriver().run_sql(PgConfig("h", 5432, "u", ""), "SHOW search_path", "mydb", 11))
+    assert isinstance(r, RowsResult) and r.rows.data == [["alpha"]]
+    assert captured == {
+        "readonly": True,
+        "timeout": "SET LOCAL statement_timeout = 60000",
+        "sql": "SHOW search_path",
+        "n": 11,
+    }

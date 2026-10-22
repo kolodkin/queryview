@@ -24,10 +24,10 @@ def _connected_session(name: str) -> str:
 
 
 def test_run_query_uses_the_session_connection():
-    from queryview.mcp_server import run_query
+    from queryview.mcp_server import run_sql
 
     sid = _connected_session("sc-duck")
-    out = _run(run_query(sid, "SELECT 42 AS answer, 'x' AS label", limit=10))
+    out = _run(run_sql(sid, "SELECT 42 AS answer, 'x' AS label", limit=10))
     assert out["ok"] is True
     assert out["columns"] == ["answer", "label"]
     assert out["rows"] == [[42, "x"]]
@@ -35,18 +35,31 @@ def test_run_query_uses_the_session_connection():
     assert "connection" not in out
 
 
+def test_run_query_runs_non_select_and_flags_truncation():
+    from queryview.mcp_server import run_sql
+
+    sid = _connected_session("sc-duck-raw")
+    out = _run(run_sql(sid, "DESCRIBE SELECT 1 AS a, 2 AS b"))
+    assert out["ok"] is True and [r[0] for r in out["rows"]] == ["a", "b"]
+    out = _run(run_sql(sid, "SELECT * FROM range(5)", limit=3))
+    assert out["rows"] == [[0], [1], [2]] and out["truncated"] is True
+    # read_only alone would let COPY write a file, or a second statement ride along
+    for sql in ("COPY (SELECT 1) TO 'x.csv'", "SELECT 1; SELECT 2"):
+        assert _run(run_sql(sid, sql))["ok"] is False
+
+
 def test_run_query_on_disconnected_session_fails():
-    from queryview.mcp_server import run_query
+    from queryview.mcp_server import run_sql
 
     rec = _run(sessions.create_session())
-    out = _run(run_query(rec.id, "SELECT 1"))
+    out = _run(run_sql(rec.id, "SELECT 1"))
     assert out == {"ok": False, "message": "not connected"}
 
 
 def test_run_query_unknown_session_fails():
-    from queryview.mcp_server import run_query
+    from queryview.mcp_server import run_sql
 
-    out = _run(run_query("no-such-session", "SELECT 1"))
+    out = _run(run_sql("no-such-session", "SELECT 1"))
     assert out["ok"] is False
 
 
@@ -114,7 +127,7 @@ def _names(out):
 def test_agent_session_connection_lifecycle():
     """Added in memory only, usable and removable by the agent, never saved."""
     from queryview import connect
-    from queryview.mcp_server import list_connections, remove_connection, run_query, use_connection
+    from queryview.mcp_server import list_connections, remove_connection, run_sql, use_connection
 
     sid = _run(sessions.create_session()).id
     other = _run(sessions.create_session()).id
@@ -128,7 +141,7 @@ def test_agent_session_connection_lifecycle():
 
     assert _run(use_connection(sid, "ag-mem"))["ok"] is True
     assert _names(_run(list_connections(sid)))["ag-mem"]["active"] is True
-    assert _run(run_query(sid, "SELECT 1 AS one"))["rows"] == [[1]]
+    assert _run(run_sql(sid, "SELECT 1 AS one"))["rows"] == [[1]]
     assert any(r["id"] == sid and r["connection"] == "ag-mem" for r in _run(sessions.list_sessions()))
 
     # A bad database fails before the session switches.
@@ -138,7 +151,7 @@ def test_agent_session_connection_lifecycle():
 
     assert _run(remove_connection(sid, "ag-mem"))["ok"] is True
     assert "ag-mem" not in _names(_run(list_connections(sid)))
-    assert _run(run_query(sid, "SELECT 1")) == {"ok": False, "message": "not connected"}
+    assert _run(run_sql(sid, "SELECT 1")) == {"ok": False, "message": "not connected"}
 
 
 def test_add_connection_refuses_a_taken_name_and_bad_input():
