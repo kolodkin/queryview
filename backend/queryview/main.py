@@ -330,7 +330,8 @@ async def db_connect(request: Request):
     b = body if isinstance(body, dict) else {}
     raw_name = b.get("name")
     name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else driver.type
-    return await connect_new(request.state.sid, name, config, driver.type, session_only=b.get("session") is True)
+    r = await connect_new(request.state.sid, name, config, driver.type, session_only=b.get("session") is True)
+    return _gate_error(r, ()) if not r["ok"] and r.get("reason") == "locked" else r
 
 
 # Open a saved connection by name for this session (a Connect page card).

@@ -261,8 +261,8 @@ def _now_ms() -> int:
 # None inside an MCP tool call.
 request_token: ContextVar[str | None] = ContextVar("request_token", default=None)
 
-# sid -> connection name -> the token issued to that session's tab. Memory
-# only: a restart means typing the passphrase again.
+# sid -> connection name -> the session's token (one per tab, good for every
+# connection it unlocked). Memory only: a restart means typing the passphrase again.
 _unlocked: dict[str, dict[str, str]] = {}
 # connection name -> consecutive wrong passphrases, for the unlock back-off.
 _unlock_failures: dict[str, int] = {}
@@ -295,8 +295,10 @@ def _is_unlocked(sid: str, name: str) -> bool:
 
 
 def _issue_token(sid: str, name: str) -> str:
-    token = secrets.token_urlsafe(32)
-    _unlocked.setdefault(sid, {})[name] = token
+    """The session's token, now good for `name` too: a tab holds one token."""
+    tokens = _unlocked.setdefault(sid, {})
+    token = next(iter(tokens.values()), None) or secrets.token_urlsafe(32)
+    tokens[name] = token
     return token
 
 
@@ -309,7 +311,7 @@ async def _verify_passphrase(name: str, passphrase: str) -> dict[str, Any] | Non
     failures = _unlock_failures.get(name, 0)
     if failures:
         await _backoff(min(2**failures, 30))
-    if not _passphrase_matches(stored, passphrase):
+    if not await asyncio.to_thread(_passphrase_matches, stored, passphrase):
         _unlock_failures[name] = failures + 1
         return {"ok": False, "message": "wrong passphrase", "reason": "locked"}
     _unlock_failures.pop(name, None)
@@ -329,12 +331,12 @@ async def lock_connection(sid: str, name: str, passphrase: str) -> dict[str, Any
             return {"ok": False, "message": await unknown_connection_message(name, sid)}
         if row.lock_hash is not None:
             return {"ok": False, "message": f'"{name}" is already locked'}
-        row.lock_hash = _hash_passphrase(passphrase)
+        row.lock_hash = await asyncio.to_thread(_hash_passphrase, passphrase)
         s.add(row)
         await s.commit()
-    state = _get_session_entry(sid)
-    if state is not None and state.name == name:
-        state.locked = True
+    for state in _sessions.values():
+        if state.name == name:
+            state.locked = True
     return {"ok": True, "token": _issue_token(sid, name)}
 
 
@@ -544,9 +546,13 @@ async def connect_new(
         state, message = await _build_session(name, config, None, conn_type)
     if state is None:
         return {"ok": False, "message": message}
-    _set_session_entry(sid, state)
     if not session_only:
+        # Re-saving keeps a lock, and needs its token: the config is behind it too.
+        state.locked = await _lock_hash_of(name) is not None
+        if state.locked and not _is_unlocked(sid, name):
+            return dict(LOCKED)
         await _save_active_connection(name, config, conn_type)
+    _set_session_entry(sid, state)
     await sessions.set_connection(sid, name)
     return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
 

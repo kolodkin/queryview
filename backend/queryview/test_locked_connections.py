@@ -171,3 +171,34 @@ def test_a_restart_forgets_tokens_but_not_the_lock():
     r = c.post("/api/db/unlock", json={"name": "lock-restart-duck", "passphrase": "pw"})
     c.headers["X-QV-Token"] = r.json()["token"]
     assert c.post("/api/db/query", json={"query": "SELECT 1"}).json()["ok"]
+
+
+def test_lock_reaches_sessions_already_on_the_connection():
+    c = _connected("lock-shared-duck")
+    other = _client()
+    assert other.post("/api/db/open", json={"name": "lock-shared-duck"}).json()["ok"]
+    assert c.post("/api/db/lock", json={"name": "lock-shared-duck", "passphrase": "pw"}).json()["ok"]
+    assert other.post("/api/db/query", json={"query": "SELECT 1"}).status_code == 403
+    assert _run(mcp_server.run_sql(other.headers["X-QV-Session"], "SELECT 1"))["message"] == "connection is locked"
+
+
+def test_resaving_a_locked_connection_keeps_it_locked():
+    c = _connected("lock-resave-duck")
+    token = c.post("/api/db/lock", json={"name": "lock-resave-duck", "passphrase": "pw"}).json()["token"]
+    body = {"type": "duckdb", "name": "lock-resave-duck", "path": ":memory:"}
+    # Without the token the config behind the lock cannot be replaced either.
+    r = c.post("/api/db/connect", json=body)
+    assert r.status_code == 403 and r.json() == {"ok": False, "message": "connection is locked"}
+    c.headers["X-QV-Token"] = token
+    r = c.post("/api/db/connect", json=body)
+    assert r.json()["ok"], r.text
+    c.headers.pop("x-qv-token")
+    assert _run(mcp_server.run_sql(c.headers["X-QV-Session"], "SELECT 1"))["message"] == "connection is locked"
+    assert c.get("/api/session").json()["locked"] is True
+
+
+def test_one_token_per_session_so_locking_another_connection_keeps_this_one_open():
+    c = _connected("lock-tok-a")
+    _connected("lock-tok-b")
+    token = c.post("/api/db/lock", json={"name": "lock-tok-a", "passphrase": "pw"}).json()["token"]
+    assert c.post("/api/db/lock", json={"name": "lock-tok-b", "passphrase": "pw"}).json()["token"] == token
