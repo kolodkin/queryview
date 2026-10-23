@@ -8,11 +8,9 @@ connection-config bodies validate `host` (non-empty) and `port` (integer
 **UI only:** every `/api/*` route but `/api/health` answers `403 {ok:false,
 message}` unless the request carries `Sec-Fetch-Site: same-origin`, which
 browsers add to every same-origin request (fetch, `EventSource`, beacons,
-download links) and page scripts cannot set. The REST API is the SPA's; an
-agent that can reach the backend over HTTP is held to the MCP tools, which
-stay within the session the user armed (see [remote.md](./remote.md)). Test
-suites that call the API from Python pose as the browser by sending that
-header (`conftest.py` does it for every `httpx`/`TestClient` call).
+download links) and page scripts cannot set. An agent reaching the backend
+over HTTP is held to the MCP tools (see [remote.md](./remote.md)). The test
+suites send that header for every `httpx`/`TestClient` call (`conftest.py`).
 
 **Locked connections:** a request on a session whose active connection is
 [locked](./connect.md#locked-connections) must also carry the tab's unlock

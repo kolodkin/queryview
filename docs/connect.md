@@ -176,33 +176,31 @@ restarts (the session then reads as disconnected).
 
 ## Locked connections
 
-A saved connection can be **locked** behind a passphrase. Click the lock on
-its card and type one. From then on the agent cannot touch it, however it comes
-in: on a session whose active connection is locked, every MCP tool that reads
-or writes data (`run_sql`, `run_script`, `select_database`, the table list in
-`session_info`, and every push) answers `connection is locked`, and so does
-every REST call that lacks the tab's unlock token (`403`). `list_connections`
-and `session_info` still name the connection and report `locked: true` so the
-agent knows why. Session connections are never locked: the agent's own are the
-agent's.
+A saved connection can be **locked** behind a passphrase: click the lock on
+its card and type one. On a session whose active connection is locked, every
+MCP tool that reads or writes data (`run_sql`, `run_script`, `select_database`,
+the table list in `session_info`, every push) answers `connection is locked`,
+and so does every REST call without the tab's unlock token (`403`).
+`list_connections` and `session_info` still name the connection and report
+`locked: true`. Session connections are never locked: they are the agent's own.
 
-What is stored: only a salted scrypt hash of the passphrase (`lock_hash` on
-the `connections` row), never the passphrase. What a tab holds: an **unlock
-token**, a random string the server issues for the passphrase and keeps in
-memory per session. The tab keeps it in `sessionStorage` (`qv_token`) and
-sends it as `X-QV-Token` on every request. Lock a connection and the locking
-tab gets its token at once, so what you are on keeps working.
+Stored: only a salted scrypt hash of the passphrase (`lock_hash` on the
+`connections` row). Held by the tab: an **unlock token**, a random string the
+server issues for the passphrase and keeps in memory per session, kept in
+`sessionStorage` (`qv_token`) and sent as `X-QV-Token` on every request.
+Locking hands the locking tab its token, so the connection it is on keeps
+working.
 
 - **Opening** a locked card lands on it like any other; the shell then asks
-  for the passphrase unless the tab already holds a token for it, and asks
-  the same way when a session resumes on a locked connection without one (a
-  new tab, a backend restart). Cancelling disconnects.
-- **Reload** keeps the token (it lives in `sessionStorage`); closing the tab
-  drops it. A restart drops the server side, so the next request asks again.
-- **Removing** the lock takes the passphrase, like unlocking does. A forgotten
-  passphrase means deleting and re-adding the connection.
-- Wrong guesses on a connection back off exponentially (2s, 4s … 30s),
-  whoever sends them, on top of the hash's own cost.
+  for the passphrase unless the tab holds a token for it, as it does when a
+  session resumes on a locked connection without one (a new tab, a backend
+  restart). Cancelling disconnects.
+- **Reload** keeps the token; closing the tab drops it. A restart drops the
+  server side, so the next request asks again.
+- **Removing** the lock takes the passphrase. A forgotten passphrase means
+  deleting and re-adding the connection.
+- Attempts on a connection back off exponentially (2s, 4s … 30s), whoever
+  sends them.
 
 Not covered: typing the passphrase where the agent can read it, or handing the
 agent the browser tab that holds the token.
