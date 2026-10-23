@@ -30,6 +30,11 @@
    (`pytest --pyargs queryview`).
 2. Exception: e2e (Playwright) tests live in the top-level `e2e/` folder —
    they test the running app through its HTTP surface, not a module.
+3. The e2e suite needs local ClickHouse (`:8123`) and PostgreSQL (`:5432`).
+   In the Claude Code web environment, start them with `claudeai/run.sh`
+   (the `/claudeai-run` skill) before running e2e; on a fresh container run
+   `claudeai/setup.sh` first. Never skip the driver tests for lack of a
+   database server without trying that first.
 
 # Conventions
 
