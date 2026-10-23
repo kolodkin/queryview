@@ -33,9 +33,10 @@ Idempotently starts (reusing anything already up):
 
 1. **ClickHouse** — `:8123` (standalone binary in `.cache/clickhouse`, user `default`, no password)
 2. **PostgreSQL** — `:5432` (cluster in `.cache/pgdata`, trust auth, superuser `postgres`)
-3. **git daemon** — `:9418`, serving a bare `queryview.git` under
-   `.cache/gitsrv` (what CI's `start-git-daemon` action provides). The repo is
-   recreated empty on every `run.sh`, so rerun it before each e2e run.
+3. **git daemon** — `:9418` (`setup_git_daemon.sh`), serving a bare
+   `queryview.git` under `.cache/gitsrv`, what CI's `start-git-daemon` action
+   provides. The repo is recreated empty on every `run.sh`, so rerun it before
+   each e2e run.
 
 Prints `[run] all services up` on success. A failure exits non-zero with a
 `[<svc>] error:` line pointing at its log under `.cache/`.
@@ -62,4 +63,5 @@ claudeai/setup_<svc>.sh first" error means the install is gone (fresh container)
 claudeai/setup.sh   # then re-run claudeai/run.sh
 ```
 
-Per-service logs: `.cache/clickhouse.log`, `.cache/postgres.log`.
+Per-service logs: `.cache/clickhouse.log`, `.cache/postgres.log`,
+`.cache/git-daemon.log`.
