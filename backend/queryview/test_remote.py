@@ -239,7 +239,7 @@ def test_push_query_reads_the_database_from_the_session_row():
     asyncio.run(sessions.set_database(rec.id, "sales_reporting"))
     remote.register(rec.id)
     try:
-        out = asyncio.run(mcp_push_query(rec.id, "SELECT 1"))
+        out = asyncio.run(mcp_push_query("SELECT 1", session_id=rec.id))
         assert out["ok"] is True
         assert out["database"] == "sales_reporting"
     finally:

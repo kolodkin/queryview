@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { useDismiss } from '../../core'
 import {
+  AGENT_SESSION_ID,
   listSessions,
   removeSession,
   renameSession,
@@ -117,8 +118,8 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
                     <span className="ml-2 text-xs text-slate-400">in another tab</span>
                   )}
                 </button>
-                {/* A held session (this tab's or another's) can't be deleted. */}
-                {!s.held && (
+                {/* A held session (this tab's or another's) can't be deleted, nor the agent session. */}
+                {!s.held && s.id !== AGENT_SESSION_ID && (
                   <button
                     type="button"
                     aria-label={`Delete ${s.label}`}

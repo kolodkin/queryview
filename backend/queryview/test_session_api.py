@@ -72,3 +72,12 @@ def test_a_heartbeat_on_a_taken_session_is_409_and_force_takes_it_back():
     assert r.json()["session"]["id"] == sid
     beat = client.post("/api/sessions/attach", json={"tab": "tab-http-6", "session_id": sid, "keep": True})
     assert beat.status_code == 409
+
+
+def test_delete_refuses_the_agent_session():
+    from queryview.sessions import AGENT_SESSION_ID
+
+    client = TestClient(app)
+    r = client.delete(f"/api/sessions/{AGENT_SESSION_ID}")
+    assert r.status_code == 409
+    assert any(s["id"] == AGENT_SESSION_ID for s in client.get("/api/sessions").json()["sessions"])

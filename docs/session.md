@@ -77,7 +77,8 @@ session would overwrite each other's state.
 
 - **New session** starts a fresh one in this tab.
 - **Rename this session** pins a name; clearing it unpins.
-- **×** deletes a session; a session a live tab holds (this one included) has none.
+- **×** deletes a session; a session a live tab holds (this one included) has
+  none, nor does the agent session.
 
 An unpinned label is `Session <n>`, with `n` a stable ordinal, so a name never
 changes under you when you switch databases. Each row shows the session's
@@ -94,6 +95,19 @@ the row. Arming is still the gate: disarming closes the channel and later pushes
 fail with `unknown or inactive session`. Unlike the old per-arm id this one is
 stable, so the command you copy stops changing under you. See
 [remote.md](./remote.md).
+
+### The agent session
+
+One session always exists: id `00000000000000000000000000000000`, labelled
+**agent**, seeded by migration and refused deletion. Every MCP tool that takes a
+`session_id` defaults to it, so an agent needs no id from the popover to add a
+connection and query; pass an explicit id to work in a tab's session instead.
+In the UI it is a session like any other, picked from the dropdown: open it,
+arm it, put it on any connection. A new tab never resumes it on its own. The id
+is deliberately guessable. The API has no auth, so a random
+id would protect nothing: whoever can reach the port can attach any session.
+Its session connections live in memory like everyone's, so after a backend
+restart the agent session reads as disconnected and the agent re-adds its own.
 
 ## How it is stored
 

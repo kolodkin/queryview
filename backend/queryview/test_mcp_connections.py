@@ -27,7 +27,7 @@ def test_run_query_uses_the_session_connection():
     from queryview.mcp_server import run_sql
 
     sid = _connected_session("sc-duck")
-    out = _run(run_sql(sid, "SELECT 42 AS answer, 'x' AS label", limit=10))
+    out = _run(run_sql("SELECT 42 AS answer, 'x' AS label", limit=10, session_id=sid))
     assert out["ok"] is True
     assert out["columns"] == ["answer", "label"]
     assert out["rows"] == [[42, "x"]]
@@ -39,27 +39,27 @@ def test_run_query_runs_non_select_and_flags_truncation():
     from queryview.mcp_server import run_sql
 
     sid = _connected_session("sc-duck-raw")
-    out = _run(run_sql(sid, "DESCRIBE SELECT 1 AS a, 2 AS b"))
+    out = _run(run_sql("DESCRIBE SELECT 1 AS a, 2 AS b", session_id=sid))
     assert out["ok"] is True and [r[0] for r in out["rows"]] == ["a", "b"]
-    out = _run(run_sql(sid, "SELECT * FROM range(5)", limit=3))
+    out = _run(run_sql("SELECT * FROM range(5)", limit=3, session_id=sid))
     assert out["rows"] == [[0], [1], [2]] and out["truncated"] is True
     # read_only alone would let COPY write a file, or a second statement ride along
     for sql in ("COPY (SELECT 1) TO 'x.csv'", "SELECT 1; SELECT 2"):
-        assert _run(run_sql(sid, sql))["ok"] is False
+        assert _run(run_sql(sql, session_id=sid))["ok"] is False
 
 
 def test_run_query_on_disconnected_session_fails():
     from queryview.mcp_server import run_sql
 
     rec = _run(sessions.create_session())
-    out = _run(run_sql(rec.id, "SELECT 1"))
+    out = _run(run_sql("SELECT 1", session_id=rec.id))
     assert out == {"ok": False, "message": "not connected"}
 
 
 def test_run_query_unknown_session_fails():
     from queryview.mcp_server import run_sql
 
-    out = _run(run_sql("no-such-session", "SELECT 1"))
+    out = _run(run_sql("SELECT 1", session_id="no-such-session"))
     assert out["ok"] is False
 
 
@@ -70,7 +70,7 @@ def test_push_dashboard_names_no_connection():
     sid = _connected_session("sc-dash")
     rid = remote.register(sid)
     try:
-        out = _run(push_dashboard(rid, "d", "<p></p>", {"q": "SELECT 1"}))
+        out = _run(push_dashboard("d", "<p></p>", {"q": "SELECT 1"}, session_id=rid))
         assert out["ok"] is True and out["pushed"] is True
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None and msg["type"] == "dashboard" and "connection" not in msg
@@ -84,7 +84,7 @@ def test_push_dashboard_on_disconnected_session_fails_without_pushing():
     rec = _run(sessions.create_session())
     rid = remote.register(rec.id)
     try:
-        out = _run(push_dashboard(rid, "d", "<p></p>", {"q": "SELECT 1"}))
+        out = _run(push_dashboard("d", "<p></p>", {"q": "SELECT 1"}, session_id=rid))
         assert out["ok"] is False and out["pushed"] is False
         assert out["message"] == "not connected"
         assert _run(remote.next_message(rid, 0.1)) is None
@@ -111,12 +111,12 @@ def test_add_connection_refuses_duckdb_and_adds_a_network_one_directly(monkeypat
 
     monkeypatch.setattr(DRIVERS["clickhouse"], "list_databases", two_dbs)
     sid = _run(sessions.create_session()).id
-    out = _run(add_connection(sid, "ag-duck", "duckdb", {"path": "/etc/passwd"}))
+    out = _run(add_connection("ag-duck", "duckdb", {"path": "/etc/passwd"}, session_id=sid))
     assert out["ok"] is False and "clickhouse or postgres" in out["message"]
     cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
-    out = _run(add_connection(sid, "ag-ch", "clickhouse", cfg))
+    out = _run(add_connection("ag-ch", "clickhouse", cfg, session_id=sid))
     assert out == {"ok": True, "name": "ag-ch", "type": "clickhouse", "databases": ["a", "b"]}
-    entry = _names(_run(list_connections(sid)))["ag-ch"]
+    entry = _names(_run(list_connections(session_id=sid)))["ag-ch"]
     assert entry["scope"] == "session" and entry["created_by"] == "agent"
 
 
@@ -134,24 +134,24 @@ def test_agent_session_connection_lifecycle():
     out = _agent_add(sid, "ag-mem")
     assert out["ok"] is True
     assert "ag-mem" not in _run(connect.list_connection_names())
-    assert "ag-mem" not in _names(_run(list_connections(other)))
+    assert "ag-mem" not in _names(_run(list_connections(session_id=other)))
 
-    entry = _names(_run(list_connections(sid)))["ag-mem"]
+    entry = _names(_run(list_connections(session_id=sid)))["ag-mem"]
     assert entry["scope"] == "session" and entry["created_by"] == "agent" and entry["active"] is False
 
-    assert _run(use_connection(sid, "ag-mem"))["ok"] is True
-    assert _names(_run(list_connections(sid)))["ag-mem"]["active"] is True
-    assert _run(run_sql(sid, "SELECT 1 AS one"))["rows"] == [[1]]
+    assert _run(use_connection("ag-mem", session_id=sid))["ok"] is True
+    assert _names(_run(list_connections(session_id=sid)))["ag-mem"]["active"] is True
+    assert _run(run_sql("SELECT 1 AS one", session_id=sid))["rows"] == [[1]]
     assert any(r["id"] == sid and r["connection"] == "ag-mem" for r in _run(sessions.list_sessions()))
 
     # A bad database fails before the session switches.
     assert _agent_add(sid, "ag-mem2")["ok"]
-    assert _run(use_connection(sid, "ag-mem2", "nope"))["message"] == "unknown database"
-    assert _names(_run(list_connections(sid)))["ag-mem"]["active"] is True
+    assert _run(use_connection("ag-mem2", "nope", session_id=sid))["message"] == "unknown database"
+    assert _names(_run(list_connections(session_id=sid)))["ag-mem"]["active"] is True
 
-    assert _run(remove_connection(sid, "ag-mem"))["ok"] is True
-    assert "ag-mem" not in _names(_run(list_connections(sid)))
-    assert _run(run_sql(sid, "SELECT 1")) == {"ok": False, "message": "not connected"}
+    assert _run(remove_connection("ag-mem", session_id=sid))["ok"] is True
+    assert "ag-mem" not in _names(_run(list_connections(session_id=sid)))
+    assert _run(run_sql("SELECT 1", session_id=sid)) == {"ok": False, "message": "not connected"}
 
 
 def test_add_connection_refuses_a_taken_name_and_bad_input():
@@ -160,9 +160,9 @@ def test_add_connection_refuses_a_taken_name_and_bad_input():
     _run(_save_active_connection("ag-taken", DuckConfig(":memory:"), "duckdb"))
     sid = _run(sessions.create_session()).id
     cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
-    assert "already exists" in _run(add_connection(sid, "ag-taken", "clickhouse", cfg))["message"]
-    assert _run(add_connection(sid, "x", "nope", {}))["ok"] is False
-    assert _run(add_connection(sid, "x", "clickhouse", {"host": "h", "port": 0}))["ok"] is False
+    assert "already exists" in _run(add_connection("ag-taken", "clickhouse", cfg, session_id=sid))["message"]
+    assert _run(add_connection("x", "nope", {}, session_id=sid))["ok"] is False
+    assert _run(add_connection("x", "clickhouse", {"host": "h", "port": 0}, session_id=sid))["ok"] is False
 
 
 def test_agent_cannot_use_or_remove_saved_or_user_connections():
@@ -183,17 +183,17 @@ def test_select_database_only_on_the_agents_own_connection():
 
     sid = _connected_session("ag-seldb")
     connect._sessions[sid].databases = ["memory"]  # DuckDB lists none; fake a picker
-    out = _run(select_database(sid, "memory"))
+    out = _run(select_database("memory", session_id=sid))
     assert out["ok"] is False and "ask the user" in out["message"]
 
     assert _agent_add(sid, "ag-seldb-own")["ok"]
-    assert _run(use_connection(sid, "ag-seldb-own"))["ok"]
+    assert _run(use_connection("ag-seldb-own", session_id=sid))["ok"]
     connect._sessions[sid].databases = ["memory"]
-    assert _run(select_database(sid, "nope"))["message"] == "unknown database"
-    assert _run(select_database(sid, "memory"))["ok"] is True
+    assert _run(select_database("nope", session_id=sid))["message"] == "unknown database"
+    assert _run(select_database("memory", session_id=sid))["ok"] is True
     assert _run(sessions.database_of(sid)) == "memory"
     rec = _run(sessions.create_session())
-    assert _run(select_database(rec.id, "memory"))["message"] == "not connected"
+    assert _run(select_database("memory", session_id=rec.id))["message"] == "not connected"
 
 
 def test_open_saved_unknown_connection_lists_available_names():
@@ -226,7 +226,7 @@ def test_session_info_describes_the_session(tmp_path):
     sid = _run(sessions.create_session()).id
     assert _run(open_saved(sid, "sc-info"))["ok"]
 
-    out = _run(session_info(sid))
+    out = _run(session_info(session_id=sid))
     assert out["ok"] is True and out["connected"] is True
     assert out["connection"] == "sc-info" and out["type"] == "duckdb"
     assert out["workspace"]
@@ -238,9 +238,9 @@ def test_session_info_on_a_disconnected_or_unknown_session():
     from queryview.mcp_server import session_info
 
     rec = _run(sessions.create_session())
-    out = _run(session_info(rec.id))
+    out = _run(session_info(session_id=rec.id))
     assert out["ok"] is True and out["connected"] is False and "tables" not in out
-    assert _run(session_info("no-such-session"))["ok"] is False
+    assert _run(session_info(session_id="no-such-session"))["ok"] is False
 
 
 def test_saved_connect_refuses_a_session_connection_name():
@@ -279,9 +279,9 @@ def test_add_and_remove_connection_tell_an_armed_browser_to_refresh(monkeypatch)
     rid = remote.register(sid)
     try:
         cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
-        assert _run(add_connection(sid, "ag-notify", "clickhouse", cfg))["ok"]
+        assert _run(add_connection("ag-notify", "clickhouse", cfg, session_id=sid))["ok"]
         assert _run(remote.next_message(rid, 1.0)) == {"type": "connections"}
-        assert _run(remove_connection(sid, "ag-notify"))["ok"]
+        assert _run(remove_connection("ag-notify", session_id=sid))["ok"]
         assert _run(remote.next_message(rid, 1.0)) == {"type": "connections"}
     finally:
         remote.unregister(rid)
@@ -300,9 +300,20 @@ def test_use_connection_marks_the_switch_as_the_agents():
     assert who(sid) == ("sc-by-user", "user")
     assert _agent_add(sid, "ag-switch")["ok"]
     try:
-        assert _run(use_connection(sid, "ag-switch"))["ok"]
+        assert _run(use_connection("ag-switch", session_id=sid))["ok"]
         assert who(sid) == ("ag-switch", "agent")
-        assert _run(remove_connection(sid, "ag-switch"))["ok"]
+        assert _run(remove_connection("ag-switch", session_id=sid))["ok"]
         assert who(sid) == (None, "agent")
     finally:
-        _run(remove_connection(sid, "ag-switch"))
+        _run(remove_connection("ag-switch", session_id=sid))
+
+
+def test_tools_default_to_the_agent_session():
+    """Without a session_id the agent works in the always-on agent session."""
+    from queryview.mcp_server import list_connections, run_sql, session_info, use_connection
+
+    assert _agent_add(sessions.AGENT_SESSION_ID, "ag-default")["ok"]
+    assert _names(_run(list_connections()))["ag-default"]["scope"] == "session"
+    assert _run(use_connection(name="ag-default"))["ok"] is True
+    assert _run(session_info())["connection"] == "ag-default"
+    assert _run(run_sql(sql="SELECT 1 AS one"))["rows"] == [[1]]

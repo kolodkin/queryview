@@ -27,9 +27,11 @@ port QueryView listens on, and start it first). See
 ## MCP tools
 
 The backend mounts a FastMCP server (Streamable HTTP) at `/mcp/` exposing these
-tools (among others):
+tools (among others). `session_id?` defaults to the always-on
+[agent session](./session.md#the-agent-session); pass a popover id to act on a
+tab's session instead.
 
-- `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
+- `push_query(session_id?, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
   push a query. `order_by` is `[{name, dir}]`; `fields` are the columns to show
   (omit for all); `cell_view` is raw YAML for this push only (not persisted);
   `name` selects a saved query. Returns `{ok, message, database}` (`database` is
@@ -39,22 +41,22 @@ tools (among others):
 - `list_queries(conn_type?="clickhouse")` — list saved queries:
   `{queries: [{query_name, query, cell_view, order_by, fields}]}`. Pass a
   `query_name` back as `push_query`'s `name`.
-- `session_info(session_id)` — what the session is on: `{ok, connected,
+- `session_info(session_id?)` — what the session is on: `{ok, connected,
   connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
   discovery. The agent switches only to its own session connections (below).
 - Connections ([access rule](./connect.md#session-connections)):
-  `list_connections(session_id)` tags each with `scope`, `created_by`,
-  `active`. `add_connection(session_id, name, type, config)` adds a ClickHouse or
-  Postgres session connection; `use_connection(session_id, name, database?)`,
-  `select_database(session_id, database)` and `remove_connection(session_id,
+  `list_connections(session_id?)` tags each with `scope`, `created_by`,
+  `active`. `add_connection(session_id?, name, type, config)` adds a ClickHouse or
+  Postgres session connection; `use_connection(session_id?, name, database?)`,
+  `select_database(session_id?, database)` and `remove_connection(session_id?,
   name)` act only on the agent's own. In the browser, an add/remove refreshes an
   armed tab's connection lists (pill menu, Connect). A `use_connection` marks
   the session row `connection_by: agent`; every tab picks it up on its next
   heartbeat, toasts "Agent switched to <name>", and the pill reads
   `<connection> · <database>` with the menu entry marked active and badged
   `agent`. Switches made in the UI never toast.
-- `run_sql(session_id, sql, limit?=1000)` — run one read-only statement as
+- `run_sql(session_id?, sql, limit?=1000)` — run one read-only statement as
   written (so `DESCRIBE`/`SHOW`/`EXPLAIN` work; page with your own
   `LIMIT`/`OFFSET`) on the session's connection and database, returning
   `{ok, database, columns, types, rows, truncated}` to the agent. Values are
@@ -62,18 +64,18 @@ tools (among others):
   collections as JSON); `truncated` means rows past `limit` were dropped. Fails
   with `not connected` on a disconnected session; stops after 60s, server-side
   too. ClickHouse errors name the `query_id` to look up in `system.query_log`.
-- `run_script(session_id, sql)` — run a script like the [Scripts](./scripts.md)
+- `run_script(session_id?, sql)` — run a script like the [Scripts](./scripts.md)
   page's Run all, **writes included**, returning `{ok, database, results: [{sql,
   ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
   agent. Stops at the first failure; `columns`/`types`/`rows` are null for a
   statement without rows.
-- `push_script(session_id, sql, run?=false)` — replace the Scripts editor's
+- `push_script(session_id?, sql, run?=false)` — replace the Scripts editor's
   text; the browser navigates there and, with `run`, runs it all (results stay
   in the browser). Returns
   `{ok, message, database}`; `ok:false` for an unknown id, a held lock
   (`"blocked, user editing"`), or a session whose Scripts page can't open yet
   (`"not connected"`, `"select a database first"`).
-- `push_dashboard(session_id, name, html, queries, params?)` — push a dashboard
+- `push_dashboard(session_id?, name, html, queries, params?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
   renders it. Only the user's **Save** persists it, unless the workspace has
   [autosave](./workspace.md#autosave) on. Returns

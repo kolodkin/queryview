@@ -26,6 +26,11 @@ SESSION_CLAIM_TTL_MS = 90_000
 
 DEFAULT_URL = "/connect"
 
+# The always-on session the MCP tools default to; seeded by migration, never
+# deleted. Deliberately guessable: the API has no auth, so a random id would
+# add nothing (see docs/session.md).
+AGENT_SESSION_ID = "0" * 32
+
 # Session writes run one at a time, so a reload's `attach` sees the pagehide
 # beacon's patch committed. See docs/session.md, "How it is stored".
 _writes = asyncio.Lock()
@@ -126,10 +131,12 @@ def _merge_ui(current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any
 
 
 def _unheld_query(now: int):
-    """The session a new tab should resume: most recently active, not held."""
+    """The session a new tab should resume: most recently active, not held. The
+    agent session is only ever picked from the dropdown."""
     stale = now - SESSION_CLAIM_TTL_MS
     return (
         select(Session)
+        .where(col(Session.id) != AGENT_SESSION_ID)
         .where(
             col(Session.claimed_by).is_(None)
             | col(Session.claim_seen_at).is_(None)
@@ -238,9 +245,12 @@ async def patch_session(
 
 
 async def delete_session(sid: str) -> tuple[bool, str]:
-    """Remove a session. Refused while a live tab holds it. The second element is
-    a reason code ("unknown" / "held"), not prose: the route maps it to a status,
-    so rewording a message cannot change an HTTP code."""
+    """Remove a session. Refused while a live tab holds it, and always for the
+    agent session. The second element is a reason code ("unknown" / "held" /
+    "agent"), not prose: the route maps it to a status, so rewording a message
+    cannot change an HTTP code."""
+    if sid == AGENT_SESSION_ID:
+        return False, "agent"
     await _ensure_schema()
     now = _now_ms()
     async with _open() as s:

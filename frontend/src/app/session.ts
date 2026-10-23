@@ -6,6 +6,9 @@
 import { apiFetch } from './api'
 import { SESSION_KEY, TAB_KEY, tabRead, tabWrite } from './tabStorage'
 
+// The always-on session the MCP tools default to; seeded by the backend, never deleted.
+export const AGENT_SESSION_ID = '0'.repeat(32)
+
 export type SessionState = {
   id: string
   label: string

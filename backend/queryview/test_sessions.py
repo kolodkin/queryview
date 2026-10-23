@@ -114,7 +114,8 @@ def _free_everything():
         await _ensure_schema()
         async with _S(_engine_for_db()) as s:
             for row in (await s.exec(_select(sessions.Session))).all():
-                await s.delete(row)
+                if row.id != sessions.AGENT_SESSION_ID:  # undeletable, and never auto-resumed
+                    await s.delete(row)
             await s.commit()
 
     _run(go())
@@ -268,3 +269,10 @@ def test_select_with_force_takes_a_held_session_over():
     assert got.id == held.id
     with pytest.raises(sessions.SessionTaken):
         _run(sessions.attach("tab-a", held.id, keep=True))
+
+
+def test_the_agent_session_always_exists_and_refuses_deletion():
+    rec = _run(sessions.get_session_rec(sessions.AGENT_SESSION_ID))
+    assert rec is not None and sessions.display_label(rec) == "agent"
+    assert _run(sessions.delete_session(sessions.AGENT_SESSION_ID)) == (False, "agent")
+    assert _run(sessions.get_session_rec(sessions.AGENT_SESSION_ID)) is not None

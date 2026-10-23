@@ -12,6 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from . import gitsync, remote, sessions
 from .dashboards import _push_dashboard
 from .queries import list_predefined_queries_view
+from .sessions import AGENT_SESSION_ID
 from .validation import dashboard_params_error
 
 mcp = FastMCP("queryview", stateless_http=True)
@@ -20,8 +21,8 @@ mcp.settings.streamable_http_path = "/"
 
 @mcp.tool()
 async def push_query(
-    session_id: str,
     query: str,
+    session_id: str = AGENT_SESSION_ID,
     limit: int = 100,
     offset: int = 0,
     order_by: list[dict[str, Any]] | None = None,
@@ -37,7 +38,7 @@ async def push_query(
     remote control". To explore data first, use run_sql with the same id.
 
     Args:
-        session_id: The session id shown in the QueryView popover.
+        session_id: A session id from the QueryView popover; omit for the always-on agent session.
         query: The SQL to run.
         limit: Page size (default 100).
         offset: Row offset (default 0).
@@ -70,7 +71,7 @@ async def push_query(
 
 
 @mcp.tool()
-async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any]:
+async def run_sql(sql: str, session_id: str = AGENT_SESSION_ID, limit: int = 1000) -> dict[str, Any]:
     """Run one read-only SQL statement on the session's connection and selected
     database, returning the rows to the agent (push_query only fills a browser
     panel). Use it to explore schema and data before a push. Runs as written
@@ -85,7 +86,7 @@ async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any
     deciding whether to fully-qualify tables as db.table.
 
     Args:
-        session_id: The session id shown in the QueryView popover.
+        session_id: A session id from the QueryView popover; omit for the always-on agent session.
         sql: The SQL statement to run.
         limit: Most rows to return (default 1000, max 10000).
     """
@@ -120,7 +121,7 @@ def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def run_script(session_id: str, sql: str) -> dict[str, Any]:
+async def run_script(sql: str, session_id: str = AGENT_SESSION_ID) -> dict[str, Any]:
     """Run a `;`-separated script on the session's connection and selected
     database, like the Scripts page's Run all, returning each statement's result.
     WRITES ARE ALLOWED (use run_sql to explore read-only). Stops at the first
@@ -132,7 +133,7 @@ async def run_script(session_id: str, sql: str) -> dict[str, Any]:
     "message"} (e.g. "sql required", "not connected", "select a database first").
 
     Args:
-        session_id: The session id shown in the QueryView popover.
+        session_id: A session id from the QueryView popover; omit for the always-on agent session.
         sql: The script; separate statements with `;`.
     """
     from .connect import execute_script
@@ -150,14 +151,14 @@ async def run_script(session_id: str, sql: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str, Any]:
+async def push_script(sql: str, session_id: str = AGENT_SESSION_ID, run: bool = False) -> dict[str, Any]:
     """Replace the text of a live session's Scripts editor; with run=True the
     browser also runs it all. Results stay in the browser (use run_script to get
     them). Fails with "blocked, user editing" while the user types, or "not
     connected" / "select a database first" when the Scripts page can't open.
 
     Args:
-        session_id: The session id shown in the QueryView popover.
+        session_id: A session id from the QueryView popover; omit for the always-on agent session.
         sql: The script; separate statements with `;`.
         run: Also run it (default False: load only).
     """
@@ -173,7 +174,7 @@ async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str,
 
 
 @mcp.tool()
-async def session_info(session_id: str) -> dict[str, Any]:
+async def session_info(session_id: str = AGENT_SESSION_ID) -> dict[str, Any]:
     """What a QueryView session is on: its connection, selected database, the
     databases it can switch to, its workspace, and the selected database's
     tables. Start here to discover schema; then run_sql on the same session.
@@ -183,7 +184,7 @@ async def session_info(session_id: str) -> dict[str, Any]:
     list_connections). Fully-qualify tables as db.table to reach another one.
 
     Args:
-        session_id: The session id shown in the QueryView popover.
+        session_id: A session id from the QueryView popover; omit for the always-on agent session.
 
     Returns {"ok": True, "connected", "connection", "type", "scope",
     "created_by", "database", "databases", "workspace", "tables": [{name, ...}]};
@@ -207,7 +208,7 @@ async def session_info(session_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def list_connections(session_id: str) -> dict[str, Any]:
+async def list_connections(session_id: str = AGENT_SESSION_ID) -> dict[str, Any]:
     """List the connections a session can use: its session connections (memory
     only, this session only) and the saved ones, each tagged with "scope"
     ("session" | "saved"), "created_by" ("agent" | "user") and "active".
@@ -256,13 +257,15 @@ def _not_yours(session_id: str, name: str) -> str | None:
 
 
 @mcp.tool()
-async def add_connection(session_id: str, name: str, type: str, config: dict[str, Any]) -> dict[str, Any]:
+async def add_connection(
+    name: str, type: str, config: dict[str, Any], session_id: str = AGENT_SESSION_ID
+) -> dict[str, Any]:
     """Add a session connection of your own: kept in this session's memory
     only, never saved, gone when the session is deleted or QueryView restarts.
     Checks it connects; use_connection then switches to it.
 
     Args:
-        session_id: The session id shown in the QueryView popover.
+        session_id: A session id from the QueryView popover; omit for the always-on agent session.
         name: A name no saved or session connection uses yet.
         type: "clickhouse" or "postgres" (DuckDB is refused: it reads local files).
         config: {host, port, username, password}.
@@ -287,7 +290,7 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
 
 
 @mcp.tool()
-async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
+async def remove_connection(name: str, session_id: str = AGENT_SESSION_ID) -> dict[str, Any]:
     """Remove a session connection you added (disconnecting the session if it
     was active). Saved and user-added connections are refused.
 
@@ -302,7 +305,7 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def use_connection(session_id: str, name: str, database: str | None = None) -> dict[str, Any]:
+async def use_connection(name: str, database: str | None = None, session_id: str = AGENT_SESSION_ID) -> dict[str, Any]:
     """Switch the session to a session connection you added, optionally
     selecting `database` (ClickHouse/Postgres need one before querying). The
     browser follows within a few seconds. Anything else is refused — ask the
@@ -320,7 +323,7 @@ async def use_connection(session_id: str, name: str, database: str | None = None
 
 
 @mcp.tool()
-async def select_database(session_id: str, database: str) -> dict[str, Any]:
+async def select_database(database: str, session_id: str = AGENT_SESSION_ID) -> dict[str, Any]:
     """Switch the database of the session's active connection, if it is a
     session connection you added; otherwise ask the user to switch in QueryView.
 
@@ -395,10 +398,10 @@ async def list_dashboards(session_id: str | None = None) -> dict[str, Any]:
 
 @mcp.tool()
 async def push_dashboard(
-    session_id: str,
     name: str,
     html: str,
     queries: dict[str, str],
+    session_id: str = AGENT_SESSION_ID,
     params: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Push a dashboard to a live QueryView session.
@@ -421,7 +424,7 @@ async def push_dashboard(
     re-runs with `window.setParams({...})`. See docs/dashboard.md.
 
     Args:
-        session_id: The session id shown in the QueryView popover.
+        session_id: A session id from the QueryView popover; omit for the always-on agent session.
         name: Dashboard name (the name the user's Save will persist under).
         html: The dashboard HTML document (renders in a sandboxed iframe).
         queries: Map of query name to SQL.
