@@ -171,3 +171,17 @@ def test_a_switch_made_elsewhere_names_the_new_connection(seeded_duckdb, page: P
     expect(entry).to_have_attribute("data-active", "true")
     expect(entry.get_by_test_id("conn-agent-badge")).to_have_count(0)
     expect(page.locator('[data-testid="pill-conn"][data-conn="duckdb"]')).to_have_attribute("data-active", "false")
+
+
+def test_the_agent_session_is_listed_undeletable_and_the_mcp_default(seeded_duckdb, page: Page, base_url: str) -> None:
+    """The always-on agent session: what an MCP call without a session_id lands
+    on, and a dropdown row like any other except for the missing ×."""
+    from conftest import mcp_call
+
+    agent = "0" * 32
+    assert mcp_call(base_url, "session_info", {})["ok"] is True
+
+    _connect_duckdb(page, seeded_duckdb)
+    page.get_by_test_id("session-switcher").click()
+    expect(page.get_by_test_id(f"session-row-{agent}")).to_contain_text("agent")
+    expect(page.get_by_test_id(f"session-delete-{agent}")).to_have_count(0)

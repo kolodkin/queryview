@@ -13,6 +13,14 @@ and snapshot your work to git.
 QueryView is a **single-user tool that runs on your own machine**. It has no
 login and assumes it is reachable only from localhost — don't expose its port.
 
+**Credentials: dev and analytics only, read-only beyond dev.** Whoever can reach
+QueryView's port, or the agent it serves, can use every saved connection: there
+is no auth, and the [agent session](docs/session.md#the-agent-session) needs no
+id at all. So give it write credentials only for development databases. For
+staging, production or any shared environment, give it **read-only
+credentials** or none; never a writing user. Lifting this limit needs a proper
+authentication flow first (see [future.md](docs/future.md#authentication)).
+
 ## Quick start
 
 Run the released package — API + bundled SPA on http://localhost:8000:
