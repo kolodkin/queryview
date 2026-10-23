@@ -33,11 +33,19 @@ Idempotently starts (reusing anything already up):
 
 1. **ClickHouse** — `:8123` (standalone binary in `.cache/clickhouse`, user `default`, no password)
 2. **PostgreSQL** — `:5432` (cluster in `.cache/pgdata`, trust auth, superuser `postgres`)
+3. **git daemon** — `:9418`, serving a bare `queryview.git` under
+   `.cache/gitsrv` (what CI's `start-git-daemon` action provides). The repo is
+   recreated empty on every `run.sh`, so rerun it before each e2e run.
 
 Prints `[run] all services up` on success. A failure exits non-zero with a
 `[<svc>] error:` line pointing at its log under `.cache/`.
 
-Then run the suite with `npm run e2e` (or `scripts/e2e.sh -k <expr>`).
+Then run the suite with the git remote the daemon serves, so the git-sync
+round trip runs instead of skipping:
+
+```bash
+E2E_GIT_REMOTE=git://127.0.0.1:9418/queryview.git npm run e2e   # or scripts/e2e.sh -k <expr>
+```
 
 ## Stop
 

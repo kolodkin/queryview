@@ -183,7 +183,7 @@ def base_url(tmp_path_factory) -> Iterator[str]:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _git_sync_remote(base_url: str) -> None:
+def _git_sync_remote(base_url: str, _pose_as_ui: None) -> None:
     """Point the default workspace at the remote CI stood up, through the same
     API a user would: the app has no env-var path to it. Unset locally, leaving
     git sync disabled and its round-trip test skipped."""
