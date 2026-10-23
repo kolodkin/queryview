@@ -11,9 +11,8 @@ export type Connection = {
   database: string | null
   // The dialect's identifier quote (`"` or a backtick), for dashboard params.
   identQuote?: string
-  // A locked saved connection, and whether this tab's token opens it; the
-  // shell prompts for the passphrase while it doesn't.
-  locked?: boolean
+  // False on a locked saved connection this tab holds no token for; the
+  // shell prompts for the passphrase while it is.
   unlocked?: boolean
 }
 
@@ -37,14 +36,13 @@ export function toConnection(data: Record<string, unknown>): Connection {
     databases: (data.databases ?? []) as string[],
     database: (data.database ?? null) as string | null,
     identQuote: data.ident_quote as string | undefined,
-    locked: data.locked as boolean | undefined,
     unlocked: data.unlocked as boolean | undefined,
   }
 }
 
-function postJson(path: string, body: unknown): Promise<Response> {
+function postJson(path: string, body: unknown, method = 'POST'): Promise<Response> {
   return apiFetch(path, {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
@@ -74,12 +72,7 @@ async function lockCall(
   passphrase: string,
 ): Promise<LockResult> {
   try {
-    const res = await apiFetch(path, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, passphrase }),
-    })
-    const data = await res.json()
+    const data = await (await postJson(path, { name, passphrase }, method)).json()
     if (!data.ok) return { ok: false, message: data.message ?? 'request failed' }
     // Locking and unlocking both hand this tab the connection's unlock token.
     if (typeof data.token === 'string') tabWrite(TOKEN_KEY, data.token)

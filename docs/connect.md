@@ -193,9 +193,10 @@ memory per session. The tab keeps it in `sessionStorage` (`qv_token`) and
 sends it as `X-QV-Token` on every request. Lock a connection and the locking
 tab gets its token at once, so what you are on keeps working.
 
-- **Opening** a locked card asks for the passphrase first; so does the shell
-  when a session resumes on a locked connection without a valid token (a new
-  tab, a backend restart). Cancelling there disconnects.
+- **Opening** a locked card lands on it like any other; the shell then asks
+  for the passphrase unless the tab already holds a token for it, and asks
+  the same way when a session resumes on a locked connection without one (a
+  new tab, a backend restart). Cancelling disconnects.
 - **Reload** keeps the token (it lives in `sessionStorage`); closing the tab
   drops it. A restart drops the server side, so the next request asks again.
 - **Removing** the lock takes the passphrase, like unlocking does. A forgotten
@@ -245,7 +246,7 @@ session.
 | POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
 | POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
 | GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by, locked}]}`: this session's connections, then the saved ones most recent first (never the config) |
-| POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card); a locked one needs this tab's token first (`403`) |
+| POST   | `/api/db/open`        | `{name}`                               | `{ok, …}` the same state as `GET /api/session` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card); on a locked one `unlocked` says whether this tab's token opens it |
 | POST   | `/api/db/lock`        | `{name, passphrase}`                   | Lock a saved connection; `{ok, token}` for this tab. Empty passphrase, unknown or already locked → `400` |
 | POST   | `/api/db/unlock`      | `{name, passphrase}`                   | `{ok, token}` — this session's unlock token; wrong passphrase → `403`, not locked → `400` |
 | DELETE | `/api/db/lock`        | `{name, passphrase}`                   | Remove the lock; `{ok}`, wrong passphrase → `403` |

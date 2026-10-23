@@ -700,7 +700,7 @@ function Shell() {
         <Loading label="Restoring session…" testid="session-loading" />
       )}
       <Toast message={toast} onDone={() => setToast(null)} />
-      {connection?.locked && connection.unlocked === false && (
+      {connection?.unlocked === false && (
         <PassphrasePrompt
           title={`${connection.name} is locked`}
           action="Unlock"

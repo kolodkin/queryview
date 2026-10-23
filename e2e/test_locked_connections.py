@@ -39,10 +39,11 @@ def test_locked_connection_keeps_the_agent_out(seeded_duckdb, page: Page, base_u
     r = httpx.post(f"{base_url}/api/db/query", json={"query": "SELECT 1"}, headers={"X-QV-Session": session_id})
     assert r.status_code == 403 and r.json()["message"] == "connection is locked"
 
-    # This tab still queries, and a reload keeps its token.
+    # This tab holds the token: reopening asks nothing, querying works, and a
+    # reload keeps it.
     card.click()
-    _answer_prompt(page, PASSPHRASE)
     page.wait_for_url("**/explorer")  # a ready DuckDB connection lands there
+    expect(page.get_by_test_id("passphrase-prompt")).to_have_count(0)
     open_query_panel(page)
     page.get_by_test_id("query-input").fill("SELECT count(*) AS n FROM items")
     page.get_by_test_id("query-run").click()

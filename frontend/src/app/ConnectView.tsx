@@ -9,7 +9,6 @@ import {
   removeLock,
   selectDatabase,
   toConnection,
-  unlockConnection,
   type Connection,
 } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
@@ -63,11 +62,10 @@ function ConnectView({
   // The card being opened, for its spinner; and the last open's failure.
   const [opening, setOpening] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // The passphrase prompt up, if any: to open a locked card, to lock one, or to
-  // remove its lock (docs/connect.md#locked-connections).
-  const [prompt, setPrompt] = useState<{ kind: 'open' | 'lock' | 'unlock'; name: string } | null>(
-    null,
-  )
+  // The passphrase prompt up, if any: to lock a card or remove its lock
+  // (docs/connect.md#locked-connections). Opening a locked card needs none:
+  // the shell asks once the session lands on it.
+  const [prompt, setPrompt] = useState<{ kind: 'lock' | 'unlock'; name: string } | null>(null)
 
   const refreshSaved = useCallback(async () => {
     try {
@@ -140,10 +138,6 @@ function ConnectView({
   }
 
   async function open(name: string) {
-    if (saved?.find((c) => c.name === name)?.locked) {
-      setPrompt({ kind: 'open', name })
-      return
-    }
     setOpening(name)
     setError(null)
     const r = await openSaved(name)
@@ -156,27 +150,14 @@ function ConnectView({
   async function submitPassphrase(passphrase: string): Promise<string | null> {
     if (!prompt) return null
     const { kind, name } = prompt
-    const r =
-      kind === 'lock'
-        ? await lockConnection(name, passphrase)
-        : kind === 'unlock'
-          ? await removeLock(name, passphrase)
-          : await unlockConnection(name, passphrase)
+    const r = await (kind === 'lock' ? lockConnection : removeLock)(name, passphrase)
     if (!r.ok) return r.message
     setPrompt(null)
     await refreshSaved()
-    if (kind === 'open') {
-      setOpening(name)
-      const opened = await openSaved(name)
-      setOpening(null)
-      if (opened.ok) adopt(opened.connection)
-      else setError(opened.message)
-    }
     return null
   }
 
   const promptTitles = {
-    open: (name: string) => [`Unlock ${name}`, 'Unlock'],
     lock: (name: string) => [`Lock ${name} with a passphrase`, 'Lock'],
     unlock: (name: string) => [`Remove the lock from ${name}`, 'Remove lock'],
   }

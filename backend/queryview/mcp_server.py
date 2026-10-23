@@ -67,8 +67,7 @@ async def push_query(
         "cell_view": cell_view,
         "name": name,
     }
-    locked = await connect.locked_message(session_id)
-    ok, message = (False, locked) if locked is not None else remote.push(session_id, payload)
+    ok, message = await connect.push(session_id, payload)
     return {"ok": ok, "message": message, "database": await sessions.database_of(session_id)}
 
 

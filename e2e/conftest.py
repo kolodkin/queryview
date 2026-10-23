@@ -18,6 +18,10 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from playwright.sync_api import Page, expect
 
+# The API refuses anything but the browser; the backend suite's fixture makes
+# every httpx call pose as one, and registers here by import.
+from queryview.conftest import _pose_as_ui  # noqa: F401
+
 # Mirror playwright.config.ts: 15s default assertion timeout.
 expect.set_options(timeout=15_000)
 
@@ -183,7 +187,7 @@ def base_url(tmp_path_factory) -> Iterator[str]:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _git_sync_remote(base_url: str, _pose_as_ui: None) -> None:
+def _git_sync_remote(base_url: str, _pose_as_ui: None) -> None:  # noqa: F811
     """Point the default workspace at the remote CI stood up, through the same
     API a user would: the app has no env-var path to it. Unset locally, leaving
     git sync disabled and its round-trip test skipped."""
@@ -360,15 +364,3 @@ def seeded_duckdb_long_names(tmp_path_factory) -> str:
         "sales_reporting_monthly_rollup",
         "warehouse_shipment_reconciliation_log",
     )
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _pose_as_ui() -> None:
-    """The API refuses anything but the browser (see main.session_header); the
-    suite's httpx calls carry the header a same-origin browser request has."""
-    init = httpx.Client.__init__
-
-    def as_ui(self, *args, headers=None, **kwargs):
-        init(self, *args, headers={"Sec-Fetch-Site": "same-origin", **dict(headers or {})}, **kwargs)
-
-    httpx.Client.__init__ = as_ui  # type: ignore[method-assign]

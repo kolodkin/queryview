@@ -32,9 +32,9 @@ from .connect import (
     list_connections_for,
     list_tables,
     lock_connection,
-    locked_message,
     open_saved,
     parse_driver_config,
+    push,
     remove_lock,
     request_token,
     run_query,
@@ -331,7 +331,7 @@ async def db_connect(request: Request):
     raw_name = b.get("name")
     name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else driver.type
     r = await connect_new(request.state.sid, name, config, driver.type, session_only=b.get("session") is True)
-    return _gate_error(r, ()) if not r["ok"] and r.get("reason") == "locked" else r
+    return r if r["ok"] else _gate_error(r, ())
 
 
 # Open a saved connection by name for this session (a Connect page card).
@@ -344,11 +344,10 @@ async def db_open(request: Request):
         return JSONResponse({"ok": False, "message": "name required"}, status_code=400)
     r = await open_saved(request.state.sid, name)
     if not r["ok"]:
-        return JSONResponse(
-            {"ok": False, "message": r["message"]},
-            status_code=404 if r.get("not_found") else 403 if r.get("reason") == "locked" else 200,
-        )
-    return {"ok": True, "name": r["name"], "type": r["type"], "databases": r["databases"]}
+        return JSONResponse({"ok": False, "message": r["message"]}, status_code=404 if r.get("not_found") else 200)
+    # The full session state: a locked connection lands with `unlocked` so the
+    # tab knows to ask for the passphrase.
+    return {"ok": True, **await get_session(request.state.sid)}
 
 
 def _lock_body(body: Any) -> tuple[str, str]:
@@ -356,32 +355,28 @@ def _lock_body(body: Any) -> tuple[str, str]:
     return _clean_str(b.get("name")), b.get("passphrase") if isinstance(b.get("passphrase"), str) else ""
 
 
-def _lock_response(r: dict[str, Any]):
-    """A lock/unlock result as a response: wrong passphrase 403, other refusals 400."""
-    if r["ok"]:
-        return r
-    return JSONResponse(r, status_code=403 if r.get("reason") == "locked" else 400)
-
-
 # Lock a saved connection behind a passphrase; this tab gets its unlock token.
 @app.post("/api/db/lock")
 async def db_lock(request: Request):
     name, passphrase = _lock_body(await _read_json(request))
-    return _lock_response(await lock_connection(request.state.sid, name, passphrase))
+    r = await lock_connection(request.state.sid, name, passphrase)
+    return r if r["ok"] else _gate_error(r, (), default=400)
 
 
 # Remove a lock, given its passphrase.
 @app.delete("/api/db/lock")
 async def db_lock_remove(request: Request):
     name, passphrase = _lock_body(await _read_json(request))
-    return _lock_response(await remove_lock(name, passphrase))
+    r = await remove_lock(name, passphrase)
+    return r if r["ok"] else _gate_error(r, (), default=400)
 
 
 # Exchange a locked connection's passphrase for this tab's unlock token.
 @app.post("/api/db/unlock")
 async def db_unlock(request: Request):
     name, passphrase = _lock_body(await _read_json(request))
-    return _lock_response(await unlock_connection(request.state.sid, name, passphrase))
+    r = await unlock_connection(request.state.sid, name, passphrase)
+    return r if r["ok"] else _gate_error(r, (), default=400)
 
 
 # Select this session's active connection's database.
@@ -639,8 +634,6 @@ async def remote_push(request: Request):
             {"ok": False, "message": "session_id and query are required"},
             status_code=400,
         )
-    if (locked := await locked_message(session_id)) is not None:
-        return {"ok": False, "message": locked}
     limit = _parse_int(b.get("limit"), 100)
     offset = _parse_int(b.get("offset"), 0)
     raw_cv = b.get("cell_view")
@@ -659,7 +652,7 @@ async def remote_push(request: Request):
         "cell_view": cell_view,
         "name": name,
     }
-    ok, message = remote.push(session_id, payload)
+    ok, message = await push(session_id, payload)
     return {"ok": ok, "message": message}
 
 

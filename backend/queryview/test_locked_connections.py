@@ -110,13 +110,15 @@ def test_mcp_tools_are_refused_on_a_locked_connection():
     }
 
 
-def test_unlock_takes_the_passphrase_and_open_needs_it_first(_no_backoff):
+def test_unlock_takes_the_passphrase_and_opening_lands_locked(_no_backoff):
     c = _connected("lock-open-duck")
     assert c.post("/api/db/lock", json={"name": "lock-open-duck", "passphrase": "pw"}).json()["ok"]
 
+    # Opening lands on the connection, telling the tab to ask; data stays shut.
     other = _client()
-    r = other.post("/api/db/open", json={"name": "lock-open-duck"})
-    assert r.status_code == 403 and r.json()["message"] == "connection is locked"
+    r = other.post("/api/db/open", json={"name": "lock-open-duck"}).json()
+    assert r["ok"] and r["locked"] is True and r["unlocked"] is False
+    assert other.post("/api/db/query", json={"query": "SELECT 1"}).status_code == 403
 
     r = other.post("/api/db/unlock", json={"name": "lock-open-duck", "passphrase": "nope"})
     assert r.status_code == 403 and r.json()["message"] == "wrong passphrase"
@@ -127,12 +129,12 @@ def test_unlock_takes_the_passphrase_and_open_needs_it_first(_no_backoff):
     r = other.post("/api/db/unlock", json={"name": "lock-open-duck", "passphrase": "pw"})
     assert r.json()["ok"], r.text
     other.headers["X-QV-Token"] = r.json()["token"]
-    assert other.post("/api/db/open", json={"name": "lock-open-duck"}).json()["ok"]
     assert other.post("/api/db/query", json={"query": "SELECT 1"}).json()["ok"]
     # A session's token is its own: it does not open the connection elsewhere.
     third = _client()
     third.headers["X-QV-Token"] = other.headers["X-QV-Token"]
-    assert third.post("/api/db/open", json={"name": "lock-open-duck"}).status_code == 403
+    assert third.post("/api/db/open", json={"name": "lock-open-duck"}).json()["unlocked"] is False
+    assert third.post("/api/db/query", json={"query": "SELECT 1"}).status_code == 403
 
 
 def test_lock_refusals_and_removal():
