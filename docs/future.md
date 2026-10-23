@@ -21,8 +21,9 @@ agent start without the copying step, and let the user watch it.
   pushes as today.
 - [Locked](./connect.md#locked-connections) connections refuse it like any
   other session; nothing in the lock changes.
-- Open: whether it starts on a connection (the most recent saved one) or
-  disconnected until the user or the agent picks one.
+- It starts disconnected and stays on whatever the agent last used on it:
+  the session row remembers its connection across restarts like any other,
+  so nothing is picked on the agent's behalf.
 
 Roughly: a constant and a startup upsert in `sessions.py`, two guards
 (auto-resume, delete), a label, docstring lines in `mcp_server.py`, docs, and
