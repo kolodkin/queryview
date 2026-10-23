@@ -16,6 +16,7 @@ import {
   openSaved,
   selectDatabase,
   toConnection,
+  unlockConnection,
   type Connection,
 } from './connection'
 import QueryView, { type QueryPush } from './QueryView'
@@ -24,6 +25,7 @@ import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
+import { PassphrasePrompt } from './controls/PassphrasePrompt'
 import { Loading } from './controls/Spinner'
 import { CopyName } from './controls/CopyName'
 import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
@@ -698,6 +700,22 @@ function Shell() {
         <Loading label="Restoring session…" testid="session-loading" />
       )}
       <Toast message={toast} onDone={() => setToast(null)} />
+      {connection?.locked && connection.unlocked === false && (
+        <PassphrasePrompt
+          title={`${connection.name} is locked`}
+          action="Unlock"
+          cancelLabel="Disconnect"
+          onSubmit={async (passphrase) => {
+            const r = await unlockConnection(connection.name, passphrase)
+            if (!r.ok) return r.message
+            await refreshConnection()
+            // Remount the views: what they fetched while locked was refused.
+            setSessionKey(`${sessionId()}:${++adoptions.current}`)
+            return null
+          }}
+          onCancel={() => void disconnect()}
+        />
+      )}
       {taken && (
         <div
           role="dialog"

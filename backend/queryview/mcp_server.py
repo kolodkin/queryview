@@ -9,7 +9,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import gitsync, remote, sessions
+from . import connect, gitsync, remote, sessions
 from .dashboards import _push_dashboard
 from .queries import list_predefined_queries_view
 from .validation import dashboard_params_error
@@ -35,6 +35,8 @@ async def push_query(
     the session's own connection. Get the `session_id` from the QueryView UI:
     the agent icon next to the connection status pill, after enabling "Allow
     remote control". To explore data first, use run_sql with the same id.
+    A session on a locked connection (see session_info) refuses every push and
+    query with "connection is locked"; ask the user to switch.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -65,7 +67,8 @@ async def push_query(
         "cell_view": cell_view,
         "name": name,
     }
-    ok, message = remote.push(session_id, payload)
+    locked = await connect.locked_message(session_id)
+    ok, message = (False, locked) if locked is not None else remote.push(session_id, payload)
     return {"ok": ok, "message": message, "database": await sessions.database_of(session_id)}
 
 
@@ -186,10 +189,11 @@ async def session_info(session_id: str) -> dict[str, Any]:
         session_id: The session id shown in the QueryView popover.
 
     Returns {"ok": True, "connected", "connection", "type", "scope",
-    "created_by", "database", "databases", "workspace", "tables": [{name, ...}]};
-    a disconnected session
+    "created_by", "locked", "database", "databases", "workspace",
+    "tables": [{name, ...}]}; a disconnected session
     has "connected": False and no connection fields; "tables" is empty until a
-    database is selected. Unknown session → {"ok": False, "message"}.
+    database is selected, and on a locked connection ("locked": True), which
+    the agent may not query at all. Unknown session → {"ok": False, "message"}.
     """
     from .connect import get_session, list_tables
 
@@ -197,6 +201,7 @@ async def session_info(session_id: str) -> dict[str, Any]:
     if rec is None:
         return {"ok": False, "message": "unknown session"}
     info: dict[str, Any] = {"ok": True, "workspace": rec.workspace, **await get_session(session_id)}
+    info.pop("unlocked", None)  # the tab's business, not the agent's
     if info["connected"]:
         info["connection"] = info.pop("name")
         listed = await list_tables(session_id)  # not ok until a database is picked
@@ -210,14 +215,16 @@ async def session_info(session_id: str) -> dict[str, Any]:
 async def list_connections(session_id: str) -> dict[str, Any]:
     """List the connections a session can use: its session connections (memory
     only, this session only) and the saved ones, each tagged with "scope"
-    ("session" | "saved"), "created_by" ("agent" | "user") and "active".
+    ("session" | "saved"), "created_by" ("agent" | "user"), "active" and
+    "locked" (a saved connection the user keeps the agent off: every tool
+    refuses while the session is on it).
 
     You may use_connection / remove_connection only scope="session",
     created_by="agent" entries; for anything else ask the user to switch in
     QueryView.
 
     Returns {"ok": True, "connections": [{name, type, scope, created_by,
-    active}]} or {"ok": False, "message"} for an unknown session.
+    active, locked}]} or {"ok": False, "message"} for an unknown session.
     """
     from .connect import list_connections_for
 
@@ -233,6 +240,7 @@ async def list_connections(session_id: str) -> dict[str, Any]:
                 "scope": c["scope"],
                 "created_by": c["created_by"],
                 "active": c["name"] == rec.connection_name,  # names are unique
+                "locked": c["locked"],
             }
             for c in await list_connections_for(session_id)
         ],

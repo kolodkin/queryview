@@ -14,6 +14,12 @@ stay within the session the user armed (see [remote.md](./remote.md)). Test
 suites that call the API from Python pose as the browser by sending that
 header (`conftest.py` does it for every `httpx`/`TestClient` call).
 
+**Locked connections:** a request on a session whose active connection is
+[locked](./connect.md#locked-connections) must also carry the tab's unlock
+token as `X-QV-Token`, or every data route answers `403 {ok:false, message:
+"connection is locked"}`. `POST /api/db/unlock` issues the token for the
+passphrase.
+
 **Sessions:** every `/api/*` request names its session with an `X-QV-Session`
 header; there is no session cookie. A session is a persisted row holding one
 tab's UI state — route, connection, database, workspace, view settings — so two
@@ -24,11 +30,12 @@ shared (SQLite). See [session.md](./session.md).
 | Method | Path                        | Body                                   | Description |
 | ------ | --------------------------- | -------------------------------------- | ----------- |
 | GET    | `/api/health`               | —                                      | Service health check. |
-| GET    | `/api/session`              | —                                      | This session's connection state `{connected, name?, type?, databases?, database?, ident_quote?}`, reconnecting the connection the session is on. |
+| GET    | `/api/session`              | —                                      | This session's connection state `{connected, name?, type?, databases?, database?, ident_quote?, locked?, unlocked?}`, reconnecting the connection the session is on; `unlocked` says whether this request's `X-QV-Token` opens a locked one. |
 | POST   | `/api/db/test`      | `{host,port,username,password}`        | Test a connection (test only — no save, no activation). `{ok, message}`. |
 | POST   | `/api/db/connect`   | `{name,host,port,username,password}`   | Create: open + save + activate for this session; lists databases (new-connection form). `{ok, name, databases}` \| `{ok:false, message}`. |
 | GET    | `/api/db/connections` | —                                    | Saved connections, most recent first: `{connections:[{name, type, database, last_active_at}]}` — metadata only, never the config. |
-| POST   | `/api/db/open`      | `{name}`                               | Open a saved connection by name for this session; lists databases (a saved card on the Connect page). `{ok, name, databases}` \| `{ok:false, message}`. |
+| POST   | `/api/db/open`      | `{name}`                               | Open a saved connection by name for this session; lists databases (a saved card on the Connect page). `{ok, name, databases}` \| `{ok:false, message}`; a [locked](./connect.md#locked-connections) one → `403` until unlocked. |
+| POST   | `/api/db/lock`      | `{name, passphrase}`                   | Lock a saved connection; `{ok, token}`. `DELETE` with the same body removes the lock; `POST /api/db/unlock` exchanges the passphrase for this session's token. Wrong passphrase → `403`. See [connect.md](./connect.md#locked-connections). |
 | POST   | `/api/db/database`  | `{database}`                           | Select this session's active connection's database. `{ok}`. |
 | POST   | `/api/db/query`     | `{query, limit?, offset?, format?, order_by?}` | Run SQL against this session's selected database, paginated by `limit`/`offset` (defaults 100/0). `order_by` is `[{name, dir}]` (`dir` ASC/DESC, names quoted with the driver's identifier quote) sorting the pagination wrapper. `{ok, meta:[{name, type}], data:[[…]]}` — ClickHouse's `JSONCompact` shape, 64-bit integers and decimals quoted, collections as JSON arrays/objects — \| `{ok:false, message}`. `format:"csv"` returns `{ok, output}` (CSV text) instead. Empty query → `400`; no session → `409`. |
 | POST   | `/api/db/execute`   | `{sql}`                                | Run a `;`-separated script as written on this session's selected database — writes and DDL included, no pagination — statement by statement on one connection, stopping at the first failure (the Scripts page). `{ok, database, results:[{sql, ok, meta, data, truncated, status, message, elapsed_ms}]}`, one entry per statement run; `meta`/`data` for a row-returning statement (`data` capped at 100 rows), else `status` is the driver's word (`OK`, `INSERT 0 3`). See [scripts.md](./scripts.md). Empty `sql` → `400`; no session / no database → `409`. |

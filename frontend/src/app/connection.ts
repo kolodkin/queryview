@@ -1,5 +1,6 @@
 import { apiFetch } from './api'
 import { withoutHeartbeat } from './session'
+import { TOKEN_KEY, tabWrite } from './tabStorage'
 
 // The active connection as reported by /api/session.
 
@@ -10,6 +11,10 @@ export type Connection = {
   database: string | null
   // The dialect's identifier quote (`"` or a backtick), for dashboard params.
   identQuote?: string
+  // A locked saved connection, and whether this tab's token opens it; the
+  // shell prompts for the passphrase while it doesn't.
+  locked?: boolean
+  unlocked?: boolean
 }
 
 // Ready to query when a database is selected, or the driver has no picker
@@ -32,6 +37,8 @@ export function toConnection(data: Record<string, unknown>): Connection {
     databases: (data.databases ?? []) as string[],
     database: (data.database ?? null) as string | null,
     identQuote: data.ident_quote as string | undefined,
+    locked: data.locked as boolean | undefined,
+    unlocked: data.unlocked as boolean | undefined,
   }
 }
 
@@ -57,6 +64,40 @@ export async function openSaved(
     return { ok: false, message: err instanceof Error ? err.message : 'request failed' }
   }
 }
+
+type LockResult = { ok: true } | { ok: false; message: string }
+
+async function lockCall(
+  method: string,
+  path: string,
+  name: string,
+  passphrase: string,
+): Promise<LockResult> {
+  try {
+    const res = await apiFetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, passphrase }),
+    })
+    const data = await res.json()
+    if (!data.ok) return { ok: false, message: data.message ?? 'request failed' }
+    // Locking and unlocking both hand this tab the connection's unlock token.
+    if (typeof data.token === 'string') tabWrite(TOKEN_KEY, data.token)
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'request failed' }
+  }
+}
+
+// Lock a saved connection behind a passphrase (docs/connect.md#locked-connections).
+export const lockConnection = (name: string, passphrase: string) =>
+  lockCall('POST', '/api/db/lock', name, passphrase)
+// Exchange the passphrase for this tab's unlock token on a locked connection.
+export const unlockConnection = (name: string, passphrase: string) =>
+  lockCall('POST', '/api/db/unlock', name, passphrase)
+// Remove a lock for good; takes the passphrase like unlocking does.
+export const removeLock = (name: string, passphrase: string) =>
+  lockCall('DELETE', '/api/db/lock', name, passphrase)
 
 // Select this session's database; false when the switch failed. Held off the
 // heartbeat, since the shell follows the row's database (withoutHeartbeat).

@@ -8,6 +8,8 @@
 
 export const TAB_KEY = 'qv_tab'
 export const SESSION_KEY = 'qv_session'
+// The unlock token of the locked connection this tab is on (docs/connect.md#locked-connections).
+export const TOKEN_KEY = 'qv_token'
 
 const memory = new Map<string, string>()
 

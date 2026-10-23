@@ -97,10 +97,13 @@ Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](./workspace.md)).
 
-**The MCP tools are the agent's only door.** The REST API refuses requests
-that don't come from the browser (see [api.md](./api.md)), so an agent cannot
-sidestep the session scope above — opening a saved connection, say — by
-calling `/api/db/open` or `/api/db/query` directly.
+**Locked connections keep the agent out.** A saved connection the user
+[locked](./connect.md#locked-connections) behind a passphrase refuses every
+tool above while a session is on it (`connection is locked`), and refuses REST
+calls without the tab's unlock token too, so copying a session id into
+`/api/db/query` gets the agent nowhere. The REST API also refuses requests
+that don't look like the browser's (see [api.md](./api.md)); that one is a
+courtesy for a cooperating agent, the lock is the boundary.
 
 **Arming is the gate, not the id.** Disarming closes the channel, and any later
 push fails with `unknown or inactive session`. The id is stable across refreshes

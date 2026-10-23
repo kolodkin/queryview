@@ -172,6 +172,39 @@ restarts (the session then reads as disconnected).
   switch to, pick the database of and remove its own. Anything else it may only
   list, and query while active. See [remote.md](./remote.md#mcp-tools).
 - This keeps a cooperating agent in its lane; it is not a security boundary.
+  For one, lock the connection.
+
+## Locked connections
+
+A saved connection can be **locked** behind a passphrase. Click the lock on
+its card and type one. From then on the agent cannot touch it, however it comes
+in: on a session whose active connection is locked, every MCP tool that reads
+or writes data (`run_sql`, `run_script`, `select_database`, the table list in
+`session_info`, and every push) answers `connection is locked`, and so does
+every REST call that lacks the tab's unlock token (`403`). `list_connections`
+and `session_info` still name the connection and report `locked: true` so the
+agent knows why. Session connections are never locked: the agent's own are the
+agent's.
+
+What is stored: only a salted scrypt hash of the passphrase (`lock_hash` on
+the `connections` row), never the passphrase. What a tab holds: an **unlock
+token**, a random string the server issues for the passphrase and keeps in
+memory per session. The tab keeps it in `sessionStorage` (`qv_token`) and
+sends it as `X-QV-Token` on every request. Lock a connection and the locking
+tab gets its token at once, so what you are on keeps working.
+
+- **Opening** a locked card asks for the passphrase first; so does the shell
+  when a session resumes on a locked connection without a valid token (a new
+  tab, a backend restart). Cancelling there disconnects.
+- **Reload** keeps the token (it lives in `sessionStorage`); closing the tab
+  drops it. A restart drops the server side, so the next request asks again.
+- **Removing** the lock takes the passphrase, like unlocking does. A forgotten
+  passphrase means deleting and re-adding the connection.
+- Wrong guesses on a connection back off exponentially (2s, 4s … 30s),
+  whoever sends them, on top of the hash's own cost.
+
+Not covered: typing the passphrase where the agent can read it, or handing the
+agent the browser tab that holds the token.
 
 ## Sessions & reconnecting
 
@@ -211,8 +244,11 @@ session.
 | ------ | ----------------------------- | -------------------------------------- | ------ |
 | POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
 | POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
-| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by}]}`: this session's connections, then the saved ones most recent first (never the config) |
-| POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card) |
+| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by, locked}]}`: this session's connections, then the saved ones most recent first (never the config) |
+| POST   | `/api/db/open`        | `{name}`                               | `{ok, name, databases}` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card); a locked one needs this tab's token first (`403`) |
+| POST   | `/api/db/lock`        | `{name, passphrase}`                   | Lock a saved connection; `{ok, token}` for this tab. Empty passphrase, unknown or already locked → `400` |
+| POST   | `/api/db/unlock`      | `{name, passphrase}`                   | `{ok, token}` — this session's unlock token; wrong passphrase → `403`, not locked → `400` |
+| DELETE | `/api/db/lock`        | `{name, passphrase}`                   | Remove the lock; `{ok}`, wrong passphrase → `403` |
 | POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database |
 | POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |
 | GET    | `/api/predefined-queries`     | `?type=<connType>`                     | `{queries:[{query_name, query}]}`; global predefined queries by connection type |
