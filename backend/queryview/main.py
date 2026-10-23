@@ -31,10 +31,15 @@ from .connect import (
     get_session,
     list_connections_for,
     list_tables,
+    lock_connection,
     open_saved,
     parse_driver_config,
+    push,
+    remove_lock,
+    request_token,
     run_query,
     select_database,
+    unlock_connection,
 )
 from .dashboard_queries import run_dashboard_queries
 from .dashboards import _upsert_and_push, get_dashboard, list_dashboards
@@ -137,6 +142,8 @@ async def session_header(request: Request, call_next):
     """Identify the session from the header the SPA sends on every /api call.
     There is no cookie: a session is named by its id, not by the browser."""
     request.state.sid = request.headers.get("X-QV-Session") or ""
+    # The unlock token for a locked connection (docs/connect.md#locked-connections).
+    request_token.set(request.headers.get("X-QV-Token"))
     return await call_next(request)
 
 
@@ -310,7 +317,8 @@ async def db_connect(request: Request):
     b = body if isinstance(body, dict) else {}
     raw_name = b.get("name")
     name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else driver.type
-    return await connect_new(request.state.sid, name, config, driver.type, session_only=b.get("session") is True)
+    r = await connect_new(request.state.sid, name, config, driver.type, session_only=b.get("session") is True)
+    return r if r["ok"] else _gate_error(r, ())
 
 
 # Open a saved connection by name for this session (a Connect page card).
@@ -323,11 +331,40 @@ async def db_open(request: Request):
         return JSONResponse({"ok": False, "message": "name required"}, status_code=400)
     r = await open_saved(request.state.sid, name)
     if not r["ok"]:
-        return JSONResponse(
-            {"ok": False, "message": r["message"]},
-            status_code=404 if r.get("not_found") else 200,
-        )
-    return {"ok": True, "name": r["name"], "type": r["type"], "databases": r["databases"]}
+        return JSONResponse({"ok": False, "message": r["message"]}, status_code=404 if r.get("not_found") else 200)
+    # The full session state: a locked connection lands with `unlocked` so the
+    # tab knows to ask for the passphrase.
+    return {"ok": True, **await get_session(request.state.sid)}
+
+
+def _lock_body(body: Any) -> tuple[str, str]:
+    b = body if isinstance(body, dict) else {}
+    passphrase = b.get("passphrase")
+    return _clean_str(b.get("name")), passphrase if isinstance(passphrase, str) else ""
+
+
+# Lock a saved connection behind a passphrase; this tab gets its unlock token.
+@app.post("/api/db/lock")
+async def db_lock(request: Request):
+    name, passphrase = _lock_body(await _read_json(request))
+    r = await lock_connection(request.state.sid, name, passphrase)
+    return r if r["ok"] else _gate_error(r, (), default=400)
+
+
+# Remove a lock, given its passphrase.
+@app.delete("/api/db/lock")
+async def db_lock_remove(request: Request):
+    name, passphrase = _lock_body(await _read_json(request))
+    r = await remove_lock(name, passphrase)
+    return r if r["ok"] else _gate_error(r, (), default=400)
+
+
+# Exchange a locked connection's passphrase for this tab's unlock token.
+@app.post("/api/db/unlock")
+async def db_unlock(request: Request):
+    name, passphrase = _lock_body(await _read_json(request))
+    r = await unlock_connection(request.state.sid, name, passphrase)
+    return r if r["ok"] else _gate_error(r, (), default=400)
 
 
 # Select this session's active connection's database.
@@ -338,17 +375,16 @@ async def db_database(request: Request):
     database = raw_db if isinstance(raw_db, str) else ""
     r = await select_database(request.state.sid, database)
     if not r["ok"]:
-        return JSONResponse(
-            {"ok": False, "message": r["message"]},
-            status_code=409 if r["reason"] == "no-session" else 400,
-        )
+        return _gate_error(r, ("no-session",), default=400)
     return {"ok": True}
 
 
-def _gate_error(r: dict[str, Any], reasons_409: tuple[str, ...]) -> JSONResponse:
-    """Failed query/describe/tables result → response. Session-gate reasons in
-    `reasons_409` map to 409; anything else (a driver error) stays 200."""
-    status = 409 if r.get("reason") in reasons_409 else 200
+def _gate_error(r: dict[str, Any], reasons_409: tuple[str, ...], default: int = 200) -> JSONResponse:
+    """Failed query/describe/tables result → response. A locked connection is
+    403, session-gate reasons in `reasons_409` 409; anything else (a driver
+    error) stays `default`."""
+    reason = r.get("reason")
+    status = 403 if reason == "locked" else 409 if reason in reasons_409 else default
     return JSONResponse({"ok": False, "message": r["message"]}, status_code=status)
 
 
@@ -604,7 +640,7 @@ async def remote_push(request: Request):
         "cell_view": cell_view,
         "name": name,
     }
-    ok, message = remote.push(session_id, payload)
+    ok, message = await push(session_id, payload)
     return {"ok": ok, "message": message}
 
 

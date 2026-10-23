@@ -12,7 +12,7 @@ from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from . import remote, workspaces
+from . import connect, workspaces
 from .connect import _engine_for_db, _ensure_schema, _now_ms
 
 
@@ -144,7 +144,7 @@ async def _push_dashboard(
     message); no session_id -> (False, False, "no session")."""
     if not session_id:
         return False, False, "no session"
-    pushed, message = remote.push(session_id, _dashboard_event(name, html, queries, params))
+    pushed, message = await connect.push(session_id, _dashboard_event(name, html, queries, params))
     if not pushed:
         return False, False, message
     ws = await (workspaces.resolve(workspace) if workspace else workspaces.fallback())
@@ -169,6 +169,6 @@ async def _upsert_and_push(
     remote.push's contract. Used by the REST endpoint (the user-Save path)."""
     await upsert_dashboard(name, html, queries, params, workspace_id=workspace_id)
     if session_id:
-        ok, message = remote.push(session_id, _dashboard_event(name, html, queries, params))
+        ok, message = await connect.push(session_id, _dashboard_event(name, html, queries, params))
         return True, ok, message
     return True, False, "persisted"

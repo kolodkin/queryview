@@ -97,6 +97,12 @@ Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](./workspace.md)).
 
+**Locked connections keep the agent out.** A saved connection the user
+[locked](./connect.md#locked-connections) behind a passphrase refuses every
+tool above while a session is on it (`connection is locked`), and refuses REST
+calls without the tab's unlock token too, so copying a session id into
+`/api/db/query` gets the agent nowhere.
+
 **Arming is the gate, not the id.** Disarming closes the channel, and any later
 push fails with `unknown or inactive session`. The id is stable across refreshes
 and re-arms, so the command you copy stops changing under you; equally, an id

@@ -2,10 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { filterNames, useDismiss } from '../core'
-import { isReady, openSaved, selectDatabase, toConnection, type Connection } from './connection'
+import {
+  isReady,
+  lockConnection,
+  openSaved,
+  removeLock,
+  selectDatabase,
+  toConnection,
+  type Connection,
+} from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
 import { AgentBadge } from './controls/AgentBadge'
+import { PassphrasePrompt } from './controls/PassphrasePrompt'
 import { timeAgo } from './timeAgo'
 import {
   MANY_THRESHOLD,
@@ -53,6 +62,10 @@ function ConnectView({
   // The card being opened, for its spinner; and the last open's failure.
   const [opening, setOpening] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The passphrase prompt up, if any: to lock a card or remove its lock
+  // (docs/connect.md#locked-connections). Opening a locked card needs none:
+  // the shell asks once the session lands on it.
+  const [prompt, setPrompt] = useState<{ kind: 'lock' | 'unlock'; name: string } | null>(null)
 
   const refreshSaved = useCallback(async () => {
     try {
@@ -133,6 +146,22 @@ function ConnectView({
     else setError(r.message)
   }
 
+  // The prompt's answer: an error to show, or null once the action went through.
+  async function submitPassphrase(passphrase: string): Promise<string | null> {
+    if (!prompt) return null
+    const { kind, name } = prompt
+    const r = await (kind === 'lock' ? lockConnection : removeLock)(name, passphrase)
+    if (!r.ok) return r.message
+    setPrompt(null)
+    await refreshSaved()
+    return null
+  }
+
+  const promptTitles = {
+    lock: (name: string) => [`Lock ${name} with a passphrase`, 'Lock'],
+    unlock: (name: string) => [`Remove the lock from ${name}`, 'Remove lock'],
+  }
+
   async function pickDatabase(database: string) {
     if (!connection) return
     if (await selectDatabase(database)) {
@@ -161,6 +190,7 @@ function ConnectView({
 
   const form = formType ? DRIVERS[formType] : undefined
   const active = connection?.name ?? null
+  const [promptTitle, promptAction] = prompt ? promptTitles[prompt.kind](prompt.name) : ['', '']
 
   function startNew(type: string) {
     setFormType(type)
@@ -181,6 +211,7 @@ function ConnectView({
           busy={opening === c.name}
           disabled={opening !== null}
           onOpen={() => void open(c.name)}
+          onToggleLock={() => setPrompt({ kind: c.locked ? 'unlock' : 'lock', name: c.name })}
         />
       ))
 
@@ -205,6 +236,14 @@ function ConnectView({
 
   return (
     <div className={`w-full ${form ? 'max-w-md' : 'max-w-3xl'}`} data-testid="connect-page">
+      {prompt && (
+        <PassphrasePrompt
+          title={promptTitle}
+          action={promptAction}
+          onSubmit={submitPassphrase}
+          onCancel={() => setPrompt(null)}
+        />
+      )}
       {heading}
       {form ? (
         <ConnectionForm meta={form} onBack={() => setFormType(null)} onConnected={adopt} />
@@ -378,6 +417,7 @@ function SavedCard({
   busy,
   disabled,
   onOpen,
+  onToggleLock,
 }: {
   conn: SavedConnection
   active: boolean
@@ -385,21 +425,30 @@ function SavedCard({
   busy: boolean
   disabled: boolean
   onOpen: () => void
+  onToggleLock: () => void
 }) {
   const label = labelOf(conn.type)
+  // A div, not a button: the lock toggle inside it is a button of its own.
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
       data-testid="conn-card"
       data-conn={conn.name}
       data-active={active}
       data-highlighted={highlighted}
-      onClick={onOpen}
-      disabled={disabled}
+      data-locked={!!conn.locked}
+      onClick={disabled ? undefined : onOpen}
+      onKeyDown={(e) => {
+        if (disabled || (e.key !== 'Enter' && e.key !== ' ')) return
+        e.preventDefault()
+        onOpen()
+      }}
+      aria-disabled={disabled}
       title={`Open ${conn.name}`}
-      className={`glass-card flex flex-col gap-3 p-4 text-left ${active ? 'is-active' : ''} ${
+      className={`glass-card flex cursor-pointer flex-col gap-3 p-4 text-left ${active ? 'is-active' : ''} ${
         highlighted ? 'is-highlighted' : ''
-      }`}
+      } ${disabled ? 'cursor-wait opacity-50' : ''}`}
     >
       <span className="flex w-full items-center gap-3">
         <DriverMark type={conn.type} />
@@ -420,12 +469,32 @@ function SavedCard({
             />
           )
         )}
+        {conn.scope !== 'session' && (
+          <button
+            type="button"
+            data-testid="conn-lock"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleLock()
+            }}
+            disabled={disabled}
+            aria-label={conn.locked ? `Remove the lock from ${conn.name}` : `Lock ${conn.name}`}
+            title={
+              conn.locked
+                ? 'Locked: the agent is kept off. Click to remove the lock.'
+                : 'Lock behind a passphrase'
+            }
+            className={`glass-btn shrink-0 px-2 py-0.5 text-xs ${conn.locked ? 'text-amber-300' : 'text-slate-500'}`}
+          >
+            {conn.locked ? '🔒' : '🔓'}
+          </button>
+        )}
       </span>
       <span className="flex w-full items-center justify-between gap-2 text-xs text-slate-500">
         <span className="truncate font-mono text-slate-300">{conn.database ?? '—'}</span>
         <span className="shrink-0">{timeAgo(conn.last_active_at)}</span>
       </span>
-    </button>
+    </div>
   )
 }
 

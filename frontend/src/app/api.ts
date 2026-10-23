@@ -2,7 +2,7 @@
 // backend resolves `X-QV-Session` into the session whose connection, database
 // and workspace the request acts on.
 
-import { SESSION_KEY, tabRead } from './tabStorage'
+import { SESSION_KEY, TOKEN_KEY, tabRead } from './tabStorage'
 
 export function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const sid = tabRead(SESSION_KEY)
@@ -10,5 +10,7 @@ export function apiFetch(path: string, init: RequestInit = {}): Promise<Response
     ...((init.headers as Record<string, string>) ?? {}),
   }
   if (sid) headers['X-QV-Session'] = sid
+  const token = tabRead(TOKEN_KEY)
+  if (token) headers['X-QV-Token'] = token
   return fetch(path, { ...init, headers })
 }
