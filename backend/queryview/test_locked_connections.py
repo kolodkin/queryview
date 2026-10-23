@@ -151,6 +151,11 @@ def test_lock_refusals_and_removal():
     assert c.post("/api/db/query", json={"query": "SELECT 1"}).json()["ok"]
     assert _run(mcp_server.run_sql(c.headers["X-QV-Session"], "SELECT 1"))["ok"] is True
     assert c.get("/api/session").json()["locked"] is False
+    # Relocking, with a new passphrase, starts over.
+    assert c.post("/api/db/lock", json={"name": "lock-rm-duck", "passphrase": "pw2"}).json()["ok"]
+    assert _run(mcp_server.run_sql(c.headers["X-QV-Session"], "SELECT 1"))["message"] == "connection is locked"
+    assert c.post("/api/db/unlock", json={"name": "lock-rm-duck", "passphrase": "pw"}).status_code == 403
+    assert c.post("/api/db/unlock", json={"name": "lock-rm-duck", "passphrase": "pw2"}).json()["ok"]
 
 
 def test_a_restart_forgets_tokens_but_not_the_lock():
