@@ -128,6 +128,8 @@ def test_unlock_takes_the_passphrase_and_opening_lands_locked(_no_backoff):
 
     r = other.post("/api/db/unlock", json={"name": "lock-open-duck", "passphrase": "pw"})
     assert r.json()["ok"], r.text
+    assert _no_backoff == [2, 4], "the right guess after two wrong ones waited too, then reset"
+    assert "lock-open-duck" not in connect._unlock_failures
     other.headers["X-QV-Token"] = r.json()["token"]
     assert other.post("/api/db/query", json={"query": "SELECT 1"}).json()["ok"]
     # A session's token is its own: it does not open the connection elsewhere.

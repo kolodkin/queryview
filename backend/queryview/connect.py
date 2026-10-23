@@ -302,16 +302,16 @@ def _issue_token(sid: str, name: str) -> str:
 
 
 async def _verify_passphrase(name: str, passphrase: str) -> dict[str, Any] | None:
-    """None when `passphrase` opens `name`, else the error. Wrong guesses on a
-    connection back off exponentially (up to 30s), whoever sends them."""
+    """None when `passphrase` opens `name`, else the error. Attempts on a
+    connection back off exponentially (up to 30s), whoever sends them; the
+    attempt is counted before the wait so a burst queues instead of racing."""
     stored = await _lock_hash_of(name)
     if stored is None:
         return {"ok": False, "message": f'"{name}" is not a locked connection'}
-    failures = _unlock_failures.get(name, 0)
-    if failures:
-        await _backoff(min(2**failures, 30))
+    attempts = _unlock_failures[name] = _unlock_failures.get(name, 0) + 1
+    if attempts > 1:
+        await _backoff(min(2 ** (attempts - 1), 30))
     if not await asyncio.to_thread(_passphrase_matches, stored, passphrase):
-        _unlock_failures[name] = failures + 1
         return {"ok": False, "message": "wrong passphrase", "reason": "locked"}
     _unlock_failures.pop(name, None)
     return None
