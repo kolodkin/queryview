@@ -55,7 +55,8 @@ def test_hash_verifies_and_never_stores_the_passphrase():
 
 def test_lock_keeps_the_locking_tab_working_and_shuts_out_everyone_else():
     c = _connected("lock-duck")
-    r = c.post("/api/db/lock", json={"name": "lock-duck", "passphrase": "pw"})
+    # A space can't appear in base64, so the plaintext never hides in the hash by chance.
+    r = c.post("/api/db/lock", json={"name": "lock-duck", "passphrase": "open sesame"})
     assert r.json()["ok"], r.text
     token = r.json()["token"]
 
@@ -64,7 +65,7 @@ def test_lock_keeps_the_locking_tab_working_and_shuts_out_everyone_else():
         (lock_hash,) = con.execute("SELECT lock_hash FROM connections WHERE name='lock-duck'").fetchone()
     finally:
         con.close()
-    assert lock_hash and "pw" not in lock_hash
+    assert lock_hash and "open sesame" not in lock_hash
 
     # The same session without the token: what an agent copying the id sends.
     for path, body in (("/api/db/query", {"query": "SELECT 1"}), ("/api/db/execute", {"sql": "SELECT 1"})):

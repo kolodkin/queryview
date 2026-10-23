@@ -200,20 +200,19 @@ def _row_to_stored(row: Connection | None) -> StoredConnection | None:
 
 async def list_connections() -> list[dict[str, Any]]:
     """Saved connections for the Connect page's cards, most-recently-active
-    first. Metadata only: the encrypted config is never read."""
+    first. Metadata only: the encrypted config is never decrypted."""
     await _ensure_schema()
-    cols = (
-        Connection.name,
-        Connection.type,
-        col(Connection.database),
-        Connection.last_active_at,
-        col(Connection.lock_hash),
-    )
     async with AsyncSession(_engine_for_db()) as s:
-        rows = await s.exec(select(*cols).order_by(col(Connection.last_active_at).desc()))
+        rows = await s.exec(select(Connection).order_by(col(Connection.last_active_at).desc()))
         return [
-            {"name": n, "type": t, "database": d, "last_active_at": at, "locked": lh is not None}
-            for n, t, d, at, lh in rows.all()
+            {
+                "name": r.name,
+                "type": r.type,
+                "database": r.database,
+                "last_active_at": r.last_active_at,
+                "locked": r.lock_hash is not None,
+            }
+            for r in rows.all()
         ]
 
 

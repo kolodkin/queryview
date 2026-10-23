@@ -339,7 +339,8 @@ async def db_open(request: Request):
 
 def _lock_body(body: Any) -> tuple[str, str]:
     b = body if isinstance(body, dict) else {}
-    return _clean_str(b.get("name")), b.get("passphrase") if isinstance(b.get("passphrase"), str) else ""
+    passphrase = b.get("passphrase")
+    return _clean_str(b.get("name")), passphrase if isinstance(passphrase, str) else ""
 
 
 # Lock a saved connection behind a passphrase; this tab gets its unlock token.
