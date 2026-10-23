@@ -1,7 +1,6 @@
 ---
 name: claudeai-run
 description: Start the local backing services (ClickHouse, PostgreSQL) needed for the e2e suite by running claudeai/run.sh. Use at the start of a new session, or whenever the services are down (e.g. after a container suspend/resume) and tests need them up.
-disable-model-invocation: true
 ---
 
 # claudeai-run Skill
