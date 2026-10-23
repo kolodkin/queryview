@@ -101,9 +101,7 @@ reports nothing (see [workspace.md](./workspace.md)).
 [locked](./connect.md#locked-connections) behind a passphrase refuses every
 tool above while a session is on it (`connection is locked`), and refuses REST
 calls without the tab's unlock token too, so copying a session id into
-`/api/db/query` gets the agent nowhere. The REST API also refuses requests
-that don't look like the browser's (see [api.md](./api.md)); that one is a
-courtesy for a cooperating agent, the lock is the boundary.
+`/api/db/query` gets the agent nowhere.
 
 **Arming is the gate, not the id.** Disarming closes the channel, and any later
 push fails with `unknown or inactive session`. The id is stable across refreshes

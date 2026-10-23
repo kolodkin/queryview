@@ -5,13 +5,6 @@ run over the HTTP interface with HTTP Basic auth and a 5s timeout. All
 connection-config bodies validate `host` (non-empty) and `port` (integer
 `1..65535`); validation errors return `400`.
 
-**UI only:** every `/api/*` route but `/api/health` answers `403 {ok:false,
-message}` unless the request carries `Sec-Fetch-Site: same-origin`, which
-browsers add to every same-origin request (fetch, `EventSource`, beacons,
-download links) and page scripts cannot set. An agent reaching the backend
-over HTTP is held to the MCP tools (see [remote.md](./remote.md)). The test
-suites send that header for every `httpx`/`TestClient` call (`conftest.py`).
-
 **Locked connections:** a request on a session whose active connection is
 [locked](./connect.md#locked-connections) must also carry the tab's unlock
 token as `X-QV-Token`, or every data route answers `403 {ok:false, message:

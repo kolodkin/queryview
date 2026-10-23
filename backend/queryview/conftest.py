@@ -10,7 +10,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import httpx
 import pytest
 
 
@@ -89,15 +88,3 @@ def _isolated_db(tmp_path_factory: pytest.TempPathFactory):
     _c._schema_ready = False  # type: ignore[attr-defined]
     _c._key = None  # type: ignore[attr-defined]
     yield
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _pose_as_ui() -> None:
-    """The API refuses anything but the browser (see main.session_header); the
-    suite's TestClient calls carry the header a same-origin browser request has."""
-    init = httpx.Client.__init__
-
-    def as_ui(self, *args, headers=None, **kwargs):
-        init(self, *args, headers={"Sec-Fetch-Site": "same-origin", **dict(headers or {})}, **kwargs)
-
-    httpx.Client.__init__ = as_ui  # type: ignore[method-assign]

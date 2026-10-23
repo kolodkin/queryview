@@ -18,10 +18,6 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from playwright.sync_api import Page, expect
 
-# The API refuses anything but the browser; the backend suite's fixture makes
-# every httpx call pose as one, and registers here by import.
-from queryview.conftest import _pose_as_ui  # noqa: F401
-
 # Mirror playwright.config.ts: 15s default assertion timeout.
 expect.set_options(timeout=15_000)
 
@@ -187,7 +183,7 @@ def base_url(tmp_path_factory) -> Iterator[str]:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _git_sync_remote(base_url: str, _pose_as_ui: None) -> None:  # noqa: F811
+def _git_sync_remote(base_url: str) -> None:
     """Point the default workspace at the remote CI stood up, through the same
     API a user would: the app has no env-var path to it. Unset locally, leaving
     git sync disabled and its round-trip test skipped."""
