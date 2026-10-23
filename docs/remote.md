@@ -97,6 +97,11 @@ Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](./workspace.md)).
 
+**The MCP tools are the agent's only door.** The REST API refuses requests
+that don't come from the browser (see [api.md](./api.md)), so an agent cannot
+sidestep the session scope above — opening a saved connection, say — by
+calling `/api/db/open` or `/api/db/query` directly.
+
 **Arming is the gate, not the id.** Disarming closes the channel, and any later
 push fails with `unknown or inactive session`. The id is stable across refreshes
 and re-arms, so the command you copy stops changing under you; equally, an id

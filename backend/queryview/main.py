@@ -1,6 +1,6 @@
-"""FastAPI app: the JSON API under /api/*, the X-QV-Session header that names
-the caller's session, and (when SERVE_STATIC=1) serving the built SPA with an
-index.html fallback."""
+"""FastAPI app: the JSON API under /api/* (browser-only: see `session_header`),
+the X-QV-Session header that names the caller's session, and (when
+SERVE_STATIC=1) serving the built SPA with an index.html fallback."""
 
 from __future__ import annotations
 
@@ -132,10 +132,23 @@ async def mcp_slash_redirect() -> RedirectResponse:
     return RedirectResponse("/mcp/", status_code=307)
 
 
+UI_ONLY_MESSAGE = "the REST API serves the QueryView UI only; agents use the MCP tools at /mcp/"
+
+
 @app.middleware("http")
 async def session_header(request: Request, call_next):
-    """Identify the session from the header the SPA sends on every /api call.
-    There is no cookie: a session is named by its id, not by the browser."""
+    """Refuse /api calls that don't come from the UI, then identify the session
+    from the header the SPA sends on every one. There is no cookie: a session
+    is named by its id, not by the browser.
+
+    Browsers stamp every same-origin request (fetch, EventSource, beacon,
+    download link) with `Sec-Fetch-Site: same-origin` and scripts can't forge
+    it, so an agent that reaches the backend over HTTP is held to the MCP
+    tools, which stay within the session scope the user armed. /api/health is
+    open for readiness probes."""
+    path = request.url.path
+    if path.startswith("/api/") and path != "/api/health" and request.headers.get("sec-fetch-site") != "same-origin":
+        return JSONResponse({"ok": False, "message": UI_ONLY_MESSAGE}, status_code=403)
     request.state.sid = request.headers.get("X-QV-Session") or ""
     return await call_next(request)
 

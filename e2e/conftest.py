@@ -360,3 +360,15 @@ def seeded_duckdb_long_names(tmp_path_factory) -> str:
         "sales_reporting_monthly_rollup",
         "warehouse_shipment_reconciliation_log",
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _pose_as_ui() -> None:
+    """The API refuses anything but the browser (see main.session_header); the
+    suite's httpx calls carry the header a same-origin browser request has."""
+    init = httpx.Client.__init__
+
+    def as_ui(self, *args, headers=None, **kwargs):
+        init(self, *args, headers={"Sec-Fetch-Site": "same-origin", **dict(headers or {})}, **kwargs)
+
+    httpx.Client.__init__ = as_ui  # type: ignore[method-assign]

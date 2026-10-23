@@ -5,6 +5,15 @@ run over the HTTP interface with HTTP Basic auth and a 5s timeout. All
 connection-config bodies validate `host` (non-empty) and `port` (integer
 `1..65535`); validation errors return `400`.
 
+**UI only:** every `/api/*` route but `/api/health` answers `403 {ok:false,
+message}` unless the request carries `Sec-Fetch-Site: same-origin`, which
+browsers add to every same-origin request (fetch, `EventSource`, beacons,
+download links) and page scripts cannot set. The REST API is the SPA's; an
+agent that can reach the backend over HTTP is held to the MCP tools, which
+stay within the session the user armed (see [remote.md](./remote.md)). Test
+suites that call the API from Python pose as the browser by sending that
+header (`conftest.py` does it for every `httpx`/`TestClient` call).
+
 **Sessions:** every `/api/*` request names its session with an `X-QV-Session`
 header; there is no session cookie. A session is a persisted row holding one
 tab's UI state — route, connection, database, workspace, view settings — so two
