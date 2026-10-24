@@ -12,7 +12,7 @@ import os
 import shutil
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 from urllib.parse import unquote
 
 import yaml
@@ -20,8 +20,6 @@ import yaml
 from .connect import _data_dir
 from .workspaces import WorkspaceRec, split_credential
 from .yamlio import YamlIOError, dashboard_from_data, dump_yaml, query_from_data, query_to_data, slug
-
-T = TypeVar("T")
 
 
 class GitSyncError(Exception):
@@ -513,7 +511,7 @@ async def store(
         return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message, merged))
 
 
-async def _retry_if_rejected(op: Callable[[], Awaitable[T]]) -> T:
+async def _retry_if_rejected(op: Callable[[], Awaitable[Any]]) -> Any:
     """Run `op`; if its push was rejected because another instance pushed
     between our fetch and push, run it once more from the new head."""
     try:
@@ -541,7 +539,6 @@ async def _store_once(
         m = await _merge(ws, wd, head)
         merged["imported"] += m["imported"]
         merged["deleted"] += m["deleted"]
-        merged["conflicts"] = m["conflicts"]
     # Loaded after the merge, which may have flipped this row's deleted flag.
     entity = await _load_entity(ws, kind, name, conn_type)
     paths = _entity_paths(kind, name, conn_type)
@@ -563,7 +560,7 @@ async def _store_once(
             (ddir / fname).write_text(content, encoding="utf-8")
     await _git("add", "-A", "--", *(p for p in paths if (wd / p).exists()), cwd=wd)
     if not (await _git("status", "--porcelain", "--", *paths, cwd=wd)).strip():
-        return {"committed": False, "sha": None, "message": "no changes", **merged}
+        return {"committed": False, "sha": None, "message": "no changes", **merged, "conflicts": conflicts(ws)}
     label = f"{conn_type}/{name}" if kind == "query" else name
     verb = "delete" if is_deleted else "store"
     await _git("commit", "-m", message or f"{verb} {kind} {label}", cwd=wd)
@@ -571,8 +568,7 @@ async def _store_once(
     sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
     # The repo now holds exactly the local copy.
     await _agree(ws, wd, "HEAD", kind, name, conn_type)
-    merged["conflicts"] = conflicts(ws)
-    return {"committed": True, "sha": sha, "message": "stored", **merged}
+    return {"committed": True, "sha": sha, "message": "stored", **merged, "conflicts": conflicts(ws)}
 
 
 async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
@@ -582,12 +578,12 @@ async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
     row = await _load_entity(ws, "query", name, conn_type)
     if row["deleted_at"] is None:
         raise GitSyncError(f"deleted query {name!r} not found", status=404)
-    marker = deleted_relpath(conn_type, name)
     async with _lock(ws):
-        await _retry_if_rejected(lambda: _purge_once(ws, conn_type, name, marker))
+        await _retry_if_rejected(lambda: _purge_once(ws, conn_type, name))
 
 
-async def _purge_once(ws: WorkspaceRec, conn_type: str, name: str, marker: str) -> None:
+async def _purge_once(ws: WorkspaceRec, conn_type: str, name: str) -> None:
+    marker = deleted_relpath(conn_type, name)
     wd = await _ensure_repo(ws)
     head = await _origin_head(wd, ws)
     if head is None:
