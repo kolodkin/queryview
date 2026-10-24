@@ -17,8 +17,8 @@ Turning the toggle off (or closing the tab) disarms the session immediately —
 pushes to its id are then reported as not delivered.
 
 Without a copied id the agent uses the standing
-[Agent session](./session.md#the-agent-session); arming it from the session
-switcher enables pushes to it the same way.
+[Agent session](./session.md#the-agent-session); pick it in the session
+switcher and arm it the same way to allow pushes.
 
 ## Connecting a client
 

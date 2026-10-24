@@ -278,7 +278,7 @@ def test_agent_session_is_standing_and_never_resumed():
     _run(sessions.ensure_agent_session())  # a restart keeps the existing row
     agent = _run(sessions.get_session_rec(sessions.AGENT_SESSION_ID))
     assert agent is not None
-    assert (agent.label, agent.seq, agent.url) == ("Agent", 0, "/explorer")
+    assert (sessions.display_label(agent), agent.url) == ("Agent", "/explorer")
     _run(sessions.touch_for_test(sessions.AGENT_SESSION_ID, last_active_at=_now_ms_for_test() + 60_000))
     got, _ = _run(sessions.attach("tab-a", None))
     assert got.id != sessions.AGENT_SESSION_ID

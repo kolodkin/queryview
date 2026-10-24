@@ -102,10 +102,12 @@ labelled **Agent**, is created at startup if missing, so an agent can start
 without the user copying an id. The MCP server's instructions and tool docs
 name it. A new tab never auto-resumes it and it can't be deleted; otherwise it
 is an ordinary session. Pick it in the session switcher to see what the agent is
-on, open a saved connection for it, or arm it to allow pushes.
+on or open a saved connection for it; arm it with **Allow remote control** to
+allow pushes. Clearing a rename falls back to **Agent**.
 [Locked](./connect.md#locked-connections) connections refuse it like any other
-session. It starts disconnected and keeps whatever connection the agent last
-used across restarts.
+session. It starts disconnected; like any session, its row remembers the
+connection it was last on, though an agent-added session connection is
+in-memory and gone after a restart.
 
 ## How it is stored
 

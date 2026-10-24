@@ -110,7 +110,7 @@ def _label(label: str | None, seq: int) -> str:
     """A pinned name, else the stable ordinal. Connection and database are shown
     beside the name rather than folded into it, so a session's name does not
     change under you when you switch databases."""
-    return label or f"Session {seq}"
+    return label or ("Agent" if seq == 0 else f"Session {seq}")
 
 
 def display_label(rec: SessionRec) -> str:
@@ -145,29 +145,29 @@ def _unheld_query(now: int):
     )
 
 
+async def _first_workspace(s: AsyncSession) -> str:
+    """The fallback workspace (the oldest), not one named "default": that one
+    can be renamed. A bare table clause: importing workspaces would be a cycle."""
+    ws = table("workspaces", column("id"), column("name"))
+    return (await s.exec(select(ws.c.name).order_by(ws.c.id).limit(1))).first() or "default"
+
+
 async def _new_row(s: AsyncSession, now: int) -> Session:
     """A fresh row in the caller's transaction, so a create-and-claim is one pass."""
     next_seq = (await s.exec(select(func.coalesce(func.max(Session.seq), 0)))).one() + 1
-    # The fallback workspace (the oldest), not one named "default": that one
-    # can be renamed. A bare table clause: importing workspaces would be a cycle.
-    ws = table("workspaces", column("id"), column("name"))
-    first_ws = (await s.exec(select(ws.c.name).order_by(ws.c.id).limit(1))).first()
-    row = Session(id=uuid.uuid4().hex, seq=next_seq, last_active_at=now, workspace=first_ws or "default")
+    row = Session(id=uuid.uuid4().hex, seq=next_seq, last_active_at=now, workspace=await _first_workspace(s))
     s.add(row)
     return row
 
 
 async def ensure_agent_session() -> None:
     """Create the standing Agent session if it is missing (startup). Seq 0 keeps
-    the user's first session "Session 1"; an existing row is left as it is, so
-    it keeps whatever connection the agent last used."""
+    the user's first session "Session 1" and labels it "Agent" (see `_label`)."""
     await _ensure_schema()
     async with _writes, _open() as s:
-        if await s.get(Session, AGENT_SESSION_ID) is not None:
-            return
-        row = await _new_row(s, _now_ms())
-        row.id, row.seq, row.label = AGENT_SESSION_ID, 0, "Agent"
-        await s.commit()
+        if await s.get(Session, AGENT_SESSION_ID) is None:
+            s.add(Session(id=AGENT_SESSION_ID, seq=0, last_active_at=_now_ms(), workspace=await _first_workspace(s)))
+            await s.commit()
 
 
 async def create_session() -> SessionRec:
@@ -260,14 +260,14 @@ async def delete_session(sid: str) -> tuple[bool, str]:
     Agent session. The second element is a reason code ("unknown" / "held" /
     "agent"), not prose: the route maps it to a status,
     so rewording a message cannot change an HTTP code."""
+    if sid == AGENT_SESSION_ID:
+        return False, "agent"
     await _ensure_schema()
     now = _now_ms()
     async with _open() as s:
         row = await s.get(Session, sid)
         if row is None:
             return False, "unknown"
-        if sid == AGENT_SESSION_ID:
-            return False, "agent"
         if _is_held(row, now):
             return False, "held"
         await s.delete(row)
