@@ -506,9 +506,8 @@ async def store(
     once."""
     _check_kind(kind, conn_type)
     _require_remote(ws)  # unconfigured -> 409 before any DB/entity lookup
-    merged = _empty_merge()
     async with _lock(ws):
-        return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message, merged))
+        return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message))
 
 
 async def _retry_if_rejected(op: Callable[[], Awaitable[Any]]) -> Any:
@@ -528,17 +527,14 @@ async def _store_once(
     name: str,
     conn_type: str | None,
     message: str | None,
-    merged: dict[str, Any],
 ) -> dict[str, Any]:
-    """One store attempt. `merged` accumulates what each attempt's merge did,
-    so a retry still reports the first attempt's imports."""
+    """One store attempt; a retry reports only its own merge."""
     wd = await _ensure_repo(ws)
     head = await _origin_head(wd, ws)
+    merged = _empty_merge()
     if head:
         await _git("reset", "--hard", head, cwd=wd)
-        m = await _merge(ws, wd, head)
-        merged["imported"] += m["imported"]
-        merged["deleted"] += m["deleted"]
+        merged = await _merge(ws, wd, head)
     # Loaded after the merge, which may have flipped this row's deleted flag.
     entity = await _load_entity(ws, kind, name, conn_type)
     paths = _entity_paths(kind, name, conn_type)
