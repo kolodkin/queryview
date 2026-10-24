@@ -27,7 +27,7 @@ SESSION_CLAIM_TTL_MS = 90_000
 DEFAULT_URL = "/connect"
 
 # The standing session the agent uses without the user copying an id out of a
-# tab. Created at startup, never auto-resumed by a new tab, never deletable.
+# tab. Seeded by migration, never auto-resumed by a new tab, never deletable.
 AGENT_SESSION_ID = "0" * 32
 
 # Session writes run one at a time, so a reload's `attach` sees the pagehide
@@ -110,7 +110,7 @@ def _label(label: str | None, seq: int) -> str:
     """A pinned name, else the stable ordinal. Connection and database are shown
     beside the name rather than folded into it, so a session's name does not
     change under you when you switch databases."""
-    # Only the Agent session has seq 0 (`ensure_agent_session`).
+    # Only the Agent session has seq 0 (seeded by migration c5d6e7f8a9b0).
     return label or ("Agent" if seq == 0 else f"Session {seq}")
 
 
@@ -146,29 +146,16 @@ def _unheld_query(now: int):
     )
 
 
-async def _first_workspace(s: AsyncSession) -> str:
-    """The fallback workspace (the oldest), not one named "default": that one
-    can be renamed. A bare table clause: importing workspaces would be a cycle."""
-    ws = table("workspaces", column("id"), column("name"))
-    return (await s.exec(select(ws.c.name).order_by(ws.c.id).limit(1))).first() or "default"
-
-
 async def _new_row(s: AsyncSession, now: int) -> Session:
     """A fresh row in the caller's transaction, so a create-and-claim is one pass."""
     next_seq = (await s.exec(select(func.coalesce(func.max(Session.seq), 0)))).one() + 1
-    row = Session(id=uuid.uuid4().hex, seq=next_seq, last_active_at=now, workspace=await _first_workspace(s))
+    # The fallback workspace (the oldest), not one named "default": that one
+    # can be renamed. A bare table clause: importing workspaces would be a cycle.
+    ws = table("workspaces", column("id"), column("name"))
+    first_ws = (await s.exec(select(ws.c.name).order_by(ws.c.id).limit(1))).first()
+    row = Session(id=uuid.uuid4().hex, seq=next_seq, last_active_at=now, workspace=first_ws or "default")
     s.add(row)
     return row
-
-
-async def ensure_agent_session() -> None:
-    """Create the standing Agent session if it is missing (startup). Seq 0 keeps
-    the user's first session "Session 1" and labels it "Agent" (see `_label`)."""
-    await _ensure_schema()
-    async with _writes, _open() as s:
-        if await s.get(Session, AGENT_SESSION_ID) is None:
-            s.add(Session(id=AGENT_SESSION_ID, seq=0, last_active_at=_now_ms(), workspace=await _first_workspace(s)))
-            await s.commit()
 
 
 async def create_session() -> SessionRec:
