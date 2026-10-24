@@ -19,7 +19,7 @@ down_revision: str | None = "b4c5d6e7f8a9"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-AGENT_SESSION_ID = "0" * 32  # sessions.AGENT_SESSION_ID; a migration must not import app code
+AGENT_SESSION_ID = "agent"  # sessions.AGENT_SESSION_ID; a migration must not import app code
 
 
 def upgrade() -> None:

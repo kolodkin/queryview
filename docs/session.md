@@ -97,9 +97,9 @@ stable, so the command you copy stops changing under you. See
 
 ## The Agent session
 
-A standing session, id `00000000000000000000000000000000`, labelled **Agent**,
-seeded by a migration. The MCP server's instructions name it, so an agent can
-start without the user copying an id.
+A standing session, id `agent`, labelled **Agent**, seeded by a migration. The
+MCP server's instructions name it, so an agent can start without the user
+copying an id.
 
 - A new tab never auto-resumes it, and it can't be deleted.
 - Otherwise it is an ordinary session: pick it in the session switcher to see

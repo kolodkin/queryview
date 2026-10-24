@@ -42,8 +42,8 @@ async def push_query(
     The targeted browser fills its query panel and auto-runs the query against
     the session's own connection. Get the `session_id` from the QueryView UI:
     the agent icon next to the connection status pill, after enabling "Allow
-    remote control"; without one, use the standing Agent session
-    00000000000000000000000000000000. To explore data first, use run_sql with the same id.
+    remote control"; without one, use the standing Agent session "agent".
+    To explore data first, use run_sql with the same id.
     A session on a locked connection (see session_info) refuses every push and
     query with "connection is locked"; ask the user to switch.
 

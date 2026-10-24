@@ -28,7 +28,7 @@ DEFAULT_URL = "/connect"
 
 # The standing session the agent uses without the user copying an id out of a
 # tab. Seeded by migration, never auto-resumed by a new tab, never deletable.
-AGENT_SESSION_ID = "0" * 32
+AGENT_SESSION_ID = "agent"
 
 # Session writes run one at a time, so a reload's `attach` sees the pagehide
 # beacon's patch committed. See docs/session.md, "How it is stored".
