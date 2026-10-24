@@ -82,8 +82,9 @@ Changing a workspace's remote or branch drops its clone and that file.
   for a `.deleted` marker with the same content (`delete query {type}/{name}`);
   once undeleted, Commit swaps it back.
 - **Purge** removes the marker (`purge query {type}/{name}`) before the row,
-  so no instance imports it back. Only Purge does: deleting a workspace removes
-  its deleted queries locally and leaves their markers in the repo.
+  so no instance imports it back (retried once, like Commit). Only Purge does:
+  deleting a workspace removes its deleted queries locally and leaves their
+  markers in the repo.
 - Other instances delete their copy on sync; one edited locally becomes a
   conflict, where **Restore** takes the deletion.
 - History spans both paths: restoring an older revision brings the query back
@@ -101,7 +102,8 @@ never moves and history is append-only.
 
 Next to each entity's **Save** button (query panel and dashboard page; absent
 in an [autosave](./workspace.md#autosave) workspace, which saves on update):
-**Commit** pushes the saved DB state to the remote; **Restore** opens
+**Commit** pushes the saved DB state to the remote (retried once if another
+instance pushed first); **Restore** opens
 the entity's revision list (newest first, 10 at a time, scroll for more) and
 overwrites the local copy with the picked revision after confirmation. Both
 are disabled when the active workspace has no remote configured.
