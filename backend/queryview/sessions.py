@@ -110,6 +110,7 @@ def _label(label: str | None, seq: int) -> str:
     """A pinned name, else the stable ordinal. Connection and database are shown
     beside the name rather than folded into it, so a session's name does not
     change under you when you switch databases."""
+    # Only the Agent session has seq 0 (`ensure_agent_session`).
     return label or ("Agent" if seq == 0 else f"Session {seq}")
 
 
@@ -210,18 +211,20 @@ async def list_sessions() -> list[dict[str, Any]]:
                 .order_by(col(Session.last_active_at).desc())
             )
         ).all()
-    return [
-        {
-            "id": r.id,
-            "label": _label(r.label, r.seq),
-            "connection": r.connection_name,
-            "database": r.database,
-            "held": bool(
-                r.claimed_by and r.claim_seen_at is not None and (now - r.claim_seen_at) < SESSION_CLAIM_TTL_MS
-            ),
-        }
-        for r in rows
-    ]
+    out = []
+    for r in rows:
+        held = bool(r.claimed_by and r.claim_seen_at is not None and (now - r.claim_seen_at) < SESSION_CLAIM_TTL_MS)
+        out.append(
+            {
+                "id": r.id,
+                "label": _label(r.label, r.seq),
+                "connection": r.connection_name,
+                "database": r.database,
+                "held": held,
+                "deletable": not held and r.id != AGENT_SESSION_ID,
+            }
+        )
+    return out
 
 
 async def patch_session(

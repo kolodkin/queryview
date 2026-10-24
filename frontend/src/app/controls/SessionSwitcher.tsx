@@ -11,9 +11,6 @@ import {
   type SessionSummary,
 } from '../session'
 
-// sessions.AGENT_SESSION_ID: the standing session the server never deletes.
-const AGENT_SESSION_ID = '0'.repeat(32)
-
 type Props = {
   label: string
   onSwitch: (session: SessionState) => void
@@ -121,7 +118,7 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
                   )}
                 </button>
                 {/* A held session (this tab's or another's) and the Agent session can't be deleted. */}
-                {!s.held && s.id !== AGENT_SESSION_ID && (
+                {s.deletable && (
                   <button
                     type="button"
                     aria-label={`Delete ${s.label}`}

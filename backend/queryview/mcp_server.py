@@ -48,8 +48,7 @@ async def push_query(
     query with "connection is locked"; ask the user to switch.
 
     Args:
-        session_id: The session id shown in the QueryView popover, or the
-            standing Agent session 00000000000000000000000000000000.
+        session_id: The session id shown in the QueryView popover.
         query: The SQL to run.
         limit: Page size (default 100).
         offset: Row offset (default 0).
@@ -97,8 +96,7 @@ async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any
     deciding whether to fully-qualify tables as db.table.
 
     Args:
-        session_id: The session id shown in the QueryView popover, or the
-            standing Agent session 00000000000000000000000000000000.
+        session_id: The session id shown in the QueryView popover.
         sql: The SQL statement to run.
         limit: Most rows to return (default 1000, max 10000).
     """
@@ -145,8 +143,7 @@ async def run_script(session_id: str, sql: str) -> dict[str, Any]:
     "message"} (e.g. "sql required", "not connected", "select a database first").
 
     Args:
-        session_id: The session id shown in the QueryView popover, or the
-            standing Agent session 00000000000000000000000000000000.
+        session_id: The session id shown in the QueryView popover.
         sql: The script; separate statements with `;`.
     """
     from .connect import execute_script
@@ -171,8 +168,7 @@ async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str,
     connected" / "select a database first" when the Scripts page can't open.
 
     Args:
-        session_id: The session id shown in the QueryView popover, or the
-            standing Agent session 00000000000000000000000000000000.
+        session_id: The session id shown in the QueryView popover.
         sql: The script; separate statements with `;`.
         run: Also run it (default False: load only).
     """
@@ -198,8 +194,7 @@ async def session_info(session_id: str) -> dict[str, Any]:
     list_connections). Fully-qualify tables as db.table to reach another one.
 
     Args:
-        session_id: The session id shown in the QueryView popover, or the
-            standing Agent session 00000000000000000000000000000000.
+        session_id: The session id shown in the QueryView popover.
 
     Returns {"ok": True, "connected", "connection", "type", "scope",
     "created_by", "locked", "database", "databases", "workspace",
@@ -283,8 +278,7 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
     Checks it connects; use_connection then switches to it.
 
     Args:
-        session_id: The session id shown in the QueryView popover, or the
-            standing Agent session 00000000000000000000000000000000.
+        session_id: The session id shown in the QueryView popover.
         name: A name no saved or session connection uses yet.
         type: "clickhouse" or "postgres" (DuckDB is refused: it reads local files).
         config: {host, port, username, password}.
@@ -443,8 +437,7 @@ async def push_dashboard(
     re-runs with `window.setParams({...})`. See docs/dashboard.md.
 
     Args:
-        session_id: The session id shown in the QueryView popover, or the
-            standing Agent session 00000000000000000000000000000000.
+        session_id: The session id shown in the QueryView popover.
         name: Dashboard name (the name the user's Save will persist under).
         html: The dashboard HTML document (renders in a sandboxed iframe).
         queries: Map of query name to SQL.

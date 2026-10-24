@@ -287,3 +287,5 @@ def test_agent_session_is_standing_and_never_resumed():
 def test_agent_session_refuses_deletion():
     _run(sessions.ensure_agent_session())
     assert _run(sessions.delete_session(sessions.AGENT_SESSION_ID)) == (False, "agent")
+    row = next(r for r in _run(sessions.list_sessions()) if r["id"] == sessions.AGENT_SESSION_ID)
+    assert row["deletable"] is False
