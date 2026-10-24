@@ -471,6 +471,30 @@ def other_instance(git_env, wipe_workspace_entities):
     gitsync.forget(ws.id)
 
 
+def test_store_retries_once_when_another_instance_pushes_first(other_instance, monkeypatch, git_env):
+    from queryview.queries import save_predefined_query
+
+    _run(save_predefined_query("gs racer", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
+    _run(save_predefined_query("gs mine", "clickhouse", "SELECT 2", workspace_id=_default_ws_id()))
+    real_git, pushes = gitsync._git, []
+
+    async def racing_git(*args, cwd=None, credential=None):
+        if args[0] == "push":
+            pushes.append(cwd)
+            if len(pushes) == 1:  # between our fetch and push, the other instance lands a commit
+                await gitsync.store(other_instance, "query", "gs racer", "clickhouse")
+        return await real_git(*args, cwd=cwd, credential=credential)
+
+    monkeypatch.setattr(gitsync, "_git", racing_git)
+    r = _run(gitsync.store(_default_ws(), "query", "gs mine", "clickhouse"))
+
+    assert r["committed"] is True
+    assert {"kind": "query", "name": "gs racer", "conn_type": "clickhouse"} in r["imported"]
+    assert len(pushes) == 3  # ours (rejected), theirs, ours again
+    log = _remote_log(git_env)
+    assert "store query clickhouse/gs racer" in log and "store query clickhouse/gs mine" in log
+
+
 def test_sync_imports_what_the_repo_has(other_instance):
     from queryview.dashboards import get_dashboard, upsert_dashboard
     from queryview.queries import get_predefined_query, save_predefined_query
