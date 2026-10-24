@@ -16,6 +16,9 @@ session's **id** and a copyable command, e.g.:
 Turning the toggle off (or closing the tab) disarms the session immediately —
 pushes to its id are then reported as not delivered.
 
+Without a copied id the agent uses the standing
+[Agent session](./session.md#the-agent-session); arm it the same way.
+
 ## Connecting a client
 
 The server runs inside the backend process — nothing extra to start — but the

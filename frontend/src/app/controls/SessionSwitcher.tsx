@@ -117,8 +117,8 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
                     <span className="ml-2 text-xs text-slate-400">in another tab</span>
                   )}
                 </button>
-                {/* A held session (this tab's or another's) can't be deleted. */}
-                {!s.held && (
+                {/* A held session (this tab's or another's) and the Agent session can't be deleted. */}
+                {s.deletable && (
                   <button
                     type="button"
                     aria-label={`Delete ${s.label}`}
@@ -164,17 +164,19 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
                 >
                   New session
                 </button>
-                <button
-                  type="button"
-                  data-testid="session-rename"
-                  onClick={() => {
-                    setDraft(label)
-                    setRenaming(true)
-                  }}
-                  className="block w-full rounded px-2 py-1.5 text-left text-slate-200 hover:bg-white/10"
-                >
-                  Rename this session
-                </button>
+                {list.find((s) => s.id === current)?.renamable !== false && (
+                  <button
+                    type="button"
+                    data-testid="session-rename"
+                    onClick={() => {
+                      setDraft(label)
+                      setRenaming(true)
+                    }}
+                    className="block w-full rounded px-2 py-1.5 text-left text-slate-200 hover:bg-white/10"
+                  >
+                    Rename this session
+                  </button>
+                )}
               </>
             )}
           </div>

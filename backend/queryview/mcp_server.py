@@ -14,7 +14,15 @@ from .dashboards import _push_dashboard
 from .queries import list_predefined_queries_view
 from .validation import dashboard_params_error
 
-mcp = FastMCP("queryview", stateless_http=True)
+mcp = FastMCP(
+    "queryview",
+    stateless_http=True,
+    instructions=(
+        f"Without a session id from the user, use the standing Agent session {sessions.AGENT_SESSION_ID}: "
+        "add_connection + use_connection for your own connection, or use the one the user put it on. "
+        "Pushes to it work once the user arms it in the QueryView UI."
+    ),
+)
 mcp.settings.streamable_http_path = "/"
 
 
@@ -34,7 +42,8 @@ async def push_query(
     The targeted browser fills its query panel and auto-runs the query against
     the session's own connection. Get the `session_id` from the QueryView UI:
     the agent icon next to the connection status pill, after enabling "Allow
-    remote control". To explore data first, use run_sql with the same id.
+    remote control"; without one, use the standing Agent session "agent".
+    To explore data first, use run_sql with the same id.
     A session on a locked connection (see session_info) refuses every push and
     query with "connection is locked"; ask the user to switch.
 

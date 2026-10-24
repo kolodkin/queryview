@@ -26,6 +26,11 @@ SESSION_CLAIM_TTL_MS = 90_000
 
 DEFAULT_URL = "/connect"
 
+# The standing session the agent uses without the user copying an id out of a
+# tab. Seeded by migration, never auto-resumed by a new tab, never deleted or
+# renamed.
+AGENT_SESSION_ID = "agent"
+
 # Session writes run one at a time, so a reload's `attach` sees the pagehide
 # beacon's patch committed. See docs/session.md, "How it is stored".
 _writes = asyncio.Lock()
@@ -102,15 +107,18 @@ def _to_rec(row: Session, now: int | None = None) -> SessionRec:
     )
 
 
-def _label(label: str | None, seq: int) -> str:
-    """A pinned name, else the stable ordinal. Connection and database are shown
-    beside the name rather than folded into it, so a session's name does not
-    change under you when you switch databases."""
+def _label(sid: str, label: str | None, seq: int) -> str:
+    """A pinned name, else the stable ordinal; the Agent session is always
+    "Agent". Connection and database are shown beside the name rather than
+    folded into it, so a session's name does not change under you when you
+    switch databases."""
+    if sid == AGENT_SESSION_ID:
+        return "Agent"
     return label or f"Session {seq}"
 
 
 def display_label(rec: SessionRec) -> str:
-    return _label(rec.label, rec.seq)
+    return _label(rec.id, rec.label, rec.seq)
 
 
 def _merge_ui(current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
@@ -135,6 +143,7 @@ def _unheld_query(now: int):
             | col(Session.claim_seen_at).is_(None)
             | (col(Session.claim_seen_at) < stale)
         )
+        .where(col(Session.id) != AGENT_SESSION_ID)
         .order_by(col(Session.last_active_at).desc())
         .limit(1)
     )
@@ -192,18 +201,21 @@ async def list_sessions() -> list[dict[str, Any]]:
                 .order_by(col(Session.last_active_at).desc())
             )
         ).all()
-    return [
-        {
-            "id": r.id,
-            "label": _label(r.label, r.seq),
-            "connection": r.connection_name,
-            "database": r.database,
-            "held": bool(
-                r.claimed_by and r.claim_seen_at is not None and (now - r.claim_seen_at) < SESSION_CLAIM_TTL_MS
-            ),
-        }
-        for r in rows
-    ]
+    out = []
+    for r in rows:
+        held = bool(r.claimed_by and r.claim_seen_at is not None and (now - r.claim_seen_at) < SESSION_CLAIM_TTL_MS)
+        out.append(
+            {
+                "id": r.id,
+                "label": _label(r.id, r.label, r.seq),
+                "connection": r.connection_name,
+                "database": r.database,
+                "held": held,
+                "deletable": not held and r.id != AGENT_SESSION_ID,
+                "renamable": r.id != AGENT_SESSION_ID,
+            }
+        )
+    return out
 
 
 async def patch_session(
@@ -226,7 +238,7 @@ async def patch_session(
             row.url = url
         if workspace is not None:
             row.workspace = workspace
-        if label is not None:
+        if label is not None and sid != AGENT_SESSION_ID:  # the Agent name is fixed
             # An empty label unpins, falling back to the derived one.
             row.label = label.strip() or None
         if ui is not None:
@@ -238,9 +250,12 @@ async def patch_session(
 
 
 async def delete_session(sid: str) -> tuple[bool, str]:
-    """Remove a session. Refused while a live tab holds it. The second element is
-    a reason code ("unknown" / "held"), not prose: the route maps it to a status,
+    """Remove a session. Refused while a live tab holds it, and always for the
+    Agent session. The second element is a reason code ("unknown" / "held" /
+    "agent"), not prose: the route maps it to a status,
     so rewording a message cannot change an HTTP code."""
+    if sid == AGENT_SESSION_ID:
+        return False, "agent"
     await _ensure_schema()
     now = _now_ms()
     async with _open() as s:

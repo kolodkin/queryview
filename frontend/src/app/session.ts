@@ -25,6 +25,8 @@ export type SessionSummary = {
   connection: string | null
   database: string | null
   held: boolean
+  deletable: boolean // false while held, and always for the Agent session
+  renamable: boolean // false for the Agent session
 }
 
 export type SessionPatch = { url?: string; label?: string; workspace?: string }

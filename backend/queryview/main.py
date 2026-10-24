@@ -161,6 +161,7 @@ _SESSION_ERRORS = {
     "unknown": (404, "unknown session"),
     "held": (409, "session is open in another tab"),
     "taken": (409, "session was taken by another tab"),
+    "agent": (409, "the Agent session can't be deleted"),
 }
 
 
