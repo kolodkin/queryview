@@ -118,6 +118,7 @@ def _parse_int(value: Any, default: int) -> int:
 async def lifespan(app: FastAPI):
     # Schema to head before serving any request (single-process, no lock needed).
     await _ensure_schema()
+    await sessions.ensure_agent_session()
     # A mounted sub-app's lifespan isn't run by the parent, so run the MCP session
     # manager here. streamable_http_app() (at mount, below) initializes
     # mcp.session_manager before this runs.
@@ -161,6 +162,7 @@ _SESSION_ERRORS = {
     "unknown": (404, "unknown session"),
     "held": (409, "session is open in another tab"),
     "taken": (409, "session was taken by another tab"),
+    "agent": (409, "the Agent session can't be deleted"),
 }
 
 

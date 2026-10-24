@@ -26,6 +26,10 @@ SESSION_CLAIM_TTL_MS = 90_000
 
 DEFAULT_URL = "/connect"
 
+# The standing session the agent uses without the user copying an id out of a
+# tab. Created at startup, never auto-resumed by a new tab, never deletable.
+AGENT_SESSION_ID = "0" * 32
+
 # Session writes run one at a time, so a reload's `attach` sees the pagehide
 # beacon's patch committed. See docs/session.md, "How it is stored".
 _writes = asyncio.Lock()
@@ -135,6 +139,7 @@ def _unheld_query(now: int):
             | col(Session.claim_seen_at).is_(None)
             | (col(Session.claim_seen_at) < stale)
         )
+        .where(col(Session.id) != AGENT_SESSION_ID)
         .order_by(col(Session.last_active_at).desc())
         .limit(1)
     )
@@ -150,6 +155,19 @@ async def _new_row(s: AsyncSession, now: int) -> Session:
     row = Session(id=uuid.uuid4().hex, seq=next_seq, last_active_at=now, workspace=first_ws or "default")
     s.add(row)
     return row
+
+
+async def ensure_agent_session() -> None:
+    """Create the standing Agent session if it is missing (startup). Seq 0 keeps
+    the user's first session "Session 1"; an existing row is left as it is, so
+    it keeps whatever connection the agent last used."""
+    await _ensure_schema()
+    async with _writes, _open() as s:
+        if await s.get(Session, AGENT_SESSION_ID) is not None:
+            return
+        row = await _new_row(s, _now_ms())
+        row.id, row.seq, row.label = AGENT_SESSION_ID, 0, "Agent"
+        await s.commit()
 
 
 async def create_session() -> SessionRec:
@@ -238,8 +256,9 @@ async def patch_session(
 
 
 async def delete_session(sid: str) -> tuple[bool, str]:
-    """Remove a session. Refused while a live tab holds it. The second element is
-    a reason code ("unknown" / "held"), not prose: the route maps it to a status,
+    """Remove a session. Refused while a live tab holds it, and always for the
+    Agent session. The second element is a reason code ("unknown" / "held" /
+    "agent"), not prose: the route maps it to a status,
     so rewording a message cannot change an HTTP code."""
     await _ensure_schema()
     now = _now_ms()
@@ -247,6 +266,8 @@ async def delete_session(sid: str) -> tuple[bool, str]:
         row = await s.get(Session, sid)
         if row is None:
             return False, "unknown"
+        if sid == AGENT_SESSION_ID:
+            return False, "agent"
         if _is_held(row, now):
             return False, "held"
         await s.delete(row)

@@ -268,3 +268,22 @@ def test_select_with_force_takes_a_held_session_over():
     assert got.id == held.id
     with pytest.raises(sessions.SessionTaken):
         _run(sessions.attach("tab-a", held.id, keep=True))
+
+
+def test_agent_session_is_standing_and_never_resumed():
+    """Startup creates the Agent session once; a new tab never lands on it."""
+    _free_everything()
+    _run(sessions.ensure_agent_session())
+    _run(sessions.patch_session(sessions.AGENT_SESSION_ID, url="/explorer"))
+    _run(sessions.ensure_agent_session())  # a restart keeps the existing row
+    agent = _run(sessions.get_session_rec(sessions.AGENT_SESSION_ID))
+    assert agent is not None
+    assert (agent.label, agent.seq, agent.url) == ("Agent", 0, "/explorer")
+    _run(sessions.touch_for_test(sessions.AGENT_SESSION_ID, last_active_at=_now_ms_for_test() + 60_000))
+    got, _ = _run(sessions.attach("tab-a", None))
+    assert got.id != sessions.AGENT_SESSION_ID
+
+
+def test_agent_session_refuses_deletion():
+    _run(sessions.ensure_agent_session())
+    assert _run(sessions.delete_session(sessions.AGENT_SESSION_ID)) == (False, "agent")
