@@ -101,7 +101,8 @@ never moves and history is append-only.
 
 Next to each entity's **Save** button (query panel and dashboard page; absent
 in an [autosave](./workspace.md#autosave) workspace, which saves on update):
-**Commit** pushes the saved DB state to the remote; **Restore** opens
+**Commit** pushes the saved DB state to the remote (if another instance
+pushed first, it refetches and commits once more); **Restore** opens
 the entity's revision list (newest first, 10 at a time, scroll for more) and
 overwrites the local copy with the picked revision after confirmation. Both
 are disabled when the active workspace has no remote configured.

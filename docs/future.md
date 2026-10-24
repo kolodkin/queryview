@@ -29,15 +29,6 @@ Roughly: a constant and a startup upsert in `sessions.py`, two guards
 (auto-resume, delete), a label, docstring lines in `mcp_server.py`, docs, and
 two tests.
 
-## Git sync follow-ups
-
-A small improvement noted in the git-sync final review, not blocking:
-
-- No push retry: under the single per-instance lock a store never self-races,
-  but a second QueryView instance pushing between our fetch and push rejects
-  the store. Fine for v1's single-instance scope; add one retry if that
-  changes.
-
 ## Deferred
 
 Out of scope by design, not planned yet. Git sync assumes a single user syncs
