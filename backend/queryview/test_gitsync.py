@@ -490,7 +490,7 @@ def test_store_retries_once_when_another_instance_pushes_first(other_instance, m
 
     assert r["committed"] is True
     assert {"kind": "query", "name": "gs racer", "conn_type": "clickhouse"} in r["imported"]
-    assert len(pushes) == 3  # theirs, ours rejected, ours again
+    assert len(pushes) == 3  # ours (rejected), theirs, ours again
     log = _remote_log(git_env)
     assert "store query clickhouse/gs racer" in log and "store query clickhouse/gs mine" in log
 

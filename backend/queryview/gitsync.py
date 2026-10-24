@@ -28,9 +28,10 @@ class GitSyncError(Exception):
     """Git-sync failure carrying an HTTP-ish status for the API layer:
     409 unconfigured, 404 entity/ref not found, 502 git or parse failure."""
 
-    def __init__(self, message: str, status: int = 502):
+    def __init__(self, message: str, status: int = 502, rejected: bool = False):
         super().__init__(message)
         self.status = status
+        self.rejected = rejected  # push refused because the remote moved under us
 
 
 # --- Serialization ---------------------------------------------------------
@@ -205,7 +206,8 @@ async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] 
         raise GitSyncError(f"git {args[0]} timed out after {_GIT_TIMEOUT_S}s") from e
     if proc.returncode != 0:
         tail = err.decode("utf-8", "replace").strip()[-500:]
-        raise GitSyncError(f"git {args[0]} failed: {tail}")
+        rejected = args[0] == "push" and b"! [rejected]" in err
+        raise GitSyncError(f"git {args[0]} failed: {tail}", rejected=rejected)
     return out.decode("utf-8", "replace")
 
 
@@ -501,13 +503,14 @@ async def store(
 ) -> dict[str, Any]:
     """Export one entity's saved DB state into the clone, commit, push.
     The workdir is reset to the remote head first — exports are deterministic
-    from the DB and each commit touches one entity, so this is always safe and
-    avoids push rejections."""
+    from the DB and each commit touches one entity, so this is always safe; the
+    only push rejection left is a concurrent push by another instance, retried
+    once."""
     _check_kind(kind, conn_type)
     _require_remote(ws)  # unconfigured -> 409 before any DB/entity lookup
-    entity = await _load_entity(ws, kind, name, conn_type)
+    merged = _empty_merge()
     async with _lock(ws):
-        return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message, entity))
+        return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message, merged))
 
 
 async def _retry_if_rejected(op: Callable[[], Awaitable[T]]) -> T:
@@ -516,7 +519,7 @@ async def _retry_if_rejected(op: Callable[[], Awaitable[T]]) -> T:
     try:
         return await op()
     except GitSyncError as e:
-        if "[rejected]" not in str(e):
+        if not e.rejected:
             raise
     return await op()
 
@@ -527,14 +530,20 @@ async def _store_once(
     name: str,
     conn_type: str | None,
     message: str | None,
-    entity: dict[str, Any],
+    merged: dict[str, Any],
 ) -> dict[str, Any]:
+    """One store attempt. `merged` accumulates what each attempt's merge did,
+    so a retry still reports the first attempt's imports."""
     wd = await _ensure_repo(ws)
     head = await _origin_head(wd, ws)
-    merged: dict[str, Any] = _empty_merge()
     if head:
         await _git("reset", "--hard", head, cwd=wd)
-        merged = await _merge(ws, wd, head)
+        m = await _merge(ws, wd, head)
+        merged["imported"] += m["imported"]
+        merged["deleted"] += m["deleted"]
+        merged["conflicts"] = m["conflicts"]
+    # Loaded after the merge, which may have flipped this row's deleted flag.
+    entity = await _load_entity(ws, kind, name, conn_type)
     paths = _entity_paths(kind, name, conn_type)
     is_deleted = kind == "query" and entity.get("deleted_at") is not None
     if kind == "query":
