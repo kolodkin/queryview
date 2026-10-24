@@ -501,9 +501,8 @@ async def store(
 ) -> dict[str, Any]:
     """Export one entity's saved DB state into the clone, commit, push.
     The workdir is reset to the remote head first — exports are deterministic
-    from the DB and each commit touches one entity, so this is always safe; the
-    only push rejection left is a concurrent push by another instance, retried
-    once."""
+    from the DB and each commit touches one entity, so this is always safe; a
+    push rejected by another instance's concurrent push is retried once."""
     _check_kind(kind, conn_type)
     _require_remote(ws)  # unconfigured -> 409 before any DB/entity lookup
     async with _lock(ws):
