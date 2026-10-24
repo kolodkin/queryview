@@ -27,7 +27,8 @@ SESSION_CLAIM_TTL_MS = 90_000
 DEFAULT_URL = "/connect"
 
 # The standing session the agent uses without the user copying an id out of a
-# tab. Seeded by migration, never auto-resumed by a new tab, never deletable.
+# tab. Seeded by migration, never auto-resumed by a new tab, never deleted or
+# renamed.
 AGENT_SESSION_ID = "agent"
 
 # Session writes run one at a time, so a reload's `attach` sees the pagehide
@@ -106,16 +107,18 @@ def _to_rec(row: Session, now: int | None = None) -> SessionRec:
     )
 
 
-def _label(label: str | None, seq: int) -> str:
-    """A pinned name, else the stable ordinal. Connection and database are shown
-    beside the name rather than folded into it, so a session's name does not
-    change under you when you switch databases."""
-    # Only the Agent session has seq 0 (seeded by migration c5d6e7f8a9b0).
-    return label or ("Agent" if seq == 0 else f"Session {seq}")
+def _label(sid: str, label: str | None, seq: int) -> str:
+    """A pinned name, else the stable ordinal; the Agent session is always
+    "Agent". Connection and database are shown beside the name rather than
+    folded into it, so a session's name does not change under you when you
+    switch databases."""
+    if sid == AGENT_SESSION_ID:
+        return "Agent"
+    return label or f"Session {seq}"
 
 
 def display_label(rec: SessionRec) -> str:
-    return _label(rec.label, rec.seq)
+    return _label(rec.id, rec.label, rec.seq)
 
 
 def _merge_ui(current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
@@ -204,11 +207,12 @@ async def list_sessions() -> list[dict[str, Any]]:
         out.append(
             {
                 "id": r.id,
-                "label": _label(r.label, r.seq),
+                "label": _label(r.id, r.label, r.seq),
                 "connection": r.connection_name,
                 "database": r.database,
                 "held": held,
                 "deletable": not held and r.id != AGENT_SESSION_ID,
+                "renamable": r.id != AGENT_SESSION_ID,
             }
         )
     return out
@@ -234,7 +238,7 @@ async def patch_session(
             row.url = url
         if workspace is not None:
             row.workspace = workspace
-        if label is not None:
+        if label is not None and sid != AGENT_SESSION_ID:  # the Agent name is fixed
             # An empty label unpins, falling back to the derived one.
             row.label = label.strip() or None
         if ui is not None:

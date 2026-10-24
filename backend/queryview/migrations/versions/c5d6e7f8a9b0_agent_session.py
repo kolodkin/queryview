@@ -23,7 +23,7 @@ AGENT_SESSION_ID = "agent"  # sessions.AGENT_SESSION_ID; a migration must not im
 
 
 def upgrade() -> None:
-    # Seq 0 keeps the user's first session "Session 1" and labels this one "Agent".
+    # Seq 0 keeps the user's first session "Session 1"; the name comes from the id.
     op.get_bind().execute(
         sa.text(
             "INSERT OR IGNORE INTO sessions (id, seq, workspace, url, ui, last_active_at) "

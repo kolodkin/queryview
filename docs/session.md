@@ -101,7 +101,7 @@ A standing session, id `agent`, labelled **Agent**, seeded by a migration. The
 MCP server's instructions name it, so an agent can start without the user
 copying an id.
 
-- A new tab never auto-resumes it, and it can't be deleted.
+- A new tab never auto-resumes it, and it can't be deleted or renamed.
 - Otherwise it is an ordinary session: pick it in the session switcher to see
   what the agent is on, and arm it with **Allow remote control** for pushes.
 - [Locked](./connect.md#locked-connections) connections refuse it like any

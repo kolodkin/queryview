@@ -285,7 +285,9 @@ def test_agent_session_is_standing_and_never_resumed():
     assert got.seq == 1  # the Agent row's seq 0 keeps the first user session "Session 1"
 
 
-def test_agent_session_refuses_deletion():
+def test_agent_session_refuses_deletion_and_rename():
     assert _run(sessions.delete_session(sessions.AGENT_SESSION_ID)) == (False, "agent")
+    rec = _run(sessions.patch_session(sessions.AGENT_SESSION_ID, label="Mine"))
+    assert rec is not None and sessions.display_label(rec) == "Agent"
     row = next(r for r in _run(sessions.list_sessions()) if r["id"] == sessions.AGENT_SESSION_ID)
-    assert row["deletable"] is False
+    assert (row["label"], row["deletable"], row["renamable"]) == ("Agent", False, False)
