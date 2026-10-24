@@ -110,8 +110,8 @@ def _label(label: str | None, seq: int) -> str:
     """A pinned name, else the stable ordinal. Connection and database are shown
     beside the name rather than folded into it, so a session's name does not
     change under you when you switch databases."""
-    # Only the Agent session has seq -1 (seeded by migration c5d6e7f8a9b0).
-    return label or ("Agent" if seq == -1 else f"Session {seq}")
+    # Only the Agent session has seq 0 (seeded by migration c5d6e7f8a9b0).
+    return label or ("Agent" if seq == 0 else f"Session {seq}")
 
 
 def display_label(rec: SessionRec) -> str:
@@ -148,8 +148,7 @@ def _unheld_query(now: int):
 
 async def _new_row(s: AsyncSession, now: int) -> Session:
     """A fresh row in the caller's transaction, so a create-and-claim is one pass."""
-    # Skip the Agent row's -1 so the first user session is still "Session 1".
-    next_seq = (await s.exec(select(func.coalesce(func.max(Session.seq), 0)).where(Session.seq > 0))).one() + 1
+    next_seq = (await s.exec(select(func.coalesce(func.max(Session.seq), 0)))).one() + 1
     # The fallback workspace (the oldest), not one named "default": that one
     # can be renamed. A bare table clause: importing workspaces would be a cycle.
     ws = table("workspaces", column("id"), column("name"))

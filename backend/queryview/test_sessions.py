@@ -282,7 +282,7 @@ def test_agent_session_is_standing_and_never_resumed():
     _run(sessions.touch_for_test(sessions.AGENT_SESSION_ID, last_active_at=_now_ms_for_test() + 60_000))
     got, _ = _run(sessions.attach("tab-a", None))
     assert got.id != sessions.AGENT_SESSION_ID
-    assert got.seq == 1  # numbering skips the Agent row's -1
+    assert got.seq == 1  # the Agent row's seq 0 keeps the first user session "Session 1"
 
 
 def test_agent_session_refuses_deletion():
