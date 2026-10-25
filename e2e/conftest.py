@@ -49,14 +49,19 @@ def start_new_connection(page: Page, driver: str) -> None:
             page.get_by_test_id(f"{prefix}-{field}").fill(value)
 
 
-def connect_clickhouse_test_db(page: Page) -> None:
-    """Connect to ClickHouse and select the seeded `qvtest` database. Ends on
-    the explorer, where picking a database lands."""
+def open_clickhouse_picker(page: Page) -> None:
+    """Connect to ClickHouse and stop on the database picker."""
     open_connect(page)
     start_new_connection(page, "clickhouse")
     expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
     page.get_by_test_id("ch-connect").click()
     expect(page.get_by_test_id("db-picker")).to_be_visible()
+
+
+def connect_clickhouse_test_db(page: Page) -> None:
+    """Connect to ClickHouse and select the seeded `qvtest` database. Ends on
+    the explorer, where picking a database lands."""
+    open_clickhouse_picker(page)
     page.locator(f'[data-db="{CH_DB}"]').click()
     expect(page.get_by_test_id("connection-status")).to_contain_text(f"· {CH_DB}")
 

@@ -179,8 +179,7 @@ function ConnectView({
     connection.database === null &&
     connection.databases.length > 0
 
-  // A list that did not come with the connection (a reload) may be stale.
-  useFreshDatabases(picking && !connection?.listed, setConnection)
+  useFreshDatabases(picking, setConnection)
 
   const heading = (
     <div className="mb-8 text-center">
@@ -552,7 +551,7 @@ function ConnectionForm({
       })
       const data = await res.json()
       if (data.ok) {
-        onConnected({ ...toConnection({ type: meta.type, ...data }), listed: true })
+        onConnected(toConnection({ type: meta.type, ...data }))
       } else {
         setResult({ ok: false, message: data.message ?? 'connect failed' })
       }

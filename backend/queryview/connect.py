@@ -494,28 +494,25 @@ async def _build_session(
     )
 
 
-async def _ensure_session(sid: str) -> bool:
+async def _ensure_session(sid: str) -> None:
     """Rebuild this session's live driver state from its row. The row is the
     durable truth; `_sessions` is only a cache of the decrypted config and the
-    database list, so a backend restart costs one reconnect, not the session.
-    True when it rebuilt (and so just listed the databases)."""
+    database list, so a backend restart costs one reconnect, not the session."""
     if not sid or _get_session_entry(sid):
-        return False
+        return
     rec = await sessions.get_session_rec(sid)
     if rec is None or rec.connection_name is None:
-        return False
+        return
     found = await _resolve(sid, rec.connection_name)
     if found is None:
         # The connection was deleted, its config no longer decrypts, or it was a
         # session connection lost to a restart. The session reads as
         # disconnected; the user reconnects.
-        return False
+        return
     conn_type, config = found
     state, _ = await _build_session(rec.connection_name, config, rec.database, conn_type)
-    if state is None:
-        return False
-    _set_session_entry(sid, state)
-    return True
+    if state is not None:
+        _set_session_entry(sid, state)
 
 
 async def get_session(sid: str) -> dict[str, Any]:
@@ -669,11 +666,11 @@ def forget_session(sid: str) -> None:
     _tokens.pop(sid, None)
 
 
-async def _relist(s: _SessionState) -> str | None:
-    """Replace the cached database list with a fresh one; the error message on failure."""
+async def _relist(s: _SessionState) -> dict[str, Any] | None:
+    """Replace the cached database list with a fresh one; the error result on failure."""
     databases, message = await _list_databases(s.type, s.config)
     if databases is None:
-        return message
+        return {"ok": False, "message": message}
     s.databases = databases
     return None
 
@@ -682,14 +679,11 @@ async def refresh_databases(sid: str) -> dict[str, Any]:
     """Re-list this session's connection's databases; the cached list dates
     from the connect. The selected database is kept even if no longer listed:
     the session is still on it, and the next select tells the user."""
-    rebuilt = await _ensure_session(sid)
-    s, err = _unlocked_entry(sid)
+    s, err = await _unlocked_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
-    if not rebuilt:
-        message = await _relist(s)
-        if message is not None:
-            return {"ok": False, "message": message}
+    if err := await _relist(s):
+        return err
     return {"ok": True, "name": s.name, "databases": s.databases}
 
 
@@ -700,12 +694,14 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
     s, err = await _unlocked_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
-    if database and database not in s.databases:
-        message = await _relist(s)
-        if message is not None:
-            return {"ok": False, "message": message}
-    if not database or database not in s.databases:
-        return {"ok": False, "message": "unknown database", "reason": "unknown"}
+    unknown = {"ok": False, "message": "unknown database", "reason": "unknown"}
+    if not database:
+        return unknown
+    if database not in s.databases:
+        if err := await _relist(s):
+            return err
+        if database not in s.databases:
+            return unknown
     s.database = database
     if _session_conn(sid, s.name) is None:
         await _save_selected_database(s.name, database)
@@ -714,15 +710,9 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
 
 
 async def _unlocked_session(sid: str) -> tuple[_SessionState | None, dict[str, Any] | None]:
-    """This session's state, rebuilt from its row if needed, or why the request
-    may not use its connection (see `_unlocked_entry`)."""
+    """This session's state, or why the request may not use its connection:
+    not connected, or locked without the tab's token (docs/connect.md#locked-connections)."""
     await _ensure_session(sid)
-    return _unlocked_entry(sid)
-
-
-def _unlocked_entry(sid: str) -> tuple[_SessionState | None, dict[str, Any] | None]:
-    """The cached state, or why the request may not use its connection: not
-    connected, or locked without the tab's token (docs/connect.md#locked-connections)."""
     s = _get_session_entry(sid)
     if s is None:
         return None, {"ok": False, "message": "not connected", "reason": "no-session"}

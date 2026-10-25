@@ -217,11 +217,6 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     if (selected) void runQuery(selected.query, limit, Math.max(0, nextOffset), orderBy)
   }
 
-  // The ↻ after the table name: the same page, read again.
-  function reload() {
-    page(offset)
-  }
-
   // Edge drag. Each move paints the width straight onto the panel rather than
   // going through state, which would rebuild the results table (100+ rows) and
   // the table list every frame; state and the storage write happen once, on
@@ -440,7 +435,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               </h2>
               <button
                 type="button"
-                onClick={reload}
+                onClick={() => page(offset)}
                 disabled={busy}
                 data-testid="explorer-refresh"
                 aria-label="Refresh rows"

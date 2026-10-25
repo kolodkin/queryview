@@ -10,6 +10,7 @@ from conftest import (
     author_params_yaml,
     ch_exec,
     connect_clickhouse_test_db,
+    open_clickhouse_picker,
     open_connect,
     open_query_panel,
     start_new_connection,
@@ -145,10 +146,7 @@ def test_database_names_copy_from_the_picker_and_the_pill(seeded_test_db, page: 
     """A database name copies from its picker row (without selecting it) and,
     once selected, from the status pill."""
     page.context.grant_permissions(["clipboard-read", "clipboard-write"])
-    open_connect(page)
-    start_new_connection(page, "clickhouse")
-    page.get_by_test_id("ch-connect").click()
-    expect(page.get_by_test_id("db-picker")).to_be_visible()
+    open_clickhouse_picker(page)
     page.locator(f'[data-db="{CH_DB}"]').locator("xpath=..").get_by_test_id("db-option-copy").click()
     assert page.evaluate("navigator.clipboard.readText()") == CH_DB
     expect(page.get_by_test_id("db-picker")).to_be_visible()

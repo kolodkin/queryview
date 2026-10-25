@@ -13,8 +13,6 @@ export type Connection = {
   database: string | null
   // The dialect's identifier quote (`"` or a backtick), for dashboard params.
   identQuote?: string
-  // The databases came with this object (an open or a connect just listed).
-  listed?: true
   // False on a locked saved connection this tab holds no token for; the
   // shell prompts for the passphrase while it is.
   unlocked?: boolean
@@ -60,7 +58,7 @@ export async function openSaved(
   try {
     const data = await (await postJson('/api/db/open', { name })).json()
     return data.ok
-      ? { ok: true, connection: { ...toConnection(data), listed: true } }
+      ? { ok: true, connection: toConnection(data) }
       : { ok: false, message: data.message ?? `could not open “${name}”` }
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : 'request failed' }
