@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Self, TypeVar
 import httpx
 
 from .base import (
+    RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_ROW_CAP,
     SCRIPT_TIMEOUT_SECONDS,
     Column,
@@ -23,6 +24,7 @@ from .base import (
     TablesResult,
     TextResult,
     build_order_by,
+    error_message,
     parse_host_port_config,
     run_script,
     wrap_paginated,
@@ -123,7 +125,12 @@ async def ch_fetch(
     reuses a caller's connection across several queries."""
     url = f"http://{c.host}:{c.port}/"
     q = f"{query}\nFORMAT {clause}" if clause else query
-    params = dict(settings or {})
+    # Every query gets a query_id, named in errors to trace it in system.query_log, and
+    # a read is dropped server-side when we hang up (e.g. on a client timeout).
+    query_id = uuid.uuid4().hex
+    params = {"query_id": query_id, **(settings or {})}
+    if not write:
+        params["cancel_http_readonly_queries_on_client_close"] = "1"
     if database:
         params["database"] = database
     auth = (c.username, c.password)
@@ -140,12 +147,12 @@ async def ch_fetch(
             async with httpx.AsyncClient(timeout=CH_TIMEOUT_SECONDS) as own:
                 res = await send(own)
     except httpx.TimeoutException:
-        return Err("connection timed out")
+        return Err(f"connection timed out (query_id {query_id})")
     except httpx.HTTPError as err:
-        return Err(str(err) or "connection failed")
+        return Err(f"{error_message(err)} (query_id {query_id})")
     text = res.text.strip()
     if not res.is_success:
-        return Err(f"ClickHouse responded {res.status_code}: {text[:200]}")
+        return Err(f"ClickHouse responded {res.status_code}: {text[:200]} (query_id {query_id})")
     return text
 
 
@@ -155,9 +162,10 @@ async def ch_query(
     kind: type[R],
     database: str | None = None,
     settings: dict[str, str] | None = None,
+    client: httpx.AsyncClient | None = None,
 ) -> R | Err:
     """Run `query` asking for `kind`'s format and decode the body into it."""
-    text = await ch_fetch(c, query, kind.clause, database, {**kind.settings, **(settings or {})})
+    text = await ch_fetch(c, query, kind.clause, database, {**kind.settings, **(settings or {})}, client=client)
     if isinstance(text, Err):
         return text
     return kind.from_text(text)
@@ -243,6 +251,17 @@ class ClickHouseDriver:
         order_clause = build_order_by(order_by, "`")
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias=None)
         return await ch_query(config, paginated, ChRows, database=database)
+
+    async def run_sql(self, config: ChConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
+        # Stop past max_rows (between blocks, so the caller trims) and at the time limit.
+        settings = {
+            "max_result_rows": str(max_rows),
+            "result_overflow_mode": "break",
+            "max_execution_time": str(RUN_SQL_TIMEOUT_SECONDS),
+        }
+        timeout = httpx.Timeout(CH_TIMEOUT_SECONDS, read=RUN_SQL_TIMEOUT_SECONDS + CH_TIMEOUT_SECONDS)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            return await ch_query(config, sql, ChRows, database, settings, client=client)
 
     async def export_csv(
         self,

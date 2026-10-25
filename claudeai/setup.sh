@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-time install for the Claude Code web environment: project deps plus the
-# e2e backing services (ClickHouse and Postgres), left running afterwards.
+# e2e backing services (ClickHouse, Postgres, git daemon), left running afterwards.
 #
 #   1. npm ci / uv sync        — frontend + backend + test deps
 #   2. Playwright Chromium     — the revision pinned by uv.lock (no-op if present)
@@ -8,6 +8,8 @@
 #                                start a server on :8123
 #   4. setup_postgres.sh       — initdb a cluster in .cache/pgdata, start a
 #                                server on :5432
+#   5. setup_git_daemon.sh     — a loopback git daemon on :9418 serving a bare
+#                                repo in .cache/gitsrv for the git-sync e2e
 #
 # Binaries and data under .cache/ survive a container suspend/resume; the
 # server processes don't. Use claudeai/run.sh to bring them back up.
@@ -49,5 +51,6 @@ fi
 
 "$ROOT/claudeai/setup_clickhouse.sh"
 "$ROOT/claudeai/setup_postgres.sh"
+"$ROOT/claudeai/setup_git_daemon.sh"
 
 log "done — services are up; use claudeai/run.sh to restart them in a new session"

@@ -5,6 +5,12 @@ run over the HTTP interface with HTTP Basic auth and a 5s timeout. All
 connection-config bodies validate `host` (non-empty) and `port` (integer
 `1..65535`); validation errors return `400`.
 
+**Locked connections:** a request on a session whose active connection is
+[locked](./connect.md#locked-connections) must also carry the tab's unlock
+token as `X-QV-Token`, or every data route answers `403 {ok:false, message:
+"connection is locked"}`. `POST /api/db/unlock` issues the token for the
+passphrase.
+
 **Sessions:** every `/api/*` request names its session with an `X-QV-Session`
 header; there is no session cookie. A session is a persisted row holding one
 tab's UI state — route, connection, database, workspace, view settings — so two
@@ -15,11 +21,12 @@ shared (SQLite). See [session.md](./session.md).
 | Method | Path                        | Body                                   | Description |
 | ------ | --------------------------- | -------------------------------------- | ----------- |
 | GET    | `/api/health`               | —                                      | Service health check. |
-| GET    | `/api/session`              | —                                      | This session's connection state `{connected, name?, type?, databases?, database?, ident_quote?}`, reconnecting the connection the session is on. |
+| GET    | `/api/session`              | —                                      | This session's connection state `{connected, name?, type?, databases?, database?, ident_quote?, locked?, unlocked?}`, reconnecting the connection the session is on; `unlocked` says whether this request's `X-QV-Token` opens a locked one. |
 | POST   | `/api/db/test`      | `{host,port,username,password}`        | Test a connection (test only — no save, no activation). `{ok, message}`. |
 | POST   | `/api/db/connect`   | `{name,host,port,username,password}`   | Create: open + save + activate for this session; lists databases (new-connection form). `{ok, name, databases}` \| `{ok:false, message}`. |
 | GET    | `/api/db/connections` | —                                    | Saved connections, most recent first: `{connections:[{name, type, database, last_active_at}]}` — metadata only, never the config. |
-| POST   | `/api/db/open`      | `{name}`                               | Open a saved connection by name for this session; lists databases (a saved card on the Connect page). `{ok, name, databases}` \| `{ok:false, message}`. |
+| POST   | `/api/db/open`      | `{name}`                               | Open a saved connection by name for this session (a saved card on the Connect page). `{ok, …}` plus the `/api/session` state \| `{ok:false, message}`; a [locked](./connect.md#locked-connections) one lands with `unlocked:false` until this tab unlocks it. |
+| POST   | `/api/db/lock`      | `{name, passphrase}`                   | Lock a saved connection; `{ok, token}`. `DELETE` with the same body removes the lock; `POST /api/db/unlock` exchanges the passphrase for this session's token. Wrong passphrase → `403`. See [connect.md](./connect.md#locked-connections). |
 | GET    | `/api/db/databases` | —                                      | Re-list this session's connection's databases from the server, refreshing the cached list. `{ok, name, databases}` \| `{ok:false, message}`. No session → `409`. |
 | POST   | `/api/db/database`  | `{database}`                           | Select this session's active connection's database; a name missing from the cached list is re-listed once before failing. `{ok}`. |
 | POST   | `/api/db/query`     | `{query, limit?, offset?, format?, order_by?}` | Run SQL against this session's selected database, paginated by `limit`/`offset` (defaults 100/0). `order_by` is `[{name, dir}]` (`dir` ASC/DESC, names quoted with the driver's identifier quote) sorting the pagination wrapper. `{ok, meta:[{name, type}], data:[[…]]}` — ClickHouse's `JSONCompact` shape, 64-bit integers and decimals quoted, collections as JSON arrays/objects — \| `{ok:false, message}`. `format:"csv"` returns `{ok, output}` (CSV text) instead. Empty query → `400`; no session → `409`. |
@@ -46,7 +53,7 @@ shared (SQLite). See [session.md](./session.md).
 **MCP:** a FastMCP server is mounted at `/mcp/` (Streamable HTTP) exposing
 `push_query` (push SQL to a session's query panel), `push_script` (push a script
 to a session's Scripts editor), `push_dashboard` (push a dashboard draft to a
-session), `session_info`, `run_query`, `run_script`, `list_queries` / `list_dashboards`
+session), `session_info`, `run_sql`, `run_script`, `list_queries` / `list_dashboards`
 and `git_store` / `git_history` / `git_restore`. They delegate to the in-process
 hubs the matching REST endpoints call. See [remote.md](./remote.md) and
 [dashboard.md](./dashboard.md).

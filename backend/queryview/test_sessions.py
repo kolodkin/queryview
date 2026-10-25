@@ -103,7 +103,8 @@ def test_list_returns_display_label_and_held_flag():
 
 
 def _free_everything():
-    """Delete every session so a test starts from a known, unheld world."""
+    """Delete every session but the migration-seeded Agent one, so a test starts
+    from a known, unheld world."""
 
     async def go():
         from sqlmodel import select as _select
@@ -113,7 +114,9 @@ def _free_everything():
 
         await _ensure_schema()
         async with _S(_engine_for_db()) as s:
-            for row in (await s.exec(_select(sessions.Session))).all():
+            for row in (
+                await s.exec(_select(sessions.Session).where(sessions.Session.id != sessions.AGENT_SESSION_ID))
+            ).all():
                 await s.delete(row)
             await s.commit()
 
@@ -268,3 +271,23 @@ def test_select_with_force_takes_a_held_session_over():
     assert got.id == held.id
     with pytest.raises(sessions.SessionTaken):
         _run(sessions.attach("tab-a", held.id, keep=True))
+
+
+def test_agent_session_is_standing_and_never_resumed():
+    """The migration seeds the Agent session; a new tab never lands on it."""
+    _free_everything()
+    agent = _run(sessions.get_session_rec(sessions.AGENT_SESSION_ID))
+    assert agent is not None
+    assert sessions.display_label(agent) == "Agent"
+    _run(sessions.touch_for_test(sessions.AGENT_SESSION_ID, last_active_at=_now_ms_for_test() + 60_000))
+    got, _ = _run(sessions.attach("tab-a", None))
+    assert got.id != sessions.AGENT_SESSION_ID
+    assert got.seq == 1  # the Agent row's seq 0 keeps the first user session "Session 1"
+
+
+def test_agent_session_refuses_deletion_and_rename():
+    assert _run(sessions.delete_session(sessions.AGENT_SESSION_ID)) == (False, "agent")
+    rec = _run(sessions.patch_session(sessions.AGENT_SESSION_ID, label="Mine"))
+    assert rec is not None and sessions.display_label(rec) == "Agent"
+    row = next(r for r in _run(sessions.list_sessions()) if r["id"] == sessions.AGENT_SESSION_ID)
+    assert (row["label"], row["deletable"], row["renamable"]) == ("Agent", False, False)

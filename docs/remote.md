@@ -16,6 +16,9 @@ session's **id** and a copyable command, e.g.:
 Turning the toggle off (or closing the tab) disarms the session immediately —
 pushes to its id are then reported as not delivered.
 
+Without a copied id the agent uses the standing
+[Agent session](./session.md#the-agent-session); arm it the same way.
+
 ## Connecting a client
 
 The server runs inside the backend process — nothing extra to start — but the
@@ -54,12 +57,14 @@ tools (among others):
   heartbeat, toasts "Agent switched to <name>", and the pill reads
   `<connection> · <database>` with the menu entry marked active and badged
   `agent`. Switches made in the UI never toast.
-- `run_query(session_id, query, limit?=1000, offset?=0)` — run a read-only
-  query on the session's connection and selected database, returning rows to
-  the agent (not the browser): `{ok, database, columns, types, rows}`, values
+- `run_sql(session_id, sql, limit?=1000)` — run one read-only statement as
+  written (so `DESCRIBE`/`SHOW`/`EXPLAIN` work; page with your own
+  `LIMIT`/`OFFSET`) on the session's connection and database, returning
+  `{ok, database, columns, types, rows, truncated}` to the agent. Values are
   typed as the driver returns them (64-bit integers and decimals as strings,
-  collections as JSON). `database` tells the agent whether to fully-qualify
-  tables. A disconnected session fails with `not connected`.
+  collections as JSON); `truncated` means rows past `limit` were dropped. Fails
+  with `not connected` on a disconnected session; stops after 60s, server-side
+  too. ClickHouse errors name the `query_id` to look up in `system.query_log`.
 - `run_script(session_id, sql)` — run a script like the [Scripts](./scripts.md)
   page's Run all, **writes included**, returning `{ok, database, results: [{sql,
   ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
@@ -94,6 +99,12 @@ channel; the SSE stream delivers the payload and the panel fills `query` /
 Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](./workspace.md)).
+
+**Locked connections keep the agent out.** A saved connection the user
+[locked](./connect.md#locked-connections) behind a passphrase refuses every
+tool above while a session is on it (`connection is locked`), and refuses REST
+calls without the tab's unlock token too, so copying a session id into
+`/api/db/query` gets the agent nowhere.
 
 **Arming is the gate, not the id.** Disarming closes the channel, and any later
 push fails with `unknown or inactive session`. The id is stable across refreshes

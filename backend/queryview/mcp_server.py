@@ -4,16 +4,25 @@ in-process remote.py hub."""
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import gitsync, remote, sessions
+from . import connect, gitsync, remote, sessions
 from .dashboards import _push_dashboard
 from .queries import list_predefined_queries_view
 from .validation import dashboard_params_error
 
-mcp = FastMCP("queryview", stateless_http=True)
+mcp = FastMCP(
+    "queryview",
+    stateless_http=True,
+    instructions=(
+        f"Without a session id from the user, use the standing Agent session {sessions.AGENT_SESSION_ID}: "
+        "add_connection + use_connection for your own connection, or use the one the user put it on. "
+        "Pushes to it work once the user arms it in the QueryView UI."
+    ),
+)
 mcp.settings.streamable_http_path = "/"
 
 
@@ -33,7 +42,10 @@ async def push_query(
     The targeted browser fills its query panel and auto-runs the query against
     the session's own connection. Get the `session_id` from the QueryView UI:
     the agent icon next to the connection status pill, after enabling "Allow
-    remote control". To explore data first, use run_query with the same id.
+    remote control"; without one, use the standing Agent session "agent".
+    To explore data first, use run_sql with the same id.
+    A session on a locked connection (see session_info) refuses every push and
+    query with "connection is locked"; ask the user to switch.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -64,42 +76,51 @@ async def push_query(
         "cell_view": cell_view,
         "name": name,
     }
-    ok, message = remote.push(session_id, payload)
+    ok, message = await connect.push(session_id, payload)
     return {"ok": ok, "message": message, "database": await sessions.database_of(session_id)}
 
 
 @mcp.tool()
-async def run_query(
-    session_id: str,
-    query: str,
-    limit: int = 1000,
-    offset: int = 0,
-) -> dict[str, Any]:
-    """Run a read-only SQL query on the session's connection and selected
+async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any]:
+    """Run one read-only SQL statement on the session's connection and selected
     database, returning the rows to the agent (push_query only fills a browser
-    panel). Use it to explore schema and data before a push.
+    panel). Use it to explore schema and data before a push. Runs as written
+    (SELECT, DESCRIBE, SHOW, EXPLAIN...): page with your own LIMIT/OFFSET.
+    Stops after a minute.
 
-    Returns {"ok": True, "database", "columns", "types", "rows": [[...]]} —
-    values typed as the driver returns them (64-bit integers and decimals as
-    strings) — or {"ok": False, "message"} (e.g. "not connected", "select a
-    database first"). The user can switch `database` from the connection pill;
-    check it before deciding whether to fully-qualify tables as db.table.
+    Returns {"ok": True, "database", "columns", "types", "rows": [[...]],
+    "truncated"} — values typed as the driver returns them (64-bit integers and
+    decimals as strings), `truncated` when rows past `limit` were dropped — or
+    {"ok": False, "message"} (e.g. "not connected", "select a database first").
+    The user can switch `database` from the connection pill; check it before
+    deciding whether to fully-qualify tables as db.table.
 
     Args:
         session_id: The session id shown in the QueryView popover.
-        query: The SQL to run.
-        limit: Page size (default 1000, max 10000).
-        offset: Row offset (default 0).
+        sql: The SQL statement to run.
+        limit: Most rows to return (default 1000, max 10000).
     """
-    from .connect import run_query as _run_query
+    from .connect import run_sql as _run_sql
+    from .drivers.base import RUN_SQL_TIMEOUT_SECONDS
     from .validation import MAX_LIMIT
 
     limit = max(0, min(limit, MAX_LIMIT))
-    offset = max(0, offset)
-    r = await _run_query(session_id, query, limit, offset)
+    deadline = RUN_SQL_TIMEOUT_SECONDS + 10  # past the drivers' own limits: a backstop
+    try:
+        async with asyncio.timeout(deadline):
+            r = await _run_sql(session_id, sql, limit + 1)
+    except TimeoutError:
+        return {"ok": False, "message": f"query timed out after {deadline}s"}
     if not r["ok"]:
         return {"ok": False, "message": r["message"]}
-    return {"ok": True, "database": r["database"], **_columns(r["meta"]), "rows": r["data"]}
+    rows = r["data"]
+    return {
+        "ok": True,
+        "database": r["database"],
+        **_columns(r["meta"]),
+        "rows": rows[:limit],
+        "truncated": len(rows) > limit,
+    }
 
 
 def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
@@ -113,7 +134,7 @@ def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
 async def run_script(session_id: str, sql: str) -> dict[str, Any]:
     """Run a `;`-separated script on the session's connection and selected
     database, like the Scripts page's Run all, returning each statement's result.
-    WRITES ARE ALLOWED (use run_query to explore read-only). Stops at the first
+    WRITES ARE ALLOWED (use run_sql to explore read-only). Stops at the first
     error; rows per statement are capped and the script has a timeout.
 
     Returns {"ok": True, "database", "results": [{sql, ok, status, message,
@@ -166,7 +187,7 @@ async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str,
 async def session_info(session_id: str) -> dict[str, Any]:
     """What a QueryView session is on: its connection, selected database, the
     databases it can switch to, its workspace, and the selected database's
-    tables. Start here to discover schema; then run_query on the same session.
+    tables. Start here to discover schema; then run_sql on the same session.
 
     The user picks the server and database in the UI (connection pill); the
     agent may only switch to session connections it added itself (see
@@ -176,10 +197,11 @@ async def session_info(session_id: str) -> dict[str, Any]:
         session_id: The session id shown in the QueryView popover.
 
     Returns {"ok": True, "connected", "connection", "type", "scope",
-    "created_by", "database", "databases", "workspace", "tables": [{name, ...}]};
-    a disconnected session
+    "created_by", "locked", "database", "databases", "workspace",
+    "tables": [{name, ...}]}; a disconnected session
     has "connected": False and no connection fields; "tables" is empty until a
-    database is selected. Unknown session → {"ok": False, "message"}.
+    database is selected, and on a locked connection ("locked": True), which
+    the agent may not query at all. Unknown session → {"ok": False, "message"}.
     """
     from .connect import get_session, list_tables
 
@@ -187,6 +209,7 @@ async def session_info(session_id: str) -> dict[str, Any]:
     if rec is None:
         return {"ok": False, "message": "unknown session"}
     info: dict[str, Any] = {"ok": True, "workspace": rec.workspace, **await get_session(session_id)}
+    info.pop("unlocked", None)  # the tab's business, not the agent's
     if info["connected"]:
         info["connection"] = info.pop("name")
         listed = await list_tables(session_id)  # not ok until a database is picked
@@ -200,14 +223,16 @@ async def session_info(session_id: str) -> dict[str, Any]:
 async def list_connections(session_id: str) -> dict[str, Any]:
     """List the connections a session can use: its session connections (memory
     only, this session only) and the saved ones, each tagged with "scope"
-    ("session" | "saved"), "created_by" ("agent" | "user") and "active".
+    ("session" | "saved"), "created_by" ("agent" | "user"), "active" and
+    "locked" (a saved connection the user keeps the agent off: every tool
+    refuses while the session is on it).
 
     You may use_connection / remove_connection only scope="session",
     created_by="agent" entries; for anything else ask the user to switch in
     QueryView.
 
     Returns {"ok": True, "connections": [{name, type, scope, created_by,
-    active}]} or {"ok": False, "message"} for an unknown session.
+    active, locked}]} or {"ok": False, "message"} for an unknown session.
     """
     from .connect import list_connections_for
 
@@ -223,6 +248,7 @@ async def list_connections(session_id: str) -> dict[str, Any]:
                 "scope": c["scope"],
                 "created_by": c["created_by"],
                 "active": c["name"] == rec.connection_name,  # names are unique
+                "locked": c["locked"],
             }
             for c in await list_connections_for(session_id)
         ],

@@ -10,6 +10,7 @@ import asyncio
 import json
 import os
 import shutil
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
@@ -25,9 +26,10 @@ class GitSyncError(Exception):
     """Git-sync failure carrying an HTTP-ish status for the API layer:
     409 unconfigured, 404 entity/ref not found, 502 git or parse failure."""
 
-    def __init__(self, message: str, status: int = 502):
+    def __init__(self, message: str, status: int = 502, rejected: bool = False):
         super().__init__(message)
         self.status = status
+        self.rejected = rejected  # push refused because the remote moved under us
 
 
 # --- Serialization ---------------------------------------------------------
@@ -202,7 +204,8 @@ async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] 
         raise GitSyncError(f"git {args[0]} timed out after {_GIT_TIMEOUT_S}s") from e
     if proc.returncode != 0:
         tail = err.decode("utf-8", "replace").strip()[-500:]
-        raise GitSyncError(f"git {args[0]} failed: {tail}")
+        rejected = args[0] == "push" and b"! [rejected]" in err
+        raise GitSyncError(f"git {args[0]} failed: {tail}", rejected=rejected)
     return out.decode("utf-8", "replace")
 
 
@@ -498,47 +501,69 @@ async def store(
 ) -> dict[str, Any]:
     """Export one entity's saved DB state into the clone, commit, push.
     The workdir is reset to the remote head first — exports are deterministic
-    from the DB and each commit touches one entity, so this is always safe and
-    avoids push rejections."""
+    from the DB and each commit touches one entity, so this is always safe; a
+    push rejected by another instance's concurrent push is retried once."""
     _check_kind(kind, conn_type)
     _require_remote(ws)  # unconfigured -> 409 before any DB/entity lookup
-    entity = await _load_entity(ws, kind, name, conn_type)
     async with _lock(ws):
-        wd = await _ensure_repo(ws)
-        head = await _origin_head(wd, ws)
-        merged: dict[str, Any] = _empty_merge()
-        if head:
-            await _git("reset", "--hard", head, cwd=wd)
-            merged = await _merge(ws, wd, head)
-        paths = _entity_paths(kind, name, conn_type)
-        is_deleted = kind == "query" and entity.get("deleted_at") is not None
-        if kind == "query":
-            # A live query is its .yaml; a deleted one its .deleted marker.
-            keep, drop = reversed(paths) if is_deleted else paths
-            (wd / keep).parent.mkdir(parents=True, exist_ok=True)
-            (wd / keep).write_text(query_to_yaml(entity), encoding="utf-8")
-            if (wd / drop).exists():
-                await _git("rm", "-q", "--", drop, cwd=wd)
-        else:
-            relpath = paths[0]
-            ddir = wd / relpath
-            if ddir.exists():
-                shutil.rmtree(ddir)
-            ddir.mkdir(parents=True, exist_ok=True)
-            for fname, content in dashboard_to_files(entity).items():
-                (ddir / fname).write_text(content, encoding="utf-8")
-        await _git("add", "-A", "--", *(p for p in paths if (wd / p).exists()), cwd=wd)
-        if not (await _git("status", "--porcelain", "--", *paths, cwd=wd)).strip():
-            return {"committed": False, "sha": None, "message": "no changes", **merged}
-        label = f"{conn_type}/{name}" if kind == "query" else name
-        verb = "delete" if is_deleted else "store"
-        await _git("commit", "-m", message or f"{verb} {kind} {label}", cwd=wd)
-        await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
-        sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
-        # The repo now holds exactly the local copy.
-        await _agree(ws, wd, "HEAD", kind, name, conn_type)
-        merged["conflicts"] = conflicts(ws)
-        return {"committed": True, "sha": sha, "message": "stored", **merged}
+        return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message))
+
+
+async def _retry_if_rejected(op: Callable[[], Awaitable[Any]]) -> Any:
+    """Run `op`; if its push was rejected because another instance pushed
+    between our fetch and push, run it once more from the new head."""
+    try:
+        return await op()
+    except GitSyncError as e:
+        if not e.rejected:
+            raise
+    return await op()
+
+
+async def _store_once(
+    ws: WorkspaceRec,
+    kind: str,
+    name: str,
+    conn_type: str | None,
+    message: str | None,
+) -> dict[str, Any]:
+    """One store attempt; a retry reports only its own merge."""
+    wd = await _ensure_repo(ws)
+    head = await _origin_head(wd, ws)
+    merged = _empty_merge()
+    if head:
+        await _git("reset", "--hard", head, cwd=wd)
+        merged = await _merge(ws, wd, head)
+    # Loaded after the merge, which may have flipped this row's deleted flag.
+    entity = await _load_entity(ws, kind, name, conn_type)
+    paths = _entity_paths(kind, name, conn_type)
+    is_deleted = kind == "query" and entity.get("deleted_at") is not None
+    if kind == "query":
+        # A live query is its .yaml; a deleted one its .deleted marker.
+        keep, drop = reversed(paths) if is_deleted else paths
+        (wd / keep).parent.mkdir(parents=True, exist_ok=True)
+        (wd / keep).write_text(query_to_yaml(entity), encoding="utf-8")
+        if (wd / drop).exists():
+            await _git("rm", "-q", "--", drop, cwd=wd)
+    else:
+        relpath = paths[0]
+        ddir = wd / relpath
+        if ddir.exists():
+            shutil.rmtree(ddir)
+        ddir.mkdir(parents=True, exist_ok=True)
+        for fname, content in dashboard_to_files(entity).items():
+            (ddir / fname).write_text(content, encoding="utf-8")
+    await _git("add", "-A", "--", *(p for p in paths if (wd / p).exists()), cwd=wd)
+    if not (await _git("status", "--porcelain", "--", *paths, cwd=wd)).strip():
+        return {"committed": False, "sha": None, "message": "no changes", **merged, "conflicts": conflicts(ws)}
+    label = f"{conn_type}/{name}" if kind == "query" else name
+    verb = "delete" if is_deleted else "store"
+    await _git("commit", "-m", message or f"{verb} {kind} {label}", cwd=wd)
+    await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
+    sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
+    # The repo now holds exactly the local copy.
+    await _agree(ws, wd, "HEAD", kind, name, conn_type)
+    return {"committed": True, "sha": sha, "message": "stored", **merged, "conflicts": conflicts(ws)}
 
 
 async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
@@ -548,20 +573,24 @@ async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
     row = await _load_entity(ws, "query", name, conn_type)
     if row["deleted_at"] is None:
         raise GitSyncError(f"deleted query {name!r} not found", status=404)
-    marker = deleted_relpath(conn_type, name)
     async with _lock(ws):
-        wd = await _ensure_repo(ws)
-        head = await _origin_head(wd, ws)
-        if head is None:
-            return
-        await _git("reset", "--hard", head, cwd=wd)
-        if not (wd / marker).exists():
-            return
-        # Agreeing on the marker keeps sync from importing an identical one back.
-        await _agree(ws, wd, head, "query", name, conn_type)
-        await _git("rm", "-q", "--", marker, cwd=wd)
-        await _git("commit", "-m", f"purge query {conn_type}/{name}", cwd=wd)
-        await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
+        await _retry_if_rejected(lambda: _purge_once(ws, conn_type, name))
+
+
+async def _purge_once(ws: WorkspaceRec, conn_type: str, name: str) -> None:
+    marker = deleted_relpath(conn_type, name)
+    wd = await _ensure_repo(ws)
+    head = await _origin_head(wd, ws)
+    if head is None:
+        return
+    await _git("reset", "--hard", head, cwd=wd)
+    if not (wd / marker).exists():
+        return
+    # Agreeing on the marker keeps sync from importing an identical one back.
+    await _agree(ws, wd, head, "query", name, conn_type)
+    await _git("rm", "-q", "--", marker, cwd=wd)
+    await _git("commit", "-m", f"purge query {conn_type}/{name}", cwd=wd)
+    await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
 
 
 async def history(

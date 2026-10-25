@@ -256,3 +256,35 @@ def test_execute_script_shows_non_json_output_as_status(monkeypatch):
     monkeypatch.setattr("queryview.drivers.clickhouse.ch_fetch", fake_ch_fetch)
     results = asyncio.run(d.execute_script(CFG, "SELECT 1 FORMAT CSV", None))
     assert results[0].ok and results[0].rows is None and results[0].status == "1,a\n2,b"
+
+
+def test_run_sql_sends_statement_as_written_with_server_limits(monkeypatch):
+    seen = {}
+    _capture(monkeypatch, seen, _json_compact(["name"], [["a"]]))
+    r = asyncio.run(ClickHouseDriver().run_sql(CFG, "DESCRIBE TABLE t", "db", 2))
+    assert isinstance(r, RowsResult) and r.rows.data == [["a"]]
+    assert seen["query"] == "DESCRIBE TABLE t"
+    assert seen["clause"] == "JSONCompact"
+    s = seen["settings"]
+    assert s["max_result_rows"] == "2" and s["result_overflow_mode"] == "break"
+    assert s["max_execution_time"] == "60"
+
+
+def test_ch_fetch_sends_query_id_and_names_it_in_errors():
+    import httpx
+
+    from queryview.drivers.clickhouse import ch_fetch
+
+    seen = {}
+
+    def handler(req):
+        seen.update(req.url.params)
+        return httpx.Response(500, text="boom")
+
+    async def go():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await ch_fetch(CFG, "SELECT 1", client=client)
+
+    r = asyncio.run(go())
+    assert len(seen["query_id"]) == 32 and seen["cancel_http_readonly_queries_on_client_close"] == "1"
+    assert isinstance(r, Err) and f"query_id {seen['query_id']}" in r.message

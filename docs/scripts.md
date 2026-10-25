@@ -4,7 +4,7 @@ The **Scripts** page (`/scripts`) is a flat SQL textbox: whatever you type runs
 **as written** against the session's selected database — `CREATE`, `INSERT`,
 `ALTER`, `DROP` included — with no pagination wrapper, no saved names, no
 column pickers. [QueryView](./query.md) wraps a single `SELECT` for paging,
-saving and presentation; the MCP `run_query` tool stays read-only (see
+saving and presentation; the MCP `run_sql` tool stays read-only (see
 [Agent pushes](#agent-pushes) for the script tools). Before a
 database is selected the page redirects to Connect.
 

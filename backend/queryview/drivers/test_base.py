@@ -156,3 +156,10 @@ def test_result_classes_are_frozen_named_payloads():
     assert [isinstance(r, Err) for r in results] == [True, False, False, False, False, False]
     with pytest.raises(dataclasses.FrozenInstanceError):
         Err("x").message = "y"  # type: ignore[misc]
+
+
+def test_error_message_names_the_exception_type():
+    from queryview.drivers.base import error_message
+
+    assert error_message(ValueError("bad")) == "ValueError: bad"
+    assert error_message(TimeoutError()) == "TimeoutError"
