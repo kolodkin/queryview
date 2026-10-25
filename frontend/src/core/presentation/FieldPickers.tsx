@@ -60,7 +60,7 @@ function FieldMenu({
             title: f.type,
           })}
           headerExtra={headerExtra}
-          className="left-0 w-72"
+          className="left-0 w-72 max-h-80"
           renderItem={(f, on) => (
             <>
               <span

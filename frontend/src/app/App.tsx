@@ -13,6 +13,7 @@ import { SearchPanel, useDismiss } from '../core'
 import {
   connectionKey,
   isReady,
+  useFreshDatabases,
   openSaved,
   selectDatabase,
   toConnection,
@@ -159,7 +160,7 @@ function DatabaseMenu({
       testid="db-select"
       isSelected={(db) => db === connection.database}
       onPick={onSelect}
-      className="left-0 w-64"
+      className="left-0 w-96 max-h-[75vh]"
       renderItem={(db, current) => (
         <span className={`truncate ${current ? 'text-indigo-200' : 'text-slate-200'}`}>{db}</span>
       )}
@@ -209,6 +210,10 @@ function Shell() {
   const [taken, setTaken] = useState(false)
 
   const dbRef = useDismiss<HTMLDivElement>(dbOpen, () => setDbOpen(false))
+
+  // The menu's list dates from the connect; re-list each time it opens (a
+  // picker-less driver has no list to refresh).
+  useFreshDatabases(dbOpen && !!connection && connection.databases.length > 0, setConnection)
   const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
   const [navOpen, setNavOpen] = useState(false)
   const navRef = useDismiss<HTMLDivElement>(navOpen, () => setNavOpen(false))
@@ -444,34 +449,40 @@ function Shell() {
     }`
 
   return (
-    <main className="relative flex min-h-screen items-center-safe justify-center-safe px-6 py-10 text-slate-100">
+    <main className="relative flex min-h-screen items-center-safe justify-center-safe px-3 py-10 text-slate-100">
       {/* One row: labels truncate as the window narrows instead of the two
           groups overlapping. */}
       <header className="absolute inset-x-4 top-4 z-10 flex items-center gap-2">
         {ready && connection && (
           <div className="flex min-w-0 items-center gap-2">
             <div ref={dbRef} className="relative min-w-0">
-              <button
-                type="button"
-                data-testid="connection-status"
-                onClick={() => setDbOpen((o) => !o)}
-                aria-haspopup="listbox"
-                aria-expanded={dbOpen}
-                className="glass-chip flex max-w-full items-center gap-2 px-3 py-1.5 text-sm font-medium"
-              >
-                <span
-                  className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
-                  data-testid="connection-indicator"
-                  aria-label="connected"
-                />
-                <span className="truncate">
-                  <span className="hidden md:inline">connected - </span>
-                  {connection.database
-                    ? `${connection.name} · ${connection.database}`
-                    : connection.name}
-                </span>
-                <span className="text-xs text-slate-400">▾</span>
-              </button>
+              {/* The copy icon is a sibling of the toggle, not a child: a
+                  button cannot nest a button. */}
+              <div className="glass-chip group flex max-w-full items-center text-sm font-medium">
+                <button
+                  type="button"
+                  data-testid="connection-status"
+                  onClick={() => setDbOpen((o) => !o)}
+                  aria-haspopup="listbox"
+                  aria-expanded={dbOpen}
+                  className={`flex min-w-0 items-center gap-2 py-1.5 pl-3 ${connection.database ? '' : 'pr-3'}`}
+                >
+                  <span
+                    className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
+                    data-testid="connection-indicator"
+                    aria-label="connected"
+                  />
+                  <span className="truncate">
+                    {connection.database
+                      ? `${connection.name} · ${connection.database}`
+                      : connection.name}
+                  </span>
+                  <span className="text-xs text-slate-400">▾</span>
+                </button>
+                {connection.database && (
+                  <CopyName name={connection.database} testid="status-db-copy" />
+                )}
+              </div>
               {dbOpen && (
                 <DatabaseMenu
                   connection={connection}

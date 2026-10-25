@@ -31,7 +31,7 @@ def test_refresh_keeps_the_query_and_the_connection(seeded_duckdb, page: Page) -
     page.reload(wait_until="networkidle")
 
     expect(page.get_by_test_id("query-input")).to_have_value("SELECT 1 -- remembered")
-    expect(page.get_by_test_id("connection-status")).to_contain_text("connected - duckdb")
+    expect(page.get_by_test_id("connection-status")).to_contain_text("duckdb")
 
 
 def test_refresh_keeps_the_page_you_were_on(seeded_duckdb, page: Page) -> None:
@@ -75,7 +75,7 @@ def test_a_tab_whose_session_is_taken_greys_out_until_it_takes_it_back(
         page.get_by_test_id("session-take-over").click()
 
         expect(page.get_by_test_id("session-taken")).to_have_count(0)
-        expect(page.get_by_test_id("connection-status")).to_contain_text("connected - duckdb")
+        expect(page.get_by_test_id("connection-status")).to_contain_text("duckdb")
         assert page.evaluate("() => sessionStorage.getItem('qv_session')") == sid
     finally:
         httpx.post(f"{base_url}/api/sessions/release", json={"tab": other})

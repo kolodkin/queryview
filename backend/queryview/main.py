@@ -35,6 +35,7 @@ from .connect import (
     open_saved,
     parse_driver_config,
     push,
+    refresh_databases,
     remove_lock,
     request_token,
     run_query,
@@ -366,6 +367,13 @@ async def db_unlock(request: Request):
     name, passphrase = _lock_body(await _read_json(request))
     r = await unlock_connection(request.state.sid, name, passphrase)
     return r if r["ok"] else _gate_error(r, (), default=400)
+
+
+# Re-list this session's connection's databases, refreshing the cached list.
+@app.get("/api/db/databases")
+async def db_databases(request: Request):
+    r = await refresh_databases(request.state.sid)
+    return r if r["ok"] else _gate_error(r, ("no-session",))
 
 
 # Select this session's active connection's database.

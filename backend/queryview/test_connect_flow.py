@@ -217,3 +217,64 @@ def test_build_session_err_keeps_localhost_hint(monkeypatch):
     assert out["ok"] is False
     assert out["message"].startswith("connection refused")
     assert "host.docker.internal" in out["message"]
+
+
+class _GrowingDriver(_FakeDriver):
+    """A picker driver whose database list changes under a live session."""
+
+    def __init__(self):
+        self.databases = ["alpha", "beta"]
+        self.fail = False
+
+    async def list_databases(self, c):
+        if self.fail:
+            return Err("listing failed")
+        return DatabasesResult(list(self.databases))
+
+
+def test_refresh_databases_relists_and_keeps_the_selected_database(monkeypatch):
+    """Databases created after connecting show up on refresh, and the selected
+    database survives the re-list."""
+    driver = _GrowingDriver()
+    monkeypatch.setitem(DRIVERS, "growing", driver)
+    rec = _run(sessions.create_session())
+    _run(connect.connect_new(rec.id, "reporting", {"v": 1}, "growing"))
+    _run(connect.select_database(rec.id, "beta"))
+    driver.databases.append("gamma")
+
+    out = _run(connect.refresh_databases(rec.id))
+    assert out == {"ok": True, "name": "reporting", "databases": ["alpha", "beta", "gamma"]}
+    state = _run(connect.get_session(rec.id))
+    assert state["databases"] == ["alpha", "beta", "gamma"]
+    assert state["database"] == "beta"
+
+
+def test_refresh_databases_keeps_the_old_list_when_listing_fails(monkeypatch):
+    driver = _GrowingDriver()
+    monkeypatch.setitem(DRIVERS, "growing", driver)
+    rec = _run(sessions.create_session())
+    _run(connect.connect_new(rec.id, "reporting", {"v": 1}, "growing"))
+    driver.fail = True
+
+    out = _run(connect.refresh_databases(rec.id))
+    assert out["ok"] is False and out["message"] == "listing failed"
+    assert _run(connect.get_session(rec.id))["databases"] == ["alpha", "beta"]
+
+
+def test_select_database_relists_on_a_miss(monkeypatch):
+    """A database created after connecting can be selected without a reconnect:
+    a miss on the cached list re-lists once before failing."""
+    driver = _GrowingDriver()
+    monkeypatch.setitem(DRIVERS, "growing", driver)
+    rec = _run(sessions.create_session())
+    _run(connect.connect_new(rec.id, "reporting", {"v": 1}, "growing"))
+    driver.databases.append("gamma")
+
+    assert _run(connect.select_database(rec.id, "gamma")) == {"ok": True}
+    assert _run(connect.get_session(rec.id))["database"] == "gamma"
+    out = _run(connect.select_database(rec.id, "delta"))
+    assert out["ok"] is False and out["message"] == "unknown database"
+    # A re-list that fails is reported as such, not as a missing database.
+    driver.fail = True
+    out = _run(connect.select_database(rec.id, "epsilon"))
+    assert out["ok"] is False and out["message"] == "listing failed"

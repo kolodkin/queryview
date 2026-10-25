@@ -8,7 +8,9 @@ from conftest import (
     CH_PORT,
     CH_USER,
     author_params_yaml,
+    ch_exec,
     connect_clickhouse_test_db,
+    open_clickhouse_picker,
     open_connect,
     open_query_panel,
     start_new_connection,
@@ -123,6 +125,38 @@ def test_a_database_switch_reruns_the_query_on_screen(seeded_test_db, page: Page
     expect(output).not_to_contain_text(CH_DB)
     expect(output).not_to_contain_text("edited")
     expect(page.get_by_test_id("query-input")).to_have_value("SELECT 'edited'")
+
+
+def test_the_pill_menu_relists_databases_on_open(seeded_test_db, page: Page) -> None:
+    """A database created after connecting shows up the next time the pill
+    menu opens, without reconnecting."""
+    fresh = f"{CH_DB}_fresh"
+    connect_clickhouse_test_db(page)
+    try:
+        ch_exec(f"CREATE DATABASE IF NOT EXISTS {fresh}")
+        page.get_by_test_id("connection-status").click()
+        page.get_by_test_id("db-select-filter").fill(fresh)
+        expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_count(1)
+        expect(page.get_by_test_id("db-select")).to_contain_text(fresh)
+    finally:
+        ch_exec(f"DROP DATABASE IF EXISTS {fresh}")
+
+
+def test_database_names_copy_from_the_picker_and_the_pill(seeded_test_db, page: Page) -> None:
+    """A database name copies from its picker row (without selecting it) and,
+    once selected, from the status pill."""
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    open_clickhouse_picker(page)
+    page.locator(f'[data-db="{CH_DB}"]').locator("xpath=..").get_by_test_id("db-option-copy").click()
+    assert page.evaluate("navigator.clipboard.readText()") == CH_DB
+    expect(page.get_by_test_id("db-picker")).to_be_visible()
+
+    page.locator(f'[data-db="{CH_DB}"]').click()
+    expect(page.get_by_test_id("connection-status")).to_contain_text(CH_DB)
+    page.evaluate("navigator.clipboard.writeText('')")
+    page.get_by_test_id("status-db-copy").click()
+    assert page.evaluate("navigator.clipboard.readText()") == CH_DB
+    expect(page.get_by_test_id("db-select")).to_have_count(0)
 
 
 def _switch_database_from_pill(page: Page, database: str) -> None:
@@ -306,6 +340,7 @@ def test_many_connections(seeded_test_db, page: Page, base_url: str) -> None:
     second = cards.nth(1)
     expect(second).to_have_attribute("data-highlighted", "true")
     name = second.get_attribute("data-conn")
+    assert name
     page.keyboard.press("Enter")
     expect(page).to_have_url(re.compile(r"/explorer"))
-    expect(page.get_by_test_id("connection-status")).to_contain_text(f"connected - {name}")
+    expect(page.get_by_test_id("connection-status")).to_contain_text(name)

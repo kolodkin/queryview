@@ -151,7 +151,7 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
   const mark = failed && failed.script === sql && rows > 0 ? failed.span : null
 
   return (
-    <div data-testid="scripts-page" className="viewport-page flex w-full max-w-[80vw] flex-col">
+    <div data-testid="scripts-page" className="viewport-page flex w-full flex-col">
       <div className="mb-6 flex items-center justify-center">
         <h1 className="text-3xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           Scripts

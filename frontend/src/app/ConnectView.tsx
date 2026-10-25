@@ -7,6 +7,7 @@ import {
   lockConnection,
   openSaved,
   removeLock,
+  useFreshDatabases,
   selectDatabase,
   toConnection,
   type Connection,
@@ -14,6 +15,7 @@ import {
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
 import { AgentBadge } from './controls/AgentBadge'
+import { CopyName } from './controls/CopyName'
 import { PassphrasePrompt } from './controls/PassphrasePrompt'
 import { timeAgo } from './timeAgo'
 import {
@@ -40,7 +42,7 @@ function ConnectView({
   listNonce,
 }: {
   connection: Connection | null
-  setConnection: (c: Connection | null) => void
+  setConnection: React.Dispatch<React.SetStateAction<Connection | null>>
   // Bumped when a session connection is added or removed.
   listNonce: number
 }) {
@@ -176,6 +178,8 @@ function ConnectView({
     !!connection &&
     connection.database === null &&
     connection.databases.length > 0
+
+  useFreshDatabases(picking, setConnection)
 
   const heading = (
     <div className="mb-8 text-center">
@@ -699,17 +703,19 @@ function DatabasePicker({
       )}
       <div className="mt-3 flex flex-wrap gap-2">
         {visible.map((db) => (
-          <button
-            key={db}
-            type="button"
-            onClick={() => onSelect(db)}
-            data-testid="db-option"
-            data-db={db}
-            title={db === remembered ? 'Last used' : undefined}
-            className={`glass-toggle px-3 py-1.5 text-sm ${db === remembered ? 'is-active-soft' : ''}`}
-          >
-            {db}
-          </button>
+          <div key={db} className="group flex items-center">
+            <button
+              type="button"
+              onClick={() => onSelect(db)}
+              data-testid="db-option"
+              data-db={db}
+              title={db === remembered ? 'Last used' : undefined}
+              className={`glass-toggle px-3 py-1.5 text-sm ${db === remembered ? 'is-active-soft' : ''}`}
+            >
+              {db}
+            </button>
+            <CopyName name={db} testid="db-option-copy" />
+          </div>
         ))}
       </div>
     </section>

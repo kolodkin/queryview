@@ -177,18 +177,20 @@ def test_agent_cannot_use_or_remove_saved_or_user_connections():
             assert out["ok"] is False and "ask the user" in out["message"]
 
 
-def test_select_database_only_on_the_agents_own_connection():
+def test_select_database_only_on_the_agents_own_connection(monkeypatch):
     from queryview import connect
     from queryview.mcp_server import select_database, use_connection
 
+    async def one_db(conn_type, config):  # DuckDB lists none; fake a picker
+        return ["memory"], None
+
+    monkeypatch.setattr(connect, "_list_databases", one_db)
     sid = _connected_session("ag-seldb")
-    connect._sessions[sid].databases = ["memory"]  # DuckDB lists none; fake a picker
     out = _run(select_database(sid, "memory"))
     assert out["ok"] is False and "ask the user" in out["message"]
 
     assert _agent_add(sid, "ag-seldb-own")["ok"]
     assert _run(use_connection(sid, "ag-seldb-own"))["ok"]
-    connect._sessions[sid].databases = ["memory"]
     assert _run(select_database(sid, "nope"))["message"] == "unknown database"
     assert _run(select_database(sid, "memory"))["ok"] is True
     assert _run(sessions.database_of(sid)) == "memory"

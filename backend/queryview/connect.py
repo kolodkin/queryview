@@ -465,15 +465,22 @@ def _with_localhost_hint(message: str, config: DriverConfig) -> str:
     return message
 
 
+async def _list_databases(conn_type: str, config: DriverConfig) -> tuple[list[str] | None, str | None]:
+    """The driver's database list, or (None, message) with the localhost hint."""
+    r = await DRIVERS[conn_type].list_databases(config)
+    if isinstance(r, Err):
+        return None, _with_localhost_hint(r.message, config)
+    return r.databases, None
+
+
 async def _build_session(
     name: str, config: DriverConfig, database: str | None, conn_type: str = "clickhouse"
 ) -> tuple[_SessionState | None, str | None]:
     """List a connection's databases and build a session object. A session
     connection's name is never in the table, so it reads as unlocked."""
-    r = await DRIVERS[conn_type].list_databases(config)
-    if isinstance(r, Err):
-        return None, _with_localhost_hint(r.message, config)
-    databases = r.databases
+    databases, message = await _list_databases(conn_type, config)
+    if databases is None:
+        return None, message
     return (
         _SessionState(
             name=name,
@@ -659,13 +666,42 @@ def forget_session(sid: str) -> None:
     _tokens.pop(sid, None)
 
 
-async def select_database(sid: str, database: str) -> dict[str, Any]:
-    """Select this session's active connection's database."""
+async def _relist(s: _SessionState) -> dict[str, Any] | None:
+    """Replace the cached database list with a fresh one; the error result on failure."""
+    databases, message = await _list_databases(s.type, s.config)
+    if databases is None:
+        return {"ok": False, "message": message}
+    s.databases = databases
+    return None
+
+
+async def refresh_databases(sid: str) -> dict[str, Any]:
+    """Re-list this session's connection's databases; the cached list dates
+    from the connect. The selected database is kept even if no longer listed:
+    the session is still on it, and the next select tells the user."""
     s, err = await _unlocked_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
-    if not database or database not in s.databases:
-        return {"ok": False, "message": "unknown database", "reason": "unknown"}
+    if err := await _relist(s):
+        return err
+    return {"ok": True, "name": s.name, "databases": s.databases}
+
+
+async def select_database(sid: str, database: str) -> dict[str, Any]:
+    """Select this session's active connection's database. A name not in the
+    cached list is checked against a fresh one first, so a database created
+    since the connect can be selected."""
+    s, err = await _unlocked_session(sid)
+    if s is None:
+        return err  # type: ignore[return-value]
+    unknown = {"ok": False, "message": "unknown database", "reason": "unknown"}
+    if not database:
+        return unknown
+    if database not in s.databases:
+        if err := await _relist(s):
+            return err
+        if database not in s.databases:
+            return unknown
     s.database = database
     if _session_conn(sid, s.name) is None:
         await _save_selected_database(s.name, database)

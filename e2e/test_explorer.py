@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 
 import pytest
+from conftest import CH_DB, ch_exec
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, DriverCase, _connect
 
@@ -120,6 +121,46 @@ def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: 
     expect(output.locator("tbody tr").first).to_contain_text("gamma")
 
 
+def test_refresh_reloads_the_rows_from_the_database(seeded_test_db, page: Page) -> None:
+    """The refresh button next to the table name re-runs the browse query: a row
+    inserted since the last load appears, and the loader shows while the
+    request is in flight. The table lives in the seeded database, which the
+    fixture drops."""
+    table = f"{CH_DB}.fresh_rows"
+    ch_exec(f"CREATE TABLE {table} (id UInt32, name String) ENGINE = MergeTree ORDER BY id")
+    ch_exec(f"INSERT INTO {table} VALUES (1, 'first')")
+    _connect(page, CASES[0], seeded_test_db)  # ClickHouse
+    page.get_by_test_id("nav-explorer").click()
+    page.locator('[data-testid="explorer-table"][data-table="fresh_rows"]').click()
+    output = page.get_by_test_id("explorer-output")
+    expect(output).to_contain_text("first")
+    expect(output).not_to_contain_text("second")
+
+    ch_exec(f"INSERT INTO {table} VALUES (2, 'second')")
+    page.route("**/api/db/query", _hold(page, 500))
+    page.get_by_test_id("explorer-refresh").click()
+    expect(page.get_by_test_id("explorer-busy")).to_be_visible()
+    expect(output).to_contain_text("second")
+    expect(page.get_by_test_id("explorer-busy")).to_have_count(0)
+
+
+def _hold(page: Page, ms: int):
+    """A route handler that holds the response for `ms`, long enough for a
+    loader to be observable. page.wait_for_timeout inside a sync route handler
+    yields to the event loop (unlike time.sleep), so assertions still run."""
+
+    def slow(route):
+        page.wait_for_timeout(ms)
+        try:
+            route.continue_()
+        except Exception:
+            # The page navigated away while the response was held; the request
+            # is gone and there is nothing left to continue.
+            pass
+
+    return slow
+
+
 # Driver-independent, so these run once against DuckDB (a file, no service).
 DUCK = next(c for c in CASES if c.id == "duckdb")
 
@@ -177,18 +218,7 @@ def test_panels_show_loaders_until_data_arrives(seeded_duckdb, page: Page, shot)
     """Both panels show a loader while their first payload is in flight."""
     _connect(page, DUCK, seeded_duckdb)
 
-    # Hold both requests open long enough for the loaders to be observable.
-    # page.wait_for_timeout inside a sync route handler yields to the event
-    # loop (unlike time.sleep), so the assertions below still run.
-    def slow(route):
-        page.wait_for_timeout(1500)
-        try:
-            route.continue_()
-        except Exception:
-            # The page navigated away while the response was held; the request
-            # is gone and there is nothing left to continue.
-            pass
-
+    slow = _hold(page, 1500)
     # Already on the explorer, so reload to refetch the list with the response
     # held back.
     page.route("**/api/db/tables", slow)

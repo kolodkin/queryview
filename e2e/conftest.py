@@ -49,14 +49,19 @@ def start_new_connection(page: Page, driver: str) -> None:
             page.get_by_test_id(f"{prefix}-{field}").fill(value)
 
 
-def connect_clickhouse_test_db(page: Page) -> None:
-    """Connect to ClickHouse and select the seeded `qvtest` database. Ends on
-    the explorer, where picking a database lands."""
+def open_clickhouse_picker(page: Page) -> None:
+    """Connect to ClickHouse and stop on the database picker."""
     open_connect(page)
     start_new_connection(page, "clickhouse")
     expect(page.get_by_test_id("clickhouse-form")).to_be_visible()
     page.get_by_test_id("ch-connect").click()
     expect(page.get_by_test_id("db-picker")).to_be_visible()
+
+
+def connect_clickhouse_test_db(page: Page) -> None:
+    """Connect to ClickHouse and select the seeded `qvtest` database. Ends on
+    the explorer, where picking a database lands."""
+    open_clickhouse_picker(page)
     page.locator(f'[data-db="{CH_DB}"]').click()
     expect(page.get_by_test_id("connection-status")).to_contain_text(f"· {CH_DB}")
 
@@ -241,7 +246,7 @@ _WORKER_SUFFIX = os.environ.get("PYTEST_XDIST_WORKER", "")
 CH_DB = f"qvtest_{_WORKER_SUFFIX}" if _WORKER_SUFFIX else "qvtest"
 
 
-def _ch_exec(sql: str) -> None:
+def ch_exec(sql: str) -> None:
     """Run a statement against ClickHouse over HTTP. POST allows writes (the GET
     interface is read-only by default), so seeding/teardown go through here."""
     res = httpx.post(
@@ -260,12 +265,12 @@ def seeded_test_db():
 
     Drops it up front too, so seeding is idempotent and never accumulates rows
     from an earlier run that left the database behind."""
-    _ch_exec(f"DROP DATABASE IF EXISTS {CH_DB}")
-    _ch_exec(f"CREATE DATABASE {CH_DB}")
-    _ch_exec(f"CREATE TABLE {CH_DB}.items (id UInt32, name String) ENGINE = MergeTree ORDER BY id")
-    _ch_exec(f"INSERT INTO {CH_DB}.items (id, name) VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')")
+    ch_exec(f"DROP DATABASE IF EXISTS {CH_DB}")
+    ch_exec(f"CREATE DATABASE {CH_DB}")
+    ch_exec(f"CREATE TABLE {CH_DB}.items (id UInt32, name String) ENGINE = MergeTree ORDER BY id")
+    ch_exec(f"INSERT INTO {CH_DB}.items (id, name) VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')")
     yield
-    _ch_exec(f"DROP DATABASE IF EXISTS {CH_DB}")
+    ch_exec(f"DROP DATABASE IF EXISTS {CH_DB}")
 
 
 # --- Postgres seeding for query tests -------------------------------------

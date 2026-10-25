@@ -3,6 +3,7 @@ the old /api/clickhouse paths are gone (404)."""
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from queryview.main import app
@@ -41,12 +42,20 @@ def test_old_clickhouse_path_is_gone():
     assert c.post("/api/clickhouse/connect", json={}).status_code == 404
 
 
-def test_tables_without_session_is_409():
+@pytest.mark.parametrize(
+    "method, path, body",
+    [
+        ("GET", "/api/db/tables", None),
+        ("GET", "/api/db/databases", None),
+        ("POST", "/api/db/execute", {"sql": "SELECT 1"}),
+    ],
+)
+def test_gated_routes_without_session_are_409(method, path, body):
     c = TestClient(app)
     # Disconnect first: it marks this cookie disconnected, so the auto-reconnect
     # of a connection saved by an earlier test can't turn this into a 200.
     c.post("/api/db/disconnect")
-    r = c.get("/api/db/tables")
+    r = c.request(method, path, json=body)
     assert r.status_code == 409
     assert r.json()["ok"] is False
 
@@ -56,13 +65,6 @@ def test_execute_requires_sql():
     r = c.post("/api/db/execute", json={"sql": "   "})
     assert r.status_code == 400
     assert r.json()["ok"] is False
-
-
-def test_execute_without_session_is_409():
-    c = TestClient(app)
-    c.post("/api/db/disconnect")
-    r = c.post("/api/db/execute", json={"sql": "SELECT 1"})
-    assert r.status_code == 409
 
 
 def test_execute_runs_a_script_per_statement(tmp_path):

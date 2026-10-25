@@ -39,7 +39,7 @@ export function SearchPanel<T>({
   headerExtra?: React.ReactNode
   // Below the list (e.g. Disconnect).
   footer?: React.ReactNode
-  // Placement and width, e.g. "left-0 w-64".
+  // Placement and size, e.g. "left-0 w-64 max-h-80".
   className?: string
 }) {
   const [filter, setFilter] = useState('')
@@ -47,7 +47,7 @@ export function SearchPanel<T>({
   return (
     <div
       data-testid={testid}
-      className={`glass-popover absolute top-full z-10 mt-2 flex max-h-80 flex-col p-1 text-sm ${className}`}
+      className={`glass-popover absolute top-full z-10 mt-2 flex flex-col p-1 text-sm ${className}`}
     >
       <form
         className="flex items-center gap-1 p-1"
