@@ -117,10 +117,9 @@ async function listDatabases(): Promise<{ name: string; databases: string[] } | 
   }
 }
 
-// While `open` (a database list on screen), re-list once and adopt the fresh
-// list; an unchanged list leaves the connection object as is, a failed re-list
-// keeps the list on screen, and a list landing after close, or for a
-// connection the session has since left, is dropped.
+// While `open` (a database list on screen), re-list once. An unchanged list
+// keeps the connection object; a failed re-list keeps the list on screen; a
+// list landing after close, or for a connection since left, is dropped.
 export function useFreshDatabases(
   open: boolean,
   setConnection: Dispatch<SetStateAction<Connection | null>>,
