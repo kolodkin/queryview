@@ -65,7 +65,7 @@ export async function openSaved(
   }
 }
 
-type LockResult = { ok: true } | { ok: false; message: string }
+export type LockResult = { ok: true } | { ok: false; message: string }
 
 async function lockCall(
   method: string,
@@ -93,6 +93,31 @@ export const unlockConnection = (name: string, passphrase: string) =>
 // Remove a lock for good; takes the passphrase like unlocking does.
 export const removeLock = (name: string, passphrase: string) =>
   lockCall('DELETE', '/api/db/lock', name, passphrase)
+// Delete a connection; a locked one takes its passphrase.
+export const deleteConnection = (name: string, passphrase = '') =>
+  lockCall('DELETE', '/api/db/connections', name, passphrase)
+
+// A saved connection's form values (password blank), for editing it. `locked`
+// means this tab must unlock it first.
+export async function fetchSavedConfig(
+  name: string,
+): Promise<
+  | { ok: true; type: string; values: Record<string, string> }
+  | { ok: false; message: string; locked?: boolean }
+> {
+  try {
+    const res = await apiFetch(`/api/db/connections/${encodeURIComponent(name)}`)
+    const data = await res.json()
+    if (!data.ok)
+      return { ok: false, message: data.message ?? 'request failed', locked: res.status === 403 }
+    const values = Object.fromEntries(
+      Object.entries(data.config as Record<string, unknown>).map(([k, v]) => [k, String(v ?? '')]),
+    )
+    return { ok: true, type: data.type as string, values: { name, ...values } }
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : 'request failed' }
+  }
+}
 
 // Select this session's database; false when the switch failed. Held off the
 // heartbeat, since the shell follows the row's database (withoutHeartbeat).

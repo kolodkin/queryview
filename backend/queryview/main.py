@@ -23,6 +23,7 @@ from . import gitsync, remote, sessions, workspaces, yamlio
 from .connect import (
     _ensure_schema,
     connect_new,
+    delete_connection,
     describe_query,
     disconnect,
     execute_script,
@@ -39,6 +40,7 @@ from .connect import (
     remove_lock,
     request_token,
     run_query,
+    saved_config,
     select_database,
     unlock_connection,
 )
@@ -367,6 +369,21 @@ async def db_unlock(request: Request):
     name, passphrase = _lock_body(await _read_json(request))
     r = await unlock_connection(request.state.sid, name, passphrase)
     return r if r["ok"] else _gate_error(r, (), default=400)
+
+
+# A saved connection's config for the edit form, password blanked.
+@app.get("/api/db/connections/{name:path}")
+async def db_connection(name: str, request: Request):
+    r = await saved_config(request.state.sid, name)
+    return r if r["ok"] else _gate_error(r, (), default=404 if r.get("not_found") else 400)
+
+
+# Delete a connection; a locked one takes its passphrase.
+@app.delete("/api/db/connections")
+async def db_connection_delete(request: Request):
+    name, passphrase = _lock_body(await _read_json(request))
+    r = await delete_connection(request.state.sid, name, passphrase)
+    return r if r["ok"] else _gate_error(r, (), default=404 if r.get("not_found") else 400)
 
 
 # Re-list this session's connection's databases, refreshing the cached list.
