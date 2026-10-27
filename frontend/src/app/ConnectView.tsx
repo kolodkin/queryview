@@ -530,53 +530,38 @@ function SavedCard({
       }}
       aria-disabled={disabled}
       title={`Open ${conn.name}`}
-      className={`glass-card flex cursor-pointer flex-col gap-3 p-4 text-left ${active ? 'is-active' : ''} ${
+      className={`glass-card flex cursor-pointer gap-3 p-4 text-left ${active ? 'is-active' : ''} ${
         highlighted ? 'is-highlighted' : ''
       } ${disabled ? 'cursor-wait opacity-50' : ''}`}
     >
-      <span className="flex w-full items-center gap-3">
-        <DriverMark type={conn.type} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-slate-100">{conn.name}</span>
-          <span className="block text-xs text-slate-400">
-            {label}
-            <AgentBadge conn={conn} className="ml-2" />
+      <span className="flex min-w-0 flex-1 flex-col gap-3">
+        <span className="flex w-full items-center gap-3">
+          <DriverMark type={conn.type} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium text-slate-100">{conn.name}</span>
+            <span className="block text-xs text-slate-400">
+              {label}
+              <AgentBadge conn={conn} className="ml-2" />
+            </span>
           </span>
+          {busy ? (
+            <Spinner />
+          ) : (
+            active && (
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
+                aria-label="active connection"
+              />
+            )
+          )}
         </span>
-        {busy ? (
-          <Spinner />
-        ) : (
-          active && (
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
-              aria-label="active connection"
-            />
-          )
-        )}
-        {saved && (
-          <button
-            type="button"
-            data-testid="conn-edit"
-            onClick={inCard(onEdit)}
-            disabled={disabled}
-            aria-label={`Edit ${conn.name}`}
-            title="Edit the connection"
-            className="glass-btn shrink-0 px-2 py-0.5 text-xs text-slate-500"
-          >
-            ✎
-          </button>
-        )}
-        <button
-          type="button"
-          data-testid="conn-delete"
-          onClick={inCard(onDelete)}
-          disabled={disabled}
-          aria-label={`Delete ${conn.name}`}
-          title="Delete the connection"
-          className="glass-btn shrink-0 px-2 py-0.5 text-xs text-slate-500 hover:text-red-300"
-        >
-          ✕
-        </button>
+        <span className="flex w-full items-center justify-between gap-2 text-xs text-slate-500">
+          <span className="truncate font-mono text-slate-300">{conn.database ?? '—'}</span>
+          <span className="shrink-0">{timeAgo(conn.last_active_at)}</span>
+        </span>
+      </span>
+      {/* The card's controls, stacked on its right edge: lock, edit, delete. */}
+      <span className="flex shrink-0 flex-col gap-1">
         {saved && (
           <button
             type="button"
@@ -589,15 +574,35 @@ function SavedCard({
                 ? 'Locked: the agent is kept off. Click to remove the lock.'
                 : 'Lock behind a passphrase'
             }
-            className={`glass-btn shrink-0 px-2 py-0.5 text-xs ${conn.locked ? 'text-amber-300' : 'text-slate-500'}`}
+            className={`glass-btn px-2 py-0.5 text-xs ${conn.locked ? 'text-amber-300' : 'text-slate-500'}`}
           >
             {conn.locked ? '🔒' : '🔓'}
           </button>
         )}
-      </span>
-      <span className="flex w-full items-center justify-between gap-2 text-xs text-slate-500">
-        <span className="truncate font-mono text-slate-300">{conn.database ?? '—'}</span>
-        <span className="shrink-0">{timeAgo(conn.last_active_at)}</span>
+        {saved && (
+          <button
+            type="button"
+            data-testid="conn-edit"
+            onClick={inCard(onEdit)}
+            disabled={disabled}
+            aria-label={`Edit ${conn.name}`}
+            title="Edit the connection"
+            className="glass-btn px-2 py-0.5 text-xs text-slate-500"
+          >
+            ✎
+          </button>
+        )}
+        <button
+          type="button"
+          data-testid="conn-delete"
+          onClick={inCard(onDelete)}
+          disabled={disabled}
+          aria-label={`Delete ${conn.name}`}
+          title="Delete the connection"
+          className="glass-btn px-2 py-0.5 text-xs text-slate-500 hover:text-red-300"
+        >
+          ✕
+        </button>
       </span>
     </div>
   )
