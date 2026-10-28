@@ -4,13 +4,17 @@ import { useNavigate } from 'react-router-dom'
 import { filterNames, useDismiss } from '../core'
 import {
   isReady,
+  deleteConnection,
+  fetchSavedConfig,
   lockConnection,
   openSaved,
   removeLock,
+  unlockConnection,
   useFreshDatabases,
   selectDatabase,
   toConnection,
   type Connection,
+  type LockResult,
 } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
@@ -30,6 +34,23 @@ import {
 import { apiFetch } from './api'
 
 type TestResult = { ok: boolean; message: string }
+
+// What the passphrase prompt is for, and the call it makes; `edit` only
+// unlocks, the form opens once the tab holds the token.
+type PromptKind = 'lock' | 'unlock' | 'edit' | 'delete'
+const PROMPT_CALLS: Record<PromptKind, (name: string, passphrase: string) => Promise<LockResult>> =
+  {
+    lock: lockConnection,
+    unlock: removeLock,
+    edit: unlockConnection,
+    delete: deleteConnection,
+  }
+const PROMPT_TITLES: Record<PromptKind, (name: string) => [string, string]> = {
+  lock: (name) => [`Lock ${name} with a passphrase`, 'Lock'],
+  unlock: (name) => [`Remove the lock from ${name}`, 'Remove lock'],
+  edit: (name) => [`${name} is locked`, 'Unlock'],
+  delete: (name) => [`Delete ${name}? Its passphrase confirms.`, 'Delete'],
+}
 
 const sectionLabel = 'text-xs font-semibold uppercase tracking-wider text-slate-400'
 const cardGrid = 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
@@ -57,17 +78,21 @@ function ConnectView({
   const newRef = useDismiss<HTMLDivElement>(newOpen, () => setNewOpen(false))
   const searchRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  // The driver whose form is open, if any.
+  // The driver whose form is open, if any; `editing` holds a saved
+  // connection's values when the form edits one instead of creating.
   const [formType, setFormType] = useState<string | null>(null)
+  const [editing, setEditing] = useState<{ name: string; values: Record<string, string> } | null>(
+    null,
+  )
   // Back from the picker to the cards; the opened connection stays.
   const [browsing, setBrowsing] = useState(false)
   // The card being opened, for its spinner; and the last open's failure.
   const [opening, setOpening] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // The passphrase prompt up, if any: to lock a card or remove its lock
-  // (docs/connect.md#locked-connections). Opening a locked card needs none:
-  // the shell asks once the session lands on it.
-  const [prompt, setPrompt] = useState<{ kind: 'lock' | 'unlock'; name: string } | null>(null)
+  // The passphrase prompt up, if any: to lock a card, remove its lock, or
+  // edit or delete a locked one (docs/connect.md#locked-connections). Opening
+  // a locked card needs none: the shell asks once the session lands on it.
+  const [prompt, setPrompt] = useState<{ kind: PromptKind; name: string } | null>(null)
 
   const refreshSaved = useCallback(async () => {
     try {
@@ -132,7 +157,7 @@ function ConnectView({
   // since a new connection isn't in it yet).
   function adopt(opened: Connection) {
     setConnection(opened)
-    setFormType(null)
+    closeForm()
     setBrowsing(false)
     setError(null)
     if (isReady(opened)) navigate('/explorer')
@@ -152,16 +177,46 @@ function ConnectView({
   async function submitPassphrase(passphrase: string): Promise<string | null> {
     if (!prompt) return null
     const { kind, name } = prompt
-    const r = await (kind === 'lock' ? lockConnection : removeLock)(name, passphrase)
+    const r = await PROMPT_CALLS[kind](name, passphrase)
     if (!r.ok) return r.message
     setPrompt(null)
-    await refreshSaved()
+    if (kind === 'edit') await edit(name)
+    else await afterChange(name)
     return null
   }
 
-  const promptTitles = {
-    lock: (name: string) => [`Lock ${name} with a passphrase`, 'Lock'],
-    unlock: (name: string) => [`Remove the lock from ${name}`, 'Remove lock'],
+  // The list after a lock change or a delete; a deleted active connection is gone.
+  async function afterChange(name: string) {
+    if (prompt?.kind === 'delete' && connection?.name === name) setConnection(null)
+    await refreshSaved()
+  }
+
+  function closeForm() {
+    setFormType(null)
+    setEditing(null)
+  }
+
+  // Open the driver form on a saved connection's values. A locked one asks
+  // for its passphrase first unless this tab holds the token.
+  async function edit(name: string) {
+    setError(null)
+    const r = await fetchSavedConfig(name)
+    if (r.ok) {
+      setEditing({ name, values: r.values })
+      setFormType(r.type)
+      setNewOpen(false)
+    } else if (r.locked) setPrompt({ kind: 'edit', name })
+    else setError(r.message)
+  }
+
+  async function remove(conn: SavedConnection) {
+    setError(null)
+    if (conn.locked) return setPrompt({ kind: 'delete', name: conn.name })
+    if (!window.confirm(`Delete connection '${conn.name}'?`)) return
+    const r = await deleteConnection(conn.name)
+    if (!r.ok) return setError(r.message)
+    if (connection?.name === conn.name) setConnection(null)
+    await refreshSaved()
   }
 
   async function pickDatabase(database: string) {
@@ -187,16 +242,23 @@ function ConnectView({
         QueryView
       </h1>
       <p className="mt-2 text-sm text-slate-400">
-        {formType ? 'Create a connection' : picking ? 'Pick a database' : 'Choose a connection'}
+        {formType
+          ? editing
+            ? 'Edit a connection'
+            : 'Create a connection'
+          : picking
+            ? 'Pick a database'
+            : 'Choose a connection'}
       </p>
     </div>
   )
 
   const form = formType ? DRIVERS[formType] : undefined
   const active = connection?.name ?? null
-  const [promptTitle, promptAction] = prompt ? promptTitles[prompt.kind](prompt.name) : ['', '']
+  const [promptTitle, promptAction] = prompt ? PROMPT_TITLES[prompt.kind](prompt.name) : ['', '']
 
   function startNew(type: string) {
+    setEditing(null)
     setFormType(type)
     setNewOpen(false)
     setError(null)
@@ -216,6 +278,8 @@ function ConnectView({
           disabled={opening !== null}
           onOpen={() => void open(c.name)}
           onToggleLock={() => setPrompt({ kind: c.locked ? 'unlock' : 'lock', name: c.name })}
+          onEdit={() => void edit(c.name)}
+          onDelete={() => void remove(c)}
         />
       ))
 
@@ -250,7 +314,13 @@ function ConnectView({
       )}
       {heading}
       {form ? (
-        <ConnectionForm meta={form} onBack={() => setFormType(null)} onConnected={adopt} />
+        <ConnectionForm
+          key={editing?.name ?? 'new'}
+          meta={form}
+          editing={editing?.values ?? null}
+          onBack={closeForm}
+          onConnected={adopt}
+        />
       ) : picking ? (
         <DatabasePicker
           connection={connection}
@@ -422,6 +492,8 @@ function SavedCard({
   disabled,
   onOpen,
   onToggleLock,
+  onEdit,
+  onDelete,
 }: {
   conn: SavedConnection
   active: boolean
@@ -430,8 +502,16 @@ function SavedCard({
   disabled: boolean
   onOpen: () => void
   onToggleLock: () => void
+  onEdit: () => void
+  onDelete: () => void
 }) {
   const label = labelOf(conn.type)
+  const saved = conn.scope !== 'session'
+  // Buttons inside the card stop the click from opening it.
+  const inCard = (f: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation()
+    f()
+  }
   // A div, not a button: the lock toggle inside it is a button of its own.
   return (
     <div
@@ -450,37 +530,43 @@ function SavedCard({
       }}
       aria-disabled={disabled}
       title={`Open ${conn.name}`}
-      className={`glass-card flex cursor-pointer flex-col gap-3 p-4 text-left ${active ? 'is-active' : ''} ${
+      className={`glass-card flex cursor-pointer gap-3 p-4 text-left ${active ? 'is-active' : ''} ${
         highlighted ? 'is-highlighted' : ''
       } ${disabled ? 'cursor-wait opacity-50' : ''}`}
     >
-      <span className="flex w-full items-center gap-3">
-        <DriverMark type={conn.type} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-slate-100">{conn.name}</span>
-          <span className="block text-xs text-slate-400">
-            {label}
-            <AgentBadge conn={conn} className="ml-2" />
+      <span className="flex min-w-0 flex-1 flex-col gap-3">
+        <span className="flex w-full items-center gap-3">
+          <DriverMark type={conn.type} />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium text-slate-100">{conn.name}</span>
+            <span className="block text-xs text-slate-400">
+              {label}
+              <AgentBadge conn={conn} className="ml-2" />
+            </span>
           </span>
+          {busy ? (
+            <Spinner />
+          ) : (
+            active && (
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
+                aria-label="active connection"
+              />
+            )
+          )}
         </span>
-        {busy ? (
-          <Spinner />
-        ) : (
-          active && (
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
-              aria-label="active connection"
-            />
-          )
-        )}
-        {conn.scope !== 'session' && (
+        <span className="flex w-full items-center justify-between gap-2 text-xs text-slate-500">
+          <span className="truncate font-mono text-slate-300">{conn.database ?? '—'}</span>
+          <span className="shrink-0">{timeAgo(conn.last_active_at)}</span>
+        </span>
+      </span>
+      {/* The card's controls, stacked on its right edge: lock, edit, delete. */}
+      <span className="flex shrink-0 flex-col gap-1">
+        {saved && (
           <button
             type="button"
             data-testid="conn-lock"
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleLock()
-            }}
+            onClick={inCard(onToggleLock)}
             disabled={disabled}
             aria-label={conn.locked ? `Remove the lock from ${conn.name}` : `Lock ${conn.name}`}
             title={
@@ -488,15 +574,35 @@ function SavedCard({
                 ? 'Locked: the agent is kept off. Click to remove the lock.'
                 : 'Lock behind a passphrase'
             }
-            className={`glass-btn shrink-0 px-2 py-0.5 text-xs ${conn.locked ? 'text-amber-300' : 'text-slate-500'}`}
+            className={`glass-btn px-2 py-0.5 text-xs ${conn.locked ? 'text-amber-300' : 'text-slate-500'}`}
           >
             {conn.locked ? '🔒' : '🔓'}
           </button>
         )}
-      </span>
-      <span className="flex w-full items-center justify-between gap-2 text-xs text-slate-500">
-        <span className="truncate font-mono text-slate-300">{conn.database ?? '—'}</span>
-        <span className="shrink-0">{timeAgo(conn.last_active_at)}</span>
+        {saved && (
+          <button
+            type="button"
+            data-testid="conn-edit"
+            onClick={inCard(onEdit)}
+            disabled={disabled}
+            aria-label={`Edit ${conn.name}`}
+            title="Edit the connection"
+            className="glass-btn px-2 py-0.5 text-xs text-slate-500"
+          >
+            ✎
+          </button>
+        )}
+        <button
+          type="button"
+          data-testid="conn-delete"
+          onClick={inCard(onDelete)}
+          disabled={disabled}
+          aria-label={`Delete ${conn.name}`}
+          title="Delete the connection"
+          className="glass-btn px-2 py-0.5 text-xs text-slate-500 hover:text-red-300"
+        >
+          ✕
+        </button>
       </span>
     </div>
   )
@@ -504,15 +610,18 @@ function SavedCard({
 
 function ConnectionForm({
   meta,
+  editing,
   onBack,
   onConnected,
 }: {
   meta: DriverMeta
+  // A saved connection's values: the form re-saves it under its name.
+  editing: Record<string, string> | null
   onBack: () => void
   onConnected: (connection: Connection) => void
 }) {
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(meta.fields.map((f) => [f.key, f.default])),
+    Object.fromEntries(meta.fields.map((f) => [f.key, editing?.[f.key] ?? f.default])),
   )
   const [result, setResult] = useState<TestResult | null>(null)
   const [busy, setBusy] = useState(false)
@@ -575,7 +684,9 @@ function ConnectionForm({
     >
       <div className="flex items-center gap-3">
         <DriverMark type={meta.type} />
-        <h2 className="flex-1 text-lg font-semibold">New {meta.label} connection</h2>
+        <h2 className="flex-1 text-lg font-semibold">
+          {editing ? 'Edit' : 'New'} {meta.label} connection
+        </h2>
         <BackButton testid="form-back" onClick={onBack} />
       </div>
 
@@ -589,20 +700,24 @@ function ConnectionForm({
             aria-label={f.label}
             data-testid={f.testid}
             autoFocus={i === 0}
-            className={`mt-1 ${fieldClass}`}
+            readOnly={!!editing && f.key === 'name'}
+            placeholder={editing && f.type === 'password' ? 'unchanged' : undefined}
+            className={`mt-1 ${fieldClass} ${editing && f.key === 'name' ? 'opacity-60' : ''}`}
           />
         </label>
       ))}
 
-      <label className="flex items-center gap-2 text-sm text-slate-300">
-        <input
-          type="checkbox"
-          checked={sessionOnly}
-          onChange={(e) => setSessionOnly(e.target.checked)}
-          data-testid="conn-session-only"
-        />
-        Session only — don't save
-      </label>
+      {!editing && (
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={sessionOnly}
+            onChange={(e) => setSessionOnly(e.target.checked)}
+            data-testid="conn-session-only"
+          />
+          Session only — don't save
+        </label>
+      )}
 
       <div className="flex gap-2">
         <button
@@ -620,7 +735,7 @@ function ConnectionForm({
           disabled={busy}
           className="glass-btn-primary flex-1 px-4 py-2 font-medium"
         >
-          Connect
+          {editing ? 'Save & connect' : 'Connect'}
         </button>
       </div>
 

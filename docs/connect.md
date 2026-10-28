@@ -76,6 +76,18 @@ Two actions:
   inline. No side effects.
 - **Connect** — `POST /api/db/connect`. On success the picker opens.
 
+## Editing and deleting
+
+Each saved card has **✎** and **✕**:
+
+- **✎** reopens the driver form on the saved values (password blank) with the
+  name fixed; **Save & connect** re-saves it under that name and opens it. A
+  blank password keeps the saved one, so a host or user can change alone.
+- **✕** deletes the connection after a confirm. Every session on it is
+  disconnected; the lock, if any, goes with it.
+
+A session connection has **✕** only.
+
 ## Flow
 
 ```
@@ -199,8 +211,10 @@ working.
   restart). Cancelling disconnects.
 - **Reload** keeps the token; closing the tab drops it. A restart drops the
   server side, so the next request asks again.
-- **Removing** the lock takes the passphrase. A forgotten passphrase means
-  deleting and re-adding the connection.
+- **Removing** the lock takes the passphrase, and so does **deleting** the
+  connection. **Editing** needs the tab's token: without one the passphrase
+  is asked first. A forgotten passphrase means deleting and re-adding the
+  connection.
 - Attempts on a connection back off exponentially (2s, 4s … 30s), whoever
   sends them.
 
@@ -246,6 +260,8 @@ session.
 | POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
 | POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
 | GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by, locked}]}`: this session's connections, then the saved ones most recent first (never the config) |
+| GET    | `/api/db/connections/<name>` | —                               | `{ok, name, type, config}` the saved config with the password blanked, for the edit form; unknown → `404`, locked without the token → `403` |
+| DELETE | `/api/db/connections` | `{name, passphrase?}`                  | `{ok}`; deletes a connection (this session's own, else a saved one) and disconnects every session on it; a locked one needs its passphrase (`403` without) |
 | POST   | `/api/db/open`        | `{name}`                               | `{ok, …}` the same state as `GET /api/session` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card); on a locked one `unlocked` says whether this tab's token opens it |
 | POST   | `/api/db/lock`        | `{name, passphrase}`                   | Lock a saved connection; `{ok, token}` for this tab. Empty passphrase, unknown or already locked → `400` |
 | POST   | `/api/db/unlock`      | `{name, passphrase}`                   | `{ok, token}` — this session's unlock token; wrong passphrase → `403`, not locked → `400` |

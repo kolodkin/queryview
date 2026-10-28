@@ -398,6 +398,18 @@ async def set_connection(sid: str, connection_name: str | None, by: Literal["age
         await s.commit()
 
 
+async def clear_connection(connection_name: str) -> None:
+    """Disconnect every session on a connection that was deleted."""
+    await _ensure_schema()
+    async with _open() as s:
+        rows = await s.exec(select(Session).where(Session.connection_name == connection_name))
+        for row in rows.all():
+            row.connection_name = None
+            row.database = None
+            s.add(row)
+        await s.commit()
+
+
 async def set_database(sid: str, database: str | None) -> None:
     await _ensure_schema()
     async with _open() as s:

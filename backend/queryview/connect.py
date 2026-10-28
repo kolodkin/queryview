@@ -548,6 +548,7 @@ async def connect_new(
     elif _session_name_taken(name):
         state, message = None, f'a connection named "{name}" already exists'
     else:
+        config = await _with_stored_password(name, config, conn_type)
         state, message = await _build_session(name, config, None, conn_type)
     if state is None:
         return {"ok": False, "message": message}
@@ -595,6 +596,57 @@ async def disconnect(sid: str, by: Literal["agent", "user"] = "user") -> dict[st
     — the Connect page still reopens them."""
     _sessions.pop(sid, None)
     await sessions.set_connection(sid, None, by)
+    return {"ok": True}
+
+
+async def _with_stored_password(name: str, config: DriverConfig, conn_type: str) -> DriverConfig:
+    """An edit that leaves the password blank keeps the saved one."""
+    driver = DRIVERS[conn_type]
+    data = driver.config_to_dict(config)
+    if not isinstance(data, dict) or data.get("password", True):
+        return config
+    stored = await _connection_by_name(name)
+    if stored is None or stored.type != conn_type:
+        return config
+    saved = driver.config_to_dict(stored.config).get("password")
+    return driver.config_from_dict({**data, "password": saved}) if saved else config
+
+
+async def saved_config(sid: str, name: str) -> dict[str, Any]:
+    """A saved connection's config for the edit form, password blanked. The
+    config is behind the lock: a locked one needs the tab's token."""
+    stored = await _connection_by_name(name)
+    if stored is None:
+        return {"ok": False, "message": await unknown_connection_message(name, sid), "not_found": True}
+    if await _lock_hash_of(name) is not None and not _is_unlocked(sid, name):
+        return LOCKED
+    data = DRIVERS[stored.type].config_to_dict(stored.config)
+    config = {k: "" if k == "password" else v for k, v in data.items()}
+    return {"ok": True, "name": name, "type": stored.type, "config": config}
+
+
+async def delete_connection(sid: str, name: str, passphrase: str) -> dict[str, Any]:
+    """Delete a connection: this session's own, else a saved one, which when
+    locked takes the passphrase. Every session on it is disconnected."""
+    if _session_conn(sid, name) is not None:
+        return await remove_session_connection(sid, name)
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = (await s.exec(select(Connection).where(Connection.name == name))).first()
+        if row is None:
+            return {"ok": False, "message": await unknown_connection_message(name, sid), "not_found": True}
+        if row.lock_hash is not None:
+            if not passphrase:
+                return LOCKED
+            if (err := await _verify_passphrase(name, passphrase)) is not None:
+                return err
+        await s.delete(row)
+        await s.commit()
+    for names in _unlocked.values():
+        names.discard(name)
+    for other in [k for k, state in _sessions.items() if state.name == name]:
+        _sessions.pop(other)
+    await sessions.clear_connection(name)
     return {"ok": True}
 
 

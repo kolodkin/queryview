@@ -207,3 +207,69 @@ def test_one_token_per_session_so_locking_another_connection_keeps_this_one_open
     _connected("lock-tok-b")
     token = c.post("/api/db/lock", json={"name": "lock-tok-a", "passphrase": "pw"}).json()["token"]
     assert c.post("/api/db/lock", json={"name": "lock-tok-b", "passphrase": "pw"}).json()["token"] == token
+
+
+def test_edit_reads_the_config_back_without_the_password_and_a_blank_one_keeps_it(monkeypatch):
+    from queryview.drivers import DRIVERS
+    from queryview.drivers.base import DatabasesResult
+
+    seen: list[str] = []
+
+    async def one_db(config):
+        seen.append(config.password)
+        return DatabasesResult(databases=["a"])
+
+    monkeypatch.setattr(DRIVERS["clickhouse"], "list_databases", one_db)
+    c = _client()
+    body = {"type": "clickhouse", "name": "edit-ch", "host": "h", "port": 8123, "username": "u", "password": "p"}
+    assert c.post("/api/db/connect", json=body).json()["ok"]
+    r = c.get("/api/db/connections/edit-ch").json()
+    config = {"host": "h", "port": 8123, "username": "u", "password": ""}
+    assert r == {"ok": True, "name": "edit-ch", "type": "clickhouse", "config": config}
+    # A re-save with a blank password keeps the saved one; a new one replaces it.
+    assert c.post("/api/db/connect", json={**body, "host": "h2", "password": ""}).json()["ok"]
+    assert c.post("/api/db/connect", json={**body, "password": "p2"}).json()["ok"]
+    assert seen == ["p", "p", "p2"]
+    assert c.get("/api/db/connections/edit-ch").json()["config"]["host"] == "h"
+    assert c.get("/api/db/connections/nope").status_code == 404
+
+
+def test_a_locked_connection_hides_its_config_from_a_tab_without_the_token():
+    c = _connected("edit-locked-duck")
+    token = c.post("/api/db/lock", json={"name": "edit-locked-duck", "passphrase": "pw"}).json()["token"]
+    r = c.get("/api/db/connections/edit-locked-duck")
+    assert r.status_code == 403 and r.json()["message"] == "connection is locked"
+    c.headers["X-QV-Token"] = token
+    assert c.get("/api/db/connections/edit-locked-duck").json()["config"] == {"path": ":memory:"}
+
+
+def test_delete_disconnects_every_session_on_it_and_a_locked_one_takes_the_passphrase():
+    c = _connected("del-duck")
+    other = _client()
+    assert other.post("/api/db/open", json={"name": "del-duck"}).json()["ok"]
+    r = c.request("DELETE", "/api/db/connections", json={"name": "del-duck"})
+    assert r.json() == {"ok": True}
+    names = {x["name"] for x in c.get("/api/db/connections").json()["connections"]}
+    assert "del-duck" not in names
+    for client in (c, other):
+        assert client.get("/api/session").json()["connected"] is False
+    assert c.request("DELETE", "/api/db/connections", json={"name": "del-duck"}).status_code == 404
+
+    c = _connected("del-locked-duck")
+    assert c.post("/api/db/lock", json={"name": "del-locked-duck", "passphrase": "pw"}).json()["ok"]
+    r = c.request("DELETE", "/api/db/connections", json={"name": "del-locked-duck"})
+    assert r.status_code == 403
+    r = c.request("DELETE", "/api/db/connections", json={"name": "del-locked-duck", "passphrase": "nope"})
+    assert r.status_code == 403 and r.json()["message"] == "wrong passphrase"
+    r = c.request("DELETE", "/api/db/connections", json={"name": "del-locked-duck", "passphrase": "pw"})
+    assert r.json() == {"ok": True}
+    assert c.get("/api/session").json()["connected"] is False
+
+
+def test_delete_drops_a_session_connection_of_this_session():
+    c = _client()
+    body = {"type": "duckdb", "name": "del-session-duck", "path": ":memory:", "session": True}
+    assert c.post("/api/db/connect", json=body).json()["ok"]
+    assert c.request("DELETE", "/api/db/connections", json={"name": "del-session-duck"}).json() == {"ok": True}
+    assert c.get("/api/session").json()["connected"] is False
+    assert "del-session-duck" not in {x["name"] for x in c.get("/api/db/connections").json()["connections"]}
