@@ -14,7 +14,5 @@ src/
   main.tsx
 ```
 
-`src/core` never fetches, routes, or reads app state; `eslint.config.js`
-enforces that (`npm run lint`). The app imports it only through
-`src/core/index.ts`, which is the surface another app can reuse. Tests sit next
-to their modules (`npm test`).
+Tests sit next to their modules (`npm test`); `npm run lint` checks the
+`core`/`app` boundary described in `AGENTS.md`.
