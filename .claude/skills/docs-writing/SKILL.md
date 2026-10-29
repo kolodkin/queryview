@@ -18,10 +18,10 @@ running shortify on the pages you touched.
   and move into the feature's page when they ship.
 - The opening paragraph names the route (`/queryview`, `/explorer`, …) and
   links the neighboring pages a reader may have meant instead.
-- A page with UI gets one ASCII layout box, then a bullet per control.
-  UI labels are **bold**, exactly as the screen shows them.
-- Endpoints appear in a `## API` table (Method, Path, Body, Description) and
-  the same row in `api.md`; change both together.
+- UI labels are **bold**, exactly as the screen shows them.
+- `api.md` is the endpoint reference. A feature page's `## API` section names
+  its endpoints and links there, as `scripts.md` does; bodies and responses are
+  not repeated.
 - Links are relative, `./page.md#anchor`. Code is named only when the reader
   must open it, as a module or package path. Code and docstrings that back-link
   a heading quote it word for word, so grep for the old text when renaming one.

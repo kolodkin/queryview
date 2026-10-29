@@ -37,11 +37,8 @@ privacy rule: invented names only.
 - Needs a real ClickHouse on `:8123` and Postgres on `:5432`, plus a built SPA
   (`npm run build`). In the Claude Code web container, the `claudeai-run`
   skill starts the databases.
-- Helpers in `e2e/conftest.py` do the navigation: `open_connect`,
-  `start_new_connection(page, driver)` (fills the suite's ClickHouse or
-  Postgres credentials), `connect_clickhouse_test_db`, `open_query_panel`,
-  `arm_remote`, `mcp_call`, `shot`. Extend them before writing a new click
-  sequence.
+- `e2e/conftest.py` holds the navigation helpers and MCP client; extend them
+  before writing a new click sequence.
 - Locate elements by `data-testid` (`page.get_by_test_id(...)`), adding a
   kebab-case attribute in the component when missing (`db-picker`,
   `ch-connect`). Assert with `expect` (15 s default)
