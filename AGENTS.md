@@ -29,7 +29,7 @@ which layer a test belongs in, where it lives, and which fixtures to reuse.
 
 ## Docs
 
-`docs/AGENTS.md` applies to everything under `docs/`.
+`docs/AGENTS.md` covers `docs/`; `frontend/AGENTS.md` covers `frontend/`.
 
 ## Python
 
