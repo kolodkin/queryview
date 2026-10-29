@@ -24,8 +24,8 @@ from .connect import (
     push,
     remove_session_connection,
 )
-from .connect import run_sql as _run_sql
-from .connect import select_database as _select_database
+from .connect import run_sql as connect_run_sql
+from .connect import select_database as connect_select_database
 from .dashboards import _push_dashboard
 from .queries import list_predefined_queries_view
 from .validation import dashboard_params_error
@@ -123,7 +123,7 @@ async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any
     deadline = RUN_SQL_TIMEOUT_SECONDS + 10  # past the drivers' own limits: a backstop
     try:
         async with asyncio.timeout(deadline):
-            r = await _run_sql(session_id, sql, limit + 1)
+            r = await connect_run_sql(session_id, sql, limit + 1)
     except TimeoutError:
         return {"ok": False, "message": f"query timed out after {deadline}s"}
     if not r["ok"]:
@@ -374,7 +374,7 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
     err = _not_yours(session_id, cur["name"])
     if err is not None:
         return {"ok": False, "message": err, "database": cur["database"]}
-    r = await _select_database(session_id, database)
+    r = await connect_select_database(session_id, database)
     if not r["ok"]:
         return {"ok": False, "message": r["message"], "database": cur["database"]}
     return {"ok": True, "message": "selected", "database": database}
