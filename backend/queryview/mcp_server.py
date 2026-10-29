@@ -9,7 +9,23 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from . import connect, gitsync, remote, sessions
+from . import gitsync, remote, sessions
+from .connect import (
+    _gated_session,
+    _session_conn,
+    add_session_connection,
+    agent_connections_for,
+    execute_script,
+    get_session,
+    list_databases_of,
+    list_tables,
+    open_saved,
+    parse_driver_config,
+    push,
+    remove_session_connection,
+)
+from .connect import run_sql as _run_sql
+from .connect import select_database as _select_database
 from .dashboards import _push_dashboard
 from .queries import list_predefined_queries_view
 from .validation import dashboard_params_error
@@ -76,7 +92,7 @@ async def push_query(
         "cell_view": cell_view,
         "name": name,
     }
-    ok, message = await connect.push(session_id, payload)
+    ok, message = await push(session_id, payload)
     return {"ok": ok, "message": message, "database": await sessions.database_of(session_id)}
 
 
@@ -100,7 +116,6 @@ async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any
         sql: The SQL statement to run.
         limit: Most rows to return (default 1000, max 10000).
     """
-    from .connect import run_sql as _run_sql
     from .drivers.base import RUN_SQL_TIMEOUT_SECONDS
     from .validation import MAX_LIMIT
 
@@ -146,8 +161,6 @@ async def run_script(session_id: str, sql: str) -> dict[str, Any]:
         session_id: The session id shown in the QueryView popover.
         sql: The script; separate statements with `;`.
     """
-    from .connect import execute_script
-
     if not sql.strip():
         return {"ok": False, "message": "sql required"}
     r = await execute_script(session_id, sql)
@@ -172,8 +185,6 @@ async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str,
         sql: The script; separate statements with `;`.
         run: Also run it (default False: load only).
     """
-    from .connect import _gated_session
-
     # Otherwise the push would wait in the browser and replay (run included)
     # whenever the user next opens Scripts.
     s, err = await _gated_session(session_id)
@@ -203,8 +214,6 @@ async def session_info(session_id: str) -> dict[str, Any]:
     database is selected, and on a locked connection ("locked": True), which
     the agent may not query at all. Unknown session → {"ok": False, "message"}.
     """
-    from .connect import get_session, list_tables
-
     rec = await sessions.get_session_rec(session_id) if session_id else None
     if rec is None:
         return {"ok": False, "message": "unknown session"}
@@ -246,7 +255,7 @@ async def list_connections(session_id: str) -> dict[str, Any]:
                 "created_by": c["created_by"],
                 "active": c["name"] == rec.connection_name,  # names are unique
             }
-            for c in await connect.agent_connections_for(session_id)
+            for c in await agent_connections_for(session_id)
         ],
     }
 
@@ -264,7 +273,7 @@ async def list_databases(session_id: str, connection: str | None = None) -> dict
     """
     if await sessions.get_session_rec(session_id) is None:
         return {"ok": False, "message": "unknown session"}
-    conns = [c for c in await connect.agent_connections_for(session_id) if connection in (None, c["name"])]
+    conns = [c for c in await agent_connections_for(session_id) if connection in (None, c["name"])]
     if connection is not None and not conns:
         return {"ok": False, "message": f'no connection named "{connection}"'}  # locked reads as unknown
     return {"ok": True, "connections": list(await asyncio.gather(*(_databases_of(session_id, c) for c in conns)))}
@@ -272,7 +281,7 @@ async def list_databases(session_id: str, connection: str | None = None) -> dict
 
 async def _databases_of(session_id: str, c: dict[str, Any]) -> dict[str, Any]:
     """One list_connections entry's {name, type} plus its "databases" or "error"."""
-    databases, error = await connect.list_databases_of(session_id, c["name"])
+    databases, error = await list_databases_of(session_id, c["name"])
     return {"name": c["name"], "type": c["type"]} | (
         {"error": error} if databases is None else {"databases": databases}
     )
@@ -285,8 +294,6 @@ _AGENT_DRIVERS = ("clickhouse", "postgres")
 def _not_yours(session_id: str, name: str) -> str | None:
     """Why the agent may not change `name`, or None for a session connection
     it added itself."""
-    from .connect import _session_conn
-
     sc = _session_conn(session_id, name)
     if sc is not None and sc.created_by == "agent":
         return None
@@ -308,8 +315,6 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
 
     Returns {"ok": True, "name", "type", "databases"} or {"ok": False, "message"}.
     """
-    from .connect import add_session_connection, parse_driver_config
-
     if await sessions.get_session_rec(session_id) is None:
         return {"ok": False, "message": "unknown session"}
     if type not in _AGENT_DRIVERS:
@@ -332,8 +337,6 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
 
     Returns {"ok": True} or {"ok": False, "message"}.
     """
-    from .connect import remove_session_connection
-
     err = _not_yours(session_id, name)
     if err is not None:
         return {"ok": False, "message": err}
@@ -350,8 +353,6 @@ async def use_connection(session_id: str, name: str, database: str | None = None
     Returns {"ok": True, "name", "type", "databases", "database"} or
     {"ok": False, "message"}.
     """
-    from .connect import open_saved
-
     err = _not_yours(session_id, name)
     if err is not None:
         return {"ok": False, "message": err}
@@ -367,9 +368,6 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
     connection, or the database does not exist (a name missing from
     session_info's "databases" is re-checked against the server first).
     """
-    from .connect import get_session
-    from .connect import select_database as _select_database
-
     cur = await get_session(session_id)
     if not cur["connected"]:
         return {"ok": False, "message": "not connected", "database": None}
