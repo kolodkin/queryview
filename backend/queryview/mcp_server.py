@@ -233,8 +233,6 @@ async def list_connections(session_id: str) -> dict[str, Any]:
     Returns {"ok": True, "connections": [{name, type, scope, created_by,
     active}]} or {"ok": False, "message"} for an unknown session.
     """
-    from .connect import agent_connections_for
-
     rec = await sessions.get_session_rec(session_id)
     if rec is None:
         return {"ok": False, "message": "unknown session"}
@@ -248,7 +246,7 @@ async def list_connections(session_id: str) -> dict[str, Any]:
                 "created_by": c["created_by"],
                 "active": c["name"] == rec.connection_name,  # names are unique
             }
-            for c in await agent_connections_for(session_id)
+            for c in await connect.agent_connections_for(session_id)
         ],
     }
 
@@ -264,11 +262,9 @@ async def list_databases(session_id: str, connection: str | None = None) -> dict
     {"ok": False, "message"} for an unknown session, or a `connection` that is
     unknown or locked.
     """
-    from .connect import agent_connections_for
-
     if await sessions.get_session_rec(session_id) is None:
         return {"ok": False, "message": "unknown session"}
-    conns = [c for c in await agent_connections_for(session_id) if connection in (None, c["name"])]
+    conns = [c for c in await connect.agent_connections_for(session_id) if connection in (None, c["name"])]
     if connection is not None and not conns:
         return {"ok": False, "message": f'no connection named "{connection}"'}  # locked reads as unknown
     return {"ok": True, "connections": list(await asyncio.gather(*(_databases_of(session_id, c) for c in conns)))}
@@ -276,9 +272,7 @@ async def list_databases(session_id: str, connection: str | None = None) -> dict
 
 async def _databases_of(session_id: str, c: dict[str, Any]) -> dict[str, Any]:
     """One list_connections entry's {name, type} plus its "databases" or "error"."""
-    from .connect import list_databases_of
-
-    databases, error = await list_databases_of(session_id, c["name"])
+    databases, error = await connect.list_databases_of(session_id, c["name"])
     return {"name": c["name"], "type": c["type"]} | (
         {"error": error} if databases is None else {"databases": databases}
     )
