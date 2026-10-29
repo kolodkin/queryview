@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:e2e": "VITE_HEARTBEAT_MS=1000 npm run build",
+    "build:e2e": "VITE_HEARTBEAT_MS=2000 npm run build",
     "lint": "eslint .",
     "test": "vitest run",
     "preview": "vite preview",

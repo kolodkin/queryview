@@ -35,7 +35,7 @@ privacy rule: invented names only.
 ## e2e
 
 - Needs a real ClickHouse on `:8123` and Postgres on `:5432`, plus a built SPA
-  (`npm run build:e2e`, a 1s session heartbeat). In the Claude Code web container, the `claudeai-run`
+  (`npm run build:e2e`, a 2s session heartbeat). In the Claude Code web container, the `claudeai-run`
   skill starts the databases.
 - `e2e/conftest.py` holds the navigation helpers and MCP client; extend them
   before writing a new click sequence.
