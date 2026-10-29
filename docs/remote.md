@@ -19,12 +19,6 @@ pushes to its id are then reported as not delivered.
 Without a copied id the agent uses the standing
 [Agent session](./session.md#the-agent-session); arm it the same way.
 
-**Default workflow.** Asked to run a query, the agent evaluates with `run_sql`
-(`run_script` for writes), iterates on the results, and finishes with
-`push_script` of the final SQL, so it lands in the [Scripts](./scripts.md)
-page — unless you name another tool (e.g. `push_query`). The server's MCP
-instructions say so; no clarifying question is needed.
-
 ## Connecting a client
 
 The server runs inside the backend process — nothing extra to start — but the
@@ -95,6 +89,15 @@ tools (among others):
 The pushed query runs through the normal `POST /api/db/query`, so all of
 that path's pagination and order-by safety applies; the push layer never talks
 to ClickHouse directly.
+
+## Default workflow
+
+The server's MCP instructions set how the agent answers "run this query",
+without asking which tool: iterate read-only with `run_sql`, apply writes once
+with `run_script`, then `push_script` the final SQL without `run`, replacing
+the [Scripts](./scripts.md) editor's text (the browser never re-applies the
+writes). If the push fails, the agent replies with the SQL. Naming a tool
+(e.g. `push_query`) overrides the default.
 
 ## How it works
 
