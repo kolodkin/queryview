@@ -28,7 +28,8 @@ def open_connect(page: Page) -> None:
     A live connection lands on the explorer, and the backend session is shared
     across tests, so a previous test's connection can resume here. Connect
     flows navigate there explicitly rather than assuming it."""
-    page.goto("/", wait_until="networkidle")
+    # No networkidle: the nav renders only once the session is attached.
+    page.goto("/")
     page.get_by_test_id("nav-connect").click()
     expect(page.get_by_test_id("connect-page")).to_be_visible()
 
@@ -136,7 +137,10 @@ def context(context, base_url: str):
     sid = session["id"]
     # Release it so the page's own tab token can claim it on load.
     httpx.post(f"{base_url}/api/sessions/release", json={"tab": tab})
-    context.add_init_script(f"sessionStorage.setItem('qv_session', {sid!r});")
+    # A 1s heartbeat so tests that wait on the next beat don't idle for 10s.
+    context.add_init_script(
+        f"sessionStorage.setItem('qv_session', {sid!r}); sessionStorage.setItem('qv_heartbeat_ms', '1000');"
+    )
     return context
 
 

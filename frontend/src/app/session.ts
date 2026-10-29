@@ -32,8 +32,9 @@ export type SessionSummary = {
 export type SessionPatch = { url?: string; label?: string; workspace?: string }
 
 // Well inside the backend's 90s claim TTL, which also covers a hidden tab
-// throttled to about one beat a minute.
-const HEARTBEAT_MS = 10_000
+// throttled to about one beat a minute. The e2e suite shortens it per tab so
+// tests that wait on a beat don't idle for the full interval.
+const HEARTBEAT_MS = Number(tabRead('qv_heartbeat_ms')) || 10_000
 // Flushes queued view state after a pause in editing. A backstop, not the main
 // mechanism — the query panel flushes on focus-out and `pagehide` beacons what
 // is still pending — so a tab that dies mid-edit loses at most what was typed
