@@ -1,6 +1,17 @@
 # Frontend
 
-- `src/core` is backend-agnostic: it never fetches, routes, or reads app state
-  (`npm run lint` enforces this). `src/app` imports it only through
-  `src/core/index.ts`.
-- `README.md` here describes the layout and commands.
+React 19 + TypeScript + Vite + Tailwind. `npm run dev` proxies `/api` to the
+backend on port 8000; `npm run build` emits `dist/`, which the release workflow
+copies into the Python package.
+
+```
+src/
+  core/    backend-agnostic kernel — result parsing, cell rendering, query
+           params, presentation pickers, the dashboard sandbox
+  app/     the QueryView application — pages, connections, workspaces, git sync
+  main.tsx
+```
+
+- `src/core` never fetches, routes, or reads app state (`npm run lint`
+  enforces this). `src/app` imports it only through `src/core/index.ts`.
+- Tests sit next to their modules (`npm test`).
