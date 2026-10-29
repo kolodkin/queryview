@@ -5,26 +5,28 @@ description: Use when a doc page, design note or chat answer needs to show a scr
 
 # UI sketch
 
-One box per screen or panel, drawn with `┌ ─ ┐ │ └ ┘`, followed by a bullet
-per control. Show structure, not pixels: a reader should see what is where
-and what it is called. Example: the query panel.
+One box per screen or panel, in plain ASCII so it aligns in every viewer,
+followed by a bullet per control. Show structure, not pixels: a reader should
+see what is where and what it is called. Example: the query panel.
 
 ```
-┌────────────────────────────────────────────────┐
-│ 🟢 default               ← connection status    │
-│ [ query ]  [ Predefined queries… ▾ ]  [ Save ] │
-│ ┌────────────────────────────────────────────┐ │
-│ │ SELECT …                                   │ │  ← SQL textarea
-│ └────────────────────────────────────────────┘ │
-│ [Execute] [Fields]  Limit [100]  Offset [0]    │
-└────────────────────────────────────────────────┘
++-------------------------------------------------+
+| (o) default               <- connection status  |
+| [ query ]  [ Predefined queries... v ]  [ Save ]|
+| +---------------------------------------------+ |
+| | SELECT ...                                  | |  <- SQL textarea
+| +---------------------------------------------+ |
+| [Execute] [Fields]  Limit [100]  Offset [0]     |
++-------------------------------------------------+
 ```
 
-- `[Label]` is a button, `[ value ]` an input, `▾` a dropdown, `…` content
-  cut short, `🟢` a status dot.
+- `[Label]` is a button, `[ value ]` an input, `v` a dropdown, `...` content
+  cut short, `(o)` a status dot.
 - A nested box is a region: textarea, table, card, sidebar.
-- Annotate with `← note` to the right, outside or at the edge of the box;
+- Annotate with `<- note` to the right, outside or at the edge of the box;
   no prose inside the drawing.
+- Only ASCII: no box-drawing characters, arrows or emoji, which fonts render
+  at different widths. Every line of a box has the same length.
 - Labels read exactly as the screen shows them, and the bullets below use the
   same labels in **bold**.
 - Keep it under 15 lines; a second sketch is for a different state (a
