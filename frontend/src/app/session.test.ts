@@ -25,7 +25,10 @@ const SESSION = {
 }
 
 beforeEach(() => vi.resetModules())
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+})
 
 describe('tabStorage', () => {
   it('round-trips a value', () => {
@@ -310,6 +313,19 @@ describe('startHeartbeat', () => {
     vi.stubGlobal('fetch', fetchMock)
   })
   afterEach(() => vi.useRealTimers())
+
+  it('keeps a queued view change across a beat', async () => {
+    // The e2e build's beat, which lands inside the idle window before the flush.
+    vi.stubEnv('VITE_HEARTBEAT_MS', '1000')
+    const { attachSession, startHeartbeat, patchView, viewState } = await import('./session')
+    await attachSession()
+    const stop = startHeartbeat({ onChanged: vi.fn(), onTaken: vi.fn() })
+    patchView('query', { sql: 'SELECT 1' })
+    // The beat's reply carries the server's older ui.
+    await vi.advanceTimersByTimeAsync(1_500)
+    expect(viewState('query').sql).toBe('SELECT 1')
+    stop()
+  })
 
   it('reports a taken session and stops writing to it', async () => {
     const { attachSession, startHeartbeat, patchView, flushPatches, isTaken } =

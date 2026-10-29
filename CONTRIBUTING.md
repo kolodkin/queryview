@@ -97,7 +97,7 @@ uv run --group test pytest backend/queryview
 
 The e2e suite is [pytest-playwright](https://playwright.dev/python/docs/test-runners),
 installed via the `test` dependency group and run through `uv`. With the SPA
-built (`npm run build`) it starts its own backend on a throwaway `DATA_DIR`,
+built (`npm run build:e2e`, which shortens the session heartbeat) it starts its own backend on a throwaway `DATA_DIR`,
 one per worker when run in parallel:
 
 ```bash

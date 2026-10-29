@@ -23,8 +23,7 @@ log() { printf '\033[36m[e2e]\033[0m %s\n' "$*"; }
 
 if [ "${SKIP_BUILD:-}" != "1" ]; then
   log "building SPA"
-  # 1s heartbeat so tests that wait on the next beat don't idle for 10s.
-  VITE_HEARTBEAT_MS=1000 npm run build -w frontend
+  npm run build:e2e -w frontend
 fi
 
 log "running Playwright e2e tests"
