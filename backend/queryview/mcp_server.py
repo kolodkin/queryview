@@ -256,13 +256,15 @@ async def list_connections(session_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def list_databases(session_id: str) -> dict[str, Any]:
+async def list_databases(session_id: str, connection: str | None = None) -> dict[str, Any]:
     """List the databases of every connection list_connections shows (locked
-    ones are left out), fetched live from each server.
+    ones are left out), fetched live from each server; only `connection`'s
+    when given.
 
     Returns {"ok": True, "connections": [{name, type, databases}]}, where a
     connection that cannot be reached has "error" in place of "databases";
-    {"ok": False, "message"} for an unknown session.
+    {"ok": False, "message"} for an unknown session, or a `connection` that is
+    unknown or locked.
     """
     from .connect import _list_databases, _resolve, list_connections_for
 
@@ -280,7 +282,9 @@ async def list_databases(session_id: str) -> dict[str, Any]:
             **({"error": error} if databases is None else {"databases": databases}),
         }
 
-    conns = [c for c in await list_connections_for(session_id) if not c["locked"]]
+    conns = [c for c in await list_connections_for(session_id) if not c["locked"] and connection in (None, c["name"])]
+    if connection is not None and not conns:
+        return {"ok": False, "message": f'no connection named "{connection}"'}  # locked reads as unknown
     return {"ok": True, "connections": list(await asyncio.gather(*map(one, conns)))}
 
 
