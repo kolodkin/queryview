@@ -224,15 +224,15 @@ async def list_connections(session_id: str) -> dict[str, Any]:
     """List the connections a session can use: its session connections (memory
     only, this session only) and the saved ones, each tagged with "scope"
     ("session" | "saved"), "created_by" ("agent" | "user"), "active" and
-    "locked" (a saved connection the user keeps the agent off: every tool
-    refuses while the session is on it).
+    Locked saved connections are left out, even while a tab has one unlocked:
+    the lock is the connection's stored state, and the agent is kept off it.
 
     You may use_connection / remove_connection only scope="session",
     created_by="agent" entries; for anything else ask the user to switch in
     QueryView.
 
     Returns {"ok": True, "connections": [{name, type, scope, created_by,
-    active, locked}]} or {"ok": False, "message"} for an unknown session.
+    active}]} or {"ok": False, "message"} for an unknown session.
     """
     from .connect import list_connections_for
 
@@ -248,11 +248,40 @@ async def list_connections(session_id: str) -> dict[str, Any]:
                 "scope": c["scope"],
                 "created_by": c["created_by"],
                 "active": c["name"] == rec.connection_name,  # names are unique
-                "locked": c["locked"],
             }
             for c in await list_connections_for(session_id)
+            if not c["locked"]
         ],
     }
+
+
+@mcp.tool()
+async def list_databases(session_id: str) -> dict[str, Any]:
+    """List the databases of every connection list_connections shows (locked
+    ones are left out), fetched live from each server.
+
+    Returns {"ok": True, "connections": [{name, type, databases}]}, where a
+    connection that cannot be reached has "error" in place of "databases";
+    {"ok": False, "message"} for an unknown session.
+    """
+    from .connect import _list_databases, _resolve, list_connections_for
+
+    if await sessions.get_session_rec(session_id) is None:
+        return {"ok": False, "message": "unknown session"}
+
+    async def one(c: dict[str, Any]) -> dict[str, Any]:
+        found = await _resolve(session_id, c["name"])
+        if found is None:
+            return {"name": c["name"], "type": c["type"], "error": "config unreadable"}
+        databases, error = await _list_databases(*found)
+        return {
+            "name": c["name"],
+            "type": c["type"],
+            **({"error": error} if databases is None else {"databases": databases}),
+        }
+
+    conns = [c for c in await list_connections_for(session_id) if not c["locked"]]
+    return {"ok": True, "connections": list(await asyncio.gather(*map(one, conns)))}
 
 
 # Network drivers only: DuckDB's SQL reads any file the backend can.

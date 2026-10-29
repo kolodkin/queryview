@@ -195,8 +195,10 @@ its card and type one. On a session whose active connection is locked, every
 MCP tool that reads or writes data (`run_sql`, `run_script`, `select_database`,
 the table list in `session_info`, every push) answers `connection is locked`,
 and so does every REST call without the tab's unlock token (`403`).
-`list_connections` and `session_info` still name the connection and report
-`locked: true`. Session connections are never locked: they are the agent's own.
+`session_info` still names the connection and reports `locked: true`.
+`list_connections` and `list_databases` leave a locked connection out
+entirely, even while a tab has it unlocked: the lock is the connection's
+stored state, an unlock only that tab's. Session connections are never locked: they are the agent's own.
 
 Stored: only a salted scrypt hash of the passphrase (`lock_hash` on the
 `connections` row). Held by the tab: an **unlock token**, a random string the

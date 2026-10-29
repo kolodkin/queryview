@@ -102,8 +102,8 @@ def test_mcp_tools_are_refused_on_a_locked_connection():
     assert pushed["ok"] is False and pushed["message"] == "connection is locked"
     info = _run(mcp_server.session_info(sid))
     assert info["locked"] is True and info["tables"] == [] and "unlocked" not in info
-    listed = {x["name"]: x for x in _run(mcp_server.list_connections(sid))["connections"]}
-    assert listed["lock-mcp-duck"]["locked"] is True
+    listed = [x["name"] for x in _run(mcp_server.list_connections(sid))["connections"]]
+    assert "lock-mcp-duck" not in listed  # though this session is on it, unlocked
     # The REST push surface, with the session id only.
     assert c.post("/api/remote/push", json={"session_id": sid, "query": "SELECT 1"}).json() == {
         "ok": False,
@@ -273,3 +273,16 @@ def test_delete_drops_a_session_connection_of_this_session():
     assert c.request("DELETE", "/api/db/connections", json={"name": "del-session-duck"}).json() == {"ok": True}
     assert c.get("/api/session").json()["connected"] is False
     assert "del-session-duck" not in {x["name"] for x in c.get("/api/db/connections").json()["connections"]}
+
+
+def test_list_databases_leaves_out_locked_connections_even_when_unlocked():
+    c = _connected("lock-list-duck")
+    sid = c.headers["X-QV-Session"]
+    assert {"name": "lock-list-duck", "type": "duckdb", "databases": []} in _run(mcp_server.list_databases(sid))[
+        "connections"
+    ]
+    # The locking tab holds the unlock token, but the lock is the connection's.
+    assert c.post("/api/db/lock", json={"name": "lock-list-duck", "passphrase": "pw"}).json()["ok"]
+    names = [x["name"] for x in _run(mcp_server.list_databases(sid))["connections"]]
+    assert "lock-list-duck" not in names
+    assert _run(mcp_server.list_databases("no-such-session"))["ok"] is False
