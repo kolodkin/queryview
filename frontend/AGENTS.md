@@ -11,6 +11,5 @@ src/
   main.tsx
 ```
 
-`src/core` never fetches, routes, or reads app state, and `src/app` imports it
-only through `src/core/index.ts`, the surface another app can reuse.
-`npm run lint` enforces both.
+`src/core` never fetches, routes, or reads app state; `npm run lint` enforces
+that.
