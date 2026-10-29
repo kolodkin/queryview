@@ -23,7 +23,7 @@ log() { printf '\033[36m[e2e]\033[0m %s\n' "$*"; }
 
 if [ "${SKIP_BUILD:-}" != "1" ]; then
   log "building SPA"
-  npm run build -w frontend
+  npm run build:e2e -w frontend
 fi
 
 log "running Playwright e2e tests"

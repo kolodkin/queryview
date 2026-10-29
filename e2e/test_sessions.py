@@ -69,7 +69,7 @@ def test_a_tab_whose_session_is_taken_greys_out_until_it_takes_it_back(
     other = f"e2e-thief-{uuid.uuid4()}"
     httpx.post(f"{base_url}/api/sessions/select", json={"tab": other, "id": sid, "force": True})
     try:
-        # The next heartbeat (every 10s) finds it taken.
+        # The next heartbeat finds it taken.
         expect(page.get_by_test_id("session-taken")).to_be_visible(timeout=15_000)
 
         page.get_by_test_id("session-take-over").click()

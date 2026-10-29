@@ -28,7 +28,8 @@ def open_connect(page: Page) -> None:
     A live connection lands on the explorer, and the backend session is shared
     across tests, so a previous test's connection can resume here. Connect
     flows navigate there explicitly rather than assuming it."""
-    page.goto("/", wait_until="networkidle")
+    # No networkidle: the nav renders only once the session is attached.
+    page.goto("/")
     page.get_by_test_id("nav-connect").click()
     expect(page.get_by_test_id("connect-page")).to_be_visible()
 

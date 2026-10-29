@@ -32,8 +32,9 @@ export type SessionSummary = {
 export type SessionPatch = { url?: string; label?: string; workspace?: string }
 
 // Well inside the backend's 90s claim TTL, which also covers a hidden tab
-// throttled to about one beat a minute.
-const HEARTBEAT_MS = 10_000
+// throttled to about one beat a minute. `npm run build:e2e` shortens it so
+// tests that wait on a beat don't idle for the full interval.
+const HEARTBEAT_MS = Number(import.meta.env.VITE_HEARTBEAT_MS) || 10_000
 // Flushes queued view state after a pause in editing. A backstop, not the main
 // mechanism — the query panel flushes on focus-out and `pagehide` beacons what
 // is still pending — so a tab that dies mid-edit loses at most what was typed
@@ -83,7 +84,11 @@ export function activeWorkspace(): string {
 
 // Every server row lands here — attach, heartbeat, a patch response, a switch.
 function adopt(next: SessionState): SessionState {
-  state = { ...next, ui: next.ui ?? {} }
+  // Re-apply what is still queued: a beat or attach reply predates it.
+  const ui = { ...(next.ui ?? {}) }
+  for (const [view, changes] of Object.entries(pending.ui ?? {}))
+    ui[view] = { ...ui[view], ...changes }
+  state = { ...next, ui }
   tabWrite(SESSION_KEY, state.id)
   for (const f of rowListeners) f(state)
   return state

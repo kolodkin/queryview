@@ -311,6 +311,15 @@ describe('startHeartbeat', () => {
   })
   afterEach(() => vi.useRealTimers())
 
+  it('keeps a queued view change across a beat', async () => {
+    const { attachSession, patchView, viewState } = await import('./session')
+    await attachSession()
+    patchView('query', { sql: 'SELECT 1' })
+    // A beat is an attach whose reply carries the server's older ui.
+    await attachSession(true)
+    expect(viewState('query').sql).toBe('SELECT 1')
+  })
+
   it('reports a taken session and stops writing to it', async () => {
     const { attachSession, startHeartbeat, patchView, flushPatches, isTaken } =
       await import('./session')
