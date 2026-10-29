@@ -22,24 +22,14 @@
 
 # Tests
 
-1. Pytest tests live side by side with the code they test, inside the relevant
-   module package (e.g. `backend/queryview/test_queries.py`,
-   `backend/queryview/drivers/test_clickhouse.py`), with shared fixtures in
-   `backend/queryview/conftest.py`. They ship in the wheel, and the release
-   workflow runs them against the installed package
-   (`pytest --pyargs queryview`).
-2. Exception: e2e (Playwright) tests live in the top-level `e2e/` folder —
-   they test the running app through its HTTP surface, not a module.
+Before adding or changing a test, load the project `testing` skill: it says
+which layer a test belongs in, where it lives, and which fixtures to reuse.
 
 # Conventions
 
 ## Docs
 
-- **Remove superpowers plans and designs once implemented.** Files under
-  `docs/superpowers/plans/` and `docs/superpowers/specs/` exist only while the
-  work is pending; when a plan ships, delete its plan and spec in the same
-  change (the feature's page under `docs/` is the doc of record) and fix any
-  links that pointed at them.
+`docs/AGENTS.md` applies to everything under `docs/`.
 
 ## Python
 

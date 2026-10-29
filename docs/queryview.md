@@ -10,19 +10,19 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
 ## Layout
 
 ```
-┌───────────────────────────────────────────────────────────┐
-│ 🟢 default               ← connection status               │
-│                                                           │
-│                        QueryView                          │
-│                   Choose a connection                     │
-│  SAVED CONNECTIONS                          [Filter…]     │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐       │
-│  │ CH prod-ch 🟢 │ │ PG warehouse │ │ DK local     │       │
-│  │ default  2 h │ │ sales   3 d  │ │ —      just  │       │
-│  └──────────────┘ └──────────────┘ └──────────────┘       │
-│  NEW CONNECTION                                           │
-│  [CH ClickHouse +] [PG Postgres +] [DK DuckDB +]           │
-└───────────────────────────────────────────────────────────┘
++----------------------------------------------------------+
+| (o) default              <- connection status            |
+|                                                          |
+|                        QueryView                         |
+|                   Choose a connection                    |
+|  SAVED CONNECTIONS                          [Filter...]  |
+|  +---------------+ +---------------+ +---------------+   |
+|  | CH prod-ch (o)| | PG warehouse  | | DK local      |   |
+|  | default   2 h | | sales    3 d  | | -        just |   |
+|  +---------------+ +---------------+ +---------------+   |
+|  NEW CONNECTION                                          |
+|  [CH ClickHouse +] [PG Postgres +] [DK DuckDB +]         |
++----------------------------------------------------------+
 ```
 
 - **Saved connections** — most recent first: driver monogram, name, last
