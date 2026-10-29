@@ -121,8 +121,9 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: uv run --frozen --group test playwright install --with-deps chromium
 
+      # 1s heartbeat so tests that wait on the next beat don't idle for 10s.
       - name: Build frontend
-        run: npm run build -w frontend
+        run: VITE_HEARTBEAT_MS=1000 npm run build -w frontend
 
       - name: Start git daemon
         uses: ./.github/actions/start-git-daemon
