@@ -5,8 +5,14 @@ description: Use when a doc page, design note or chat answer needs to show a scr
 
 # UI sketch
 
-One box per screen or panel, in plain ASCII so it aligns in every viewer,
-followed by a bullet per control. Show structure, not pixels: a reader should
+## IMPORTANT
+
+Only ASCII: `+ - |` for boxes, `<-` for arrows, `...` for ellipsis, `(o)` for
+a status dot. No box-drawing characters, Unicode arrows or emoji: fonts render
+them at different widths and the box falls apart. Every line of a box has the
+same length; count before you commit.
+
+One box per screen or panel, followed by a bullet per control. Show structure, not pixels: a reader should
 see what is where and what it is called. Example: the query panel.
 
 ```
@@ -25,8 +31,6 @@ see what is where and what it is called. Example: the query panel.
 - A nested box is a region: textarea, table, card, sidebar.
 - Annotate with `<- note` to the right, outside or at the edge of the box;
   no prose inside the drawing.
-- Only ASCII: no box-drawing characters, arrows or emoji, which fonts render
-  at different widths. Every line of a box has the same length.
 - Labels read exactly as the screen shows them, and the bullets below use the
   same labels in **bold**.
 - Keep it under 15 lines; a second sketch is for a different state (a
