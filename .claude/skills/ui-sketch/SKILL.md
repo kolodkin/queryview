@@ -7,15 +7,15 @@ description: Use when a doc page, design note or chat answer needs to show a scr
 
 One box per screen or panel, drawn with `┌ ─ ┐ │ └ ┘`, followed by a bullet
 per control. Show structure, not pixels: a reader should see what is where
-and what it is called.
+and what it is called. Example: the query panel.
 
 ```
 ┌───────────────────────────────────────────────┐
 │ 🟢 default              ← connection status    │
 │ [ query ]  [ Predefined queries… ▾ ]  [ Save ] │
-│ ┌───────────────────────────────────────────┐ │
-│ │ SELECT …                                  │ │  ← SQL textarea
-│ └───────────────────────────────────────────┘ │
+│ ┌───────────────────────────────────────────┐  │
+│                                                │  SELECT …                                  │ │  ← SQL textarea
+│ └───────────────────────────────────────────┘  │
 │ [Execute] [Fields]  Limit [100]  Offset [0]    │
 └───────────────────────────────────────────────┘
 ```
