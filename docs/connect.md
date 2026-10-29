@@ -91,17 +91,17 @@ A session connection has **✕** only.
 ## Flow
 
 ```
-cards ── "New connection" card ──▶ connection form
-                                     │
-                     ┌── Test ───────┤   (inline pass/fail, stays here)
-                     │               │
-                     └── Connect ────┴──▶ database picker
-                                              │
-                              pick a database  │
-                                              ▼
-                              🟢 <connection> · <database>  (explorer)
+cards -- "New connection" card --> connection form
+                                     |
+                     +-- Test -------+   (inline pass/fail, stays here)
+                     |               |
+                     +-- Connect ----+--> database picker
+                                              |
+                              pick a database |
+                                              v
+                              (o) <connection> - <database>  (explorer)
 
-cards ── saved card ──▶ opens <name>, activates it ──▶ database picker ──▶ pick
+cards -- saved card --> opens <name>, activates it --> database picker --> pick
 ```
 
 ## Database picker
