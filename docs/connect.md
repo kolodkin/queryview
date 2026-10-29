@@ -198,7 +198,8 @@ and so does every REST call without the tab's unlock token (`403`).
 `session_info` still names the connection and reports `locked: true`.
 `list_connections` and `list_databases` leave a locked connection out
 entirely, even while a tab has it unlocked: the lock is the connection's
-stored state, an unlock only that tab's. Session connections are never locked: they are the agent's own.
+stored state, an unlock only that tab's. Session connections are never
+locked: they are the agent's own.
 
 Stored: only a salted scrypt hash of the passphrase (`lock_hash` on the
 `connections` row). Held by the tab: an **unlock token**, a random string the

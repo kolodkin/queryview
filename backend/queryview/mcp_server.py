@@ -223,7 +223,7 @@ async def session_info(session_id: str) -> dict[str, Any]:
 async def list_connections(session_id: str) -> dict[str, Any]:
     """List the connections a session can use: its session connections (memory
     only, this session only) and the saved ones, each tagged with "scope"
-    ("session" | "saved"), "created_by" ("agent" | "user"), "active" and
+    ("session" | "saved"), "created_by" ("agent" | "user") and "active".
     Locked saved connections are left out, even while a tab has one unlocked:
     the lock is the connection's stored state, and the agent is kept off it.
 
@@ -279,11 +279,15 @@ async def list_databases(session_id: str, connection: str | None = None) -> dict
 async def _databases_of(session_id: str, c: dict[str, Any]) -> dict[str, Any]:
     """One list_connections entry's {name, type} plus its "databases" or "error"."""
     from .connect import _list_databases, _resolve
+    from .drivers.base import error_message
 
     found = await _resolve(session_id, c["name"])
-    if found is None:
-        return {"name": c["name"], "type": c["type"], "error": "config unreadable"}
-    databases, error = await _list_databases(*found)
+    if found is None:  # deleted meanwhile, or its config no longer decrypts
+        return {"name": c["name"], "type": c["type"], "error": "connection unavailable"}
+    try:
+        databases, error = await _list_databases(*found)
+    except Exception as e:  # one bad server must not fail the whole list
+        databases, error = None, error_message(e)
     return {
         "name": c["name"],
         "type": c["type"],

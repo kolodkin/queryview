@@ -292,3 +292,14 @@ def test_list_databases_leaves_out_locked_connections_even_when_unlocked():
         "message": 'no connection named "lock-list-duck"'
     }
     assert _run(mcp_server.list_databases("no-such-session"))["ok"] is False
+
+
+def test_list_databases_reports_a_failing_connection_without_failing_the_rest(monkeypatch):
+    sid = _connected("list-fail-duck").headers["X-QV-Session"]
+
+    async def boom(config):
+        raise RuntimeError("server gone")
+
+    monkeypatch.setattr(connect.DRIVERS["duckdb"], "list_databases", boom)
+    out = _run(mcp_server.list_databases(sid, "list-fail-duck"))
+    assert out["connections"] == [{"name": "list-fail-duck", "type": "duckdb", "error": "RuntimeError: server gone"}]
