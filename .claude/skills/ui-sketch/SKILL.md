@@ -10,14 +10,14 @@ per control. Show structure, not pixels: a reader should see what is where
 and what it is called. Example: the query panel.
 
 ```
-┌───────────────────────────────────────────────┐
-│ 🟢 default              ← connection status    │
-│ [ query ]  [ Predefined queries… ▾ ]  [ Save ]│
-│ ┌───────────────────────────────────────────┐ │
-│ │ SELECT …                                  │ │  ← SQL textarea
-│ └───────────────────────────────────────────┘ │
-│ [Execute] [Fields]  Limit [100]  Offset [0]   │
-└───────────────────────────────────────────────┘
+┌────────────────────────────────────────────────┐
+│ 🟢 default               ← connection status    │
+│ [ query ]  [ Predefined queries… ▾ ]  [ Save ] │
+│ ┌────────────────────────────────────────────┐ │
+│ │ SELECT …                                   │ │  ← SQL textarea
+│ └────────────────────────────────────────────┘ │
+│ [Execute] [Fields]  Limit [100]  Offset [0]    │
+└────────────────────────────────────────────────┘
 ```
 
 - `[Label]` is a button, `[ value ]` an input, `▾` a dropdown, `…` content
