@@ -38,4 +38,18 @@ export default defineConfig([
       ],
     },
   },
+  {
+    // src/core/index.ts is the surface another app can reuse.
+    files: ['src/app/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            { group: ['**/core/**', '!**/core/index'], message: 'app imports core only through core/index.ts.' },
+          ],
+        },
+      ],
+    },
+  },
 ])

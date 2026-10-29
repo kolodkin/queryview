@@ -1,8 +1,7 @@
 # Frontend
 
 React 19 + TypeScript + Vite + Tailwind. `npm run dev` proxies `/api` to the
-backend on port 8000; `npm run build` emits `dist/`, which the release workflow
-copies into the Python package.
+backend on port 8000; `npm run build` emits `dist/`.
 
 ```
 src/
@@ -12,6 +11,6 @@ src/
   main.tsx
 ```
 
-- `src/core` never fetches, routes, or reads app state (`npm run lint`
-  enforces this). `src/app` imports it only through `src/core/index.ts`.
-- Tests sit next to their modules (`npm test`).
+`src/core` never fetches, routes, or reads app state, and `src/app` imports it
+only through `src/core/index.ts`, the surface another app can reuse.
+`npm run lint` enforces both.
