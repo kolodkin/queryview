@@ -224,8 +224,7 @@ async def list_connections(session_id: str) -> dict[str, Any]:
     """List the connections a session can use: its session connections (memory
     only, this session only) and the saved ones, each tagged with "scope"
     ("session" | "saved"), "created_by" ("agent" | "user") and "active".
-    Locked saved connections are left out, even while a tab has one unlocked:
-    the lock is the connection's stored state, and the agent is kept off it.
+    Locked saved connections are left out, even while a tab has one unlocked.
 
     You may use_connection / remove_connection only scope="session",
     created_by="agent" entries; for anything else ask the user to switch in
