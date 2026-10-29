@@ -6,9 +6,9 @@ description: Use when a doc page, design note or chat answer needs to show a scr
 # UI sketch
 
 IMPORTANT!!! Only ASCII: `+ - |` for boxes, `<-` for arrows, `...` for
-ellipsis, `(o)` for a status dot. No box-drawing characters, Unicode arrows or
-emoji: fonts render them at different widths and the box falls apart. Every
-line of a box has the same length; count before you commit.
+ellipsis. No box-drawing characters, Unicode arrows or emoji: fonts render
+them at different widths and the box falls apart. Every line of a box has the
+same length; count before you commit.
 
 One box per screen or panel, followed by a bullet per control. Show structure,
 not pixels: a reader should see what is where and what it is called. Example:
@@ -26,7 +26,7 @@ the query panel.
 ```
 
 - `[Label]` is a button, `[ value ]` an input, `v` a dropdown, `...` content
-  cut short, `(o)` a status dot.
+  cut short.
 - A nested box is a region: textarea, table, card, sidebar.
 - Annotate with `<- note` to the right, outside or at the edge of the box;
   no prose inside the drawing.
