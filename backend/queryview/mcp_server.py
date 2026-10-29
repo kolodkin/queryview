@@ -266,26 +266,29 @@ async def list_databases(session_id: str, connection: str | None = None) -> dict
     {"ok": False, "message"} for an unknown session, or a `connection` that is
     unknown or locked.
     """
-    from .connect import _list_databases, _resolve, list_connections_for
+    from .connect import list_connections_for
 
     if await sessions.get_session_rec(session_id) is None:
         return {"ok": False, "message": "unknown session"}
-
-    async def one(c: dict[str, Any]) -> dict[str, Any]:
-        found = await _resolve(session_id, c["name"])
-        if found is None:
-            return {"name": c["name"], "type": c["type"], "error": "config unreadable"}
-        databases, error = await _list_databases(*found)
-        return {
-            "name": c["name"],
-            "type": c["type"],
-            **({"error": error} if databases is None else {"databases": databases}),
-        }
-
     conns = [c for c in await list_connections_for(session_id) if not c["locked"] and connection in (None, c["name"])]
     if connection is not None and not conns:
         return {"ok": False, "message": f'no connection named "{connection}"'}  # locked reads as unknown
-    return {"ok": True, "connections": list(await asyncio.gather(*map(one, conns)))}
+    return {"ok": True, "connections": list(await asyncio.gather(*(_databases_of(session_id, c) for c in conns)))}
+
+
+async def _databases_of(session_id: str, c: dict[str, Any]) -> dict[str, Any]:
+    """One list_connections entry's {name, type} plus its "databases" or "error"."""
+    from .connect import _list_databases, _resolve
+
+    found = await _resolve(session_id, c["name"])
+    if found is None:
+        return {"name": c["name"], "type": c["type"], "error": "config unreadable"}
+    databases, error = await _list_databases(*found)
+    return {
+        "name": c["name"],
+        "type": c["type"],
+        **({"error": error} if databases is None else {"databases": databases}),
+    }
 
 
 # Network drivers only: DuckDB's SQL reads any file the backend can.
