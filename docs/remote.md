@@ -48,9 +48,9 @@ tools (among others):
   discovery. The agent switches only to its own session connections (below).
 - Connections ([access rule](./connect.md#session-connections)):
   `list_connections(session_id)` tags each with `scope`, `created_by`,
-  `active`, leaving out [locked](./connect.md#locked-connections) ones, even
-  when a tab has unlocked them; `list_databases(session_id, connection?)` lists
-  the databases of each listed connection, or of `connection` only.
+  `active`, leaving out [locked](./connect.md#locked-connections) ones;
+  `list_databases(session_id, connection?)` lists the databases of each listed
+  connection, or of `connection` only.
   `add_connection(session_id, name, type, config)` adds a ClickHouse or
   Postgres session connection; `use_connection(session_id, name, database?)`,
   `select_database(session_id, database)` and `remove_connection(session_id,

@@ -288,8 +288,9 @@ def test_list_databases_leaves_out_locked_connections_even_when_unlocked():
     assert c.post("/api/db/lock", json={"name": "lock-list-duck", "passphrase": "pw"}).json()["ok"]
     names = [x["name"] for x in _run(mcp_server.list_databases(sid))["connections"]]
     assert "lock-list-duck" not in names
-    assert _run(mcp_server.list_databases(sid, "lock-list-duck")) == _run(mcp_server.list_databases(sid, "nope")) | {
-        "message": 'no connection named "lock-list-duck"'
+    assert _run(mcp_server.list_databases(sid, "lock-list-duck")) == {
+        "ok": False,
+        "message": 'no connection named "lock-list-duck"',
     }
     assert _run(mcp_server.list_databases("no-such-session"))["ok"] is False
 

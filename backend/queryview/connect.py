@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from alembic.config import Config
 
 from .drivers import DRIVERS
-from .drivers.base import DriverConfig, Err, RowsResult, select_all_sql
+from .drivers.base import DriverConfig, Err, RowsResult, error_message, select_all_sql
 
 # --- Storage (SQLite, lazily opened) --------------------------------------
 
@@ -666,6 +666,24 @@ async def list_connections_for(sid: str) -> list[dict[str, Any]]:
         for n, c in _session_conns.get(sid, {}).items()
     ]
     return own + [{**c, "scope": "saved", "created_by": "user"} for c in await list_connections()]
+
+
+async def agent_connections_for(sid: str) -> list[dict[str, Any]]:
+    """list_connections_for minus locked ones: the agent never sees those, even
+    while a tab has one unlocked (the lock is the connection's stored state)."""
+    return [c for c in await list_connections_for(sid) if not c["locked"]]
+
+
+async def list_databases_of(sid: str, name: str) -> tuple[list[str] | None, str | None]:
+    """A connection's live database list, or (None, message); never raises, so
+    one bad server can't fail a listing of many."""
+    found = await _resolve(sid, name)
+    if found is None:  # deleted meanwhile, or its config no longer decrypts
+        return None, "connection unavailable"
+    try:
+        return await _list_databases(*found)
+    except Exception as e:
+        return None, error_message(e)
 
 
 def _session_name_taken(name: str) -> bool:
