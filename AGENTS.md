@@ -29,7 +29,8 @@ which layer a test belongs in, where it lives, and which fixtures to reuse.
 
 ## Docs
 
-`docs/AGENTS.md` applies to everything under `docs/`.
+`docs/AGENTS.md` applies to everything under `docs/`; `frontend/AGENTS.md` to
+everything under `frontend/`.
 
 ## Python
 
