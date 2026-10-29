@@ -3,8 +3,7 @@ name: CI
 on:
   workflow_dispatch:
   pull_request:
-  # Runs on main seed the caches (uv, npm, Playwright) that fresh PR branches
-  # inherit; without them every new branch's first run reinstalls everything.
+  # Runs on main seed the caches (uv, npm, Playwright) a fresh PR branch inherits.
   push:
     branches: [main]
 
