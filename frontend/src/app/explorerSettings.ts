@@ -1,7 +1,7 @@
 // The explorer's remembered settings, kept in the session's `ui` blob under
 // the 'explorer' view (session.ts holds the storage shape).
-// Today just the Tables sidebar width, so a sidebar dragged wide enough for
-// long table names stays that way.
+// The Tables sidebar width, so a sidebar dragged wide enough for long table
+// names stays that way, and the DuckDB folder mode's union-by-name flag.
 
 import { patchView, viewState } from './session'
 
@@ -25,4 +25,13 @@ export function loadSidebarWidth(): number {
 
 export function saveSidebarWidth(width: number): void {
   patchView(VIEW, { sidebarWidth: clampSidebarWidth(width) })
+}
+
+// Whether folder-mode glob entries match columns by name across files.
+export function loadUnionByName(): boolean {
+  return viewState(VIEW).unionByName === true
+}
+
+export function saveUnionByName(on: boolean): void {
+  patchView(VIEW, { unionByName: on })
 }

@@ -5,7 +5,9 @@ import {
   MIN_SIDEBAR_WIDTH,
   clampSidebarWidth,
   loadSidebarWidth,
+  loadUnionByName,
   saveSidebarWidth,
+  saveUnionByName,
 } from './explorerSettings'
 
 // The width lives in the session's `ui` blob now, so the test fakes the session
@@ -64,5 +66,15 @@ describe('the remembered sidebar width', () => {
   it('defaults when the view has other settings but no width', () => {
     ui.view = { future: 'keep me' }
     expect(loadSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH)
+  })
+})
+
+describe('unionByName', () => {
+  it('is off until saved on', () => {
+    expect(loadUnionByName()).toBe(false)
+    saveUnionByName(true)
+    expect(loadUnionByName()).toBe(true)
+    saveUnionByName(false)
+    expect(loadUnionByName()).toBe(false)
   })
 })

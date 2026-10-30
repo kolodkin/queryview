@@ -22,8 +22,11 @@ import {
   MIN_SIDEBAR_WIDTH,
   clampSidebarWidth,
   loadSidebarWidth,
+  loadUnionByName,
   saveSidebarWidth,
+  saveUnionByName,
 } from './explorerSettings'
+import { isFolderNav } from './folderNav'
 import { apiFetch } from './api'
 
 // Sidebar entry from /api/db/tables. rows/bytes are engine estimates — null
@@ -69,6 +72,8 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   // Sidebar width, dragged on its right edge and remembered across reloads so
   // long table names stay readable.
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
+  // Folder mode's glob entries: union_by_name on or off (docs/explorer.md).
+  const [union, setUnion] = useState(loadUnionByName)
   const [dragging, setDragging] = useState(false)
   const asideRef = useRef<HTMLElement | null>(null)
   // Captured on grab: the panel's left edge (fixed — widening the row's first
@@ -102,7 +107,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     setTablesLoading(true) // eslint-disable-line react-hooks/set-state-in-effect
     void (async () => {
       try {
-        const res = await apiFetch('/api/db/tables')
+        const res = await apiFetch(`/api/db/tables${union ? '?union=1' : ''}`)
         const data = await res.json()
         if (cancelled) return
         if (data.ok) {
@@ -129,7 +134,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, scope])
+  }, [ready, scope, union])
 
   const runQuery = useCallback(async (sql: string, lim: number, off: number, ord: OrderCol[]) => {
     const ticket = ++runSeq.current
@@ -302,6 +307,23 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
       >
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-slate-200">Tables</h2>
+          {connection && isFolderNav(connection) && (
+            <label
+              className="flex items-center gap-1 text-xs text-slate-300"
+              title="Match glob columns by name"
+            >
+              <input
+                type="checkbox"
+                data-testid="explorer-union"
+                checked={union}
+                onChange={(e) => {
+                  setUnion(e.target.checked)
+                  saveUnionByName(e.target.checked)
+                }}
+              />
+              Union by name
+            </label>
+          )}
           {sidebarWidth !== DEFAULT_SIDEBAR_WIDTH && (
             <button
               type="button"
