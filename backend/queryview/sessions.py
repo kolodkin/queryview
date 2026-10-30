@@ -289,7 +289,7 @@ async def _sweep(s: AsyncSession, now: int) -> None:
         col(Session.claimed_by).is_(None),
         col(Session.last_active_at) < now - SESSION_CLAIM_TTL_MS,
     )
-    for sid in (await s.exec(gone.returning(Session.id))).scalars().all():
+    for sid in (await s.exec(gone.returning(col(Session.id)))).scalars().all():
         forget_session(sid)
 
 
