@@ -70,10 +70,78 @@ def _list_folders(root: str) -> list[str]:
     return [folders[0], *sorted(folders[1:])]
 
 
-def _open(path: str, read_only: bool = True):
+def _sql_str(value: str) -> str:
+    """`value` as a single-quoted SQL string literal."""
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _open(path: str, database: str | None, read_only: bool = True):
+    # Folder mode has no database file: an in-memory connection whose
+    # file_search_path is the selected folder, so `read_csv('x.csv')` and
+    # saved queries resolve against the folder being browsed.
+    if _is_folder(path):
+        con = duckdb.connect(":memory:")
+        con.execute(f"SET file_search_path = {_sql_str(os.path.join(path, database or '.'))}")
+        return con
     # read_only avoids lock contention between concurrent describe/query opens;
     # :memory: cannot be read_only, so open it read-write.
     return duckdb.connect(path, read_only=(read_only and path != ":memory:"))
+
+
+# Data files a folder lists as tables: base extension -> DuckDB reader. A
+# non-parquet one may also carry a .gz or .zst suffix (parquet compresses
+# internally); DuckDB infers the compression from the suffix.
+_READERS = {
+    ".parquet": "read_parquet",
+    ".csv": "read_csv",
+    ".tsv": "read_csv",
+    ".json": "read_json",
+    ".jsonl": "read_json",
+    ".ndjson": "read_json",
+}
+_COMPRESSIONS = (".gz", ".zst")
+
+
+def _data_ext(name: str) -> str | None:
+    """The full data extension of a file name (`.csv`, `.csv.gz`), or None
+    when the folder lister should skip the file."""
+    lower = name.lower()
+    base, comp = lower, ""
+    for c in _COMPRESSIONS:
+        if lower.endswith(c):
+            base, comp = lower[: -len(c)], c
+            break
+    _stem, ext = os.path.splitext(base)
+    if ext not in _READERS or (comp and ext == ".parquet"):
+        return None
+    return ext + comp
+
+
+def _read_query(name: str, union: bool) -> str:
+    """The browse SELECT for a file or glob name, relative to file_search_path."""
+    ext = _data_ext(name) or ""
+    base = next((ext[: -len(c)] for c in _COMPRESSIONS if ext.endswith(c)), ext)
+    extra = ", union_by_name = true" if union and "*" in name else ""
+    return f"SELECT * FROM {_READERS[base]}({_sql_str(name)}{extra})"
+
+
+def _list_files(folder: str, union: bool) -> list[dict[str, Any]]:
+    """Data files directly in `folder`, then one `*.<ext>` glob per extension
+    with two or more files. rows is never estimated; bytes is the file size."""
+    files = sorted(
+        (e.name, e.stat().st_size)
+        for e in os.scandir(folder)
+        if e.is_file(follow_symlinks=False) and not e.name.startswith(".") and _data_ext(e.name)
+    )
+    tables = [{"name": n, "rows": None, "bytes": b, "query": _read_query(n, union)} for n, b in files]
+    globs: dict[str, list[int]] = {}  # extension -> sizes of its files
+    for n, b in files:
+        globs.setdefault(_data_ext(n) or "", []).append(b)
+    for ext, sizes in sorted(globs.items()):
+        if len(sizes) >= 2:
+            name = f"*{ext}"
+            tables.append({"name": name, "rows": None, "bytes": sum(sizes), "query": _read_query(name, union)})
+    return tables
 
 
 _READ_STATEMENTS = {duckdb.StatementType.SELECT, duckdb.StatementType.EXPLAIN}
@@ -112,7 +180,7 @@ class DuckDBDriver:
         def _work():
             if _is_folder(config.path) and not os.access(config.path, os.R_OK):
                 raise PermissionError(f"cannot read {config.path}")
-            con = _open(":memory:" if _is_folder(config.path) else config.path)
+            con = _open(config.path, None)
             try:
                 return _scalar(con, "SELECT 1")
             finally:
@@ -135,13 +203,20 @@ class DuckDBDriver:
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
 
-    async def list_tables(self, config: DuckConfig, database: str | None) -> TablesResult | Err:
+    async def list_tables(self, config: DuckConfig, database: str | None, union: bool = False) -> TablesResult | Err:
+        if _is_folder(config.path):
+            try:
+                folder = os.path.join(config.path, database or ".")
+                return TablesResult(await asyncio.to_thread(_list_files, folder, union))
+            except Exception as e:  # noqa: BLE001
+                return Err(error_message(e))
+
         # SHOW TABLES for the name set, joined with duckdb_tables()'s estimated
         # row count (absent for views). Bytes are distinct storage blocks ×
         # block size from pragma_storage_info — metadata only, no data scan;
         # None for views and whenever the pragma has nothing (e.g. :memory:).
         def _work():
-            con = _open(config.path)
+            con = _open(config.path, database)
             try:
                 names = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
                 est = dict(con.execute("SELECT table_name, estimated_size FROM duckdb_tables()").fetchall())
@@ -182,7 +257,7 @@ class DuckDBDriver:
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias="_qv")
 
         def _work() -> QueryRows:
-            con = _open(config.path)
+            con = _open(config.path, database)
             try:
                 return _rel_rows(con.sql(paginated))
             finally:
@@ -206,7 +281,7 @@ class DuckDBDriver:
 
     async def run_sql(self, config: DuckConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
         def _work() -> QueryRows:
-            con = _open(config.path)
+            con = _open(config.path, database)
             timer = threading.Timer(RUN_SQL_TIMEOUT_SECONDS, con.interrupt)  # DuckDB has no server-side limit
             timer.start()
             try:
@@ -245,7 +320,7 @@ class DuckDBDriver:
         inner = sql.rstrip().rstrip(";")
 
         def _work():
-            con = _open(config.path)
+            con = _open(config.path, database)
             try:
                 # DuckDB's DESCRIBE returns (column_name, column_type, ...).
                 return con.execute(f"DESCRIBE {inner}").fetchall()
@@ -275,7 +350,7 @@ class DuckDBDriver:
                 return StatementResult(stmt, False, message=error_message(e))
 
         try:
-            con = await asyncio.to_thread(_open, config.path, False)
+            con = await asyncio.to_thread(_open, config.path, database, False)
         except Exception as e:  # noqa: BLE001
             # The open itself failed: report it against the whole script.
             return [StatementResult(sql, False, message=error_message(e))]

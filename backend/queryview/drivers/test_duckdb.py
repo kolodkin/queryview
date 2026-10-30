@@ -6,6 +6,7 @@ validation are covered by test_driver_contract."""
 from __future__ import annotations
 
 import asyncio
+import os
 
 import duckdb
 import pytest
@@ -180,3 +181,40 @@ def test_list_databases_in_folder_mode_lists_root_and_subfolders(folder):
 
 def test_test_connection_succeeds_on_a_folder(folder):
     assert _run(DuckDBDriver().test(DuckConfig(folder)))["ok"] is True
+
+
+def test_list_tables_in_folder_mode_lists_files_and_globs(folder):
+    r = _run(DuckDBDriver().list_tables(DuckConfig(folder), "."))
+    names = [t["name"] for t in r.tables]
+    assert names == ["extra.csv", "items.csv", "o'neil.csv", "*.csv"]
+    items = next(t for t in r.tables if t["name"] == "items.csv")
+    assert items["rows"] is None and items["bytes"] == os.path.getsize(os.path.join(folder, "items.csv"))
+    assert items["query"] == "SELECT * FROM read_csv('items.csv')"
+    glob = r.tables[-1]
+    assert glob["query"] == "SELECT * FROM read_csv('*.csv')"
+    assert glob["bytes"] == sum(t["bytes"] for t in r.tables[:-1])
+    quoted = next(t for t in r.tables if t["name"] == "o'neil.csv")
+    assert quoted["query"] == "SELECT * FROM read_csv('o''neil.csv')"
+
+
+def test_list_tables_union_flag_only_changes_globs(folder):
+    r = _run(DuckDBDriver().list_tables(DuckConfig(folder), ".", union=True))
+    assert r.tables[-1]["query"] == "SELECT * FROM read_csv('*.csv', union_by_name = true)"
+    assert r.tables[0]["query"] == "SELECT * FROM read_csv('extra.csv')"
+
+
+def test_list_tables_recognizes_compressed_files_in_a_subfolder(folder):
+    r = _run(DuckDBDriver().list_tables(DuckConfig(folder), "sub"))
+    assert [t["name"] for t in r.tables] == ["nested.csv.gz"]
+    assert r.tables[0]["query"] == "SELECT * FROM read_csv('nested.csv.gz')"
+
+
+def test_folder_queries_resolve_relative_to_the_selected_folder(folder):
+    d = DuckDBDriver()
+    cfg = DuckConfig(folder)
+    r = _run(d.run_query(cfg, "SELECT * FROM read_csv('items.csv')", ".", 10, 0, [{"name": "id", "dir": "ASC"}]))
+    assert r.rows.data == [[1, "alpha"], [2, "beta"], [3, "gamma"]]
+    r = _run(d.run_query(cfg, "SELECT count(*) AS n FROM read_csv('nested.csv.gz')", "sub", 10, 0, None))
+    assert isinstance(r, RowsResult) and r.rows.data == [[3]]
+    r = _run(d.run_query(cfg, "SELECT count(*) AS n FROM read_csv('*.csv', union_by_name = true)", ".", 10, 0, None))
+    assert r.rows.data == [[5]]
