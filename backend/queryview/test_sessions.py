@@ -155,9 +155,13 @@ def test_a_released_named_session_is_resumed_by_the_next_tab():
 
 def test_a_released_unnamed_session_is_scratch():
     """Unnamed sessions live only in the tab showing them: a new tab never
-    resumes one, and it is swept once released for a claim TTL."""
+    resumes one, and it is swept — in-memory connections too, as the delete
+    route forgets them — once released for a claim TTL."""
+    from queryview import connect
+
     _free_everything()
     scratch, _ = _run(sessions.attach("tab-a", None))
+    connect._session_conns[scratch.id] = {}
     _run(sessions.release("tab-a"))
     fresh, created = _run(sessions.attach("tab-b", None))
     assert created is True
@@ -165,40 +169,17 @@ def test_a_released_unnamed_session_is_scratch():
     # Within the TTL it survives: a reload's release beacon may land after
     # its re-attach, and the next heartbeat re-claims it.
     assert _run(sessions.get_session_rec(scratch.id)) is not None
-    _run(sessions.touch_for_test(scratch.id, claim_seen_at=_stale()))
+    _run(sessions.touch_for_test(scratch.id, last_active_at=_stale()))
     _run(sessions.attach("tab-b", fresh.id))
     assert _run(sessions.get_session_rec(scratch.id)) is None
-
-
-def test_sweeping_drops_the_session_connections_too():
-    """The sweep is a delete: the in-memory state the delete route forgets must
-    go with the row, or every scratch session leaks its connections."""
-    from queryview import connect
-
-    _free_everything()
-    scratch, _ = _run(sessions.attach("tab-a", None))
-    connect._session_conns[scratch.id] = {}
-    _run(sessions.release("tab-a"))
-    _run(sessions.touch_for_test(scratch.id, claim_seen_at=_stale()))
-    _run(sessions.attach("tab-b", None))
     assert scratch.id not in connect._session_conns
-
-
-def test_an_unnamed_session_released_before_releases_were_timed_is_swept():
-    """A row from before this rule has no release time: it goes by last activity
-    rather than lingering, unresumable, in the dropdown."""
-    _free_everything()
-    legacy = _run(sessions.create_session())
-    _run(sessions.touch_for_test(legacy.id, last_active_at=_stale()))
-    _run(sessions.attach("tab-b", None))
-    assert _run(sessions.get_session_rec(legacy.id)) is None
 
 
 def test_a_lapsed_unnamed_claim_is_not_swept():
     """A crashed or sleeping tab never released; its session waits for it."""
     _free_everything()
     asleep, _ = _run(sessions.attach("tab-a", None))
-    _run(sessions.touch_for_test(asleep.id, claim_seen_at=_stale()))
+    _run(sessions.touch_for_test(asleep.id, claim_seen_at=_stale(), last_active_at=_stale()))
     _run(sessions.attach("tab-b", None))
     assert _run(sessions.get_session_rec(asleep.id)) is not None
 

@@ -56,7 +56,7 @@ class Session(SQLModel, table=True):
     url: str = Field(default=DEFAULT_URL)  # path + search
     ui: str = Field(default="{}")  # JSON, namespaced by view
     claimed_by: str | None = Field(default=None, index=True)  # tab token
-    claim_seen_at: int | None = Field(default=None)  # unix ms; the release time once unclaimed
+    claim_seen_at: int | None = Field(default=None)  # unix ms
     last_active_at: int = Field(index=True)  # unix ms
 
 
@@ -267,51 +267,43 @@ async def delete_session(sid: str) -> tuple[bool, str]:
             return False, "held"
         await s.delete(row)
         await s.commit()
+        forget_session(sid)
         return True, ""
 
 
 # --- Claims (one tab holds a session at a time) ---------------------------
 
 
-def _free(tab: str, now: int):
-    """Release what `tab` holds. `claim_seen_at` keeps the release time: an
-    unnamed session is swept once that is a claim TTL old (`_sweep`)."""
-    return update(Session).where(col(Session.claimed_by) == tab).values(claimed_by=None, claim_seen_at=now)
+def _free(tab: str):
+    """Release what `tab` holds."""
+    return update(Session).where(col(Session.claimed_by) == tab).values(claimed_by=None, claim_seen_at=None)
 
 
-async def _sweep(s: AsyncSession, keep_id: str, now: int) -> None:
-    """Drop unnamed sessions released a claim TTL ago: they are scratch, kept only
-    while a tab shows them. The TTL is the reload grace — a reload's release
-    beacon can land after its re-attach, and the next heartbeat re-claims within
-    it. A lapsed claim (a crashed or sleeping tab) is left alone: it may wake.
-    A row never stamped (released before releases were timed) goes by its last
-    activity. Each swept id also drops its in-memory connections (`forget_session`),
-    as the delete route does."""
-    dead = (
+async def _sweep(s: AsyncSession, now: int) -> None:
+    """Delete unnamed sessions idle and unclaimed for a claim TTL — scratch, kept
+    only while a tab shows them (docs/session.md) — and forget their in-memory
+    connections. A lapsed claim (a crashed or sleeping tab) is left: it may wake."""
+    gone = delete(Session).where(
         col(Session.label).is_(None),
         col(Session.id) != AGENT_SESSION_ID,
-        col(Session.id) != keep_id,
         col(Session.claimed_by).is_(None),
-        func.coalesce(Session.claim_seen_at, Session.last_active_at) < now - SESSION_CLAIM_TTL_MS,
+        col(Session.last_active_at) < now - SESSION_CLAIM_TTL_MS,
     )
-    ids = (await s.exec(select(Session.id).where(*dead))).all()
-    if not ids:
-        return
-    for sid in ids:
+    for sid in (await s.exec(gone.returning(Session.id))).scalars().all():
         forget_session(sid)
-    await s.exec(delete(Session).where(col(Session.id).in_(ids)))
 
 
 async def _claim(s: AsyncSession, row: Session, tab: str, now: int) -> None:
     """Take the session for `tab`, free whatever else that tab held, and sweep
     dead scratch sessions. Single statements rather than scans: this runs on
     every heartbeat, and the rows a scan would hydrate carry the saved SQL."""
-    await s.exec(_free(tab, now).where(col(Session.id) != row.id))
-    await _sweep(s, row.id, now)
+    await s.exec(_free(tab).where(col(Session.id) != row.id))
     row.claimed_by = tab
     row.claim_seen_at = now
     row.last_active_at = now
     s.add(row)
+    await s.flush()  # the claim is in SQL before the sweep looks for unclaimed rows
+    await _sweep(s, now)
 
 
 class SessionTaken(Exception):
@@ -379,7 +371,7 @@ async def release(tab: str) -> None:
     covers the tab that never got to send it."""
     await _ensure_schema()
     async with _writes, _open() as s:
-        await s.exec(_free(tab, _now_ms()))
+        await s.exec(_free(tab))
         await s.commit()
 
 
