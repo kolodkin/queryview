@@ -124,7 +124,7 @@ def test_folder_connection_lands_on_root_with_tables_and_union(tmp_path):
     names = [t["name"] for t in c.get("/api/db/tables").json()["tables"]]
     assert names == ["a.csv", "b.csv", "*.csv"]
     glob = c.get("/api/db/tables", params={"union": "1"}).json()["tables"][-1]
-    assert glob["query"] == "SELECT * FROM read_csv('*.csv', union_by_name = true)"
+    assert glob["query"] == "SELECT * FROM read_csv(['a.csv', 'b.csv'], union_by_name = true)"
     assert c.post("/api/db/database", json={"database": "sub"}).json()["ok"]
     assert [t["name"] for t in c.get("/api/db/tables").json()["tables"]] == ["c.csv"]
     # Reopening resets to the root, as opening any connection resets its database.
@@ -135,3 +135,5 @@ def test_folder_connection_lands_on_root_with_tables_and_union(tmp_path):
     shutil.rmtree(tmp_path / "sub")
     connect._sessions.clear()
     assert c.get("/api/session").json()["database"] == "."
+    # ...and the row agrees, or the tab would switch back to the vanished folder.
+    assert asyncio.run(sessions.get_session_rec(sid)).database == "."

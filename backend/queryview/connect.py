@@ -520,6 +520,8 @@ async def _ensure_session(sid: str) -> None:
     state, _ = await _build_session(rec.connection_name, config, rec.database, conn_type)
     if state is not None:
         _set_session_entry(sid, state)
+        if state.database != rec.database:  # a vanished folder fell back to the root
+            await sessions.set_database(sid, state.database)
 
 
 async def get_session(sid: str) -> dict[str, Any]:

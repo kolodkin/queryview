@@ -191,22 +191,27 @@ def test_list_tables_in_folder_mode_lists_files_and_globs(folder):
     assert items["rows"] is None and items["bytes"] == os.path.getsize(os.path.join(folder, "items.csv"))
     assert items["query"] == "SELECT * FROM read_csv('items.csv')"
     glob = r.tables[-1]
-    assert glob["query"] == "SELECT * FROM read_csv('*.csv')"
+    assert glob["query"] == "SELECT * FROM read_csv(['extra.csv', 'items.csv', 'o''neil.csv'])"
     assert glob["bytes"] == sum(t["bytes"] for t in r.tables[:-1])
     quoted = next(t for t in r.tables if t["name"] == "o'neil.csv")
     assert quoted["query"] == "SELECT * FROM read_csv('o''neil.csv')"
+    rows = _run(DuckDBDriver().run_query(DuckConfig(folder), quoted["query"], ".", 10, 0, None))
+    assert rows.rows.data == [[5, "epsilon"]]
 
 
 def test_list_tables_union_flag_only_changes_globs(folder):
     r = _run(DuckDBDriver().list_tables(DuckConfig(folder), ".", union=True))
-    assert r.tables[-1]["query"] == "SELECT * FROM read_csv('*.csv', union_by_name = true)"
+    assert (
+        r.tables[-1]["query"]
+        == "SELECT * FROM read_csv(['extra.csv', 'items.csv', 'o''neil.csv'], union_by_name = true)"
+    )
     assert r.tables[0]["query"] == "SELECT * FROM read_csv('extra.csv')"
 
 
 def test_list_tables_recognizes_compressed_files_in_a_subfolder(folder):
     r = _run(DuckDBDriver().list_tables(DuckConfig(folder), "sub"))
     assert [t["name"] for t in r.tables] == ["nested.csv.gz"]
-    assert r.tables[0]["query"] == "SELECT * FROM read_csv('nested.csv.gz')"
+    assert r.tables[0]["query"] == "SELECT * FROM read_csv('nested.csv.gz', compression = 'gzip')"
 
 
 def test_folder_queries_resolve_relative_to_the_selected_folder(folder):
@@ -218,3 +223,48 @@ def test_folder_queries_resolve_relative_to_the_selected_folder(folder):
     assert isinstance(r, RowsResult) and r.rows.data == [[3]]
     r = _run(d.run_query(cfg, "SELECT count(*) AS n FROM read_csv('*.csv', union_by_name = true)", ".", 10, 0, None))
     assert r.rows.data == [[5]]
+
+
+def test_glob_entries_read_only_the_listed_files(tmp_path):
+    """Hidden, symlinked and glob-named files are skipped by the listing, so the
+    glob entry names its files explicitly rather than letting DuckDB expand a
+    pattern that would follow the symlink out of the root; upper-case
+    extensions still read, with the compression spelled out."""
+    import gzip
+
+    outside = tmp_path / "secret.csv"
+    outside.write_text("id,name\n9,outside\n")
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "A.CSV").write_text("id,name\n1,alpha\n")
+    (root / "b.csv").write_text("id,name\n2,beta\n")
+    (root / ".hid.csv").write_text("id,name\n8,hidden\n")
+    (root / "evil.csv").symlink_to(outside)
+    (root / "r[1].csv").write_text("id,name\n7,bracket\n")
+    (root / "r1.csv").write_text("id,name\n3,gamma\n")
+    with gzip.open(root / "C.CSV.GZ", "wt") as f:
+        f.write("id,name\n4,delta\n")
+    d = DuckDBDriver()
+    r = _run(d.list_tables(DuckConfig(str(root)), "."))
+    assert [t["name"] for t in r.tables] == ["A.CSV", "C.CSV.GZ", "b.csv", "r1.csv", "*.csv"]
+    glob = r.tables[-1]
+    assert glob["query"] == "SELECT * FROM read_csv(['A.CSV', 'b.csv', 'r1.csv'])"
+    assert glob["bytes"] == sum(t["bytes"] for t in r.tables if t["name"] in ("A.CSV", "b.csv", "r1.csv"))
+    assert r.tables[1]["query"] == "SELECT * FROM read_csv('C.CSV.GZ', compression = 'gzip')"
+    for t in r.tables:
+        rows = _run(d.run_query(DuckConfig(str(root)), t["query"], ".", 10, 0, [{"name": "id", "dir": "ASC"}]))
+        assert isinstance(rows, RowsResult), (t["name"], rows)
+    rows = _run(d.run_query(DuckConfig(str(root)), glob["query"], ".", 10, 0, [{"name": "id", "dir": "ASC"}]))
+    assert rows.rows.data == [[1, "alpha"], [2, "beta"], [3, "gamma"]]
+
+
+def test_folders_with_a_comma_are_not_browsable(tmp_path):
+    # file_search_path is a comma-separated list, so such a path cannot be set.
+    (tmp_path / "a,b").mkdir()
+    (tmp_path / "ok").mkdir()
+    r = _run(DuckDBDriver().list_databases(DuckConfig(str(tmp_path))))
+    assert r.databases == [".", "ok"]
+    comma_root = tmp_path / "x,y"
+    comma_root.mkdir()
+    r = _run(DuckDBDriver().list_databases(DuckConfig(str(comma_root))))
+    assert isinstance(r, Err) and "comma" in r.message

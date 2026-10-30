@@ -65,7 +65,11 @@ def _list_folders(root: str) -> list[str]:
         dirs[:] = (
             []
             if depth >= FOLDER_DEPTH
-            else sorted(n for n in dirs if not n.startswith(".") and not os.path.islink(os.path.join(dirpath, n)))
+            else sorted(
+                n
+                for n in dirs
+                if not n.startswith(".") and "," not in n and not os.path.islink(os.path.join(dirpath, n))
+            )
         )
     return [folders[0], *sorted(folders[1:])]
 
@@ -117,30 +121,43 @@ def _data_ext(name: str) -> str | None:
     return ext + comp
 
 
-def _read_query(name: str, union: bool) -> str:
-    """The browse SELECT for a file or glob name, relative to file_search_path."""
-    ext = _data_ext(name) or ""
-    base = next((ext[: -len(c)] for c in _COMPRESSIONS if ext.endswith(c)), ext)
-    extra = ", union_by_name = true" if union and "*" in name else ""
-    return f"SELECT * FROM {_READERS[base]}({_sql_str(name)}{extra})"
+# Characters DuckDB reads as a glob pattern; a file so named is left out of the
+# listing rather than silently reading a neighbour.
+_GLOB_CHARS = set("*?[")
+
+
+def _read_query(ext: str, names: list[str], union: bool) -> str:
+    """The browse SELECT for one file or (a glob entry) the listed files of one
+    extension, relative to file_search_path. Files are named explicitly, never
+    as a pattern: a pattern would follow symlinks and hidden files the listing
+    skips. Compression is spelled out since DuckDB only infers a lowercase suffix."""
+    comp = next((c for c in _COMPRESSIONS if ext.endswith(c)), "")
+    reader = _READERS[ext[: -len(comp)] if comp else ext]
+    source = _sql_str(names[0]) if len(names) == 1 else "[" + ", ".join(_sql_str(n) for n in names) + "]"
+    extra = ", compression = 'gzip'" if comp == ".gz" else ", compression = 'zstd'" if comp == ".zst" else ""
+    extra += ", union_by_name = true" if union and len(names) > 1 else ""
+    return f"SELECT * FROM {reader}({source}{extra})"
 
 
 def _list_files(folder: str, union: bool) -> list[dict[str, Any]]:
     """Data files directly in `folder`, then one `*.<ext>` glob per extension
     with two or more files. rows is never estimated; bytes is the file size."""
     files = sorted(
-        (e.name, e.stat().st_size)
+        (e.name, e.stat().st_size, _data_ext(e.name) or "")
         for e in os.scandir(folder)
-        if e.is_file(follow_symlinks=False) and not e.name.startswith(".") and _data_ext(e.name)
+        if e.is_file(follow_symlinks=False)
+        and not e.name.startswith(".")
+        and not _GLOB_CHARS & set(e.name)
+        and _data_ext(e.name)
     )
-    tables = [{"name": n, "rows": None, "bytes": b, "query": _read_query(n, union)} for n, b in files]
-    globs: dict[str, list[int]] = {}  # extension -> sizes of its files
-    for n, b in files:
-        globs.setdefault(_data_ext(n) or "", []).append(b)
-    for ext, sizes in sorted(globs.items()):
-        if len(sizes) >= 2:
-            name = f"*{ext}"
-            tables.append({"name": name, "rows": None, "bytes": sum(sizes), "query": _read_query(name, union)})
+    tables = [{"name": n, "rows": None, "bytes": b, "query": _read_query(ext, [n], union)} for n, b, ext in files]
+    globs: dict[str, list[tuple[str, int]]] = {}  # extension -> its (name, size) files
+    for n, b, ext in files:
+        globs.setdefault(ext, []).append((n, b))
+    for ext, members in sorted(globs.items()):
+        if len(members) >= 2:
+            query = _read_query(ext, [n for n, _ in members], union)
+            tables.append({"name": f"*{ext}", "rows": None, "bytes": sum(b for _, b in members), "query": query})
     return tables
 
 
@@ -199,6 +216,8 @@ class DuckDBDriver:
             return DatabasesResult([])
         try:
             root = os.path.abspath(config.path)
+            if "," in root:
+                return Err("a DuckDB folder path cannot contain a comma")
             return DatabasesResult(await asyncio.to_thread(_list_folders, root), root=root)
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))

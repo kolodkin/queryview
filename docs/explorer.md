@@ -118,12 +118,15 @@ root; reopening the connection does too.
   its subfolders and **..**; picking one enters it, which lists its files in
   the sidebar. The pill reads `<connection> · <folder name>` with the full path
   as its tooltip. The folder list is walked once at connect, four levels deep;
-  hidden entries and symlinks are skipped.
+  hidden entries, symlinks and names with a comma are skipped.
 - **Tables** — files named `.parquet`, `.csv`, `.tsv`, `.json`, `.jsonl` or
   `.ndjson`, the non-parquet ones also with a `.gz` or `.zst` suffix (DuckDB
   infers the compression). The browse query is the matching reader, e.g.
   `SELECT * FROM read_csv('items.csv')`. An extension with two or more files
-  also gets a **`*.<ext>`** glob entry (`*.csv`, `*.csv.gz`) after the files.
+  also gets a **`*.<ext>`** entry (`*.csv`, `*.csv.gz`) after the files; its
+  query names the listed files explicitly, so a file added later needs the
+  list refreshed. Hidden files, symlinks and names with `*`, `?` or `[` are
+  not listed.
 - **Union by name** — the checkbox adds `union_by_name = true` to the glob
   queries, so files whose columns differ in order or count are matched by
   header name instead of position (missing columns read as NULL). Single files
@@ -131,4 +134,5 @@ root; reopening the connection does too.
 - **Paths** — folder mode opens `:memory:` with DuckDB's `file_search_path`
   set to the selected folder, so generated queries, saved queries and SQL typed
   on the query page resolve file names against the folder being browsed. Only
-  folders under the root can be selected.
+  folders under the root can be selected; a folder (or root) whose path has a
+  comma is skipped, since DuckDB reads that setting as a list.
