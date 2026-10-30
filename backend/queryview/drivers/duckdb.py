@@ -4,6 +4,7 @@ library is driven in a worker thread so the event loop is never blocked."""
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -41,6 +42,32 @@ def parse_duck_config(body: Any) -> tuple[DuckConfig | None, str | None]:
     raw = b.get("path")
     path = raw.strip() if isinstance(raw, str) else ""
     return DuckConfig(path=path or ":memory:"), None
+
+
+# How many folder levels below the root list_databases walks.
+# shortcut: depth capped, upgrade to lazy per-folder listing if roots get deep
+FOLDER_DEPTH = 4
+
+
+def _is_folder(path: str) -> bool:
+    """Folder mode: `path` is a directory of data files rather than a .duckdb file."""
+    return path != ":memory:" and os.path.isdir(path)
+
+
+def _list_folders(root: str) -> list[str]:
+    """The root (".") and its subfolders as sorted relative POSIX paths, down to
+    FOLDER_DEPTH levels; hidden names and symlinks are skipped."""
+    folders: list[str] = []
+    for dirpath, dirs, _files in os.walk(root, followlinks=False):
+        rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
+        folders.append(rel)
+        depth = 0 if rel == "." else rel.count("/") + 1
+        dirs[:] = (
+            []
+            if depth >= FOLDER_DEPTH
+            else sorted(n for n in dirs if not n.startswith(".") and not os.path.islink(os.path.join(dirpath, n)))
+        )
+    return [folders[0], *sorted(folders[1:])]
 
 
 def _open(path: str, read_only: bool = True):
@@ -83,7 +110,9 @@ class DuckDBDriver:
 
     async def test(self, config: DuckConfig) -> dict[str, Any]:
         def _work():
-            con = _open(config.path)
+            if _is_folder(config.path) and not os.access(config.path, os.R_OK):
+                raise PermissionError(f"cannot read {config.path}")
+            con = _open(":memory:" if _is_folder(config.path) else config.path)
             try:
                 return _scalar(con, "SELECT 1")
             finally:
@@ -96,8 +125,15 @@ class DuckDBDriver:
             return {"ok": False, "message": error_message(e)}
 
     async def list_databases(self, config: DuckConfig) -> DatabasesResult | Err:
-        # No picker: queries run directly against the file (schema-qualify in SQL).
-        return DatabasesResult([])
+        # Folder mode lists folders as the "databases"; a file has no picker:
+        # queries run directly against it (schema-qualify in SQL).
+        if not _is_folder(config.path):
+            return DatabasesResult([])
+        try:
+            root = os.path.abspath(config.path)
+            return DatabasesResult(await asyncio.to_thread(_list_folders, root), root=root)
+        except Exception as e:  # noqa: BLE001
+            return Err(error_message(e))
 
     async def list_tables(self, config: DuckConfig, database: str | None) -> TablesResult | Err:
         # SHOW TABLES for the name set, joined with duckdb_tables()'s estimated

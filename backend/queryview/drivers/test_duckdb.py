@@ -143,3 +143,40 @@ def test_describe_and_export_errors_become_err(duck_path):
     assert isinstance(r, Err) and "no_such" in r.message
     r = _run(d.export_csv(DuckConfig(duck_path), "SELECT * FROM no_such", None, 10, 0, None))
     assert isinstance(r, Err) and "no_such" in r.message
+
+
+# --- folder mode -------------------------------------------------------------
+
+
+@pytest.fixture
+def folder(tmp_path):
+    """A root with data files, a compressed file in a subfolder, a folder past
+    FOLDER_DEPTH, a hidden folder and a symlink — the last three never listed."""
+    import gzip
+
+    (tmp_path / "items.csv").write_text("id,name\n1,alpha\n2,beta\n3,gamma\n")
+    (tmp_path / "extra.csv").write_text("id,name\n4,delta\n")
+    (tmp_path / "o'neil.csv").write_text("id,name\n5,epsilon\n")
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    with gzip.open(sub / "nested.csv.gz", "wt") as f:
+        f.write("id,name\n1,alpha\n2,beta\n3,gamma\n")
+    deep = sub / "deep1" / "deep2" / "deep3" / "deep4"
+    deep.mkdir(parents=True)
+    (deep / "x.csv").write_text("id\n1\n")
+    hidden = tmp_path / ".hidden"
+    hidden.mkdir()
+    (hidden / "h.csv").write_text("id\n1\n")
+    (tmp_path / "link").symlink_to(sub, target_is_directory=True)
+    return str(tmp_path)
+
+
+def test_list_databases_in_folder_mode_lists_root_and_subfolders(folder):
+    r = _run(DuckDBDriver().list_databases(DuckConfig(folder)))
+    assert r.root == folder
+    # .hidden and the symlink are absent; deep4 is past FOLDER_DEPTH
+    assert r.databases == [".", "sub", "sub/deep1", "sub/deep1/deep2", "sub/deep1/deep2/deep3"]
+
+
+def test_test_connection_succeeds_on_a_folder(folder):
+    assert _run(DuckDBDriver().test(DuckConfig(folder)))["ok"] is True

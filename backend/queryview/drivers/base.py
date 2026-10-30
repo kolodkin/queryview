@@ -54,6 +54,9 @@ class TextResult(Result):
 @dataclass(frozen=True)
 class DatabasesResult(Result):
     databases: list[str]
+    # The directory a folder-mode DuckDB connection browses (docs/explorer.md);
+    # None for every other driver and for a DuckDB file.
+    root: str | None = None
 
 
 @dataclass(frozen=True)
