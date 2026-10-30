@@ -455,7 +455,7 @@ async def db_execute(request: Request):
 # Tables of this session's selected database (the Explorer page's sidebar).
 @app.get("/api/db/tables")
 async def db_tables(request: Request):
-    r = await list_tables(request.state.sid)
+    r = await list_tables(request.state.sid, union=request.query_params.get("union") == "1")
     if not r["ok"]:
         return _gate_error(r, ("no-session", "no-database"))
     return {"ok": True, "tables": r["tables"]}

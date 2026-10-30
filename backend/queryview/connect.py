@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from alembic.config import Config
 
 from .drivers import DRIVERS
-from .drivers.base import DriverConfig, Err, RowsResult, error_message, select_all_sql
+from .drivers.base import DatabasesResult, DriverConfig, Err, RowsResult, error_message, select_all_sql
 
 # --- Storage (SQLite, lazily opened) --------------------------------------
 
@@ -385,6 +385,7 @@ class _SessionState:
     databases: list[str]
     database: str | None
     locked: bool = False  # a locked saved connection: data calls need the tab's token
+    root: str | None = None  # the folder a DuckDB folder-mode connection browses
 
 
 @dataclass
@@ -465,12 +466,12 @@ def _with_localhost_hint(message: str, config: DriverConfig) -> str:
     return message
 
 
-async def _list_databases(conn_type: str, config: DriverConfig) -> tuple[list[str] | None, str | None]:
+async def _list_databases(conn_type: str, config: DriverConfig) -> tuple[DatabasesResult | None, str | None]:
     """The driver's database list, or (None, message) with the localhost hint."""
     r = await DRIVERS[conn_type].list_databases(config)
     if isinstance(r, Err):
         return None, _with_localhost_hint(r.message, config)
-    return r.databases, None
+    return r, None
 
 
 async def _build_session(
@@ -478,17 +479,23 @@ async def _build_session(
 ) -> tuple[_SessionState | None, str | None]:
     """List a connection's databases and build a session object. A session
     connection's name is never in the table, so it reads as unlocked."""
-    databases, message = await _list_databases(conn_type, config)
-    if databases is None:
+    listed, message = await _list_databases(conn_type, config)
+    if listed is None:
         return None, message
+    databases = listed.databases
+    if not (database and database in databases):
+        # "." is DuckDB folder mode's root: always a valid pick, so a folder
+        # connection lands on the explorer rather than the picker.
+        database = "." if "." in databases else None
     return (
         _SessionState(
             name=name,
             type=conn_type,
             config=config,
             databases=databases,
-            database=database if database and database in databases else None,
+            database=database,
             locked=await _lock_hash_of(name) is not None,
+            root=listed.root,
         ),
         None,
     )
@@ -528,6 +535,7 @@ async def get_session(sid: str) -> dict[str, Any]:
         "type": s.type,
         "databases": s.databases,
         "database": s.database,
+        **({"root": s.root} if s.root else {}),
         # How this dialect quotes a table/column (dashboard `identifier` params).
         "ident_quote": DRIVERS[s.type].ident_quote,
         "scope": "session" if sc else "saved",
@@ -559,7 +567,14 @@ async def connect_new(
         await _save_active_connection(name, config, conn_type)
     _set_session_entry(sid, state)
     await sessions.set_connection(sid, name)
-    return {"ok": True, "name": name, "type": state.type, "databases": state.databases}
+    return {
+        "ok": True,
+        "name": name,
+        "type": state.type,
+        "databases": state.databases,
+        "database": state.database,
+        **({"root": state.root} if state.root else {}),
+    }
 
 
 async def open_saved(
@@ -588,7 +603,14 @@ async def open_saved(
     await sessions.set_connection(sid, name, by)
     if database is not None:
         await select_database(sid, database)
-    return {"ok": True, "name": name, "type": state.type, "databases": state.databases, "database": database}
+    return {
+        "ok": True,
+        "name": name,
+        "type": state.type,
+        "databases": state.databases,
+        "database": database if database is not None else state.database,
+        **({"root": state.root} if state.root else {}),
+    }
 
 
 async def disconnect(sid: str, by: Literal["agent", "user"] = "user") -> dict[str, Any]:
@@ -681,7 +703,8 @@ async def list_databases_of(sid: str, name: str) -> tuple[list[str] | None, str 
     if found is None:  # deleted meanwhile, or its config no longer decrypts
         return None, "connection unavailable"
     try:
-        return await _list_databases(*found)
+        listed, message = await _list_databases(*found)
+        return (listed.databases if listed else None), message
     except Exception as e:
         return None, error_message(e)
 
@@ -738,10 +761,10 @@ def forget_session(sid: str) -> None:
 
 async def _relist(s: _SessionState) -> dict[str, Any] | None:
     """Replace the cached database list with a fresh one; the error result on failure."""
-    databases, message = await _list_databases(s.type, s.config)
-    if databases is None:
+    listed, message = await _list_databases(s.type, s.config)
+    if listed is None:
         return {"ok": False, "message": message}
-    s.databases = databases
+    s.databases = listed.databases
     return None
 
 
@@ -817,18 +840,19 @@ async def describe_query(sid: str, sql: str) -> dict[str, Any]:
     return {"ok": True, "fields": r.fields}
 
 
-async def list_tables(sid: str) -> dict[str, Any]:
+async def list_tables(sid: str, union: bool = False) -> dict[str, Any]:
     """List the tables of this session's selected database (the Explorer page's
-    sidebar), each with the ready-to-run browse SELECT — built here with the
-    driver's identifier quote, so the frontend never guesses dialect quoting."""
+    sidebar), each with the ready-to-run browse SELECT — the driver's own when
+    it supplies one (DuckDB folder mode), else built here with the driver's
+    identifier quote, so the frontend never guesses dialect quoting."""
     s, err = await _gated_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
     driver = DRIVERS[s.type]
-    r = await driver.list_tables(s.config, s.database)
+    r = await driver.list_tables(s.config, s.database, union)
     if isinstance(r, Err):
         return {"ok": False, "message": r.message}
-    tables = [{**t, "query": select_all_sql(t["name"], driver.ident_quote)} for t in r.tables]
+    tables = [{**t, "query": t.get("query") or select_all_sql(t["name"], driver.ident_quote)} for t in r.tables]
     return {"ok": True, "tables": tables}
 
 

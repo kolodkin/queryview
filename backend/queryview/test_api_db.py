@@ -3,9 +3,13 @@ the old /api/clickhouse paths are gone (404)."""
 
 from __future__ import annotations
 
+import asyncio
+import shutil
+
 import pytest
 from fastapi.testclient import TestClient
 
+from queryview import connect, sessions
 from queryview.main import app
 
 
@@ -99,3 +103,33 @@ def test_session_only_connect_lists_for_its_session_only():
     mine = {x["name"]: x for x in c.get("/api/db/connections").json()["connections"]}
     assert mine["so-duck"]["scope"] == "session" and mine["so-duck"]["created_by"] == "user"
     assert "so-duck" not in {x["name"] for x in other.get("/api/db/connections").json()["connections"]}
+
+
+def test_folder_connection_lands_on_root_with_tables_and_union(tmp_path):
+    for name in ("a.csv", "b.csv"):
+        (tmp_path / name).write_text("id\n1\n")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "c.csv").write_text("id\n1\n")
+    root = str(tmp_path)
+    # A real session row, so the rebuild at the end has something to rebuild from.
+    sid = asyncio.run(sessions.create_session()).id
+    c = TestClient(app, headers={"X-QV-Session": sid})
+    # Session-only: a saved connection would join every later test's MCP listing.
+    r = c.post("/api/db/connect", json={"type": "duckdb", "name": "folder-duck", "path": root, "session": True}).json()
+    assert r["ok"], r
+    assert r["databases"] == [".", "sub"] and r["database"] == "." and r["root"] == root
+    assert c.get("/api/session").json()["root"] == root
+    names = [t["name"] for t in c.get("/api/db/tables").json()["tables"]]
+    assert names == ["a.csv", "b.csv", "*.csv"]
+    glob = c.get("/api/db/tables", params={"union": "1"}).json()["tables"][-1]
+    assert glob["query"] == "SELECT * FROM read_csv('*.csv', union_by_name = true)"
+    assert c.post("/api/db/database", json={"database": "sub"}).json()["ok"]
+    assert [t["name"] for t in c.get("/api/db/tables").json()["tables"]] == ["c.csv"]
+    # Reopening resets to the root, as opening any connection resets its database.
+    r = c.post("/api/db/open", json={"name": "folder-duck"}).json()
+    assert r["database"] == "." and r["root"] == root
+    # A rebuilt session whose remembered folder vanished falls back to the root.
+    assert c.post("/api/db/database", json={"database": "sub"}).json()["ok"]
+    shutil.rmtree(tmp_path / "sub")
+    connect._sessions.clear()
+    assert c.get("/api/session").json()["database"] == "."

@@ -150,7 +150,7 @@ class PostgresDriver:
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
 
-    async def list_tables(self, config: PgConfig, database: str | None) -> TablesResult | Err:
+    async def list_tables(self, config: PgConfig, database: str | None, union: bool = False) -> TablesResult | Err:
         # Tables and views of the public schema — what an unqualified name in
         # the explorer's generated SELECT resolves to under the default
         # search_path. Other schemas need explicit SQL on the query page.

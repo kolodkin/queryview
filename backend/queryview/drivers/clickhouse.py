@@ -217,7 +217,7 @@ class ClickHouseDriver:
             return r
         return DatabasesResult([row[0] for row in r.data])
 
-    async def list_tables(self, config: ChConfig, database: str | None) -> TablesResult | Err:
+    async def list_tables(self, config: ChConfig, database: str | None, union: bool = False) -> TablesResult | Err:
         # Same set SHOW TABLES yields, plus the engine's stored row/byte counts
         # (NULL for views and engines that don't track them).
         r = await ch_rows(

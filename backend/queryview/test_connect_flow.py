@@ -54,7 +54,7 @@ class _FakeDriver:
     async def describe_query(self, c, sql, database):
         return FieldsResult([{"name": "x", "type": "int"}])
 
-    async def list_tables(self, c, database):
+    async def list_tables(self, c, database, union=False):
         return TablesResult([{"name": f"t-of-{database}", "rows": 1, "bytes": None}])
 
 

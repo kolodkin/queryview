@@ -7,6 +7,7 @@ import asyncio
 
 from queryview import remote, sessions
 from queryview.connect import _save_active_connection, open_saved
+from queryview.drivers.base import DatabasesResult
 from queryview.drivers.clickhouse import ChConfig
 from queryview.drivers.duckdb import DuckConfig
 
@@ -182,7 +183,7 @@ def test_select_database_only_on_the_agents_own_connection(monkeypatch):
     from queryview.mcp_server import select_database, use_connection
 
     async def one_db(conn_type, config):  # DuckDB lists none; fake a picker
-        return ["memory"], None
+        return DatabasesResult(["memory"]), None
 
     monkeypatch.setattr(connect, "_list_databases", one_db)
     sid = _connected_session("ag-seldb")
