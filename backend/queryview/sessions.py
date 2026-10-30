@@ -13,10 +13,10 @@ from typing import Any, ClassVar, Literal
 
 from sqlalchemy import column, table
 from sqlalchemy.orm import load_only
-from sqlmodel import Field, SQLModel, col, func, select, update
+from sqlmodel import Field, SQLModel, col, delete, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from .connect import _engine_for_db, _ensure_schema, _now_ms
+from .connect import _engine_for_db, _ensure_schema, _now_ms, forget_session
 
 # A claim older than this is stale: the tab closed, crashed or slept, and the
 # session is free for the next tab that asks. Past a minute because browsers
@@ -134,7 +134,8 @@ def _merge_ui(current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any
 
 
 def _unheld_query(now: int):
-    """The session a new tab should resume: most recently active, not held."""
+    """The session a new tab should resume: the most recently active named one
+    that is not held. An unnamed session lives only in the tab that holds it."""
     stale = now - SESSION_CLAIM_TTL_MS
     return (
         select(Session)
@@ -143,7 +144,7 @@ def _unheld_query(now: int):
             | col(Session.claim_seen_at).is_(None)
             | (col(Session.claim_seen_at) < stale)
         )
-        .where(col(Session.id) != AGENT_SESSION_ID)
+        .where(col(Session.id) != AGENT_SESSION_ID, col(Session.label).is_not(None))
         .order_by(col(Session.last_active_at).desc())
         .limit(1)
     )
@@ -266,25 +267,43 @@ async def delete_session(sid: str) -> tuple[bool, str]:
             return False, "held"
         await s.delete(row)
         await s.commit()
+        forget_session(sid)
         return True, ""
 
 
 # --- Claims (one tab holds a session at a time) ---------------------------
 
 
-async def _claim(s: AsyncSession, row: Session, tab: str, now: int) -> None:
-    """Take the session for `tab` and free whatever else that tab held. The
-    release is one UPDATE rather than a scan: this runs on every heartbeat, and
-    the rows it would otherwise hydrate carry the saved SQL."""
-    await s.exec(
-        update(Session)
-        .where(col(Session.claimed_by) == tab, col(Session.id) != row.id)
-        .values(claimed_by=None, claim_seen_at=None)
+def _free(tab: str):
+    """Release what `tab` holds."""
+    return update(Session).where(col(Session.claimed_by) == tab).values(claimed_by=None, claim_seen_at=None)
+
+
+async def _sweep(s: AsyncSession, now: int) -> None:
+    """Delete unnamed sessions idle and unclaimed for a claim TTL — scratch, kept
+    only while a tab shows them (docs/session.md) — and forget their in-memory
+    connections. A lapsed claim (a crashed or sleeping tab) is left: it may wake."""
+    gone = delete(Session).where(
+        col(Session.label).is_(None),
+        col(Session.id) != AGENT_SESSION_ID,
+        col(Session.claimed_by).is_(None),
+        col(Session.last_active_at) < now - SESSION_CLAIM_TTL_MS,
     )
+    for sid in (await s.exec(gone.returning(col(Session.id)))).scalars().all():
+        forget_session(sid)
+
+
+async def _claim(s: AsyncSession, row: Session, tab: str, now: int) -> None:
+    """Take the session for `tab`, free whatever else that tab held, and sweep
+    dead scratch sessions. Single statements rather than scans: this runs on
+    every heartbeat, and the rows a scan would hydrate carry the saved SQL."""
+    await s.exec(_free(tab).where(col(Session.id) != row.id))
     row.claimed_by = tab
     row.claim_seen_at = now
     row.last_active_at = now
     s.add(row)
+    await s.flush()  # the claim is in SQL before the sweep looks for unclaimed rows
+    await _sweep(s, now)
 
 
 class SessionTaken(Exception):
@@ -352,10 +371,7 @@ async def release(tab: str) -> None:
     covers the tab that never got to send it."""
     await _ensure_schema()
     async with _writes, _open() as s:
-        for row in (await s.exec(select(Session).where(Session.claimed_by == tab))).all():
-            row.claimed_by = None
-            row.claim_seen_at = None
-            s.add(row)
+        await s.exec(_free(tab))
         await s.commit()
 
 

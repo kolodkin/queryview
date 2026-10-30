@@ -5,8 +5,10 @@ URL, the connection and database you are querying, your workspace, and the
 per-view settings a reload should bring back. It lives in SQLite, so it survives
 a browser refresh *and* a backend restart.
 
-One tab holds a session at a time, but sessions outlive the tabs that held them:
-close a tab and the next one you open picks its session back up.
+One tab holds a session at a time. A **named** session outlives the tab that
+held it: close the tab and the next one you open picks it back up. An unnamed
+one (`Session <n>`) is scratch — it lives only while a tab shows it, and is
+deleted once that tab has closed or switched away from it.
 
 > **`sessionStorage` holds identity. The server holds state.** The app uses no
 > `localStorage` at all.
@@ -38,7 +40,8 @@ What you get:
 
 - **Refresh** → the same session, same page, same everything.
 - **New tab while another is open** → a new session; the first tab holds its own.
-- **New tab with nothing else open** → your last session comes back.
+- **New tab with nothing else open** → your last named session comes back,
+  else a new one.
 
 Each tab keeps `qv_tab` (a token it mints) and `qv_session` (what it is attached
 to) in `sessionStorage`. Both survive a refresh, neither crosses to a new tab —
@@ -55,6 +58,12 @@ at once cannot race: the id the tab already has if it is free or already this
 tab's, else the most recently active unheld session, else a new one. The first
 case falls through when a *different* live tab holds that id — duplicating a tab
 copies its `sessionStorage`, and the copy must not hijack the original.
+
+An unnamed session is swept 90 seconds after it is both unheld and idle. The
+delay is the reload grace: a reload's release beacon can land after its
+re-attach, and the next heartbeat re-claims the session well within it. A
+session whose tab still holds its claim but stopped heartbeating (a crash, a
+sleeping laptop) is kept — it may wake.
 
 A running tab is never moved silently. A sleeping laptop or a frozen tab can
 still let a claim lapse and another tab take its session. Its next heartbeat (sent
@@ -76,14 +85,15 @@ session held by another live tab is shown but not selectable: two tabs on one
 session would overwrite each other's state.
 
 - **New session** starts a fresh one in this tab.
-- **Rename this session** pins a name; clearing it unpins.
+- **Rename this session** pins a name, so the session survives its tab;
+  clearing it unpins.
 - **×** deletes a session; a session a live tab holds (this one included) has none.
 
 An unpinned label is `Session <n>`, with `n` a stable ordinal, so a name never
 changes under you when you switch databases. Each row shows the session's
 connection and database beside its name.
 
-Sessions never expire, so the list grows until you prune it — the cost of
+Named sessions never expire, so the list grows until you prune it — the cost of
 sessions being durable and nameable rather than a capped history.
 
 ## Sessions and the agent

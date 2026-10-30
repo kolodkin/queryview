@@ -132,11 +132,13 @@ def test_a_restored_panel_does_not_page_a_new_query_into_nothing(seeded_duckdb, 
 
 @pytest.fixture
 def left_behind(base_url: str):
-    """An earlier test's session: state saved, then released by its closing tab,
-    so it is the most recently active unheld session — what a new tab resumes.
-    Requested before `page`, so it exists when `context` seeds this test's."""
+    """An earlier test's session: named, state saved, then released by its
+    closing tab, so it is the most recently active unheld named session — what a
+    new tab resumes. Requested before `page`, so it exists when `context` seeds
+    this test's."""
     tab = f"e2e-{uuid.uuid4().hex}"
     sid = httpx.post(f"{base_url}/api/sessions/attach", json={"tab": tab}).json()["session"]["id"]
+    httpx.patch(f"{base_url}/api/sessions/{sid}", json={"label": "left behind"})
     ui = {"query": {"sql": "SELECT 'left behind'"}}
     httpx.post(f"{base_url}/api/sessions/release", json={"tab": tab, "session_id": sid, "ui": ui})
     yield sid

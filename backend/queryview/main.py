@@ -28,7 +28,6 @@ from .connect import (
     disconnect,
     execute_script,
     export_csv,
-    forget_session,
     get_session,
     list_connections_for,
     list_tables,
@@ -252,7 +251,6 @@ async def sessions_delete(sid: str):
     ok, reason = await sessions.delete_session(sid)
     if not ok:
         return _session_error(reason)
-    forget_session(sid)
     return {"ok": True}
 
 

@@ -43,6 +43,7 @@ def test_delete_refuses_a_held_session():
 def test_release_frees_the_claim_so_the_next_tab_resumes_it():
     client = TestClient(app)
     sid = client.post("/api/sessions/attach", json={"tab": "tab-http-4"}).json()["session"]["id"]
+    client.patch(f"/api/sessions/{sid}", json={"label": "nightly audit"})  # unnamed ones are not resumed
     client.post("/api/sessions/release", json={"tab": "tab-http-4"})
     again = client.post("/api/sessions/attach", json={"tab": "tab-http-5"}).json()
     assert again["created"] is False
@@ -54,6 +55,7 @@ def test_release_applies_the_state_the_tab_had_not_flushed():
     beacon carries the pending patch and it must not be lost."""
     client = TestClient(app)
     sid = client.post("/api/sessions/attach", json={"tab": "tab-http-6"}).json()["session"]["id"]
+    client.patch(f"/api/sessions/{sid}", json={"label": "nightly audit"})
 
     client.post(
         "/api/sessions/release",

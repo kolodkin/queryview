@@ -72,11 +72,15 @@ def test_patch_returns_the_updated_record():
     assert sessions.display_label(unpinned) == f"Session {rec.seq}"
 
 
-def test_delete_removes_the_row():
+def test_delete_removes_the_row_and_its_in_memory_state():
+    from queryview import connect
+
     rec = _run(sessions.create_session())
+    connect._session_conns[rec.id] = {}
     ok, _ = _run(sessions.delete_session(rec.id))
     assert ok
     assert _run(sessions.get_session_rec(rec.id)) is None
+    assert rec.id not in connect._session_conns
 
 
 def test_label_is_the_ordinal_whatever_the_connection():
@@ -138,20 +142,57 @@ def test_attach_with_own_id_reclaims_the_same_session():
     assert again.id == first.id
 
 
-def test_a_released_session_is_resumed_by_the_next_tab():
-    """Close the tab, open a new one: the session comes back."""
+def _stale():
+    return _now_ms_for_test() - sessions.SESSION_CLAIM_TTL_MS - 1
+
+
+def test_a_released_named_session_is_resumed_by_the_next_tab():
+    """Close the tab, open a new one: a named session comes back."""
     _free_everything()
     first, _ = _run(sessions.attach("tab-a", None))
+    _run(sessions.patch_session(first.id, label="nightly audit"))
     _run(sessions.release("tab-a"))
     resumed, created = _run(sessions.attach("tab-b", None))
     assert created is False
     assert resumed.id == first.id
 
 
+def test_a_released_unnamed_session_is_scratch():
+    """Unnamed sessions live only in the tab showing them: never resumed, and
+    swept — in-memory connections too — a claim TTL after release."""
+    from queryview import connect
+
+    _free_everything()
+    scratch, _ = _run(sessions.attach("tab-a", None))
+    connect._session_conns[scratch.id] = {}
+    _run(sessions.release("tab-a"))
+    fresh, created = _run(sessions.attach("tab-b", None))
+    assert created is True
+    assert fresh.id != scratch.id
+    # Within the TTL it survives: a reload's release beacon may land after
+    # its re-attach, and the next heartbeat re-claims it.
+    assert _run(sessions.get_session_rec(scratch.id)) is not None
+    _run(sessions.touch_for_test(scratch.id, last_active_at=_stale()))
+    _run(sessions.attach("tab-b", fresh.id))
+    assert _run(sessions.get_session_rec(scratch.id)) is None
+    assert scratch.id not in connect._session_conns
+
+
+def test_a_lapsed_unnamed_claim_is_not_swept():
+    """A crashed or sleeping tab never released; its session waits for it."""
+    _free_everything()
+    asleep, _ = _run(sessions.attach("tab-a", None))
+    _run(sessions.touch_for_test(asleep.id, claim_seen_at=_stale(), last_active_at=_stale()))
+    _run(sessions.attach("tab-b", None))
+    assert _run(sessions.get_session_rec(asleep.id)) is not None
+
+
 def test_attach_resumes_the_most_recent_unheld_session():
     _free_everything()
     older = _run(sessions.create_session())
     newer = _run(sessions.create_session())
+    for rec in (older, newer):
+        _run(sessions.patch_session(rec.id, label=f"named {rec.seq}"))
     now = _now_ms_for_test()
     # Two creates can land in the same millisecond, so order them explicitly.
     _run(sessions.touch_for_test(older.id, last_active_at=now - 60_000))
@@ -185,7 +226,8 @@ def test_attach_with_an_id_held_by_another_tab_does_not_hijack():
 def test_a_stale_claim_is_reclaimable():
     _free_everything()
     stale, _ = _run(sessions.attach("tab-a", None))
-    _run(sessions.touch_for_test(stale.id, claim_seen_at=_now_ms_for_test() - sessions.SESSION_CLAIM_TTL_MS - 1))
+    _run(sessions.patch_session(stale.id, label="nightly audit"))
+    _run(sessions.touch_for_test(stale.id, claim_seen_at=_stale()))
     taken, created = _run(sessions.attach("tab-b", None))
     assert created is False
     assert taken.id == stale.id
@@ -256,7 +298,8 @@ def test_a_heartbeat_whose_session_was_taken_raises_instead_of_moving():
     its next heartbeat must learn that, not be handed some other session."""
     _free_everything()
     mine, _ = _run(sessions.attach("tab-a", None))
-    _run(sessions.touch_for_test(mine.id, claim_seen_at=_now_ms_for_test() - sessions.SESSION_CLAIM_TTL_MS - 1))
+    _run(sessions.patch_session(mine.id, label="nightly audit"))
+    _run(sessions.touch_for_test(mine.id, claim_seen_at=_stale()))
     _run(sessions.attach("tab-b", None))
     with pytest.raises(sessions.SessionTaken):
         _run(sessions.attach("tab-a", mine.id, keep=True))
