@@ -59,11 +59,11 @@ tab's, else the most recently active unheld session, else a new one. The first
 case falls through when a *different* live tab holds that id — duplicating a tab
 copies its `sessionStorage`, and the copy must not hijack the original.
 
-An unnamed session is swept once it has been unheld and idle for 90 seconds
-(its tab closed, or switched to another session). The delay is the reload grace:
-a reload's release beacon can land after its re-attach, and the next heartbeat
-re-claims the session well within it. A session whose tab still holds the claim
-but stopped heartbeating (a crash, a sleeping laptop) is not swept — it may wake.
+An unnamed session is swept 90 seconds after it is both unheld and idle. The
+delay is the reload grace: a reload's release beacon can land after its
+re-attach, and the next heartbeat re-claims the session well within it. A
+session whose tab still holds its claim but stopped heartbeating (a crash, a
+sleeping laptop) is kept — it may wake.
 
 A running tab is never moved silently. A sleeping laptop or a frozen tab can
 still let a claim lapse and another tab take its session. Its next heartbeat (sent
@@ -85,8 +85,8 @@ session held by another live tab is shown but not selectable: two tabs on one
 session would overwrite each other's state.
 
 - **New session** starts a fresh one in this tab.
-- **Rename this session** pins a name, which is what makes the session
-  survive its tab; clearing it unpins.
+- **Rename this session** pins a name, so the session survives its tab;
+  clearing it unpins.
 - **×** deletes a session; a session a live tab holds (this one included) has none.
 
 An unpinned label is `Session <n>`, with `n` a stable ordinal, so a name never

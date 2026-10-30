@@ -72,11 +72,15 @@ def test_patch_returns_the_updated_record():
     assert sessions.display_label(unpinned) == f"Session {rec.seq}"
 
 
-def test_delete_removes_the_row():
+def test_delete_removes_the_row_and_its_in_memory_state():
+    from queryview import connect
+
     rec = _run(sessions.create_session())
+    connect._session_conns[rec.id] = {}
     ok, _ = _run(sessions.delete_session(rec.id))
     assert ok
     assert _run(sessions.get_session_rec(rec.id)) is None
+    assert rec.id not in connect._session_conns
 
 
 def test_label_is_the_ordinal_whatever_the_connection():
@@ -154,9 +158,8 @@ def test_a_released_named_session_is_resumed_by_the_next_tab():
 
 
 def test_a_released_unnamed_session_is_scratch():
-    """Unnamed sessions live only in the tab showing them: a new tab never
-    resumes one, and it is swept — in-memory connections too, as the delete
-    route forgets them — once released for a claim TTL."""
+    """Unnamed sessions live only in the tab showing them: never resumed, and
+    swept — in-memory connections too — a claim TTL after release."""
     from queryview import connect
 
     _free_everything()
