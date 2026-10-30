@@ -90,6 +90,15 @@ The pushed query runs through the normal `POST /api/db/query`, so all of
 that path's pagination and order-by safety applies; the push layer never talks
 to ClickHouse directly.
 
+## Default workflow
+
+The server's MCP instructions set how the agent answers "run this query",
+without asking which tool: iterate read-only with `run_sql`, apply writes once
+with `run_script`, then `push_script` the final SQL without `run`, replacing
+the [Scripts](./scripts.md) editor's text (the browser never re-applies the
+writes). If the push fails, the agent replies with the SQL. Naming a tool
+(e.g. `push_query`) overrides the default.
+
 ## How it works
 
 When armed, the browser opens an SSE stream

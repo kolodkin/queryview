@@ -36,7 +36,10 @@ mcp = FastMCP(
     instructions=(
         f"Without a session id from the user, use the standing Agent session {sessions.AGENT_SESSION_ID}: "
         "add_connection + use_connection for your own connection, or use the one the user put it on. "
-        "Pushes to it work once the user arms it in the QueryView UI."
+        "Pushes to it work once the user arms it in the QueryView UI. "
+        "Asked to run a query, don't ask which tool: iterate read-only with run_sql, apply "
+        "writes once with run_script, then push_script the final SQL with run=False (never "
+        "re-run writes); if the push fails, reply with the SQL. A user-named tool wins."
     ),
 )
 mcp.settings.streamable_http_path = "/"
