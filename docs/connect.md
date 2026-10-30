@@ -34,9 +34,11 @@ commit it; the app applies it on next start.
  ClickHouse and Postgres take host/port/username/password and present
 a database picker — for ClickHouse the picker lists `SHOW DATABASES`, for Postgres
 it lists real databases (`pg_database`) and the chosen one is where queries run.
-DuckDB takes a **path** (or `:memory:`), has no network and **no picker** —
-connecting goes straight to the explorer; schema-qualify tables in SQL as
-needed.
+DuckDB takes a **path** (or `:memory:`) and has no network. A `.duckdb` file
+has **no picker** — connecting goes straight to the explorer; schema-qualify
+tables in SQL as needed. A **folder** gets the folder picker instead: its
+subfolders are the "databases" and its data files the tables, landing on the
+folder itself (see [explorer.md](./explorer.md#duckdb-folder-mode)).
 
 A saved card that fails to open reports the error under the cards.
 When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`

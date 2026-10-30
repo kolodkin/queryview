@@ -25,7 +25,8 @@ order-by select the query panel uses.
 ```
 
 - **Sidebar** — the tables of the session's selected database, from
-  `GET /api/db/tables`. Each entry shows the engine's row-count and size
+  `GET /api/db/tables`. A DuckDB folder connection adds a **Union by name**
+  checkbox beside the heading (see [DuckDB folder mode](#duckdb-folder-mode)). Each entry shows the engine's row-count and size
   estimates under the name (e.g. `1.2K rows · 3.4MB`), and a **copy** icon
   that copies the name without opening the table. Row counts abbreviate with K/M/G/T/P at each power of
   1000, byte sizes with KB/MB/GB/TB/PB at each power of 1024; an estimate the
@@ -86,8 +87,48 @@ engine doesn't track them:
 | ---------- | ----------------------------------------------------------- | --------- |
 | ClickHouse | `system.tables` for the selected database (same set as `SHOW TABLES`) | `total_rows` / `total_bytes` (null for views) |
 | Postgres   | `pg_class` for the `public` schema, tables and views — what an unqualified name resolves to under the default `search_path`; other schemas need explicit SQL on the query page | planner's `reltuples` (null until first ANALYZE/VACUUM) / `pg_total_relation_size` |
-| DuckDB     | `SHOW TABLES` against the file (no database picker)          | `duckdb_tables()`'s `estimated_size` rows; bytes = distinct `pragma_storage_info` blocks × block size (null for views / `:memory:`) |
+| DuckDB file | `SHOW TABLES` against the file (no database picker)         | `duckdb_tables()`'s `estimated_size` rows; bytes = distinct `pragma_storage_info` blocks × block size (null for views / `:memory:`) |
+| DuckDB folder | the selected folder's data files and `*.<ext>` globs (below) | rows null (never scanned); bytes = file size, summed for a glob |
 
 Like `/api/db/query` and `/api/db/describe`, the endpoint is session-scoped and
 gated: no active connection or (for drivers with a picker) no selected database
 is a 409.
+
+## DuckDB folder mode
+
+A DuckDB connection whose **Path** is a directory browses the filesystem: the
+folders under it are the "databases" (relative paths, `.` being the root) and
+the data files in the selected folder are the tables. Connecting lands on the
+root; reopening the connection does too.
+
+```
++------------------------------------------------+
+| /data/exports/2024                             |  <- full path
+| [ Search 3 folders...                        ] |
+| [ .. ]                                         |  <- parent, hidden at root
+| [ q1 ]                                         |
+| [ q2 ]                                         |
+| [ archive ]                                    |
+| ---------------------------------------------- |
+| connections ...  [Disconnect]                  |
++------------------------------------------------+
+```
+
+- **Pill menu** — one level at a time: the selected folder's full path, then
+  its subfolders and **..**; picking one enters it, which lists its files in
+  the sidebar. The pill reads `<connection> · <folder name>` with the full path
+  as its tooltip. The folder list is walked once at connect, four levels deep;
+  hidden entries and symlinks are skipped.
+- **Tables** — files named `.parquet`, `.csv`, `.tsv`, `.json`, `.jsonl` or
+  `.ndjson`, the non-parquet ones also with a `.gz` or `.zst` suffix (DuckDB
+  infers the compression). The browse query is the matching reader, e.g.
+  `SELECT * FROM read_csv('items.csv')`. An extension with two or more files
+  also gets a **`*.<ext>`** glob entry (`*.csv`, `*.csv.gz`) after the files.
+- **Union by name** — the checkbox adds `union_by_name = true` to the glob
+  queries, so files whose columns differ in order or count are matched by
+  header name instead of position (missing columns read as NULL). Single files
+  are unaffected. The choice is remembered with the sidebar width.
+- **Paths** — folder mode opens `:memory:` with DuckDB's `file_search_path`
+  set to the selected folder, so generated queries, saved queries and SQL typed
+  on the query page resolve file names against the folder being browsed. Only
+  folders under the root can be selected.
