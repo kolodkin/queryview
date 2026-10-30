@@ -62,8 +62,8 @@ copies its `sessionStorage`, and the copy must not hijack the original.
 An unnamed session is swept 90 seconds after its tab released it (closed, or
 switched to another session). The delay is the reload grace: a reload's release
 beacon can land after its re-attach, and the next heartbeat re-claims the
-session well within it. A session whose tab merely stopped heartbeating (a
-crash, a sleeping laptop) is not swept — it may wake.
+session well within it. A session whose tab still holds the claim but stopped
+heartbeating (a crash, a sleeping laptop) is not swept — it may wake.
 
 A running tab is never moved silently. A sleeping laptop or a frozen tab can
 still let a claim lapse and another tab take its session. Its next heartbeat (sent

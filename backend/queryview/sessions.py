@@ -16,7 +16,7 @@ from sqlalchemy.orm import load_only
 from sqlmodel import Field, SQLModel, col, delete, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from .connect import _engine_for_db, _ensure_schema, _now_ms
+from .connect import _engine_for_db, _ensure_schema, _now_ms, forget_session
 
 # A claim older than this is stale: the tab closed, crashed or slept, and the
 # session is free for the next tab that asks. Past a minute because browsers
@@ -56,7 +56,7 @@ class Session(SQLModel, table=True):
     url: str = Field(default=DEFAULT_URL)  # path + search
     ui: str = Field(default="{}")  # JSON, namespaced by view
     claimed_by: str | None = Field(default=None, index=True)  # tab token
-    claim_seen_at: int | None = Field(default=None)  # unix ms
+    claim_seen_at: int | None = Field(default=None)  # unix ms; the release time once unclaimed
     last_active_at: int = Field(index=True)  # unix ms
 
 
@@ -279,18 +279,27 @@ def _free(tab: str, now: int):
     return update(Session).where(col(Session.claimed_by) == tab).values(claimed_by=None, claim_seen_at=now)
 
 
-def _sweep(keep_id: str, now: int):
+async def _sweep(s: AsyncSession, keep_id: str, now: int) -> None:
     """Drop unnamed sessions released a claim TTL ago: they are scratch, kept only
     while a tab shows them. The TTL is the reload grace — a reload's release
     beacon can land after its re-attach, and the next heartbeat re-claims within
-    it. A lapsed claim (a crashed or sleeping tab) is left alone: it may wake."""
-    return delete(Session).where(
+    it. A lapsed claim (a crashed or sleeping tab) is left alone: it may wake.
+    A row never stamped (released before releases were timed) goes by its last
+    activity. Each swept id also drops its in-memory connections (`forget_session`),
+    as the delete route does."""
+    dead = (
         col(Session.label).is_(None),
         col(Session.id) != AGENT_SESSION_ID,
         col(Session.id) != keep_id,
         col(Session.claimed_by).is_(None),
-        col(Session.claim_seen_at) < now - SESSION_CLAIM_TTL_MS,
+        func.coalesce(Session.claim_seen_at, Session.last_active_at) < now - SESSION_CLAIM_TTL_MS,
     )
+    ids = (await s.exec(select(Session.id).where(*dead))).all()
+    if not ids:
+        return
+    for sid in ids:
+        forget_session(sid)
+    await s.exec(delete(Session).where(col(Session.id).in_(ids)))
 
 
 async def _claim(s: AsyncSession, row: Session, tab: str, now: int) -> None:
@@ -298,7 +307,7 @@ async def _claim(s: AsyncSession, row: Session, tab: str, now: int) -> None:
     dead scratch sessions. Single statements rather than scans: this runs on
     every heartbeat, and the rows a scan would hydrate carry the saved SQL."""
     await s.exec(_free(tab, now).where(col(Session.id) != row.id))
-    await s.exec(_sweep(row.id, now))
+    await _sweep(s, row.id, now)
     row.claimed_by = tab
     row.claim_seen_at = now
     row.last_active_at = now
