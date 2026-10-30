@@ -17,6 +17,7 @@ export function SearchPanel<T>({
   renderItem,
   itemProps,
   itemAction,
+  header,
   headerExtra,
   footer,
   className = '',
@@ -35,6 +36,8 @@ export function SearchPanel<T>({
   // A control beside each option (e.g. copy). A sibling, not a child: the
   // option is itself a button.
   itemAction?: (item: T) => React.ReactNode
+  // Above the search box (e.g. the folder path the options live in).
+  header?: React.ReactNode
   // Beside the search box (e.g. All / None).
   headerExtra?: React.ReactNode
   // Below the list (e.g. Disconnect).
@@ -49,6 +52,7 @@ export function SearchPanel<T>({
       data-testid={testid}
       className={`glass-popover absolute top-full z-10 mt-2 flex flex-col p-1 text-sm ${className}`}
     >
+      {header}
       <form
         className="flex items-center gap-1 p-1"
         onSubmit={(e) => {
