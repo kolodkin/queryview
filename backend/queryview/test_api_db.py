@@ -119,6 +119,8 @@ def test_folder_connection_lands_on_root_with_tables_and_union(tmp_path):
     assert r["ok"], r
     assert r["databases"] == [".", "sub"] and r["database"] == "." and r["root"] == root
     assert c.get("/api/session").json()["root"] == root
+    # The default is persisted: the tab re-derives its connection from the session row.
+    assert asyncio.run(sessions.get_session_rec(sid)).database == "."
     names = [t["name"] for t in c.get("/api/db/tables").json()["tables"]]
     assert names == ["a.csv", "b.csv", "*.csv"]
     glob = c.get("/api/db/tables", params={"union": "1"}).json()["tables"][-1]

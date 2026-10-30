@@ -366,3 +366,19 @@ def seeded_duckdb_long_names(tmp_path_factory) -> str:
         "sales_reporting_monthly_rollup",
         "warehouse_shipment_reconciliation_log",
     )
+
+
+@pytest.fixture(scope="module")
+def seeded_folder(tmp_path_factory) -> str:
+    """A folder for DuckDB folder mode: two CSVs at the root (the shared
+    alpha/beta/gamma rows plus one delta row) and a gzipped CSV in `sub/`."""
+    import gzip
+
+    root = tmp_path_factory.mktemp("duck_folder")
+    rows = "id,name\n1,alpha\n2,beta\n3,gamma\n"
+    (root / "items.csv").write_text(rows)
+    (root / "extra.csv").write_text("id,name\n4,delta\n")
+    (root / "sub").mkdir()
+    with gzip.open(root / "sub" / "nested.csv.gz", "wt") as f:
+        f.write(rows)
+    return str(root)

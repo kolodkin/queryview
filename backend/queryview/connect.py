@@ -567,6 +567,8 @@ async def connect_new(
         await _save_active_connection(name, config, conn_type)
     _set_session_entry(sid, state)
     await sessions.set_connection(sid, name)
+    if state.database:  # folder mode's "." default: the tab reads it back from the row
+        await sessions.set_database(sid, state.database)
     return {
         "ok": True,
         "name": name,
@@ -603,6 +605,8 @@ async def open_saved(
     await sessions.set_connection(sid, name, by)
     if database is not None:
         await select_database(sid, database)
+    elif state.database:  # folder mode's "." default
+        await sessions.set_database(sid, state.database)
     return {
         "ok": True,
         "name": name,
