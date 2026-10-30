@@ -13,6 +13,8 @@ export type Connection = {
   database: string | null
   // The dialect's identifier quote (`"` or a backtick), for dashboard params.
   identQuote?: string
+  // The directory a DuckDB folder-mode connection browses (absolute).
+  root?: string
   // False on a locked saved connection this tab holds no token for; the
   // shell prompts for the passphrase while it is.
   unlocked?: boolean
@@ -38,6 +40,7 @@ export function toConnection(data: Record<string, unknown>): Connection {
     databases: (data.databases ?? []) as string[],
     database: (data.database ?? null) as string | null,
     identQuote: data.ident_quote as string | undefined,
+    root: data.root as string | undefined,
     unlocked: data.unlocked as boolean | undefined,
   }
 }
