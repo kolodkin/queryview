@@ -93,10 +93,14 @@ entries (name starting with `.`) and symlinked directories are skipped.
 huge root does not stall connect. Marked in code as
 `shortcut: depth capped, upgrade to lazy per-folder listing if roots get deep`.
 
-**Default selection**: in folder mode the session's `database` defaults to `"."`
-when nothing is remembered, so connecting lands on the Explorer showing the
-root's files, matching DuckDB's "straight to the explorer" behavior today. The
-remembered database still wins when it is in the list.
+**Default selection**: in folder mode `_build_session` sets `database` to
+`"."` whenever it would otherwise be null, so connecting or reopening lands on
+the Explorer showing the root's files, matching DuckDB's "straight to the
+explorer" behavior today. Reopening does **not** return to the last folder:
+`open_saved` resets the database for every driver and that stays as is. Only
+the backend-restart rebuild (`_ensure_session`) restores the session's own
+folder, and if that folder vanished it falls back to `"."`. So in folder mode
+`database` is never null and the existing gate needs no change.
 
 ### Folder mode: tables
 
@@ -153,8 +157,10 @@ width.
 
 ### Picker: one level at a time
 
-Both picker surfaces (pill menu and Connect page) get the same treatment via
-one small helper in `frontend/src/app/connection.ts`:
+Only the pill menu (`DatabaseMenu` in `App.tsx`) changes. The Connect page's
+`DatabasePicker` renders only while `database` is null, which never happens in
+folder mode, so it is left alone. The children/parent logic lives in one small
+helper in `frontend/src/app/connection.ts`:
 
 - In folder mode the items shown are the **children** of the current database
   (entries whose parent path equals it), displayed by their last path segment,
@@ -183,21 +189,24 @@ Sketch of the pill menu in folder mode:
 
 To show the full path the frontend needs the root: `/api/db/connect`,
 `/api/db/open` and `/api/session` responses include the driver's `root` for
-folder-mode DuckDB (absolute, as configured). Other drivers send nothing.
+folder-mode DuckDB (absolute, as configured) and the selected `database`
+(`connect_new` omits `database` today; it must send it so the frontend sees
+the `"."` default). Other drivers send no `root`.
 
-### Gate
+### Connect / test on a directory
 
-`_gated_session` 409s with `no-database` when
-`(driver.requires_database or s.databases) and not s.database`. The static
-flag keeps its meaning for ClickHouse/Postgres; a folder-mode DuckDB session
-is gated by having a list. With the `"."` default this only bites when a
-remembered folder has vanished.
+`duckdb.connect(<dir>)` raises, so in folder mode `test()` checks the directory
+is readable and runs `SELECT 1` on `:memory:` instead; `_open` opens `:memory:`
+and sets `file_search_path`. The mode is re-derived from `path` on every call
+since `_open` is per call.
 
 ### Security
 
 - Selection is validated against the cached list, as today, so `..` segments
   or absolute paths can never become the active folder.
-- The walk follows no symlinks and skips hidden entries.
+- The walk skips hidden entries and symlinked directories and files
+  (`os.walk` with `followlinks=False` still lists symlinked dirs, so they are
+  filtered out of `dirs` explicitly).
 - `file_search_path` scopes relative names in generated queries to the folder;
   user-typed SQL on the query page can still name any path the process can
   read, which is already true today.
@@ -217,8 +226,8 @@ Per the project `testing` skill:
   `.` and subdirectories, skips hidden ones, caps depth; tables list files,
   compressed variants and glob entries with byte sums; queries resolve via
   `file_search_path`; union flag changes glob queries only; file mode unchanged.
-- API test: `/api/db/tables?union=1` on a folder-mode session; gate 409 when
-  the folder list is non-empty and nothing selected.
+- API test: `/api/db/tables?union=1` on a folder-mode session; connecting to
+  a folder lands with `database == "."` and `root` in the response.
 - Frontend unit test for the children/parent helper.
 - One e2e: connect to a temp folder with a CSV and a subfolder, enter the
   subfolder from the pill, see the full path, browse a file.
@@ -229,3 +238,5 @@ Per the project `testing` skill:
 - Whether parquet row counts come from `parquet_file_metadata` (cheap) or stay
   null like the others; null is acceptable for the first cut.
 - Checkbox placement details within the Explorer sidebar header.
+- File names containing glob metacharacters (`[`, `?`, `*`) may be read as
+  patterns by DuckDB; skipping such files is acceptable.
