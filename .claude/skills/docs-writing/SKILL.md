@@ -19,7 +19,7 @@ running shortify on the pages you touched.
 - The opening paragraph names the route (`/queryview`, `/explorer`, …) and
   links the neighboring pages a reader may have meant instead.
 - UI labels are **bold**, exactly as the screen shows them. A page about a
-  screen may open with a layout sketch; the `ui-sketch` skill draws it.
+  screen may open with a layout sketch; the `devpowers:ui-sketch` skill draws it.
 - `api.md` is the endpoint reference. A feature page's `## API` section names
   its endpoints and links there, as `scripts.md` does; bodies and responses are
   not repeated.
