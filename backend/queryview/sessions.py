@@ -13,7 +13,7 @@ from typing import Any, ClassVar, Literal
 
 from sqlalchemy import column, table
 from sqlalchemy.orm import load_only
-from sqlmodel import Field, SQLModel, col, func, select, update
+from sqlmodel import Field, SQLModel, col, delete, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .connect import _engine_for_db, _ensure_schema, _now_ms
@@ -134,7 +134,8 @@ def _merge_ui(current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any
 
 
 def _unheld_query(now: int):
-    """The session a new tab should resume: most recently active, not held."""
+    """The session a new tab should resume: the most recently active named one
+    that is not held. An unnamed session lives only in the tab that holds it."""
     stale = now - SESSION_CLAIM_TTL_MS
     return (
         select(Session)
@@ -143,7 +144,7 @@ def _unheld_query(now: int):
             | col(Session.claim_seen_at).is_(None)
             | (col(Session.claim_seen_at) < stale)
         )
-        .where(col(Session.id) != AGENT_SESSION_ID)
+        .where(col(Session.id) != AGENT_SESSION_ID, col(Session.label).is_not(None))
         .order_by(col(Session.last_active_at).desc())
         .limit(1)
     )
@@ -272,15 +273,32 @@ async def delete_session(sid: str) -> tuple[bool, str]:
 # --- Claims (one tab holds a session at a time) ---------------------------
 
 
-async def _claim(s: AsyncSession, row: Session, tab: str, now: int) -> None:
-    """Take the session for `tab` and free whatever else that tab held. The
-    release is one UPDATE rather than a scan: this runs on every heartbeat, and
-    the rows it would otherwise hydrate carry the saved SQL."""
-    await s.exec(
-        update(Session)
-        .where(col(Session.claimed_by) == tab, col(Session.id) != row.id)
-        .values(claimed_by=None, claim_seen_at=None)
+def _free(tab: str, now: int):
+    """Release what `tab` holds. `claim_seen_at` keeps the release time: an
+    unnamed session is swept once that is a claim TTL old (`_sweep`)."""
+    return update(Session).where(col(Session.claimed_by) == tab).values(claimed_by=None, claim_seen_at=now)
+
+
+def _sweep(keep_id: str, now: int):
+    """Drop unnamed sessions released a claim TTL ago: they are scratch, kept only
+    while a tab shows them. The TTL is the reload grace — a reload's release
+    beacon can land after its re-attach, and the next heartbeat re-claims within
+    it. A lapsed claim (a crashed or sleeping tab) is left alone: it may wake."""
+    return delete(Session).where(
+        col(Session.label).is_(None),
+        col(Session.id) != AGENT_SESSION_ID,
+        col(Session.id) != keep_id,
+        col(Session.claimed_by).is_(None),
+        col(Session.claim_seen_at) < now - SESSION_CLAIM_TTL_MS,
     )
+
+
+async def _claim(s: AsyncSession, row: Session, tab: str, now: int) -> None:
+    """Take the session for `tab`, free whatever else that tab held, and sweep
+    dead scratch sessions. Single statements rather than scans: this runs on
+    every heartbeat, and the rows a scan would hydrate carry the saved SQL."""
+    await s.exec(_free(tab, now).where(col(Session.id) != row.id))
+    await s.exec(_sweep(row.id, now))
     row.claimed_by = tab
     row.claim_seen_at = now
     row.last_active_at = now
@@ -352,10 +370,7 @@ async def release(tab: str) -> None:
     covers the tab that never got to send it."""
     await _ensure_schema()
     async with _writes, _open() as s:
-        for row in (await s.exec(select(Session).where(Session.claimed_by == tab))).all():
-            row.claimed_by = None
-            row.claim_seen_at = None
-            s.add(row)
+        await s.exec(_free(tab, _now_ms()))
         await s.commit()
 
 
