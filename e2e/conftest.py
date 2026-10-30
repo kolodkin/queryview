@@ -357,6 +357,20 @@ def seeded_duckdb(tmp_path_factory) -> str:
 
 
 @pytest.fixture(scope="module")
+def seeded_sqlite(tmp_path_factory) -> str:
+    """A temp SQLite file with the same `items` table."""
+    import sqlite3
+
+    path = str(tmp_path_factory.mktemp("sqlite") / "qv.sqlite")
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE items (id INTEGER, name TEXT)")
+    con.execute("INSERT INTO items VALUES (1,'alpha'),(2,'beta'),(3,'gamma')")
+    con.commit()
+    con.close()
+    return path
+
+
+@pytest.fixture(scope="module")
 def seeded_duckdb_long_names(tmp_path_factory) -> str:
     """As above plus invented names too long for the sidebar's default width,
     so the resize test exercises the truncation it exists to fix."""

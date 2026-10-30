@@ -1,6 +1,6 @@
 # QueryView
 
-A local SQL workbench for **ClickHouse**, **Postgres** and **DuckDB** — and a
+A local SQL workbench for **ClickHouse**, **Postgres**, **DuckDB** and **SQLite** — and a
 place to let an AI agent do the querying for you.
 
 Pick a saved connection from its card to open a database, then **QueryView** to
@@ -47,7 +47,7 @@ Open http://localhost:8000 — it lands on the **Connect** page:
 
 | Page | What happens |
 |---|---|
-| **Connect** → *New connection* card | Create a ClickHouse, Postgres or DuckDB connection — host, port and credentials, or a file path for DuckDB. Passwords are encrypted at rest. |
+| **Connect** → *New connection* card | Create a ClickHouse, Postgres, DuckDB or SQLite connection — host, port and credentials, or a file path for DuckDB and SQLite. Passwords are encrypted at rest. |
 | **Connect** → a saved card | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
 | **QueryView** | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
 | **Scripts** | A flat SQL scratchpad: run the statement under the cursor or the whole `;`-separated script as written — writes and DDL included, stopping at the first error — see the last statement's rows, hand it to QueryView. |

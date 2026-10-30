@@ -36,7 +36,8 @@ a database picker — for ClickHouse the picker lists `SHOW DATABASES`, for Post
 it lists real databases (`pg_database`) and the chosen one is where queries run.
 DuckDB takes a **path** (or `:memory:`), has no network and **no picker** —
 connecting goes straight to the explorer; schema-qualify tables in SQL as
-needed.
+needed. SQLite takes a **path** to an existing file and likewise has no picker;
+every page but the script run opens it read-only.
 
 A saved card that fails to open reports the error under the cards.
 When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`
@@ -135,7 +136,7 @@ Connection details are stored via SQLModel in the SQLite database (see
 CREATE TABLE connections (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   name           TEXT NOT NULL UNIQUE,
-  type           TEXT NOT NULL,   -- selects the driver (clickhouse | postgres | duckdb)
+  type           TEXT NOT NULL,   -- selects the driver (clickhouse | postgres | duckdb | sqlite)
   config         TEXT NOT NULL,   -- base64(AES-GCM(json.dumps(driver config)))
   database       TEXT,            -- last selected database (nullable)
   last_active_at INTEGER NOT NULL -- unix ms; when it was last opened
@@ -182,7 +183,7 @@ restarts (the session then reads as disconnected).
   agent's `use_connection` toasts "Agent switched to <name>", never the user's.
 - You add one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved connections and all sessions' ones.
-- The agent may add (ClickHouse or Postgres only: DuckDB reads local files),
+- The agent may add (ClickHouse or Postgres only: DuckDB and SQLite read local files),
   switch to, pick the database of and remove its own. Anything else it may only
   list, and query while active. See [remote.md](./remote.md#mcp-tools).
 - This keeps a cooperating agent in its lane; it is not a security boundary.
@@ -277,8 +278,8 @@ session.
 | GET    | `/api/session`                | —                                      | `{connected, name?, type?, databases?, database?}` for the calling session |
 
 `test`/`connect` resolve the driver from `type` and validate per driver
-(ClickHouse/Postgres require `host` + `port` `1..65535`; DuckDB requires a
-`path`); validation errors return `400`. ClickHouse queries run over the HTTP
+(ClickHouse/Postgres require `host` + `port` `1..65535`; DuckDB and SQLite take a
+`path`, required for SQLite); validation errors return `400`. ClickHouse queries run over the HTTP
 interface with HTTP Basic auth and a 5s timeout.
 
 ## CI

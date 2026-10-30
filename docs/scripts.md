@@ -70,7 +70,7 @@ that supports transactions if partial application is not acceptable.
 | Last statement run | Line |
 | --- | --- |
 | Returned rows | `N rows · T ms`; cut at **100 rows**: `first 100 rows, more exist · T ms` |
-| No rows (DDL, DML) | the driver's own status — ClickHouse `OK`, Postgres's command tag (`INSERT 0 3`), DuckDB `OK` — `· T ms` |
+| No rows (DDL, DML) | the driver's own status — ClickHouse `OK`, Postgres's command tag (`INSERT 0 3`), DuckDB and SQLite `OK` — `· T ms` |
 | Failed | `Statement #k Failed - <the driver's error>` in red; the statement itself is **marked red in the textbox** until you click into it |
 
 A script's line starts with `N statements ·` and `T` is the total.
@@ -94,6 +94,9 @@ same JSON shape as every other result
   page opens it read-only. DuckDB refuses a second open of one file with a
   different mode in the same process, so the explorer and QueryView error on
   that file until the run finishes. A `:memory:` database is new on every run.
+- **SQLite** — the file is opened read-write in autocommit mode for the run
+  (every other page opens it read-only), so a script's own `BEGIN`/`COMMIT`
+  work and each statement persists as it runs.
 
 ## Session
 

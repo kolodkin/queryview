@@ -22,13 +22,14 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
 |  +---------------+ +---------------+ +---------------+   |
 |  NEW CONNECTION                                          |
 |  [CH ClickHouse +] [PG Postgres +] [DK DuckDB +]         |
+|  [SQ SQLite +]                                           |
 +----------------------------------------------------------+
 ```
 
 - **Saved connections** — most recent first: driver monogram, name, last
   database, last used; the active one has a green dot. Clicking opens it: the
   database picker (last-used database highlighted), or the explorer for a
-  picker-less driver (DuckDB). Each card edits (✎), deletes (✕) and locks (🔒)
+  picker-less driver (DuckDB, SQLite). Each card edits (✎), deletes (✕) and locks (🔒)
   its connection (see [connect.md](./connect.md)).
 - **New connection** — a card per driver, and the same entries in the **+ New**
   menu; either opens that driver's form in place (see

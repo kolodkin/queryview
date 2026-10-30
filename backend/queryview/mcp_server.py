@@ -290,7 +290,7 @@ async def _databases_of(session_id: str, c: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-# Network drivers only: DuckDB's SQL reads any file the backend can.
+# Network drivers only: DuckDB's and SQLite's SQL read any file the backend can.
 _AGENT_DRIVERS = ("clickhouse", "postgres")
 
 
@@ -313,7 +313,7 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
     Args:
         session_id: The session id shown in the QueryView popover.
         name: A name no saved or session connection uses yet.
-        type: "clickhouse" or "postgres" (DuckDB is refused: it reads local files).
+        type: "clickhouse" or "postgres" (DuckDB and SQLite are refused: they read local files).
         config: {host, port, username, password}.
 
     Returns {"ok": True, "name", "type", "databases"} or {"ok": False, "message"}.

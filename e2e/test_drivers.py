@@ -50,6 +50,14 @@ CASES = [
         "duckdb",
         path_field="duck-path",
     ),
+    DriverCase(
+        "sqlite",
+        "sqlite-form",
+        "sq-connect",
+        "seeded_sqlite",
+        "sqlite",
+        path_field="sq-path",
+    ),
 ]
 
 
@@ -69,7 +77,7 @@ def _connect(page: Page, case: DriverCase, seed) -> None:
         expect(page.get_by_test_id("db-picker")).to_be_visible()
         page.locator(f'[data-db="{case.db_option}"]').click()
     else:
-        # Picker-less driver (DuckDB): connecting goes straight to ready.
+        # Picker-less driver (DuckDB, SQLite): connecting goes straight to ready.
         expect(page.get_by_test_id("db-picker")).to_have_count(0)
     expect(page.get_by_test_id("connection-status")).to_contain_text(case.status_text)
 
