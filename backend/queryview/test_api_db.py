@@ -225,3 +225,28 @@ def test_reopening_a_folder_connection_goes_back_to_its_last_folder_and_file(tmp
     assert c.post("/api/db/connect", json=other).json()["ok"]
     r = c.post("/api/db/open", json={"name": "lv-folder"}).json()
     assert r["database"] == "sub" and r["table"] == "c.csv"
+
+
+@pytest.mark.parametrize("driver", ["sqlite", "duckdb"])
+def test_reopening_a_picker_less_connection_goes_back_to_its_last_table(tmp_path, driver):
+    # SQLite and a DuckDB file have no database: last visited holds the table only.
+    import sqlite3
+
+    import duckdb
+
+    path = str(tmp_path / f"lv.{driver}")
+    con = sqlite3.connect(path) if driver == "sqlite" else duckdb.connect(path)
+    con.execute("CREATE TABLE orders (id INTEGER)")
+    con.execute("CREATE TABLE refunds (id INTEGER)")
+    con.commit()
+    con.close()
+    sid = asyncio.run(sessions.create_session()).id
+    c = TestClient(app, headers={"X-QV-Session": sid})
+    body = {"type": driver, "name": f"lv-{driver}", "path": path, "session": True}
+    assert c.post("/api/db/connect", json=body).json()["ok"]
+    assert c.patch(f"/api/sessions/{sid}", json={"table": "refunds"}).json()["ok"]
+    other = {"type": "duckdb", "name": f"lv-{driver}-other", "path": ":memory:", "session": True}
+    assert c.post("/api/db/connect", json=other).json()["ok"]
+    r = c.post("/api/db/open", json={"name": f"lv-{driver}"}).json()
+    assert r["ok"] and r["database"] is None and r["table"] == "refunds"
+    assert c.get("/api/session").json()["table"] == "refunds"

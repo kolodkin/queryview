@@ -47,7 +47,8 @@ goes straight back to them, skipping the picker:
   [explorer.md](./explorer.md#duckdb-folder-mode)); a database no longer
   listed lands on the picker.
 - **Table** — the Explorer opens it if it is still in that database. Picking
-  another database forgets it.
+  another database forgets it. SQLite and a DuckDB file have no database, so
+  their entry is the table alone.
 
 The record is the session's, not the connection's: a new session opens a
 Postgres or ClickHouse connection on its picker, with the last database used
