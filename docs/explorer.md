@@ -133,6 +133,8 @@ root; reopening the connection does too.
   says so: "More than N files" above the sidebar (its `*.<ext>` entries then
   read only the listed files), "More than N folders" in the pill menu.
   Remembered with the sidebar width; the server reads it from the session.
+  After a backend restart, a selected folder past the limit stays selected if
+  it still exists under the root (not hidden or behind a symlink).
 - **Union by name** — adds `union_by_name = true` to `*.<ext>` queries, so a
   column only some files have is kept (NULL elsewhere) rather than dropped.
   Remembered with the sidebar width.

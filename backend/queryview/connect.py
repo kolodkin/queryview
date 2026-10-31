@@ -496,6 +496,20 @@ async def _list_databases(
     return r, None
 
 
+def _folder_under(root: str, rel: str) -> bool:
+    """Whether a stored folder-mode path is still a folder the listing could
+    show: relative, inside `root`, and no step hidden, symlinked or missing."""
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") or p.startswith(".") for p in parts):
+        return False
+    path = root
+    for p in parts:
+        path = os.path.join(path, p)
+        if os.path.islink(path) or not os.path.isdir(path):
+            return False
+    return True
+
+
 async def _build_session(
     name: str,
     config: DriverConfig,
@@ -509,6 +523,8 @@ async def _build_session(
     if listed is None:
         return None, message
     databases = listed.databases
+    if database and database not in databases and listed.root and _folder_under(listed.root, database):
+        databases = [*databases, database]  # a selected folder past the list limit, still on disk
     if not (database and database in databases):
         # "." is DuckDB folder mode's root: always a valid pick, so a folder
         # connection lands on the explorer rather than the picker.
