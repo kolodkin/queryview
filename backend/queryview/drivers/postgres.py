@@ -12,6 +12,7 @@ from typing import Any
 import asyncpg
 
 from .base import (
+    DEFAULT_LIST_LIMIT,
     RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_ROW_CAP,
     SCRIPT_TIMEOUT_SECONDS,
@@ -140,7 +141,9 @@ class PostgresDriver:
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "message": error_message(e)}
 
-    async def list_databases(self, config: PgConfig) -> DatabasesResult | Err:
+    async def list_databases(
+        self, config: PgConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
+    ) -> DatabasesResult | Err:
         try:
             async with _connect_bootstrap(config) as conn:
                 rows = await conn.fetch(
@@ -150,7 +153,9 @@ class PostgresDriver:
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
 
-    async def list_tables(self, config: PgConfig, database: str | None) -> TablesResult | Err:
+    async def list_tables(
+        self, config: PgConfig, database: str | None, union: bool = False, limit: int = DEFAULT_LIST_LIMIT
+    ) -> TablesResult | Err:
         # Tables and views of the public schema — what an unqualified name in
         # the explorer's generated SELECT resolves to under the default
         # search_path. Other schemas need explicit SQL on the query page.

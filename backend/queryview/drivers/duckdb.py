@@ -4,6 +4,7 @@ library is driven in a worker thread so the event loop is never blocked."""
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Any
 import duckdb
 
 from .base import (
+    DEFAULT_LIST_LIMIT,
     RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_ROW_CAP,
     Column,
@@ -43,10 +45,154 @@ def parse_duck_config(body: Any) -> tuple[DuckConfig | None, str | None]:
     return DuckConfig(path=path or ":memory:"), None
 
 
-def _open(path: str, read_only: bool = True):
+def _is_folder(path: str) -> bool:
+    """Folder mode: `path` is a directory of data files rather than a .duckdb file."""
+    return path != ":memory:" and os.path.isdir(path)
+
+
+def _folder_error(path: str) -> str | None:
+    """Why a folder-mode root cannot be used, or None. Shared by Test and
+    connect so the two never disagree."""
+    if "," in os.path.abspath(path):  # file_search_path reads a comma as a list separator
+        return "a DuckDB folder path cannot contain a comma"
+    if not os.access(path, os.R_OK | os.X_OK):
+        return f"cannot read {path}"
+    return None
+
+
+def _resolve_folder(root: str, rel: str | None) -> str:
+    """The deepest folder along the relative path `rel` that still exists under
+    `root`, checked one step at a time ("." when none). A path with an empty,
+    `.`/`..` or hidden step is refused whole; a missing or symlinked step ends
+    the walk there, so a vanished folder resolves to its nearest parent."""
+    parts = (rel or ".").split("/")
+    if any(p == "" or p.startswith(".") for p in parts):  # also ".", "..", hidden
+        return "."
+    found = "."
+    for i in range(len(parts)):
+        step = "/".join(parts[: i + 1])
+        path = os.path.join(root, step)
+        if os.path.islink(path) or not os.path.isdir(path):
+            break
+        found = step
+    return found
+
+
+def _list_folders(root: str, current: str | None, limit: int) -> tuple[list[str], str, bool]:
+    """One level: the root ("."), the resolved current folder and its parent
+    chain, and up to `limit` of its own subfolders; then the resolved folder,
+    and whether it has more subfolders. Hidden names, symlinks and an
+    unreadable folder are skipped; the limit never cuts the path itself."""
+    current = _resolve_folder(root, current)
+    try:
+        with os.scandir(os.path.join(root, current)) as entries:
+            names = sorted(e.name for e in entries if e.is_dir(follow_symlinks=False) and not e.name.startswith("."))
+    except OSError:
+        names = []
+    parts = [] if current == "." else current.split("/")
+    chain = ["/".join(parts[: i + 1]) for i in range(len(parts))]
+    prefix = "" if current == "." else current + "/"
+    shown = {*chain, *(prefix + n for n in names[:limit])}
+    return [".", *sorted(shown)], current, len(names) > limit
+
+
+def _sql_str(value: str) -> str:
+    """`value` as a single-quoted SQL string literal."""
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _open(path: str, database: str | None, read_only: bool = True):
+    # Folder mode has no database file: an in-memory connection whose
+    # file_search_path is the root, so `read_csv('sub/x.csv')` resolves the
+    # same whichever folder is selected (and as the Explorer shows the path).
+    if _is_folder(path):
+        con = duckdb.connect(":memory:")
+        con.execute(f"SET file_search_path = {_sql_str(path)}")
+        return con
+    if database is not None:  # only folder mode selects one: the folder is gone
+        raise FileNotFoundError(f"folder not found: {path}")
     # read_only avoids lock contention between concurrent describe/query opens;
     # :memory: cannot be read_only, so open it read-write.
     return duckdb.connect(path, read_only=(read_only and path != ":memory:"))
+
+
+# Data files a folder lists as tables: base extension -> DuckDB reader. A
+# non-parquet one may also carry a .gz or .zst suffix (parquet compresses
+# internally); DuckDB infers the compression from the suffix.
+_READERS = {
+    ".parquet": "read_parquet",
+    ".csv": "read_csv",
+    ".tsv": "read_csv",
+    ".json": "read_json",
+    ".jsonl": "read_json",
+    ".ndjson": "read_json",
+}
+_COMPRESSIONS = (".gz", ".zst")
+
+
+def _data_ext(name: str) -> tuple[str, str] | None:
+    """A file name's data extension and compression suffix (`.csv`, `.gz`), or
+    None when the folder lister should skip the file."""
+    lower = name.lower()
+    comp = next((c for c in _COMPRESSIONS if lower.endswith(c)), "")
+    _stem, ext = os.path.splitext(lower[: len(lower) - len(comp)])
+    if ext not in _READERS or (comp and ext == ".parquet"):
+        return None
+    return ext, comp
+
+
+# Characters DuckDB reads as a glob pattern; a file so named is left out of the
+# listing rather than silently reading a neighbour.
+_GLOB_CHARS = set("*?[")
+
+
+def _read_query(ext: str, comp: str, names: list[str], union: bool) -> str:
+    """The browse SELECT for one file or (a glob entry) the listed files of one
+    extension, relative to file_search_path. Files are named explicitly, never
+    as a pattern: a pattern would follow symlinks and hidden files the listing
+    skips. Compression is spelled out since DuckDB only infers a lowercase suffix."""
+    reader = _READERS[ext]
+    source = _sql_str(names[0]) if len(names) == 1 else "[" + ", ".join(_sql_str(n) for n in names) + "]"
+    extra = ", compression = 'gzip'" if comp == ".gz" else ", compression = 'zstd'" if comp == ".zst" else ""
+    extra += ", union_by_name = true" if union and len(names) > 1 else ""
+    return f"SELECT * FROM {reader}({source}{extra})"
+
+
+def _list_files(root: str, folder: str, union: bool, limit: int) -> TablesResult:
+    """The first `limit` data files directly in `folder` (relative to `root`),
+    then one `*.<ext>` glob per extension with two or more of them. Queries
+    name files by their path from the root. rows is never estimated; bytes is
+    the file size, stat'ed only for the files kept."""
+    prefix = "" if folder == "." else folder + "/"
+    with os.scandir(os.path.join(root, folder)) as it:
+        matched = sorted(
+            (
+                (e, kind)
+                for e in it
+                if e.is_file(follow_symlinks=False)
+                and not e.name.startswith(".")
+                and not _GLOB_CHARS & set(e.name)
+                and (kind := _data_ext(e.name))
+            ),
+            key=lambda m: m[0].name,
+        )
+    files = [(e.name, prefix + e.name, e.stat().st_size, kind) for e, kind in matched[:limit]]
+    # `path` is the file's path from the root, for the Explorer to show; a glob has none.
+    tables = [
+        {"name": n, "path": p, "rows": None, "bytes": b, "query": _read_query(*kind, [p], union)}
+        for n, p, b, kind in files
+    ]
+    globs: dict[tuple[str, str], list[tuple[str, int]]] = {}  # (ext, comp) -> its (path, size) files
+    for _n, p, b, kind in files:
+        globs.setdefault(kind, []).append((p, b))
+    for kind, members in sorted(globs.items()):
+        if len(members) >= 2:
+            query = _read_query(*kind, [p for p, _ in members], union)
+            name = "*" + "".join(kind)
+            tables.append(
+                {"name": name, "path": None, "rows": None, "bytes": sum(b for _, b in members), "query": query}
+            )
+    return TablesResult(tables, truncated=len(matched) > limit)
 
 
 _READ_STATEMENTS = {duckdb.StatementType.SELECT, duckdb.StatementType.EXPLAIN}
@@ -83,7 +229,9 @@ class DuckDBDriver:
 
     async def test(self, config: DuckConfig) -> dict[str, Any]:
         def _work():
-            con = _open(config.path)
+            if _is_folder(config.path) and (problem := _folder_error(config.path)):
+                raise ValueError(problem)
+            con = _open(config.path, None)
             try:
                 return _scalar(con, "SELECT 1")
             finally:
@@ -95,17 +243,37 @@ class DuckDBDriver:
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "message": error_message(e)}
 
-    async def list_databases(self, config: DuckConfig) -> DatabasesResult | Err:
-        # No picker: queries run directly against the file (schema-qualify in SQL).
-        return DatabasesResult([])
+    async def list_databases(
+        self, config: DuckConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
+    ) -> DatabasesResult | Err:
+        # Folder mode lists folders as the "databases"; a file has no picker:
+        # queries run directly against it (schema-qualify in SQL).
+        if not _is_folder(config.path):
+            return DatabasesResult([])
+        try:
+            if problem := _folder_error(config.path):
+                return Err(problem)
+            root = os.path.abspath(config.path)
+            folders, resolved, truncated = await asyncio.to_thread(_list_folders, root, current, limit)
+            return DatabasesResult(folders, root=root, truncated=truncated, current=resolved)
+        except Exception as e:  # noqa: BLE001
+            return Err(error_message(e))
 
-    async def list_tables(self, config: DuckConfig, database: str | None) -> TablesResult | Err:
+    async def list_tables(
+        self, config: DuckConfig, database: str | None, union: bool = False, limit: int = DEFAULT_LIST_LIMIT
+    ) -> TablesResult | Err:
+        if _is_folder(config.path):
+            try:
+                return await asyncio.to_thread(_list_files, config.path, database or ".", union, limit)
+            except Exception as e:  # noqa: BLE001
+                return Err(error_message(e))
+
         # SHOW TABLES for the name set, joined with duckdb_tables()'s estimated
         # row count (absent for views). Bytes are distinct storage blocks ×
         # block size from pragma_storage_info — metadata only, no data scan;
         # None for views and whenever the pragma has nothing (e.g. :memory:).
         def _work():
-            con = _open(config.path)
+            con = _open(config.path, database)
             try:
                 names = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
                 est = dict(con.execute("SELECT table_name, estimated_size FROM duckdb_tables()").fetchall())
@@ -114,11 +282,10 @@ class DuckDBDriver:
                 def _bytes(name: str) -> int | None:
                     if name not in est:  # a view — no storage of its own
                         return None
-                    quoted = name.replace("'", "''")
                     try:
                         blocks = _scalar(
                             con,
-                            f"SELECT count(DISTINCT block_id) FROM pragma_storage_info('{quoted}') WHERE block_id >= 0",
+                            f"SELECT count(DISTINCT block_id) FROM pragma_storage_info({_sql_str(name)}) WHERE block_id >= 0",
                         )
                     except Exception:  # noqa: BLE001
                         return None
@@ -146,7 +313,7 @@ class DuckDBDriver:
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias="_qv")
 
         def _work() -> QueryRows:
-            con = _open(config.path)
+            con = _open(config.path, database)
             try:
                 return _rel_rows(con.sql(paginated))
             finally:
@@ -170,7 +337,7 @@ class DuckDBDriver:
 
     async def run_sql(self, config: DuckConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
         def _work() -> QueryRows:
-            con = _open(config.path)
+            con = _open(config.path, database)
             timer = threading.Timer(RUN_SQL_TIMEOUT_SECONDS, con.interrupt)  # DuckDB has no server-side limit
             timer.start()
             try:
@@ -209,7 +376,7 @@ class DuckDBDriver:
         inner = sql.rstrip().rstrip(";")
 
         def _work():
-            con = _open(config.path)
+            con = _open(config.path, database)
             try:
                 # DuckDB's DESCRIBE returns (column_name, column_type, ...).
                 return con.execute(f"DESCRIBE {inner}").fetchall()
@@ -239,7 +406,7 @@ class DuckDBDriver:
                 return StatementResult(stmt, False, message=error_message(e))
 
         try:
-            con = await asyncio.to_thread(_open, config.path, False)
+            con = await asyncio.to_thread(_open, config.path, database, False)
         except Exception as e:  # noqa: BLE001
             # The open itself failed: report it against the whole script.
             return [StatementResult(sql, False, message=error_message(e))]

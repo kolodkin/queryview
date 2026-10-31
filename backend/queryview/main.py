@@ -400,7 +400,7 @@ async def db_database(request: Request):
     r = await select_database(request.state.sid, database)
     if not r["ok"]:
         return _gate_error(r, ("no-session",), default=400)
-    return {"ok": True}
+    return r
 
 
 def _gate_error(r: dict[str, Any], reasons_409: tuple[str, ...], default: int = 200) -> JSONResponse:
@@ -455,10 +455,10 @@ async def db_execute(request: Request):
 # Tables of this session's selected database (the Explorer page's sidebar).
 @app.get("/api/db/tables")
 async def db_tables(request: Request):
-    r = await list_tables(request.state.sid)
+    r = await list_tables(request.state.sid, union=request.query_params.get("union") == "1")
     if not r["ok"]:
         return _gate_error(r, ("no-session", "no-database"))
-    return {"ok": True, "tables": r["tables"]}
+    return r
 
 
 # Describe a query's output columns (name + type) without scanning data.

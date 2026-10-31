@@ -5,6 +5,7 @@ per-driver test modules."""
 
 from __future__ import annotations
 
+import inspect
 import typing
 from dataclasses import dataclass
 from typing import Any
@@ -95,3 +96,14 @@ def test_query_methods_are_annotated_named_result_or_err(type_, method):
     fn = getattr(type(DRIVERS[type_]), method)
     hints = typing.get_type_hints(fn)
     assert set(typing.get_args(hints["return"])) == {RESULT_OF[method], Err}, hints["return"]
+
+
+@pytest.mark.parametrize("type_", ALL)
+def test_list_tables_accepts_union_flag(type_):
+    # The Explorer's union-by-name flag reaches every driver; only DuckDB's
+    # folder mode acts on it.
+    assert "union" in inspect.signature(DRIVERS[type_].list_tables).parameters
+    # ...and the Explorer's Max entries, which caps DuckDB folder mode's lists.
+    assert "limit" in inspect.signature(DRIVERS[type_].list_tables).parameters
+    assert "limit" in inspect.signature(DRIVERS[type_].list_databases).parameters
+    assert "current" in inspect.signature(DRIVERS[type_].list_databases).parameters

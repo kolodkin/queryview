@@ -215,7 +215,7 @@ def test_edit_reads_the_config_back_without_the_password_and_a_blank_one_keeps_i
 
     seen: list[str] = []
 
-    async def one_db(config):
+    async def one_db(config, limit=1000, current=None):
         seen.append(config.password)
         return DatabasesResult(databases=["a"])
 
@@ -298,7 +298,7 @@ def test_list_databases_leaves_out_locked_connections_even_when_unlocked():
 def test_list_databases_reports_a_failing_connection_without_failing_the_rest(monkeypatch):
     sid = _connected("list-fail-duck").headers["X-QV-Session"]
 
-    async def boom(config):
+    async def boom(config, limit=1000, current=None):
         raise RuntimeError("server gone")
 
     monkeypatch.setattr(connect.DRIVERS["duckdb"], "list_databases", boom)
