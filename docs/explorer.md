@@ -117,8 +117,8 @@ root; reopening the connection does too.
 - **Pill menu** — one level at a time: the selected folder's full path, then
   its subfolders and **..**; picking one enters it, which lists its files in
   the sidebar. The pill reads `<connection> · <folder name>` with the full path
-  as its tooltip. Folders are scanned at connect and when the menu opens,
-  shallowest first; hidden entries and symlinks are skipped.
+  as its tooltip. Only the selected folder's own subfolders are read, at connect,
+  on each pick and when the menu opens; hidden entries and symlinks are skipped.
 - **Tables** — files named `.parquet`, `.csv`, `.tsv`, `.json`, `.jsonl` or
   `.ndjson`, the non-parquet ones also with a `.gz` or `.zst` suffix. The
   browse query is the matching reader, e.g. `SELECT * FROM read_csv('items.csv')`.
@@ -128,19 +128,22 @@ root; reopening the connection does too.
 - **Path** — beside the selected file's name, its path from the root in small
   type (`sub/nested.csv.gz`) with a copy button, for SQL on the query page.
   A `*.<ext>` entry has none.
-- **Max entries** — the most folders scanned and files listed per folder,
-  default 1000 (1–100000); a blank or non-number entry is ignored. A cut list
-  says so: "More than N files" above the sidebar (its `*.<ext>` entries then
-  read only the listed files), "More than N folders" in the pill menu.
-  Remembered with the sidebar width; the server reads it from the session.
-  After a backend restart, a selected folder past the limit stays selected if
-  it still exists under the root (not hidden or behind a symlink).
+- **Max entries** — the most subfolders and files listed per folder, default
+  1000 (1–100000); a blank or non-number entry is ignored. A cut list says so:
+  "More than N files" above the sidebar (its `*.<ext>` entries then read only
+  the listed files), "More than N folders" in the pill menu. It only trims
+  what a level shows: a folder past it stays reachable by path. Remembered with
+  the sidebar width; the server reads it from the session.
+- **Selecting by path** — a saved query, an agent or a backend restart can
+  select any folder under the root, checked one step at a time: a step that is
+  hidden, `.`/`..` or empty refuses the path; one that is missing or a symlink
+  ends it there, so a folder that is gone falls back to its nearest parent.
 - **Union by name** — adds `union_by_name = true` to `*.<ext>` queries, so a
   column only some files have is kept (NULL elsewhere) rather than dropped.
   Remembered with the sidebar width.
 - **Paths** — folder mode opens `:memory:` with `file_search_path` set to the
   root, and queries name files by their path from it, so SQL reads the same
   file whichever folder is selected. Only folders under the root can be
-  selected. **Test** and connecting both refuse a root with a comma (DuckDB
+  selected (see **Selecting by path**). **Test** and connecting both refuse a root with a comma (DuckDB
   reads it as a list) or one that cannot be listed; after a backend restart, a
   folder that is gone leaves the session disconnected.

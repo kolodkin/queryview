@@ -400,7 +400,7 @@ async def db_database(request: Request):
     r = await select_database(request.state.sid, database)
     if not r["ok"]:
         return _gate_error(r, ("no-session",), default=400)
-    return {"ok": True}
+    return r
 
 
 def _gate_error(r: dict[str, Any], reasons_409: tuple[str, ...], default: int = 200) -> JSONResponse:

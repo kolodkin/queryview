@@ -141,7 +141,9 @@ class PostgresDriver:
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "message": error_message(e)}
 
-    async def list_databases(self, config: PgConfig, limit: int = DEFAULT_LIST_LIMIT) -> DatabasesResult | Err:
+    async def list_databases(
+        self, config: PgConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
+    ) -> DatabasesResult | Err:
         try:
             async with _connect_bootstrap(config) as conn:
                 rows = await conn.fetch(

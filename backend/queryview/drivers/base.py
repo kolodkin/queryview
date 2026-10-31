@@ -57,7 +57,10 @@ class DatabasesResult(Result):
     # The directory a folder-mode DuckDB connection browses (docs/explorer.md);
     # None for every other driver and for a DuckDB file.
     root: str | None = None
-    truncated: bool = False  # more folders than the list limit
+    truncated: bool = False  # the current folder has more subfolders than the list limit
+    # The folder the list is centred on: the requested one, or its nearest
+    # existing parent. None outside DuckDB folder mode.
+    current: str | None = None
 
 
 @dataclass(frozen=True)
@@ -134,8 +137,11 @@ class Driver(Protocol):
     def config_to_dict(self, config: DriverConfig) -> dict[str, Any]: ...
     def config_from_dict(self, data: dict[str, Any]) -> DriverConfig: ...
     async def test(self, config: DriverConfig) -> dict[str, Any]: ...
-    # `limit` caps DuckDB folder mode's lists; other drivers ignore it.
-    async def list_databases(self, config: DriverConfig, limit: int = DEFAULT_LIST_LIMIT) -> DatabasesResult | Err: ...
+    # `limit` and `current` (the folder to list around) are DuckDB folder
+    # mode's; other drivers ignore them.
+    async def list_databases(
+        self, config: DriverConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
+    ) -> DatabasesResult | Err: ...
     # `union`: add union_by_name to glob queries (DuckDB folder mode only;
     # other drivers ignore it).
     async def list_tables(

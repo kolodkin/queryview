@@ -107,7 +107,7 @@ def test_add_connection_refuses_duckdb_and_adds_a_network_one_directly(monkeypat
     from queryview.drivers.base import DatabasesResult
     from queryview.mcp_server import add_connection, list_connections
 
-    async def two_dbs(config, limit=1000):
+    async def two_dbs(config, limit=1000, current=None):
         return DatabasesResult(databases=["a", "b"])
 
     monkeypatch.setattr(DRIVERS["clickhouse"], "list_databases", two_dbs)
@@ -182,7 +182,7 @@ def test_select_database_only_on_the_agents_own_connection(monkeypatch):
     from queryview import connect
     from queryview.mcp_server import select_database, use_connection
 
-    async def one_db(conn_type, config, limit=1000):  # DuckDB lists none; fake a picker
+    async def one_db(conn_type, config, limit=1000, current=None):  # DuckDB lists none; fake a picker
         return DatabasesResult(["memory"]), None
 
     monkeypatch.setattr(connect, "_list_databases", one_db)
@@ -274,7 +274,7 @@ def test_add_and_remove_connection_tell_an_armed_browser_to_refresh(monkeypatch)
     from queryview.drivers.base import DatabasesResult
     from queryview.mcp_server import add_connection, remove_connection
 
-    async def one_db(config, limit=1000):
+    async def one_db(config, limit=1000, current=None):
         return DatabasesResult(databases=["a"])
 
     monkeypatch.setattr(DRIVERS["clickhouse"], "list_databases", one_db)

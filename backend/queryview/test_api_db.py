@@ -175,7 +175,7 @@ def test_a_restart_with_the_folder_gone_disconnects_instead_of_creating_a_file(t
     assert not root.exists()
 
 
-def test_a_restart_keeps_a_selected_folder_past_the_limit_if_it_still_exists(tmp_path):
+def test_folders_past_the_limit_stay_reachable_by_path(tmp_path):
     root = tmp_path / "root"
     for i in range(1, 13):
         (root / f"d{i:02d}").mkdir(parents=True)
@@ -183,21 +183,24 @@ def test_a_restart_keeps_a_selected_folder_past_the_limit_if_it_still_exists(tmp
     (root / "d12" / "deep" / "a.csv").write_text("id\n1\n")
     (tmp_path / "outside").mkdir()
     (root / "link").symlink_to(tmp_path / "outside", target_is_directory=True)
-    (root / ".hidden").mkdir()
     sid = asyncio.run(sessions.create_session()).id
+    asyncio.run(sessions.patch_session(sid, ui={"explorer": {"maxEntries": 10}}))
     c = TestClient(app, headers={"X-QV-Session": sid})
     body = {"type": "duckdb", "name": "keep-duck", "path": str(root), "session": True}
-    assert c.post("/api/db/connect", json=body).json()["ok"]
-    assert c.post("/api/db/database", json={"database": "d12/deep"}).json()["ok"]
+    r = c.post("/api/db/connect", json=body).json()
+    assert "d12" not in r["databases"] and r["databases_truncated"] is True
 
-    # Lower the limit so d12/deep falls outside the list, then restart.
-    asyncio.run(sessions.patch_session(sid, ui={"explorer": {"maxEntries": 10}}))
+    # A saved query or link can still select d12/deep: it is checked by path.
+    r = c.post("/api/db/database", json={"database": "d12/deep"}).json()
+    assert r["ok"] and r["databases"] == [".", "d12", "d12/deep"]
+    assert [t["name"] for t in c.get("/api/db/tables").json()["tables"]] == ["a.csv"]
+    for bad in ("../outside", "link", "d12/../../outside", "d99"):
+        assert c.post("/api/db/database", json={"database": bad}).status_code == 400, bad
+
+    # A restart keeps it; one that finds it gone stops at its nearest parent.
     connect._sessions.clear()
     assert c.get("/api/session").json()["database"] == "d12/deep"
-    assert [t["name"] for t in c.get("/api/db/tables").json()["tables"]] == ["a.csv"]
-
-    # A stored path that escapes the root, or is hidden, symlinked or gone, falls back to the root.
-    for stored in ("../outside", "/etc", "link", ".hidden", "d12/../../outside", "d99"):
-        asyncio.run(sessions.set_database(sid, stored))
-        connect._sessions.clear()
-        assert c.get("/api/session").json()["database"] == ".", stored
+    shutil.rmtree(root / "d12" / "deep")
+    connect._sessions.clear()
+    assert c.get("/api/session").json()["database"] == "d12"
+    assert asyncio.run(sessions.get_session_rec(sid)).database == "d12"

@@ -487,27 +487,14 @@ async def _list_limit(sid: str) -> int:
 
 
 async def _list_databases(
-    conn_type: str, config: DriverConfig, limit: int = DEFAULT_LIST_LIMIT
+    conn_type: str, config: DriverConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
 ) -> tuple[DatabasesResult | None, str | None]:
-    """The driver's database list, or (None, message) with the localhost hint."""
-    r = await DRIVERS[conn_type].list_databases(config, limit)
+    """The driver's database list, or (None, message) with the localhost hint.
+    `current` is the folder a DuckDB folder-mode list is centred on."""
+    r = await DRIVERS[conn_type].list_databases(config, limit, current)
     if isinstance(r, Err):
         return None, _with_localhost_hint(r.message, config)
     return r, None
-
-
-def _folder_under(root: str, rel: str) -> bool:
-    """Whether a stored folder-mode path is still a folder the listing could
-    show: relative, inside `root`, and no step hidden, symlinked or missing."""
-    parts = rel.split("/")
-    if any(p in ("", ".", "..") or p.startswith(".") for p in parts):
-        return False
-    path = root
-    for p in parts:
-        path = os.path.join(path, p)
-        if os.path.islink(path) or not os.path.isdir(path):
-            return False
-    return True
 
 
 async def _build_session(
@@ -519,16 +506,16 @@ async def _build_session(
 ) -> tuple[_SessionState | None, str | None]:
     """List a connection's databases and build a session object. A session
     connection's name is never in the table, so it reads as unlocked."""
-    listed, message = await _list_databases(conn_type, config, limit)
+    listed, message = await _list_databases(conn_type, config, limit, database)
     if listed is None:
         return None, message
     databases = listed.databases
-    if database and database not in databases and listed.root and _folder_under(listed.root, database):
-        databases = [*databases, database]  # a selected folder past the list limit, still on disk
-    if not (database and database in databases):
-        # "." is DuckDB folder mode's root: always a valid pick, so a folder
-        # connection lands on the explorer rather than the picker.
-        database = "." if listed.root is not None else None
+    if listed.current is not None:
+        # DuckDB folder mode: the stored folder, or its nearest existing parent
+        # (the root "." at worst), so a folder connection never lands on a picker.
+        database = listed.current
+    elif not (database and database in databases):
+        database = None
     return (
         _SessionState(
             name=name,
@@ -811,13 +798,15 @@ def forget_session(sid: str) -> None:
     _tokens.pop(sid, None)
 
 
-async def _relist(sid: str, s: _SessionState) -> dict[str, Any] | None:
-    """Replace the cached database list with a fresh one; the error result on failure."""
-    listed, message = await _list_databases(s.type, s.config, await _list_limit(sid))
-    if listed is None:
-        return {"ok": False, "message": message}
+async def _relist(sid: str, s: _SessionState, current: str | None = None) -> DatabasesResult | dict[str, Any]:
+    """A fresh database list (centred on `current`, else the selected folder, in
+    DuckDB folder mode); the error result on failure."""
+    listed, message = await _list_databases(s.type, s.config, await _list_limit(sid), current or s.database)
+    return listed if listed is not None else {"ok": False, "message": message}
+
+
+def _keep(s: _SessionState, listed: DatabasesResult) -> None:
     s.databases, s.truncated = listed.databases, listed.truncated
-    return None
 
 
 async def refresh_databases(sid: str) -> dict[str, Any]:
@@ -827,12 +816,18 @@ async def refresh_databases(sid: str) -> dict[str, Any]:
     s, err = await _unlocked_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
-    if err := await _relist(sid, s):
-        return err
+    listed = await _relist(sid, s)
+    if not isinstance(listed, DatabasesResult):
+        return listed
+    _keep(s, listed)
+    if listed.current is not None and listed.current != s.database:  # the folder vanished: its parent
+        s.database = listed.current
+        await sessions.set_database(sid, s.database)
     return {
         "ok": True,
         "name": s.name,
         "databases": s.databases,
+        **({"database": s.database} if s.root else {}),
         **({"databases_truncated": True} if s.truncated else {}),
     }
 
@@ -847,16 +842,29 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
     unknown = {"ok": False, "message": "unknown database", "reason": "unknown"}
     if not database:
         return unknown
-    if database not in s.databases:
-        if err := await _relist(sid, s):
-            return err
+    if s.root is not None:
+        # DuckDB folder mode: any folder the path check reaches, past the list
+        # limit too; the list then moves to that folder's level.
+        listed = await _relist(sid, s, database)
+        if not isinstance(listed, DatabasesResult):
+            return listed
+        if listed.current != database:
+            return unknown
+        _keep(s, listed)
+    elif database not in s.databases:
+        listed = await _relist(sid, s)
+        if not isinstance(listed, DatabasesResult):
+            return listed
+        _keep(s, listed)
         if database not in s.databases:
             return unknown
     s.database = database
     if _session_conn(sid, s.name) is None:
         await _save_selected_database(s.name, database)
     await sessions.set_database(sid, database)
-    return {"ok": True}
+    if s.root is None:
+        return {"ok": True}
+    return {"ok": True, "databases": s.databases, **({"databases_truncated": True} if s.truncated else {})}
 
 
 async def _unlocked_session(sid: str) -> tuple[_SessionState | None, dict[str, Any] | None]:

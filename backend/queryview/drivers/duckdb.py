@@ -6,7 +6,6 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
-from collections import deque
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -61,31 +60,40 @@ def _folder_error(path: str) -> str | None:
     return None
 
 
-def _list_folders(root: str, limit: int) -> tuple[list[str], bool]:
-    """The root (".") and up to `limit` subfolders as sorted relative POSIX
-    paths, and whether more exist. Scanned breadth-first, so a cut keeps the
-    shallow folders the picker shows first; hidden names, symlinks and
-    unreadable folders are skipped."""
-    found: list[str] = []
-    queue = deque(["."])
-    truncated = False
-    while queue and not truncated:
-        rel = queue.popleft()
-        try:
-            with os.scandir(os.path.join(root, rel)) as entries:
-                names = sorted(
-                    e.name for e in entries if e.is_dir(follow_symlinks=False) and not e.name.startswith(".")
-                )
-        except OSError:
-            continue
-        for n in names:
-            if len(found) == limit:
-                truncated = True
-                break
-            child = n if rel == "." else f"{rel}/{n}"
-            found.append(child)
-            queue.append(child)
-    return [".", *sorted(found)], truncated
+def _resolve_folder(root: str, rel: str | None) -> str:
+    """The deepest folder along the relative path `rel` that still exists under
+    `root`, checked one step at a time ("." when none). A path with an empty,
+    `.`/`..` or hidden step is refused whole; a missing or symlinked step ends
+    the walk there, so a vanished folder resolves to its nearest parent."""
+    parts = (rel or ".").split("/")
+    if parts == ["."] or any(p in ("", ".", "..") or p.startswith(".") for p in parts):
+        return "."
+    found = "."
+    for i in range(len(parts)):
+        step = "/".join(parts[: i + 1])
+        path = os.path.join(root, step)
+        if os.path.islink(path) or not os.path.isdir(path):
+            break
+        found = step
+    return found
+
+
+def _list_folders(root: str, current: str | None, limit: int) -> tuple[list[str], str, bool]:
+    """One level: the root ("."), the resolved current folder and its parent
+    chain, and up to `limit` of its own subfolders; then the resolved folder,
+    and whether it has more subfolders. Hidden names, symlinks and an
+    unreadable folder are skipped; the limit never cuts the path itself."""
+    current = _resolve_folder(root, current)
+    try:
+        with os.scandir(os.path.join(root, current)) as entries:
+            names = sorted(e.name for e in entries if e.is_dir(follow_symlinks=False) and not e.name.startswith("."))
+    except OSError:
+        names = []
+    parts = [] if current == "." else current.split("/")
+    chain = ["/".join(parts[: i + 1]) for i in range(len(parts))]
+    prefix = "" if current == "." else current + "/"
+    shown = {*chain, *(prefix + n for n in names[:limit])}
+    return [".", *sorted(shown)], current, len(names) > limit
 
 
 def _sql_str(value: str) -> str:
@@ -235,7 +243,9 @@ class DuckDBDriver:
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "message": error_message(e)}
 
-    async def list_databases(self, config: DuckConfig, limit: int = DEFAULT_LIST_LIMIT) -> DatabasesResult | Err:
+    async def list_databases(
+        self, config: DuckConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
+    ) -> DatabasesResult | Err:
         # Folder mode lists folders as the "databases"; a file has no picker:
         # queries run directly against it (schema-qualify in SQL).
         if not _is_folder(config.path):
@@ -244,8 +254,8 @@ class DuckDBDriver:
             if problem := _folder_error(config.path):
                 return Err(problem)
             root = os.path.abspath(config.path)
-            folders, truncated = await asyncio.to_thread(_list_folders, root, limit)
-            return DatabasesResult(folders, root=root, truncated=truncated)
+            folders, resolved, truncated = await asyncio.to_thread(_list_folders, root, current, limit)
+            return DatabasesResult(folders, root=root, truncated=truncated, current=resolved)
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
 

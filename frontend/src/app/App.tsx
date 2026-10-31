@@ -18,6 +18,7 @@ import {
   useFreshDatabases,
   openSaved,
   selectDatabase,
+  selectFolder,
   toConnection,
   unlockConnection,
   type Connection,
@@ -447,7 +448,10 @@ function Shell() {
   async function switchDatabase(database: string) {
     setDbOpen(false)
     if (!connection || database === connection.database) return
-    if (await selectDatabase(database)) setConnection({ ...connection, database })
+    if (isFolderNav(connection)) {
+      const listed = await selectFolder(database)
+      if (listed) setConnection({ ...connection, database, ...listed })
+    } else if (await selectDatabase(database)) setConnection({ ...connection, database })
   }
 
   // Drop the connection (saved connections survive) and go to the Connect

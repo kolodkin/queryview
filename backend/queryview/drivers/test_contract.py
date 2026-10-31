@@ -106,3 +106,4 @@ def test_list_tables_accepts_union_flag(type_):
     # ...and the Explorer's Max entries, which caps DuckDB folder mode's lists.
     assert "limit" in inspect.signature(DRIVERS[type_].list_tables).parameters
     assert "limit" in inspect.signature(DRIVERS[type_].list_databases).parameters
+    assert "current" in inspect.signature(DRIVERS[type_].list_databases).parameters

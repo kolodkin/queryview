@@ -172,12 +172,26 @@ def folder(tmp_path):
     return str(tmp_path)
 
 
-def test_list_databases_in_folder_mode_lists_root_and_subfolders(folder):
-    r = _run(DuckDBDriver().list_databases(DuckConfig(folder)))
-    assert r.root == folder
-    # .hidden and the symlink are absent; no depth cap, only the entry limit
-    deep = ["sub/deep1", "sub/deep1/deep2", "sub/deep1/deep2/deep3", "sub/deep1/deep2/deep3/deep4"]
-    assert r.databases == [".", "sub", *deep] and r.truncated is False
+def test_list_databases_in_folder_mode_lists_one_level(folder):
+    d = DuckDBDriver()
+    r = _run(d.list_databases(DuckConfig(folder)))
+    assert r.root == folder and r.current == "." and r.truncated is False
+    # Only the root's own subfolders; .hidden and the symlink are skipped.
+    assert r.databases == [".", "sub"]
+    # A deep current folder: its parent chain, itself, and its own subfolders.
+    r = _run(d.list_databases(DuckConfig(folder), current="sub/deep1"))
+    assert r.current == "sub/deep1"
+    assert r.databases == [".", "sub", "sub/deep1", "sub/deep1/deep2"]
+
+
+def test_a_current_folder_that_is_gone_resolves_to_its_nearest_parent(folder):
+    r = _run(DuckDBDriver().list_databases(DuckConfig(folder), current="sub/deep1/missing/x"))
+    assert r.current == "sub/deep1"
+
+
+@pytest.mark.parametrize("bad", ["../x", "/etc", ".hidden", "link", "sub/../..", "sub//deep1", ""])
+def test_a_current_folder_outside_the_rules_resolves_to_the_root(folder, bad):
+    assert _run(DuckDBDriver().list_databases(DuckConfig(folder), current=bad)).current == "."
 
 
 def test_test_connection_succeeds_on_a_folder(folder):
@@ -288,14 +302,15 @@ def test_a_vanished_folder_root_is_an_error_not_a_new_database_file(tmp_path):
     assert not root.exists()
 
 
-def test_folder_listing_stops_at_the_limit_shallowest_first(tmp_path):
+def test_folder_listing_cuts_one_level_at_the_limit(tmp_path):
     for d in ("a/x", "b", "c"):
         (tmp_path / d).mkdir(parents=True)
     d = DuckDBDriver()
     r = _run(d.list_databases(DuckConfig(str(tmp_path)), limit=2))
     assert r.databases == [".", "a", "b"] and r.truncated is True
-    r = _run(d.list_databases(DuckConfig(str(tmp_path)), limit=4))
-    assert r.databases == [".", "a", "a/x", "b", "c"] and r.truncated is False
+    # The limit cuts the shown level, never the path to the current folder.
+    r = _run(d.list_databases(DuckConfig(str(tmp_path)), limit=1, current="c"))
+    assert r.databases == [".", "c"] and r.current == "c" and r.truncated is False
 
 
 def test_file_listing_stops_at_the_limit(tmp_path):

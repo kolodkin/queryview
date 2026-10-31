@@ -137,6 +137,26 @@ export function selectDatabase(database: string): Promise<boolean> {
   })
 }
 
+// Select a DuckDB folder: the server answers with the list centred on it (its
+// parent chain and subfolders), which replaces the connection's list; null on failure.
+export function selectFolder(
+  folder: string,
+): Promise<{ databases: string[]; foldersTruncated: boolean } | null> {
+  return withoutHeartbeat(async () => {
+    try {
+      const data = await (await postJson('/api/db/database', { database: folder })).json()
+      return data.ok
+        ? {
+            databases: data.databases as string[],
+            foldersTruncated: data.databases_truncated === true,
+          }
+        : null
+    } catch {
+      return null
+    }
+  })
+}
+
 // This session's databases, fresh from the server, with the connection they
 // belong to; null when the request failed.
 async function listDatabases(): Promise<{

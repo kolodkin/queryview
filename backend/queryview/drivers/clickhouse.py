@@ -212,7 +212,9 @@ class ClickHouseDriver:
             return {"ok": False, "message": r.message}
         return {"ok": True, "message": f"Connected — SELECT 1 returned {r.text}"}
 
-    async def list_databases(self, config: ChConfig, limit: int = DEFAULT_LIST_LIMIT) -> DatabasesResult | Err:
+    async def list_databases(
+        self, config: ChConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
+    ) -> DatabasesResult | Err:
         r = await ch_rows(config, "SHOW DATABASES", 1)
         if isinstance(r, Err):
             return r

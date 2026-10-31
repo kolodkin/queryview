@@ -42,7 +42,7 @@ class _FakeDriver:
     async def test(self, c):
         return {"ok": True, "message": "ok"}
 
-    async def list_databases(self, c, limit=1000):
+    async def list_databases(self, c, limit=1000, current=None):
         return DatabasesResult([])  # no picker
 
     async def run_query(self, c, sql, database, limit, offset, order_by):
@@ -129,7 +129,7 @@ def test_run_query_requires_database_when_picker_present(monkeypatch):
         type = "fakedb"
         requires_database = True
 
-        async def list_databases(self, c, limit=1000):
+        async def list_databases(self, c, limit=1000, current=None):
             return DatabasesResult(["a", "b"])
 
     monkeypatch.setitem(DRIVERS, "fakedb", _WithDbs())
@@ -144,7 +144,7 @@ def test_list_tables_requires_database_when_picker_present(monkeypatch):
         type = "fakedb2"
         requires_database = True
 
-        async def list_databases(self, c, limit=1000):
+        async def list_databases(self, c, limit=1000, current=None):
             return DatabasesResult(["a", "b"])
 
     monkeypatch.setitem(DRIVERS, "fakedb2", _WithDbs())
@@ -207,7 +207,7 @@ def test_build_session_err_keeps_localhost_hint(monkeypatch):
     class _Down(_FakeDriver):
         type = "down"
 
-        async def list_databases(self, c, limit=1000):
+        async def list_databases(self, c, limit=1000, current=None):
             return Err("connection refused")
 
     # connect_new takes the driver's parsed config object; the hint reads its host.
@@ -226,7 +226,7 @@ class _GrowingDriver(_FakeDriver):
         self.databases = ["alpha", "beta"]
         self.fail = False
 
-    async def list_databases(self, c, limit=1000):
+    async def list_databases(self, c, limit=1000, current=None):
         if self.fail:
             return Err("listing failed")
         return DatabasesResult(list(self.databases))
@@ -285,7 +285,7 @@ def test_rebuild_keeps_an_unlisted_database_on_the_row_for_picker_drivers(monkey
     # keeps its selection, as refresh_databases does, even if no longer listed.
     fake = _FakeDriver()
 
-    async def listed(c, limit=1000):
+    async def listed(c, limit=1000, current=None):
         return DatabasesResult(["other"])
 
     monkeypatch.setattr(fake, "list_databases", listed)
