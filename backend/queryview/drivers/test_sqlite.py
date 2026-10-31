@@ -184,3 +184,18 @@ def test_declared_types_name_columns_even_without_rows(db_path):
         "INTEGER",
         "INTEGER",
     ]  # expression: value class
+
+
+def test_a_table_named_like_the_type_view_still_reads(db_path):
+    con = sqlite3.connect(db_path)
+    con.execute("CREATE TABLE _qv_types (id INTEGER)")
+    con.execute("INSERT INTO _qv_types VALUES (5)")
+    con.commit()
+    con.close()
+    r = _run(SqliteDriver().run_query(SqliteConfig(db_path), "SELECT * FROM _qv_types", None, 10, 0, None))
+    assert isinstance(r, RowsResult) and r.rows.data == [[5]] and r.rows.meta[0].type == "INTEGER"
+
+
+def test_a_path_with_a_doubled_leading_slash_opens(db_path):
+    r = _run(SqliteDriver().test(SqliteConfig("/" + db_path)))
+    assert r["ok"] is True, r
