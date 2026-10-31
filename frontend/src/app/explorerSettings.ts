@@ -27,6 +27,24 @@ export function saveSidebarWidth(width: number): void {
   patchView(VIEW, { sidebarWidth: clampSidebarWidth(width) })
 }
 
+// Folder mode's list limit: folders scanned and files listed per folder. The
+// backend reads it from the session, so it must be flushed before a re-list.
+export const DEFAULT_MAX_ENTRIES = 1000
+export const MAX_MAX_ENTRIES = 100_000
+
+export function loadMaxEntries(): number {
+  const stored = viewState(VIEW).maxEntries
+  return typeof stored === 'number' ? stored : DEFAULT_MAX_ENTRIES
+}
+
+export function saveMaxEntries(n: number): number {
+  const clamped = Number.isFinite(n)
+    ? Math.min(MAX_MAX_ENTRIES, Math.max(1, Math.round(n)))
+    : DEFAULT_MAX_ENTRIES
+  patchView(VIEW, { maxEntries: clamped })
+  return clamped
+}
+
 // Whether folder-mode glob entries match columns by name across files.
 export function loadUnionByName(): boolean {
   return viewState(VIEW).unionByName === true

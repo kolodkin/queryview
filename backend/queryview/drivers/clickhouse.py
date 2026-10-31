@@ -10,6 +10,7 @@ from typing import Any, ClassVar, Self, TypeVar
 import httpx
 
 from .base import (
+    DEFAULT_LIST_LIMIT,
     RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_ROW_CAP,
     SCRIPT_TIMEOUT_SECONDS,
@@ -211,13 +212,15 @@ class ClickHouseDriver:
             return {"ok": False, "message": r.message}
         return {"ok": True, "message": f"Connected — SELECT 1 returned {r.text}"}
 
-    async def list_databases(self, config: ChConfig) -> DatabasesResult | Err:
+    async def list_databases(self, config: ChConfig, limit: int = DEFAULT_LIST_LIMIT) -> DatabasesResult | Err:
         r = await ch_rows(config, "SHOW DATABASES", 1)
         if isinstance(r, Err):
             return r
         return DatabasesResult([row[0] for row in r.data])
 
-    async def list_tables(self, config: ChConfig, database: str | None, union: bool = False) -> TablesResult | Err:
+    async def list_tables(
+        self, config: ChConfig, database: str | None, union: bool = False, limit: int = DEFAULT_LIST_LIMIT
+    ) -> TablesResult | Err:
         # Same set SHOW TABLES yields, plus the engine's stored row/byte counts
         # (NULL for views and engines that don't track them).
         r = await ch_rows(

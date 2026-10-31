@@ -15,6 +15,8 @@ export type Connection = {
   identQuote?: string
   // The directory a DuckDB folder-mode connection browses (absolute).
   root?: string
+  // The folder list was cut at the Explorer's Max entries.
+  foldersTruncated?: boolean
   // False on a locked saved connection this tab holds no token for; the
   // shell prompts for the passphrase while it is.
   unlocked?: boolean
@@ -41,6 +43,7 @@ export function toConnection(data: Record<string, unknown>): Connection {
     database: (data.database ?? null) as string | null,
     identQuote: data.ident_quote as string | undefined,
     root: data.root as string | undefined,
+    foldersTruncated: data.databases_truncated === true,
     unlocked: data.unlocked as boolean | undefined,
   }
 }
@@ -136,10 +139,20 @@ export function selectDatabase(database: string): Promise<boolean> {
 
 // This session's databases, fresh from the server, with the connection they
 // belong to; null when the request failed.
-async function listDatabases(): Promise<{ name: string; databases: string[] } | null> {
+async function listDatabases(): Promise<{
+  name: string
+  databases: string[]
+  foldersTruncated: boolean
+} | null> {
   try {
     const data = await (await apiFetch('/api/db/databases')).json()
-    return data.ok ? { name: data.name as string, databases: data.databases as string[] } : null
+    return data.ok
+      ? {
+          name: data.name as string,
+          databases: data.databases as string[],
+          foldersTruncated: data.databases_truncated === true,
+        }
+      : null
   } catch {
     return null
   }
@@ -157,12 +170,14 @@ export function useFreshDatabases(
     let live = true
     void listDatabases().then((fresh) => {
       if (!live || !fresh) return
-      const { name, databases } = fresh
+      const { name, databases, foldersTruncated } = fresh
       setConnection((c) => {
         if (!c || c.name !== name) return c
         const same =
-          databases.length === c.databases.length && databases.every((d, i) => d === c.databases[i])
-        return same ? c : { ...c, databases }
+          foldersTruncated === !!c.foldersTruncated &&
+          databases.length === c.databases.length &&
+          databases.every((d, i) => d === c.databases[i])
+        return same ? c : { ...c, databases, foldersTruncated }
       })
     })
     return () => {

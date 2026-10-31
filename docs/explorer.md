@@ -117,8 +117,8 @@ root; reopening the connection does too.
 - **Pill menu** — one level at a time: the selected folder's full path, then
   its subfolders and **..**; picking one enters it, which lists its files in
   the sidebar. The pill reads `<connection> · <folder name>` with the full path
-  as its tooltip. The folder list is walked once at connect, four levels deep;
-  hidden entries and symlinks are skipped.
+  as its tooltip. Folders are scanned at connect and when the menu opens,
+  shallowest first; hidden entries and symlinks are skipped.
 - **Tables** — files named `.parquet`, `.csv`, `.tsv`, `.json`, `.jsonl` or
   `.ndjson`, the non-parquet ones also with a `.gz` or `.zst` suffix. The
   browse query is the matching reader, e.g. `SELECT * FROM read_csv('items.csv')`.
@@ -128,6 +128,10 @@ root; reopening the connection does too.
 - **Path** — beside the selected file's name, its path from the root in small
   type (`sub/nested.csv.gz`) with a copy button, for SQL on the query page.
   A `*.<ext>` entry has none.
+- **Max entries** — the most folders scanned and files listed per folder,
+  default 1000 (1–100000). A cut list says so: "More than N files" above the
+  sidebar, "More than N folders" in the pill menu. Remembered with the
+  sidebar width, and read by the server from the session.
 - **Union by name** — adds `union_by_name = true` to `*.<ext>` queries, so a
   column only some files have is kept (NULL elsewhere) rather than dropped.
   Remembered with the sidebar width.

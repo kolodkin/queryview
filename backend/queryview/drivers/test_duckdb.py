@@ -152,7 +152,7 @@ def test_describe_and_export_errors_become_err(duck_path):
 @pytest.fixture
 def folder(tmp_path):
     """A root with data files, a compressed file in a subfolder, a folder past
-    FOLDER_DEPTH, a hidden folder and a symlink — the last three never listed."""
+    a hidden folder and a symlink — the last two never listed."""
     import gzip
 
     (tmp_path / "items.csv").write_text("id,name\n1,alpha\n2,beta\n3,gamma\n")
@@ -175,8 +175,9 @@ def folder(tmp_path):
 def test_list_databases_in_folder_mode_lists_root_and_subfolders(folder):
     r = _run(DuckDBDriver().list_databases(DuckConfig(folder)))
     assert r.root == folder
-    # .hidden and the symlink are absent; deep4 is past FOLDER_DEPTH
-    assert r.databases == [".", "sub", "sub/deep1", "sub/deep1/deep2", "sub/deep1/deep2/deep3"]
+    # .hidden and the symlink are absent; no depth cap, only the entry limit
+    deep = ["sub/deep1", "sub/deep1/deep2", "sub/deep1/deep2/deep3", "sub/deep1/deep2/deep3/deep4"]
+    assert r.databases == [".", "sub", *deep] and r.truncated is False
 
 
 def test_test_connection_succeeds_on_a_folder(folder):
@@ -285,3 +286,23 @@ def test_a_vanished_folder_root_is_an_error_not_a_new_database_file(tmp_path):
     out = _run(DuckDBDriver().execute_script(DuckConfig(str(root)), "SELECT 1", "."))
     assert out[0].ok is False
     assert not root.exists()
+
+
+def test_folder_listing_stops_at_the_limit_shallowest_first(tmp_path):
+    for d in ("a/x", "b", "c"):
+        (tmp_path / d).mkdir(parents=True)
+    d = DuckDBDriver()
+    r = _run(d.list_databases(DuckConfig(str(tmp_path)), limit=2))
+    assert r.databases == [".", "a", "b"] and r.truncated is True
+    r = _run(d.list_databases(DuckConfig(str(tmp_path)), limit=4))
+    assert r.databases == [".", "a", "a/x", "b", "c"] and r.truncated is False
+
+
+def test_file_listing_stops_at_the_limit(tmp_path):
+    for n in ("a.csv", "b.csv", "c.csv"):
+        (tmp_path / n).write_text("id\n1\n")
+    r = _run(DuckDBDriver().list_tables(DuckConfig(str(tmp_path)), ".", limit=2))
+    assert [t["name"] for t in r.tables] == ["a.csv", "b.csv", "*.csv"] and r.truncated is True
+    assert r.tables[-1]["query"] == "SELECT * FROM read_csv(['a.csv', 'b.csv'])"
+    r = _run(DuckDBDriver().list_tables(DuckConfig(str(tmp_path)), ".", limit=3))
+    assert r.truncated is False

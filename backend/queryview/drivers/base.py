@@ -57,6 +57,7 @@ class DatabasesResult(Result):
     # The directory a folder-mode DuckDB connection browses (docs/explorer.md);
     # None for every other driver and for a DuckDB file.
     root: str | None = None
+    truncated: bool = False  # more folders than the list limit
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,7 @@ class TablesResult(Result):
     # Each table is {"name": str, "rows": int|None, "bytes": int|None}; rows and
     # bytes are cheap engine estimates, None when the engine doesn't track them.
     tables: list[dict[str, Any]]
+    truncated: bool = False  # more files than the list limit (DuckDB folder mode)
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,10 @@ SCRIPT_ROW_CAP = 100
 # 5-second probe, and a timeout reported as a failure would leave the user
 # re-running a write the server finished anyway.
 SCRIPT_TIMEOUT_SECONDS = 600
+# DuckDB folder mode lists at most this many folders, and files per folder;
+# the Explorer's Max entries setting changes it within 1..MAX_LIST_LIMIT.
+DEFAULT_LIST_LIMIT = 1000
+MAX_LIST_LIMIT = 100_000
 # How long an agent's read-only run_sql may run, server- and client-side.
 RUN_SQL_TIMEOUT_SECONDS = 60
 
@@ -128,11 +134,12 @@ class Driver(Protocol):
     def config_to_dict(self, config: DriverConfig) -> dict[str, Any]: ...
     def config_from_dict(self, data: dict[str, Any]) -> DriverConfig: ...
     async def test(self, config: DriverConfig) -> dict[str, Any]: ...
-    async def list_databases(self, config: DriverConfig) -> DatabasesResult | Err: ...
+    # `limit` caps DuckDB folder mode's lists; other drivers ignore it.
+    async def list_databases(self, config: DriverConfig, limit: int = DEFAULT_LIST_LIMIT) -> DatabasesResult | Err: ...
     # `union`: add union_by_name to glob queries (DuckDB folder mode only;
     # other drivers ignore it).
     async def list_tables(
-        self, config: DriverConfig, database: str | None, union: bool = False
+        self, config: DriverConfig, database: str | None, union: bool = False, limit: int = DEFAULT_LIST_LIMIT
     ) -> TablesResult | Err: ...
     async def run_query(
         self,

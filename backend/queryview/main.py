@@ -458,7 +458,7 @@ async def db_tables(request: Request):
     r = await list_tables(request.state.sid, union=request.query_params.get("union") == "1")
     if not r["ok"]:
         return _gate_error(r, ("no-session", "no-database"))
-    return {"ok": True, "tables": r["tables"]}
+    return r
 
 
 # Describe a query's output columns (name + type) without scanning data.

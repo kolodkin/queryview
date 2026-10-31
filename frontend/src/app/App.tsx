@@ -11,6 +11,7 @@ import {
 
 import { SearchPanel, useDismiss } from '../core'
 import { PARENT, childFolders, folderLabel, fullPath, isFolderNav, parentFolder } from './folderNav'
+import { loadMaxEntries } from './explorerSettings'
 import {
   connectionKey,
   isReady,
@@ -174,12 +175,15 @@ function DatabaseMenu({
       className="left-0 w-96 max-h-[75vh]"
       header={
         folders && (
-          <div
-            data-testid="db-select-path"
-            title={path}
-            className="truncate px-2 pt-1 text-xs text-slate-400"
-          >
-            {path}
+          <div className="px-2 pt-1 text-xs">
+            <div data-testid="db-select-path" title={path} className="truncate text-slate-400">
+              {path}
+            </div>
+            {connection.foldersTruncated && (
+              <div data-testid="db-select-truncated" className="text-amber-300">
+                More than {loadMaxEntries()} folders: raise Max entries on the Explorer.
+              </div>
+            )}
           </div>
         )
       }

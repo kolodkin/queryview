@@ -5,8 +5,10 @@ import {
   MIN_SIDEBAR_WIDTH,
   clampSidebarWidth,
   loadSidebarWidth,
+  loadMaxEntries,
   loadUnionByName,
   saveSidebarWidth,
+  saveMaxEntries,
   saveUnionByName,
 } from './explorerSettings'
 
@@ -76,5 +78,17 @@ describe('unionByName', () => {
     expect(loadUnionByName()).toBe(true)
     saveUnionByName(false)
     expect(loadUnionByName()).toBe(false)
+  })
+})
+
+describe('maxEntries', () => {
+  it('defaults to 1000 and clamps what is saved', () => {
+    expect(loadMaxEntries()).toBe(1000)
+    saveMaxEntries(5000)
+    expect(loadMaxEntries()).toBe(5000)
+    saveMaxEntries(0)
+    expect(loadMaxEntries()).toBe(1)
+    saveMaxEntries(10_000_000)
+    expect(loadMaxEntries()).toBe(100_000)
   })
 })

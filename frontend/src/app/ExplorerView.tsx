@@ -22,12 +22,15 @@ import {
   MIN_SIDEBAR_WIDTH,
   clampSidebarWidth,
   loadSidebarWidth,
+  loadMaxEntries,
   loadUnionByName,
   saveSidebarWidth,
+  saveMaxEntries,
   saveUnionByName,
 } from './explorerSettings'
 import { isFolderNav } from './folderNav'
 import { apiFetch } from './api'
+import { flushPatches } from './session'
 
 // Sidebar entry from /api/db/tables. rows/bytes are engine estimates — null
 // when the engine doesn't track them (views, never-analyzed Postgres tables);
@@ -80,6 +83,10 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
   // Folder mode's glob entries: union_by_name on or off (docs/explorer.md).
   const [union, setUnion] = useState(loadUnionByName)
+  // Folder mode's list limit; the backend reads it from the session.
+  const [maxEntries, setMaxEntries] = useState(loadMaxEntries)
+  const [maxDraft, setMaxDraft] = useState(String(maxEntries))
+  const [tablesTruncated, setTablesTruncated] = useState(false)
   const [dragging, setDragging] = useState(false)
   const asideRef = useRef<HTMLElement | null>(null)
   // Captured on grab: the panel's left edge (fixed — widening the row's first
@@ -119,6 +126,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
         if (data.ok) {
           const list = (data.tables ?? []) as TableInfo[]
           setTables(list)
+          setTablesTruncated(data.truncated === true)
           setTablesError(null)
           if (table && !list.some((t) => t.name === table)) {
             setSearchParams({}, { replace: true })
@@ -140,7 +148,16 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, scope, union])
+  }, [ready, scope, union, maxEntries])
+
+  // Save, then flush to the session before the re-list reads it there.
+  async function applyMaxEntries() {
+    const next = saveMaxEntries(Number(maxDraft))
+    setMaxDraft(String(next))
+    if (next === maxEntries) return
+    await flushPatches()
+    setMaxEntries(next)
+  }
 
   const runQuery = useCallback(async (sql: string, lim: number, off: number, ord: OrderCol[]) => {
     const ticket = ++runSeq.current
@@ -313,7 +330,20 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
       >
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-slate-200">Tables</h2>
-          {connection && isFolderNav(connection) && (
+          {sidebarWidth !== DEFAULT_SIDEBAR_WIDTH && (
+            <button
+              type="button"
+              data-testid="explorer-sidebar-reset"
+              onClick={() => resize(DEFAULT_SIDEBAR_WIDTH)}
+              title="Reset the sidebar width"
+              className="glass-btn ml-auto px-1.5 py-0.5 text-xs text-slate-300"
+            >
+              Reset width
+            </button>
+          )}
+        </div>
+        {connection && isFolderNav(connection) && (
+          <div className="mt-2 flex flex-wrap items-center gap-3">
             <label
               className="flex items-center gap-1 text-xs text-slate-300"
               title="Match glob columns by name"
@@ -329,19 +359,31 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               />
               Union by name
             </label>
-          )}
-          {sidebarWidth !== DEFAULT_SIDEBAR_WIDTH && (
-            <button
-              type="button"
-              data-testid="explorer-sidebar-reset"
-              onClick={() => resize(DEFAULT_SIDEBAR_WIDTH)}
-              title="Reset the sidebar width"
-              className="glass-btn ml-auto px-1.5 py-0.5 text-xs text-slate-300"
+            <label
+              className="flex items-center gap-1 text-xs text-slate-300"
+              title="Most folders scanned, and files listed per folder"
             >
-              Reset width
-            </button>
-          )}
-        </div>
+              Max entries
+              <input
+                type="number"
+                min={1}
+                data-testid="explorer-max-entries"
+                value={maxDraft}
+                onChange={(e) => setMaxDraft(e.target.value)}
+                onBlur={() => void applyMaxEntries()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void applyMaxEntries()
+                }}
+                className="glass-input w-20 px-1.5 py-0.5 text-xs"
+              />
+            </label>
+          </div>
+        )}
+        {tablesTruncated && (
+          <p data-testid="explorer-truncated" className="mt-2 text-xs text-amber-300">
+            More than {maxEntries} files: only the first {maxEntries} are listed.
+          </p>
+        )}
         {tables.length > 0 && (
           <form
             className="mt-2"

@@ -392,3 +392,14 @@ def seeded_mixed_folder(tmp_path_factory) -> str:
     (root / "a.csv").write_text("id,name\n1,alpha\n2,beta\n")
     (root / "b.csv").write_text("name,id,city\ngamma,3,lisbon\n")
     return str(root)
+
+
+@pytest.fixture(scope="module")
+def seeded_wide_folder(tmp_path_factory) -> str:
+    """Three CSVs and two subfolders, for lowering the Explorer's Max entries."""
+    root = tmp_path_factory.mktemp("duck_wide")
+    for name in ("a.csv", "b.csv", "c.csv"):
+        (root / name).write_text("id\n1\n")
+    for name in ("x", "y"):
+        (root / name).mkdir()
+    return str(root)

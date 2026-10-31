@@ -6,12 +6,14 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+from collections import deque
 from dataclasses import asdict, dataclass
 from typing import Any
 
 import duckdb
 
 from .base import (
+    DEFAULT_LIST_LIMIT,
     RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_ROW_CAP,
     Column,
@@ -44,30 +46,36 @@ def parse_duck_config(body: Any) -> tuple[DuckConfig | None, str | None]:
     return DuckConfig(path=path or ":memory:"), None
 
 
-# How many folder levels below the root list_databases walks.
-# shortcut: depth capped, upgrade to lazy per-folder listing if roots get deep
-FOLDER_DEPTH = 4
-
-
 def _is_folder(path: str) -> bool:
     """Folder mode: `path` is a directory of data files rather than a .duckdb file."""
     return path != ":memory:" and os.path.isdir(path)
 
 
-def _list_folders(root: str) -> list[str]:
-    """The root (".") and its subfolders as sorted relative POSIX paths, down to
-    FOLDER_DEPTH levels; hidden names and symlinks are skipped."""
-    folders: list[str] = []
-    for dirpath, dirs, _files in os.walk(root, followlinks=False):
-        rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
-        folders.append(rel)
-        depth = 0 if rel == "." else rel.count("/") + 1
-        dirs[:] = (
-            []
-            if depth >= FOLDER_DEPTH
-            else sorted(n for n in dirs if not n.startswith(".") and not os.path.islink(os.path.join(dirpath, n)))
-        )
-    return [folders[0], *sorted(folders[1:])]
+def _list_folders(root: str, limit: int) -> tuple[list[str], bool]:
+    """The root (".") and up to `limit` subfolders as sorted relative POSIX
+    paths, and whether more exist. Scanned breadth-first, so a cut keeps the
+    shallow folders the picker shows first; hidden names, symlinks and
+    unreadable folders are skipped."""
+    found: list[str] = []
+    queue = deque(["."])
+    truncated = False
+    while queue and not truncated:
+        rel = queue.popleft()
+        try:
+            with os.scandir(os.path.join(root, rel)) as entries:
+                names = sorted(
+                    e.name for e in entries if e.is_dir(follow_symlinks=False) and not e.name.startswith(".")
+                )
+        except OSError:
+            continue
+        for n in names:
+            if len(found) == limit:
+                truncated = True
+                break
+            child = n if rel == "." else f"{rel}/{n}"
+            found.append(child)
+            queue.append(child)
+    return [".", *sorted(found)], truncated
 
 
 def _sql_str(value: str) -> str:
@@ -132,19 +140,25 @@ def _read_query(ext: str, comp: str, names: list[str], union: bool) -> str:
     return f"SELECT * FROM {reader}({source}{extra})"
 
 
-def _list_files(root: str, folder: str, union: bool) -> list[dict[str, Any]]:
-    """Data files directly in `folder` (relative to `root`), then one `*.<ext>`
-    glob per extension with two or more files. Queries name files by their path
-    from the root. rows is never estimated; bytes is the file size."""
+def _list_files(root: str, folder: str, union: bool, limit: int) -> TablesResult:
+    """The first `limit` data files directly in `folder` (relative to `root`),
+    then one `*.<ext>` glob per extension with two or more of them. Queries
+    name files by their path from the root. rows is never estimated; bytes is
+    the file size, stat'ed only for the files kept."""
     prefix = "" if folder == "." else folder + "/"
-    files = sorted(
-        (e.name, prefix + e.name, e.stat().st_size, kind)
-        for e in os.scandir(os.path.join(root, folder))
-        if e.is_file(follow_symlinks=False)
-        and not e.name.startswith(".")
-        and not _GLOB_CHARS & set(e.name)
-        and (kind := _data_ext(e.name))
-    )
+    with os.scandir(os.path.join(root, folder)) as it:
+        matched = sorted(
+            (
+                (e, kind)
+                for e in it
+                if e.is_file(follow_symlinks=False)
+                and not e.name.startswith(".")
+                and not _GLOB_CHARS & set(e.name)
+                and (kind := _data_ext(e.name))
+            ),
+            key=lambda m: m[0].name,
+        )
+    files = [(e.name, prefix + e.name, e.stat().st_size, kind) for e, kind in matched[:limit]]
     # `path` is the file's path from the root, for the Explorer to show; a glob has none.
     tables = [
         {"name": n, "path": p, "rows": None, "bytes": b, "query": _read_query(*kind, [p], union)}
@@ -160,7 +174,7 @@ def _list_files(root: str, folder: str, union: bool) -> list[dict[str, Any]]:
             tables.append(
                 {"name": name, "path": None, "rows": None, "bytes": sum(b for _, b in members), "query": query}
             )
-    return tables
+    return TablesResult(tables, truncated=len(matched) > limit)
 
 
 _READ_STATEMENTS = {duckdb.StatementType.SELECT, duckdb.StatementType.EXPLAIN}
@@ -211,7 +225,7 @@ class DuckDBDriver:
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "message": error_message(e)}
 
-    async def list_databases(self, config: DuckConfig) -> DatabasesResult | Err:
+    async def list_databases(self, config: DuckConfig, limit: int = DEFAULT_LIST_LIMIT) -> DatabasesResult | Err:
         # Folder mode lists folders as the "databases"; a file has no picker:
         # queries run directly against it (schema-qualify in SQL).
         if not _is_folder(config.path):
@@ -220,14 +234,17 @@ class DuckDBDriver:
             root = os.path.abspath(config.path)
             if "," in root:
                 return Err("a DuckDB folder path cannot contain a comma")
-            return DatabasesResult(await asyncio.to_thread(_list_folders, root), root=root)
+            folders, truncated = await asyncio.to_thread(_list_folders, root, limit)
+            return DatabasesResult(folders, root=root, truncated=truncated)
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
 
-    async def list_tables(self, config: DuckConfig, database: str | None, union: bool = False) -> TablesResult | Err:
+    async def list_tables(
+        self, config: DuckConfig, database: str | None, union: bool = False, limit: int = DEFAULT_LIST_LIMIT
+    ) -> TablesResult | Err:
         if _is_folder(config.path):
             try:
-                return TablesResult(await asyncio.to_thread(_list_files, config.path, database or ".", union))
+                return await asyncio.to_thread(_list_files, config.path, database or ".", union, limit)
             except Exception as e:  # noqa: BLE001
                 return Err(error_message(e))
 

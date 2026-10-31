@@ -28,7 +28,16 @@ if TYPE_CHECKING:
     from alembic.config import Config
 
 from .drivers import DRIVERS
-from .drivers.base import DatabasesResult, DriverConfig, Err, RowsResult, error_message, select_all_sql
+from .drivers.base import (
+    DEFAULT_LIST_LIMIT,
+    MAX_LIST_LIMIT,
+    DatabasesResult,
+    DriverConfig,
+    Err,
+    RowsResult,
+    error_message,
+    select_all_sql,
+)
 
 # --- Storage (SQLite, lazily opened) --------------------------------------
 
@@ -386,6 +395,7 @@ class _SessionState:
     database: str | None
     locked: bool = False  # a locked saved connection: data calls need the tab's token
     root: str | None = None  # the folder a DuckDB folder-mode connection browses
+    truncated: bool = False  # the folder list was cut at the session's list limit
 
 
 @dataclass
@@ -466,20 +476,36 @@ def _with_localhost_hint(message: str, config: DriverConfig) -> str:
     return message
 
 
-async def _list_databases(conn_type: str, config: DriverConfig) -> tuple[DatabasesResult | None, str | None]:
+async def _list_limit(sid: str) -> int:
+    """The Explorer's **Max entries** for this session (docs/explorer.md), from
+    the session's `ui` blob; the tab writes it, so anything else is the default."""
+    rec = await sessions.get_session_rec(sid) if sid else None
+    view = rec.ui.get("explorer") if rec else None
+    raw = view.get("maxEntries") if isinstance(view, dict) else None
+    valid = isinstance(raw, int) and not isinstance(raw, bool) and 1 <= raw <= MAX_LIST_LIMIT
+    return raw if valid else DEFAULT_LIST_LIMIT
+
+
+async def _list_databases(
+    conn_type: str, config: DriverConfig, limit: int = DEFAULT_LIST_LIMIT
+) -> tuple[DatabasesResult | None, str | None]:
     """The driver's database list, or (None, message) with the localhost hint."""
-    r = await DRIVERS[conn_type].list_databases(config)
+    r = await DRIVERS[conn_type].list_databases(config, limit)
     if isinstance(r, Err):
         return None, _with_localhost_hint(r.message, config)
     return r, None
 
 
 async def _build_session(
-    name: str, config: DriverConfig, database: str | None, conn_type: str = "clickhouse"
+    name: str,
+    config: DriverConfig,
+    database: str | None,
+    conn_type: str = "clickhouse",
+    limit: int = DEFAULT_LIST_LIMIT,
 ) -> tuple[_SessionState | None, str | None]:
     """List a connection's databases and build a session object. A session
     connection's name is never in the table, so it reads as unlocked."""
-    listed, message = await _list_databases(conn_type, config)
+    listed, message = await _list_databases(conn_type, config, limit)
     if listed is None:
         return None, message
     databases = listed.databases
@@ -496,6 +522,7 @@ async def _build_session(
             database=database,
             locked=await _lock_hash_of(name) is not None,
             root=listed.root,
+            truncated=listed.truncated,
         ),
         None,
     )
@@ -517,7 +544,7 @@ async def _ensure_session(sid: str) -> None:
         # disconnected; the user reconnects.
         return
     conn_type, config = found
-    state, _ = await _build_session(rec.connection_name, config, rec.database, conn_type)
+    state, _ = await _build_session(rec.connection_name, config, rec.database, conn_type, await _list_limit(sid))
     if state is not None:
         _set_session_entry(sid, state)
         if state.root is not None and state.database != rec.database:  # a vanished folder fell back to the root
@@ -538,6 +565,7 @@ async def get_session(sid: str) -> dict[str, Any]:
         "databases": s.databases,
         "database": s.database,
         **({"root": s.root} if s.root else {}),
+        **({"databases_truncated": True} if s.truncated else {}),
         # How this dialect quotes a table/column (dashboard `identifier` params).
         "ident_quote": DRIVERS[s.type].ident_quote,
         "scope": "session" if sc else "saved",
@@ -559,7 +587,7 @@ async def connect_new(
         state, message = None, f'a connection named "{name}" already exists'
     else:
         config = await _with_stored_password(name, config, conn_type)
-        state, message = await _build_session(name, config, None, conn_type)
+        state, message = await _build_session(name, config, None, conn_type, await _list_limit(sid))
     if state is None:
         return {"ok": False, "message": message}
     if not session_only:
@@ -583,6 +611,7 @@ def _opened(state: _SessionState) -> dict[str, Any]:
         "databases": state.databases,
         "database": state.database,
         **({"root": state.root} if state.root else {}),
+        **({"databases_truncated": True} if state.truncated else {}),
     }
 
 
@@ -601,7 +630,7 @@ async def open_saved(
         }
     conn_type, config = found
     # Reset the database so opening always lands on the picker.
-    state, message = await _build_session(name, config, None, conn_type)
+    state, message = await _build_session(name, config, None, conn_type, await _list_limit(sid))
     if state is None:
         return {"ok": False, "message": message}
     if database is not None and database not in state.databases:
@@ -707,7 +736,7 @@ async def list_databases_of(sid: str, name: str) -> tuple[list[str] | None, str 
     if found is None:  # deleted meanwhile, or its config no longer decrypts
         return None, "connection unavailable"
     try:
-        listed, message = await _list_databases(*found)
+        listed, message = await _list_databases(*found, await _list_limit(sid))
         return (listed.databases if listed else None), message
     except Exception as e:
         return None, error_message(e)
@@ -736,7 +765,7 @@ async def add_session_connection(
         return None, "no session"
     if (taken := await _name_taken(name)) is not None:
         return None, taken
-    state, message = await _build_session(name, config, None, conn_type)
+    state, message = await _build_session(name, config, None, conn_type, await _list_limit(sid))
     if state is not None:
         _session_conns.setdefault(sid, {})[name] = _SessionConn(conn_type, config, created_by, _now_ms())
         remote.notify(sid, {"type": "connections"})
@@ -763,12 +792,12 @@ def forget_session(sid: str) -> None:
     _tokens.pop(sid, None)
 
 
-async def _relist(s: _SessionState) -> dict[str, Any] | None:
+async def _relist(sid: str, s: _SessionState) -> dict[str, Any] | None:
     """Replace the cached database list with a fresh one; the error result on failure."""
-    listed, message = await _list_databases(s.type, s.config)
+    listed, message = await _list_databases(s.type, s.config, await _list_limit(sid))
     if listed is None:
         return {"ok": False, "message": message}
-    s.databases = listed.databases
+    s.databases, s.truncated = listed.databases, listed.truncated
     return None
 
 
@@ -779,9 +808,14 @@ async def refresh_databases(sid: str) -> dict[str, Any]:
     s, err = await _unlocked_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
-    if err := await _relist(s):
+    if err := await _relist(sid, s):
         return err
-    return {"ok": True, "name": s.name, "databases": s.databases}
+    return {
+        "ok": True,
+        "name": s.name,
+        "databases": s.databases,
+        **({"databases_truncated": True} if s.truncated else {}),
+    }
 
 
 async def select_database(sid: str, database: str) -> dict[str, Any]:
@@ -795,7 +829,7 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
     if not database:
         return unknown
     if database not in s.databases:
-        if err := await _relist(s):
+        if err := await _relist(sid, s):
             return err
         if database not in s.databases:
             return unknown
@@ -853,11 +887,11 @@ async def list_tables(sid: str, union: bool = False) -> dict[str, Any]:
     if s is None:
         return err  # type: ignore[return-value]
     driver = DRIVERS[s.type]
-    r = await driver.list_tables(s.config, s.database, union)
+    r = await driver.list_tables(s.config, s.database, union, await _list_limit(sid))
     if isinstance(r, Err):
         return {"ok": False, "message": r.message}
     tables = [{**t, "query": t.get("query") or select_all_sql(t["name"], driver.ident_quote)} for t in r.tables]
-    return {"ok": True, "tables": tables}
+    return {"ok": True, "tables": tables, **({"truncated": True} if r.truncated else {})}
 
 
 async def run_query(

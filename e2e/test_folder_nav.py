@@ -77,3 +77,36 @@ def test_union_by_name_adds_columns_only_some_files_have(seeded_mixed_folder, pa
     expect(headers).to_have_text(["id", "name", "city"])
     expect(panel).to_contain_text("lisbon")
     shot("glob with union by name: shared columns aligned, city added")
+
+
+def test_max_entries_cuts_lists_and_says_so(seeded_wide_folder, page: Page, shot) -> None:
+    open_connect(page)
+    start_new_connection(page, "duckdb")
+    page.get_by_test_id("duck-path").fill(seeded_wide_folder)
+    page.get_by_test_id("duck-connect").click()
+    expect(page.get_by_test_id("duckdb-form")).to_have_count(0)
+    names = page.locator('[data-testid="explorer-table"] > span:first-child')
+    expect(names).to_have_text(["a.csv", "b.csv", "c.csv", "*.csv"])
+    expect(page.get_by_test_id("explorer-truncated")).to_have_count(0)
+
+    # Lower the limit: both lists are cut, and both say so.
+    limit = page.get_by_test_id("explorer-max-entries")
+    limit.fill("1")
+    limit.press("Enter")
+    expect(names).to_have_text(["a.csv"])
+    expect(page.get_by_test_id("explorer-truncated")).to_contain_text("More than 1 files")
+    shot("max entries 1: file list cut, with notice")
+    page.get_by_test_id("connection-status").click()
+    expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_text(["x"])
+    expect(page.get_by_test_id("db-select-truncated")).to_contain_text("More than 1 folders")
+    shot("max entries 1: folder list cut, with notice")
+    page.get_by_test_id("connection-status").click()
+
+    # Raise it back: everything is listed again, no notices.
+    limit.fill("1000")
+    limit.press("Enter")
+    expect(names).to_have_text(["a.csv", "b.csv", "c.csv", "*.csv"])
+    expect(page.get_by_test_id("explorer-truncated")).to_have_count(0)
+    page.get_by_test_id("connection-status").click()
+    expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_text(["x", "y"])
+    expect(page.get_by_test_id("db-select-truncated")).to_have_count(0)
