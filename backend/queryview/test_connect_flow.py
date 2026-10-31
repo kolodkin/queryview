@@ -278,3 +278,21 @@ def test_select_database_relists_on_a_miss(monkeypatch):
     driver.fail = True
     out = _run(connect.select_database(rec.id, "epsilon"))
     assert out["ok"] is False and out["message"] == "listing failed"
+
+
+def test_rebuild_keeps_an_unlisted_database_on_the_row_for_picker_drivers(monkeypatch):
+    # Only DuckDB folder mode falls back to its root; a ClickHouse/Postgres row
+    # keeps its selection, as refresh_databases does, even if no longer listed.
+    fake = _FakeDriver()
+
+    async def listed(c):
+        return DatabasesResult(["other"])
+
+    monkeypatch.setattr(fake, "list_databases", listed)
+    monkeypatch.setitem(DRIVERS, "fake", fake)
+    rec = _run(sessions.create_session())
+    _run(connect.connect_new(rec.id, "reporting-keep", {"v": 1}, "fake", session_only=True))
+    _run(sessions.set_database(rec.id, "gone"))
+    connect._sessions.clear()
+    _run(connect.get_session(rec.id))
+    assert _run(sessions.get_session_rec(rec.id)).database == "gone"

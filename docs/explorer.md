@@ -118,7 +118,7 @@ root; reopening the connection does too.
   its subfolders and **..**; picking one enters it, which lists its files in
   the sidebar. The pill reads `<connection> · <folder name>` with the full path
   as its tooltip. The folder list is walked once at connect, four levels deep;
-  hidden entries, symlinks and names with a comma are skipped.
+  hidden entries and symlinks are skipped.
 - **Tables** — files named `.parquet`, `.csv`, `.tsv`, `.json`, `.jsonl` or
   `.ndjson`, the non-parquet ones also with a `.gz` or `.zst` suffix (DuckDB
   infers the compression). The browse query is the matching reader, e.g.
@@ -127,14 +127,16 @@ root; reopening the connection does too.
   query names the listed files explicitly, so a file added later needs the
   list refreshed. Hidden files, symlinks and names with `*`, `?` or `[` are
   not listed.
-- **Path** — beside the selected table's name, its path from the root in small
+- **Path** — beside the selected file's name, its path from the root in small
   type (`sub/nested.csv.gz`) with a copy button, for SQL on the query page.
+  A `*.<ext>` entry has none.
 - **Union by name** — the checkbox adds `union_by_name = true` to the glob
   queries, so files whose columns differ in order or count are matched by
   header name instead of position (missing columns read as NULL). Single files
   are unaffected. The choice is remembered with the sidebar width.
 - **Paths** — folder mode opens `:memory:` with DuckDB's `file_search_path`
-  set to the selected folder, so generated queries, saved queries and SQL typed
-  on the query page resolve file names against the folder being browsed. Only
-  folders under the root can be selected; a folder (or root) whose path has a
-  comma is skipped, since DuckDB reads that setting as a list.
+  set to the root, and generated queries name files by their path from it
+  (`read_csv('sub/items.csv')`), so a saved query or SQL typed on the query
+  page reads the same file whichever folder is selected. Only folders under the
+  root can be selected. A root whose path has a comma is refused, since DuckDB
+  reads that setting as a list.

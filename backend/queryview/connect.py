@@ -486,7 +486,7 @@ async def _build_session(
     if not (database and database in databases):
         # "." is DuckDB folder mode's root: always a valid pick, so a folder
         # connection lands on the explorer rather than the picker.
-        database = "." if "." in databases else None
+        database = "." if listed.root is not None else None
     return (
         _SessionState(
             name=name,
@@ -520,7 +520,7 @@ async def _ensure_session(sid: str) -> None:
     state, _ = await _build_session(rec.connection_name, config, rec.database, conn_type)
     if state is not None:
         _set_session_entry(sid, state)
-        if state.database != rec.database:  # a vanished folder fell back to the root
+        if state.root is not None and state.database != rec.database:  # a vanished folder fell back to the root
             await sessions.set_database(sid, state.database)
 
 

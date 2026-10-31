@@ -65,11 +65,7 @@ def _list_folders(root: str) -> list[str]:
         dirs[:] = (
             []
             if depth >= FOLDER_DEPTH
-            else sorted(
-                n
-                for n in dirs
-                if not n.startswith(".") and "," not in n and not os.path.islink(os.path.join(dirpath, n))
-            )
+            else sorted(n for n in dirs if not n.startswith(".") and not os.path.islink(os.path.join(dirpath, n)))
         )
     return [folders[0], *sorted(folders[1:])]
 
@@ -81,11 +77,11 @@ def _sql_str(value: str) -> str:
 
 def _open(path: str, database: str | None, read_only: bool = True):
     # Folder mode has no database file: an in-memory connection whose
-    # file_search_path is the selected folder, so `read_csv('x.csv')` and
-    # saved queries resolve against the folder being browsed.
+    # file_search_path is the root, so `read_csv('sub/x.csv')` resolves the
+    # same whichever folder is selected (and as the Explorer shows the path).
     if _is_folder(path):
         con = duckdb.connect(":memory:")
-        con.execute(f"SET file_search_path = {_sql_str(os.path.join(path, database or '.'))}")
+        con.execute(f"SET file_search_path = {_sql_str(path)}")
         return con
     # read_only avoids lock contention between concurrent describe/query opens;
     # :memory: cannot be read_only, so open it read-write.
@@ -139,24 +135,28 @@ def _read_query(ext: str, names: list[str], union: bool) -> str:
     return f"SELECT * FROM {reader}({source}{extra})"
 
 
-def _list_files(folder: str, union: bool) -> list[dict[str, Any]]:
-    """Data files directly in `folder`, then one `*.<ext>` glob per extension
-    with two or more files. rows is never estimated; bytes is the file size."""
+def _list_files(root: str, folder: str, union: bool) -> list[dict[str, Any]]:
+    """Data files directly in `folder` (relative to `root`), then one `*.<ext>`
+    glob per extension with two or more files. Queries name files by their path
+    from the root. rows is never estimated; bytes is the file size."""
+    prefix = "" if folder == "." else folder + "/"
     files = sorted(
         (e.name, e.stat().st_size, _data_ext(e.name) or "")
-        for e in os.scandir(folder)
+        for e in os.scandir(os.path.join(root, folder))
         if e.is_file(follow_symlinks=False)
         and not e.name.startswith(".")
         and not _GLOB_CHARS & set(e.name)
         and _data_ext(e.name)
     )
-    tables = [{"name": n, "rows": None, "bytes": b, "query": _read_query(ext, [n], union)} for n, b, ext in files]
+    tables = [
+        {"name": n, "rows": None, "bytes": b, "query": _read_query(ext, [prefix + n], union)} for n, b, ext in files
+    ]
     globs: dict[str, list[tuple[str, int]]] = {}  # extension -> its (name, size) files
     for n, b, ext in files:
         globs.setdefault(ext, []).append((n, b))
     for ext, members in sorted(globs.items()):
         if len(members) >= 2:
-            query = _read_query(ext, [n for n, _ in members], union)
+            query = _read_query(ext, [prefix + n for n, _ in members], union)
             tables.append({"name": f"*{ext}", "rows": None, "bytes": sum(b for _, b in members), "query": query})
     return tables
 
@@ -195,7 +195,7 @@ class DuckDBDriver:
 
     async def test(self, config: DuckConfig) -> dict[str, Any]:
         def _work():
-            if _is_folder(config.path) and not os.access(config.path, os.R_OK):
+            if _is_folder(config.path) and not os.access(config.path, os.R_OK | os.X_OK):
                 raise PermissionError(f"cannot read {config.path}")
             con = _open(config.path, None)
             try:
@@ -225,8 +225,7 @@ class DuckDBDriver:
     async def list_tables(self, config: DuckConfig, database: str | None, union: bool = False) -> TablesResult | Err:
         if _is_folder(config.path):
             try:
-                folder = os.path.join(config.path, database or ".")
-                return TablesResult(await asyncio.to_thread(_list_files, folder, union))
+                return TablesResult(await asyncio.to_thread(_list_files, config.path, database or ".", union))
             except Exception as e:  # noqa: BLE001
                 return Err(error_message(e))
 

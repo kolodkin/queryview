@@ -459,7 +459,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
                   {table}
                 </h2>
                 {/* A folder-mode file's path from the root, for SQL on the query page. */}
-                {connection && isFolderNav(connection) && (
+                {connection && isFolderNav(connection) && !table.startsWith('*') && (
                   <span className="flex min-w-0 items-center text-xs text-slate-400">
                     <span data-testid="explorer-table-path" className="truncate font-mono">
                       {tablePath}
