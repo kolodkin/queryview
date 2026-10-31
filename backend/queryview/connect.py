@@ -553,7 +553,7 @@ async def _ensure_session(sid: str) -> None:
         # mode would create a database file at that path. Reads disconnected.
         return
     _set_session_entry(sid, state)
-    if state.root is not None and state.database != rec.database:  # a vanished folder fell back to the root
+    if state.root is not None and state.database != rec.database:  # a vanished folder: its nearest parent
         await sessions.set_database(sid, state.database)
 
 
@@ -635,11 +635,13 @@ async def open_saved(
             "not_found": True,
         }
     conn_type, config = found
-    # Reset the database so opening always lands on the picker.
-    state, message = await _build_session(name, config, None, conn_type, await _list_limit(sid))
+    # Without a `database` opening lands on the picker (a folder connection on
+    # its root). With one, building on it checks it: listed, or in folder mode
+    # reachable by path.
+    state, message = await _build_session(name, config, database, conn_type, await _list_limit(sid))
     if state is None:
         return {"ok": False, "message": message}
-    if database is not None and database not in state.databases:
+    if database is not None and state.database != database:
         return {"ok": False, "message": "unknown database"}
     _set_session_entry(sid, state)
     if _session_conn(sid, name) is None:
@@ -649,7 +651,7 @@ async def open_saved(
         await select_database(sid, database)
     elif state.database:  # folder mode's "." default
         await sessions.set_database(sid, state.database)
-    return {**_opened(state), "database": database if database is not None else state.database}
+    return _opened(state)
 
 
 async def disconnect(sid: str, by: Literal["agent", "user"] = "user") -> dict[str, Any]:

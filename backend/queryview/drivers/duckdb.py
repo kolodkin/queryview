@@ -66,7 +66,7 @@ def _resolve_folder(root: str, rel: str | None) -> str:
     `.`/`..` or hidden step is refused whole; a missing or symlinked step ends
     the walk there, so a vanished folder resolves to its nearest parent."""
     parts = (rel or ".").split("/")
-    if parts == ["."] or any(p in ("", ".", "..") or p.startswith(".") for p in parts):
+    if any(p == "" or p.startswith(".") for p in parts):  # also ".", "..", hidden
         return "."
     found = "."
     for i in range(len(parts)):

@@ -197,6 +197,12 @@ def test_folders_past_the_limit_stay_reachable_by_path(tmp_path):
     for bad in ("../outside", "link", "d12/../../outside", "d99"):
         assert c.post("/api/db/database", json={"database": bad}).status_code == 400, bad
 
+    # Opening the connection on it works too (an agent's use_connection).
+    r = asyncio.run(connect.open_saved(sid, "keep-duck", "d12/deep", by="agent"))
+    assert r["ok"] and r["database"] == "d12/deep" and "d12/deep" in r["databases"]
+    assert asyncio.run(connect.open_saved(sid, "keep-duck", "d99", by="agent"))["ok"] is False
+    assert c.get("/api/session").json()["database"] == "d12/deep"
+
     # A restart keeps it; one that finds it gone stops at its nearest parent.
     connect._sessions.clear()
     assert c.get("/api/session").json()["database"] == "d12/deep"

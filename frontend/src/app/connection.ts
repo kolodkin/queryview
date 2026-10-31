@@ -163,6 +163,8 @@ async function listDatabases(): Promise<{
   name: string
   databases: string[]
   foldersTruncated: boolean
+  // Folder mode: the selected folder, which moves to its parent if it vanished.
+  database?: string
 } | null> {
   try {
     const data = await (await apiFetch('/api/db/databases')).json()
@@ -171,6 +173,7 @@ async function listDatabases(): Promise<{
           name: data.name as string,
           databases: data.databases as string[],
           foldersTruncated: data.databases_truncated === true,
+          database: data.database as string | undefined,
         }
       : null
   } catch {
@@ -190,14 +193,15 @@ export function useFreshDatabases(
     let live = true
     void listDatabases().then((fresh) => {
       if (!live || !fresh) return
-      const { name, databases, foldersTruncated } = fresh
+      const { name, databases, foldersTruncated, database } = fresh
       setConnection((c) => {
         if (!c || c.name !== name) return c
         const same =
+          (database === undefined || database === c.database) &&
           foldersTruncated === !!c.foldersTruncated &&
           databases.length === c.databases.length &&
           databases.every((d, i) => d === c.databases[i])
-        return same ? c : { ...c, databases, foldersTruncated }
+        return same ? c : { ...c, databases, foldersTruncated, database: database ?? c.database }
       })
     })
     return () => {
