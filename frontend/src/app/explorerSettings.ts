@@ -37,6 +37,12 @@ export function loadMaxEntries(): number {
   return typeof stored === 'number' ? stored : DEFAULT_MAX_ENTRIES
 }
 
+// The typed value, or null for a blank or non-number field (keep the current one).
+export function parseMaxEntries(draft: string): number | null {
+  const n = Number(draft)
+  return draft.trim() !== '' && Number.isFinite(n) ? n : null
+}
+
 export function saveMaxEntries(n: number): number {
   const clamped = Number.isFinite(n)
     ? Math.min(MAX_MAX_ENTRIES, Math.max(1, Math.round(n)))

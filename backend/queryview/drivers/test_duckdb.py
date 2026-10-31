@@ -306,3 +306,12 @@ def test_file_listing_stops_at_the_limit(tmp_path):
     assert r.tables[-1]["query"] == "SELECT * FROM read_csv(['a.csv', 'b.csv'])"
     r = _run(DuckDBDriver().list_tables(DuckConfig(str(tmp_path)), ".", limit=3))
     assert r.truncated is False
+
+
+def test_test_and_connect_agree_on_a_comma_root(tmp_path):
+    # Test used to pass a root that connecting then refused.
+    comma = tmp_path / "a,b"
+    comma.mkdir()
+    d = DuckDBDriver()
+    assert _run(d.test(DuckConfig(str(comma))))["ok"] is False
+    assert isinstance(_run(d.list_databases(DuckConfig(str(comma)))), Err)

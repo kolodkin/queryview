@@ -157,3 +157,19 @@ def test_folder_lists_are_cut_at_the_explorer_max_entries(tmp_path):
     asyncio.run(sessions.patch_session(sid, ui={"explorer": {"maxEntries": True}}))
     r = c.get("/api/db/databases").json()
     assert len(r["databases"]) == 13 and r.get("databases_truncated") is None
+
+
+def test_a_restart_with_the_folder_gone_disconnects_instead_of_creating_a_file(tmp_path):
+    root = tmp_path / "exports"
+    root.mkdir()
+    sid = asyncio.run(sessions.create_session()).id
+    c = TestClient(app, headers={"X-QV-Session": sid})
+    body = {"type": "duckdb", "name": "gone-duck", "path": str(root), "session": True}
+    assert c.post("/api/db/connect", json=body).json()["database"] == "."
+    shutil.rmtree(root)
+    connect._sessions.clear()
+    # The row still says ".", but the path is no longer a folder: file mode
+    # would create a database file there, so the session reads disconnected.
+    assert c.get("/api/session").json()["connected"] is False
+    assert c.post("/api/db/execute", json={"sql": "SELECT 1"}).status_code == 409
+    assert not root.exists()

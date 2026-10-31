@@ -23,6 +23,7 @@ import {
   clampSidebarWidth,
   loadSidebarWidth,
   loadMaxEntries,
+  parseMaxEntries,
   loadUnionByName,
   saveSidebarWidth,
   saveMaxEntries,
@@ -133,11 +134,13 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
           }
         } else {
           setTables([])
+          setTablesTruncated(false)
           setTablesError((data.message as string) ?? 'failed to list tables')
         }
       } catch (err) {
         if (!cancelled) {
           setTables([])
+          setTablesTruncated(false)
           setTablesError(err instanceof Error ? err.message : 'request failed')
         }
       } finally {
@@ -152,7 +155,9 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
 
   // Save, then flush to the session before the re-list reads it there.
   async function applyMaxEntries() {
-    const next = saveMaxEntries(Number(maxDraft))
+    const typed = parseMaxEntries(maxDraft)
+    if (typed === null) return setMaxDraft(String(maxEntries))
+    const next = saveMaxEntries(typed)
     setMaxDraft(String(next))
     if (next === maxEntries) return
     await flushPatches()
@@ -381,7 +386,8 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
         )}
         {tablesTruncated && (
           <p data-testid="explorer-truncated" className="mt-2 text-xs text-amber-300">
-            More than {maxEntries} files: only the first {maxEntries} are listed.
+            More than {maxEntries} files: only the first {maxEntries} are listed, and *.ext entries
+            read only those.
           </p>
         )}
         {tables.length > 0 && (

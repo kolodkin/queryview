@@ -6,6 +6,7 @@ import {
   clampSidebarWidth,
   loadSidebarWidth,
   loadMaxEntries,
+  parseMaxEntries,
   loadUnionByName,
   saveSidebarWidth,
   saveMaxEntries,
@@ -90,5 +91,14 @@ describe('maxEntries', () => {
     expect(loadMaxEntries()).toBe(1)
     saveMaxEntries(10_000_000)
     expect(loadMaxEntries()).toBe(100_000)
+  })
+})
+
+describe('parseMaxEntries', () => {
+  it('reads a typed number and rejects a blank or non-number', () => {
+    expect(parseMaxEntries('10')).toBe(10)
+    expect(parseMaxEntries(' 25 ')).toBe(25)
+    expect(parseMaxEntries('')).toBeNull()
+    expect(parseMaxEntries('abc')).toBeNull()
   })
 })

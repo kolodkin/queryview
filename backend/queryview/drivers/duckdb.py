@@ -51,6 +51,16 @@ def _is_folder(path: str) -> bool:
     return path != ":memory:" and os.path.isdir(path)
 
 
+def _folder_error(path: str) -> str | None:
+    """Why a folder-mode root cannot be used, or None. Shared by Test and
+    connect so the two never disagree."""
+    if "," in os.path.abspath(path):  # file_search_path reads a comma as a list separator
+        return "a DuckDB folder path cannot contain a comma"
+    if not os.access(path, os.R_OK | os.X_OK):
+        return f"cannot read {path}"
+    return None
+
+
 def _list_folders(root: str, limit: int) -> tuple[list[str], bool]:
     """The root (".") and up to `limit` subfolders as sorted relative POSIX
     paths, and whether more exist. Scanned breadth-first, so a cut keeps the
@@ -211,8 +221,8 @@ class DuckDBDriver:
 
     async def test(self, config: DuckConfig) -> dict[str, Any]:
         def _work():
-            if _is_folder(config.path) and not os.access(config.path, os.R_OK | os.X_OK):
-                raise PermissionError(f"cannot read {config.path}")
+            if _is_folder(config.path) and (problem := _folder_error(config.path)):
+                raise ValueError(problem)
             con = _open(config.path, None)
             try:
                 return _scalar(con, "SELECT 1")
@@ -231,9 +241,9 @@ class DuckDBDriver:
         if not _is_folder(config.path):
             return DatabasesResult([])
         try:
+            if problem := _folder_error(config.path):
+                return Err(problem)
             root = os.path.abspath(config.path)
-            if "," in root:
-                return Err("a DuckDB folder path cannot contain a comma")
             folders, truncated = await asyncio.to_thread(_list_folders, root, limit)
             return DatabasesResult(folders, root=root, truncated=truncated)
         except Exception as e:  # noqa: BLE001
