@@ -18,12 +18,14 @@ _DDL = {
     "clickhouse": "CREATE TABLE {t} (id UInt32, name String) ENGINE = MergeTree ORDER BY id",
     "postgres": "CREATE TABLE {t} (id integer, name text)",
     "duckdb": "CREATE TABLE {t} (id INTEGER, name TEXT)",
+    "sqlite": "CREATE TABLE {t} (id INTEGER, name TEXT)",
 }
 # A temporary table: it lives on the run's connection (ClickHouse: its session).
 _TEMP_DDL = {
     "clickhouse": "CREATE TEMPORARY TABLE {t} (x UInt8)",
     "postgres": "CREATE TEMP TABLE {t} (x integer)",
     "duckdb": "CREATE TEMP TABLE {t} (x INTEGER)",
+    "sqlite": "CREATE TEMP TABLE {t} (x INTEGER)",
 }
 
 DUCK = next(c for c in CASES if c.id == "duckdb")

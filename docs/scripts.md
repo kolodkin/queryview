@@ -70,7 +70,7 @@ that supports transactions if partial application is not acceptable.
 | Last statement run | Line |
 | --- | --- |
 | Returned rows | `N rows · T ms`; cut at **100 rows**: `first 100 rows, more exist · T ms` |
-| No rows (DDL, DML) | the driver's own status — ClickHouse `OK`, Postgres's command tag (`INSERT 0 3`), DuckDB `OK` — `· T ms` |
+| No rows (DDL, DML) | the driver's own status — ClickHouse `OK`, Postgres's command tag (`INSERT 0 3`), DuckDB and SQLite `OK` — `· T ms` |
 | Failed | `Statement #k Failed - <the driver's error>` in red; the statement itself is **marked red in the textbox** until you click into it |
 
 A script's line starts with `N statements ·` and `T` is the total.
@@ -94,6 +94,9 @@ same JSON shape as every other result
   page opens it read-only. DuckDB refuses a second open of one file with a
   different mode in the same process, so the explorer and QueryView error on
   that file until the run finishes. A `:memory:` database is new on every run.
+- **SQLite** — the run opens the file read-write in autocommit mode; every
+  other page opens it read-only. Each statement persists as it runs, and a
+  script's own `BEGIN`/`COMMIT` works.
 
 ## Session
 
@@ -109,6 +112,20 @@ agent; `push_script` replaces the text (saved like an edit) and, with `run`,
 runs it here. Focus in the page holds the
 [edit lock](./query.md#co-edit--edit-lock), so a push is refused with
 `blocked, user editing` while you type. See [remote.md](./remote.md).
+
+## File writes
+
+On a DuckDB or SQLite connection a script, the agent's included, can write
+any file QueryView's process can: DuckDB's `COPY ... TO` writes any path, and
+SQLite's `ATTACH` opens or creates any SQLite file, QueryView's own
+`db.sqlite` among them. `run_sql` refuses both.
+
+```sql
+ATTACH '/home/user/elsewhere.db' AS x;
+CREATE TABLE x.customers_copy AS SELECT * FROM customers
+```
+
+Keep an agent off file connections you wouldn't hand it the filesystem for.
 
 ## API
 
