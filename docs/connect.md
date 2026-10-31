@@ -38,7 +38,9 @@ DuckDB takes a **path** (or `:memory:`), has no network and **no picker** —
 connecting goes straight to the explorer; schema-qualify tables in SQL as
 needed. SQLite takes a **path** to an existing file (`:memory:` is refused: every
 request opens a fresh connection) and likewise has no picker;
-every page but the script run opens it read-only.
+every page but the script run opens it read-only. Windows network (UNC) paths
+like `\\fileserver\share\reports.db` don't open; map the share to a drive
+letter instead.
 
 A saved card that fails to open reports the error under the cards.
 When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`
