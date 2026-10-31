@@ -74,7 +74,7 @@ semantics:
 The browse SELECT always selects `*` and comes from the server: each
 `/api/db/tables` entry carries its ready-to-run `query`, quoted with the
 driver's own identifier quote (backticks for ClickHouse, double quotes for
-Postgres/DuckDB) — the frontend never guesses dialect quoting.
+Postgres/DuckDB/SQLite) — the frontend never guesses dialect quoting.
 
 ## Table listing per driver
 
@@ -89,6 +89,7 @@ engine doesn't track them:
 | Postgres   | `pg_class` for the `public` schema, tables and views — what an unqualified name resolves to under the default `search_path`; other schemas need explicit SQL on the query page | planner's `reltuples` (null until first ANALYZE/VACUUM) / `pg_total_relation_size` |
 | DuckDB file | `SHOW TABLES` against the file (no database picker)         | `duckdb_tables()`'s `estimated_size` rows; bytes = distinct `pragma_storage_info` blocks × block size (null for views / `:memory:`) |
 | DuckDB folder | the selected folder's data files and `*.<ext>` globs (below) | rows null (never scanned); bytes = file size, summed for a glob |
+| SQLite     | `sqlite_master` tables and views (no database picker)        | none — SQLite keeps no estimates (both null) |
 
 Like `/api/db/query` and `/api/db/describe`, the endpoint is session-scoped and
 gated: no active connection or (for drivers with a picker) no selected database

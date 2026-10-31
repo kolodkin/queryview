@@ -87,4 +87,19 @@ export const DRIVERS: Record<string, DriverMeta> = {
       { key: 'path', label: 'Path', testid: 'duck-path', type: 'text', default: ':memory:' },
     ],
   },
+  sqlite: {
+    type: 'sqlite',
+    label: 'SQLite',
+    blurb: 'Local database file',
+    mark: 'SQ',
+    accent: 'bg-violet-400/15 text-violet-200 ring-violet-300/30',
+    formTestid: 'sqlite-form',
+    testTestid: 'sq-test',
+    connectTestid: 'sq-connect',
+    resultTestid: 'sq-result',
+    fields: [
+      { key: 'name', label: 'Name', testid: 'sq-name', type: 'text', default: 'sqlite' },
+      { key: 'path', label: 'Path', testid: 'sq-path', type: 'text', default: '' },
+    ],
+  },
 }

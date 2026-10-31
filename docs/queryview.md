@@ -22,6 +22,7 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
 |  +---------------+ +---------------+ +---------------+   |
 |  NEW CONNECTION                                          |
 |  [CH ClickHouse +] [PG Postgres +] [DK DuckDB +]         |
+|  [SQ SQLite +]                                           |
 +----------------------------------------------------------+
 ```
 
@@ -30,7 +31,7 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
   database and table this session last visited there (see
   [session.md](./session.md#last-visited)); otherwise the database picker
   (last-used database highlighted), or the explorer for a picker-less driver
-  (a DuckDB file; a DuckDB folder lands on its root — see
+  (a DuckDB file, SQLite; a DuckDB folder lands on its root — see
   [explorer.md](./explorer.md#duckdb-folder-mode)). Each card edits (✎), deletes (✕) and locks (🔒)
   its connection (see [connect.md](./connect.md)).
 - **New connection** — a card per driver, and the same entries in the **+ New**

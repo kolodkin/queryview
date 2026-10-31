@@ -17,6 +17,7 @@ from queryview.drivers.base import DatabasesResult, Err, FieldsResult, RowsResul
 from queryview.drivers.clickhouse import ChConfig
 from queryview.drivers.duckdb import DuckConfig
 from queryview.drivers.postgres import PgConfig
+from queryview.drivers.sqlite import SqliteConfig
 
 
 @dataclass
@@ -42,6 +43,11 @@ SAMPLES: dict[str, DriverSample] = {
     "duckdb": DriverSample(
         DuckConfig("/tmp/x.duckdb"),
         {"path": "/tmp/x.duckdb"},
+        requires_database=False,
+    ),
+    "sqlite": DriverSample(
+        SqliteConfig("/tmp/x.sqlite"),
+        {"path": "/tmp/x.sqlite"},
         requires_database=False,
     ),
 }
