@@ -83,6 +83,8 @@ def _open(path: str, database: str | None, read_only: bool = True):
         con = duckdb.connect(":memory:")
         con.execute(f"SET file_search_path = {_sql_str(path)}")
         return con
+    if database is not None:  # only folder mode selects one: the folder is gone
+        raise FileNotFoundError(f"folder not found: {path}")
     # read_only avoids lock contention between concurrent describe/query opens;
     # :memory: cannot be read_only, so open it read-write.
     return duckdb.connect(path, read_only=(read_only and path != ":memory:"))

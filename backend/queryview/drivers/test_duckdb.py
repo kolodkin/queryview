@@ -276,3 +276,12 @@ def test_a_comma_is_refused_only_in_the_root(tmp_path):
     comma_root.mkdir()
     r = _run(DuckDBDriver().list_databases(DuckConfig(str(comma_root))))
     assert isinstance(r, Err) and "comma" in r.message
+
+
+def test_a_vanished_folder_root_is_an_error_not_a_new_database_file(tmp_path):
+    # A folder session passes its selected folder; if the root is gone, opening
+    # it as a file would create a .duckdb file where the folder was.
+    root = tmp_path / "gone"
+    out = _run(DuckDBDriver().execute_script(DuckConfig(str(root)), "SELECT 1", "."))
+    assert out[0].ok is False
+    assert not root.exists()
