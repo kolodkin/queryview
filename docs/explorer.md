@@ -127,6 +127,8 @@ root; reopening the connection does too.
   query names the listed files explicitly, so a file added later needs the
   list refreshed. Hidden files, symlinks and names with `*`, `?` or `[` are
   not listed.
+- **Path** — beside the selected table's name, its path from the root in small
+  type (`sub/nested.csv.gz`) with a copy button, for SQL on the query page.
 - **Union by name** — the checkbox adds `union_by_name = true` to the glob
   queries, so files whose columns differ in order or count are matched by
   header name instead of position (missing columns read as NULL). Single files

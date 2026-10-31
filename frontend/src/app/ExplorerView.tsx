@@ -74,6 +74,8 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
   // Folder mode's glob entries: union_by_name on or off (docs/explorer.md).
   const [union, setUnion] = useState(loadUnionByName)
+  const folder = connection?.database ?? '.'
+  const tablePath = folder === '.' ? table : `${folder}/${table}`
   const [dragging, setDragging] = useState(false)
   const asideRef = useRef<HTMLElement | null>(null)
   // Captured on grab: the panel's left edge (fixed — widening the row's first
@@ -448,13 +450,24 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
             <div className="flex flex-wrap items-center gap-2">
               {/* flex-1 + min-w-0 truncates a long name rather than wrapping
                   the pagination controls onto a second row. */}
-              <h2
-                data-testid="explorer-table-name"
-                title={table}
-                className="min-w-0 flex-1 truncate text-lg font-semibold text-white"
-              >
-                {table}
-              </h2>
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <h2
+                  data-testid="explorer-table-name"
+                  title={table}
+                  className="min-w-0 truncate text-lg font-semibold text-white"
+                >
+                  {table}
+                </h2>
+                {/* A folder-mode file's path from the root, for SQL on the query page. */}
+                {connection && isFolderNav(connection) && (
+                  <span className="flex min-w-0 items-center text-xs text-slate-400">
+                    <span data-testid="explorer-table-path" className="truncate font-mono">
+                      {tablePath}
+                    </span>
+                    <CopyName name={tablePath} testid="explorer-table-path-copy" />
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => page(offset)}

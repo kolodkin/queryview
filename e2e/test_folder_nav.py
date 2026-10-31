@@ -38,6 +38,7 @@ def test_folder_connection_navigates_folders_and_browses_files(seeded_folder, pa
     expect(names).to_have_text(["nested.csv.gz"])
     tables.first.click()
     expect(page.get_by_test_id("explorer-panel")).to_contain_text("gamma")
+    expect(page.get_by_test_id("explorer-table-path")).to_have_text("sub/nested.csv.gz")
     shot("subfolder: gzipped csv browsed")
 
     # `..` goes back up.
