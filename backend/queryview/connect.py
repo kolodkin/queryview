@@ -482,8 +482,9 @@ async def _list_limit(sid: str) -> int:
     rec = await sessions.get_session_rec(sid) if sid else None
     view = rec.ui.get("explorer") if rec else None
     raw = view.get("maxEntries") if isinstance(view, dict) else None
-    valid = isinstance(raw, int) and not isinstance(raw, bool) and 1 <= raw <= MAX_LIST_LIMIT
-    return raw if valid else DEFAULT_LIST_LIMIT
+    if isinstance(raw, int) and not isinstance(raw, bool) and 1 <= raw <= MAX_LIST_LIMIT:
+        return raw
+    return DEFAULT_LIST_LIMIT
 
 
 async def _list_databases(

@@ -11,6 +11,13 @@ from queryview import sessions
 from queryview.connect import _now_ms as _now_ms_for_test
 
 
+def _row(sid: str) -> sessions.SessionRec:
+    """The session's stored record, which these tests require to exist."""
+    rec = _run(sessions.get_session_rec(sid))
+    assert rec is not None
+    return rec
+
+
 def _run(coro):
     return asyncio.run(coro)
 
@@ -343,7 +350,7 @@ def test_last_visited_keeps_database_and_table_per_connection():
     _run(sessions.patch_session(sid, table="orders"))
     _run(sessions.set_connection(sid, "events"))
     _run(sessions.set_database(sid, "clicks"))
-    lv = _run(sessions.get_session_rec(sid)).last_visited
+    lv = _row(sid).last_visited
     assert lv == {
         "warehouse": {"database": "sales_reporting", "table": "orders"},
         "events": {"database": "clicks"},
@@ -351,8 +358,8 @@ def test_last_visited_keeps_database_and_table_per_connection():
     # A different database forgets the table, which belonged to the old one.
     _run(sessions.set_connection(sid, "warehouse"))
     _run(sessions.set_database(sid, "finance"))
-    assert _run(sessions.get_session_rec(sid)).last_visited["warehouse"] == {"database": "finance"}
+    assert _row(sid).last_visited["warehouse"] == {"database": "finance"}
     # Deselecting clears the table.
     _run(sessions.patch_session(sid, table="ledger"))
     _run(sessions.patch_session(sid, table=""))
-    assert _run(sessions.get_session_rec(sid)).last_visited["warehouse"] == {"database": "finance", "table": None}
+    assert _row(sid).last_visited["warehouse"] == {"database": "finance", "table": None}

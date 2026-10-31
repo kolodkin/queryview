@@ -13,6 +13,13 @@ from queryview import connect, sessions
 from queryview.main import app
 
 
+def _row(sid: str) -> sessions.SessionRec:
+    """The session's stored record, which these tests require to exist."""
+    rec = asyncio.run(sessions.get_session_rec(sid))
+    assert rec is not None
+    return rec
+
+
 def test_connect_unknown_type_is_400():
     c = TestClient(app)
     r = c.post("/api/db/connect", json={"type": "nope", "name": "x", "host": "h", "port": 1})
@@ -120,7 +127,7 @@ def test_folder_connection_lands_on_root_with_tables_and_union(tmp_path):
     assert r["databases"] == [".", "sub"] and r["database"] == "." and r["root"] == root
     assert c.get("/api/session").json()["root"] == root
     # The default is persisted: the tab re-derives its connection from the session row.
-    assert asyncio.run(sessions.get_session_rec(sid)).database == "."
+    assert _row(sid).database == "."
     names = [t["name"] for t in c.get("/api/db/tables").json()["tables"]]
     assert names == ["a.csv", "b.csv", "*.csv"]
     glob = c.get("/api/db/tables", params={"union": "1"}).json()["tables"][-1]
@@ -136,7 +143,7 @@ def test_folder_connection_lands_on_root_with_tables_and_union(tmp_path):
     connect._sessions.clear()
     assert c.get("/api/session").json()["database"] == "."
     # ...and the row agrees, or the tab would switch back to the vanished folder.
-    assert asyncio.run(sessions.get_session_rec(sid)).database == "."
+    assert _row(sid).database == "."
 
 
 def test_folder_lists_are_cut_at_the_explorer_max_entries(tmp_path):
@@ -209,7 +216,7 @@ def test_folders_past_the_limit_stay_reachable_by_path(tmp_path):
     shutil.rmtree(root / "d12" / "deep")
     connect._sessions.clear()
     assert c.get("/api/session").json()["database"] == "d12"
-    assert asyncio.run(sessions.get_session_rec(sid)).database == "d12"
+    assert _row(sid).database == "d12"
 
 
 def test_reopening_a_folder_connection_goes_back_to_its_last_folder_and_file(tmp_path):

@@ -21,6 +21,13 @@ from queryview.drivers.base import (
 )
 
 
+def _row(sid: str) -> sessions.SessionRec:
+    """The session's stored record, which these tests require to exist."""
+    rec = _run(sessions.get_session_rec(sid))
+    assert rec is not None
+    return rec
+
+
 def _run(coro):
     return asyncio.run(coro)
 
@@ -295,7 +302,7 @@ def test_rebuild_keeps_an_unlisted_database_on_the_row_for_picker_drivers(monkey
     _run(sessions.set_database(rec.id, "gone"))
     connect._sessions.clear()
     _run(connect.get_session(rec.id))
-    assert _run(sessions.get_session_rec(rec.id)).database == "gone"
+    assert _row(rec.id).database == "gone"
 
 
 def test_reopening_a_connection_goes_back_to_its_last_database_and_table(monkeypatch):
