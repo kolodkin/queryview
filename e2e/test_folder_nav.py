@@ -10,7 +10,7 @@ from conftest import open_connect, start_new_connection
 from playwright.sync_api import Page, expect
 
 
-def test_folder_connection_navigates_folders_and_browses_files(seeded_folder, page: Page) -> None:
+def test_folder_connection_navigates_folders_and_browses_files(seeded_folder, page: Page, shot) -> None:
     open_connect(page)
     start_new_connection(page, "duckdb")
     page.get_by_test_id("duck-path").fill(seeded_folder)
@@ -24,22 +24,26 @@ def test_folder_connection_navigates_folders_and_browses_files(seeded_folder, pa
     tables = page.get_by_test_id("explorer-table")
     names = page.locator('[data-testid="explorer-table"] > span:first-child')  # the name, not the size
     expect(names).to_have_text(["extra.csv", "items.csv", "*.csv"])
+    shot("folder mode: root files and glob entry")
 
     # The menu shows the full path and the root's subfolders, no `..` at the root.
     status.click()
     expect(page.get_by_test_id("db-select-path")).to_have_text(seeded_folder)
     options = page.get_by_test_id("db-select").get_by_role("option")
     expect(options).to_have_text(["sub"])
+    shot("folder picker at the root: full path, no parent")
     options.first.click()
     expect(status).to_contain_text("· sub")
     expect(status).to_have_attribute("title", f"{seeded_folder}/sub")
     expect(names).to_have_text(["nested.csv.gz"])
     tables.first.click()
     expect(page.get_by_test_id("explorer-panel")).to_contain_text("gamma")
+    shot("subfolder: gzipped csv browsed")
 
     # `..` goes back up.
     status.click()
     expect(options).to_have_text([".."])
+    shot("folder picker in a subfolder: parent entry")
     options.first.click()
     expect(names).to_have_text(["extra.csv", "items.csv", "*.csv"])
 
@@ -49,3 +53,4 @@ def test_folder_connection_navigates_folders_and_browses_files(seeded_folder, pa
     panel = page.get_by_test_id("explorer-panel")
     expect(panel).to_contain_text("delta")
     expect(panel).to_contain_text("gamma")
+    shot("union by name: glob entry across both files")
