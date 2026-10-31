@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 import aiosqlite
@@ -65,9 +66,7 @@ async def _connect(c: SqliteConfig, timeout: float = SQLITE_TIMEOUT_SECONDS, rea
     closed on exit. It never creates the file: reads open it read-only, the
     script run read-write. Work still running `timeout` seconds after the open
     is aborted: the progress handler is SQLite's only statement timeout."""
-    path = c.path.replace("%", "%25").replace("?", "%3f").replace("#", "%23")
-    # An absolute path gets an empty authority, so a leading "//" stays a path.
-    uri = f"file:{'//' if path.startswith('/') else ''}{path}?mode={'ro' if read_only else 'rw'}"
+    uri = f"{Path(c.path).resolve().as_uri()}?mode={'ro' if read_only else 'rw'}"
     factory = _NoAttach if read_only else sqlite3.Connection
     conn = await aiosqlite.connect(uri, uri=True, isolation_level=None, factory=factory)
     try:
@@ -84,23 +83,21 @@ async def _connect(c: SqliteConfig, timeout: float = SQLITE_TIMEOUT_SECONDS, rea
 _CLASS_OF = {int: "INTEGER", float: "REAL", str: "TEXT", bytes: "BLOB"}
 
 
-def _to_rows(cur: aiosqlite.Cursor, fetched: Iterable[Any], declared: list[str] | None = None) -> QueryRows:
+def _to_rows(cur: aiosqlite.Cursor, fetched: Iterable[Any], declared: Sequence[str] = ()) -> QueryRows:
     records = list(fetched)
     names = [d[0] for d in cur.description or ()]
     meta = []
     for i, name in enumerate(names):
-        decl = declared[i] if declared and i < len(declared) else ""
+        decl = declared[i] if declared else ""
         first = next((r[i] for r in records if r[i] is not None), None)
         meta.append(Column(name, decl or _CLASS_OF.get(type(first), "")))
     return QueryRows(meta, [[to_json_value(v) for v in r] for r in records])
 
 
 async def _declared_types(conn: aiosqlite.Connection, select: str) -> list[str]:
-    """Each result column's declared type, "" for an expression, read from a
-    temp view of `select` (temp is writable on a read-only open, and dies with
-    the connection). Works on an empty result, unlike the value fallback. When
-    the view can't be made (e.g. the query reads a table of the same name), it
-    returns [] and every column falls back; a bad query fails on its own run."""
+    """Each result column's declared type ("" for an expression), read from a
+    temp view of `select`, so it works on an empty result. [] when the view
+    fails; a bad query then reports its error from its own run."""
     try:
         await conn.execute(f"CREATE TEMP VIEW _qv_types AS {select}")
         try:
@@ -165,7 +162,7 @@ class SqliteDriver:
         order_clause = build_order_by(order_by, '"')
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias="_qv")
         async with _connect(config) as conn:
-            declared = await _declared_types(conn, paginated) if typed else None
+            declared = await _declared_types(conn, paginated) if typed else ()
             async with conn.execute(paginated) as cur:
                 return _to_rows(cur, await cur.fetchall(), declared)
 
