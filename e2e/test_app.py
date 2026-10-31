@@ -28,6 +28,7 @@ _DUCKDB = next(c for c in CASES if c.id == "duckdb")
 _PICKER = [c for c in CASES if c.db_option]
 _CURRENT_DB = {"clickhouse": "currentDatabase()", "postgres": "current_database()"}
 _OTHER_DB = {"clickhouse": "system", "postgres": "postgres"}
+# Both start on CH_DB: conftest names the Postgres database the same (PG_DB).
 
 
 def test_queryview_e2e(page: Page) -> None:
@@ -121,14 +122,14 @@ def test_a_database_switch_reruns_the_query_on_screen(case: DriverCase, request,
     page.get_by_test_id("query-input").fill(f"SELECT {_CURRENT_DB[case.id]} AS db")
     page.get_by_test_id("query-run").click()
     output = page.get_by_test_id("query-output")
-    expect(output).to_contain_text(case.db_option)
+    expect(output).to_contain_text(CH_DB)
 
     # An edit since the run is not what produced the results: the re-run is of
     # the run's own query, and the edit stays in the editor.
     page.get_by_test_id("query-input").fill("SELECT 'edited'")
     _switch_database_from_pill(page, other)
     expect(output).to_contain_text(other)
-    expect(output).not_to_contain_text(case.db_option)
+    expect(output).not_to_contain_text(CH_DB)
     expect(output).not_to_contain_text("edited")
     expect(page.get_by_test_id("query-input")).to_have_value("SELECT 'edited'")
 
@@ -186,7 +187,7 @@ def test_a_database_switch_refreshes_param_options(case: DriverCase, request, pa
         f"params:\n  - name: db\n    options_sql: SELECT {_CURRENT_DB[case.id]}\n",
     )
     sel = page.locator('[data-testid="param-select"][data-param="db"]')
-    expect(sel.locator("option").first).to_have_text(case.db_option)
+    expect(sel.locator("option").first).to_have_text(CH_DB)
 
     _switch_database_from_pill(page, other)
     expect(sel.locator("option").first).to_have_text(other)
@@ -207,11 +208,11 @@ def test_a_database_switch_reruns_with_the_new_database_param_options(case: Driv
     )
     page.get_by_test_id("query-run").click()
     output = page.get_by_test_id("query-output")
-    expect(output).to_contain_text(case.db_option)
+    expect(output).to_contain_text(CH_DB)
 
     _switch_database_from_pill(page, other)
     expect(output).to_contain_text(other)
-    expect(output).not_to_contain_text(case.db_option)
+    expect(output).not_to_contain_text(CH_DB)
 
 
 def test_a_database_switched_elsewhere_reaches_the_tab_on_its_heartbeat(
