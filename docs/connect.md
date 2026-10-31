@@ -40,7 +40,7 @@ tables in SQL as needed. A **folder** gets the folder picker instead: its
 subfolders are the "databases" and its data files the tables, landing on the
 folder itself (see [explorer.md](./explorer.md#duckdb-folder-mode)).
 SQLite takes a **path** to an existing file (`:memory:` is refused: every
-request opens a fresh connection) and likewise has no picker;
+request opens a fresh connection) and, like a `.duckdb` file, has no picker;
 every page but the script run opens it read-only. Windows network (UNC) paths
 like `\\fileserver\share\reports.db` don't open; map the share to a drive
 letter instead.

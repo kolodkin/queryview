@@ -137,6 +137,10 @@ def test_reopening_a_connection_goes_back_to_its_last_folder_and_file(seeded_fol
     expect(status).to_contain_text("· sub")
     page.locator('[data-testid="explorer-table"][data-table="nested.csv.gz"]').click()
     expect(page.get_by_test_id("explorer-panel")).to_contain_text("gamma")
+    # Visiting another page and coming back through the nav keeps the memory.
+    page.get_by_test_id("nav-queryview").click()
+    page.get_by_test_id("nav-explorer").click()
+    expect(page.get_by_test_id("explorer-tables")).to_be_visible()
 
     # Switch to another connection, then reopen the first from its card.
     open_connect(page)

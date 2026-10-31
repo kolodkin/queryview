@@ -363,3 +363,31 @@ def test_last_visited_keeps_database_and_table_per_connection():
     _run(sessions.patch_session(sid, table="ledger"))
     _run(sessions.patch_session(sid, table=""))
     assert _row(sid).last_visited["warehouse"] == {"database": "finance", "table": None}
+
+
+def test_last_visited_survives_a_malformed_entry():
+    # A hand-edited blob reads as nothing remembered rather than failing writes.
+    sid = _run(sessions.create_session()).id
+    _run(sessions.set_connection(sid, "warehouse"))
+
+    async def corrupt():
+        async with sessions._open() as s:
+            assert row is not None
+            row = await s.get(sessions.Session, sid)
+            row.last_visited = '{"warehouse": "x"}'
+            s.add(row)
+            await s.commit()
+
+    _run(corrupt())
+    _run(sessions.patch_session(sid, table="orders"))
+    _run(sessions.set_database(sid, "finance"))
+    assert _row(sid).last_visited["warehouse"] == {"database": "finance"}
+
+
+def test_deleting_a_connection_forgets_where_sessions_last_were_on_it():
+    sid = _run(sessions.create_session()).id
+    _run(sessions.set_connection(sid, "warehouse"))
+    _run(sessions.set_database(sid, "sales_reporting"))
+    _run(sessions.set_connection(sid, "events"))
+    _run(sessions.clear_connection("warehouse"))
+    assert "warehouse" not in _row(sid).last_visited

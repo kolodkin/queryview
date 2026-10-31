@@ -63,9 +63,10 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   const scope = connectionKey(connection)
   const [searchParams, setSearchParams] = useSearchParams()
   const table = searchParams.get('table') ?? ''
-  // Remember the selection for this connection, so reopening it comes back here.
+  // Remember the selection for this connection, so reopening it comes back
+  // here. An empty one (a plain /explorer visit) keeps the remembered table.
   useEffect(() => {
-    if (ready) void patchSession({ table })
+    if (ready && table) void patchSession({ table })
   }, [ready, table])
 
   const [tables, setTables] = useState<TableInfo[]>([])

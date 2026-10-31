@@ -50,7 +50,9 @@ goes straight back to them, skipping the picker:
   another database forgets it. SQLite and a DuckDB file have no database, so
   their entry is the table alone.
 
-The record is the session's, not the connection's: a new session opens a
+Deleting a connection forgets every session's entry for it, so a new
+connection reusing the name starts fresh. The record is the session's, not
+the connection's: a new session opens a
 Postgres or ClickHouse connection on its picker, with the last database used
 anywhere highlighted.
 

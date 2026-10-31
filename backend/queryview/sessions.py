@@ -96,6 +96,12 @@ def _json_dict(text: str) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _visited_entry(visited: dict[str, Any], name: str) -> dict[str, Any]:
+    """One connection's last-visited entry; a malformed one reads as empty."""
+    entry = visited.get(name)
+    return entry if isinstance(entry, dict) else {}
+
+
 def _to_rec(row: Session, now: int | None = None) -> SessionRec:
     now = _now_ms() if now is None else now
     ui = _json_dict(row.ui)
@@ -257,7 +263,7 @@ async def patch_session(
             row.ui = json.dumps(_merge_ui(_to_rec(row).ui, ui))
         if table is not None and row.connection_name:
             visited = _json_dict(row.last_visited)
-            entry = visited.get(row.connection_name) or {"database": row.database}
+            entry = _visited_entry(visited, row.connection_name) or {"database": row.database}
             visited[row.connection_name] = {**entry, "table": table or None}
             row.last_visited = json.dumps(visited)
         row.last_active_at = _now_ms()
@@ -431,13 +437,20 @@ async def set_connection(sid: str, connection_name: str | None, by: Literal["age
 
 
 async def clear_connection(connection_name: str) -> None:
-    """Disconnect every session on a connection that was deleted."""
+    """Disconnect every session on a connection that was deleted, and forget
+    where any session last was on it: a new connection may reuse the name."""
     await _ensure_schema()
-    async with _open() as s:
-        rows = await s.exec(select(Session).where(Session.connection_name == connection_name))
+    async with _writes, _open() as s:
+        rows = await s.exec(select(Session))
         for row in rows.all():
-            row.connection_name = None
-            row.database = None
+            visited = _json_dict(row.last_visited)
+            if row.connection_name != connection_name and connection_name not in visited:
+                continue
+            if row.connection_name == connection_name:
+                row.connection_name = None
+                row.database = None
+            visited.pop(connection_name, None)
+            row.last_visited = json.dumps(visited)
             s.add(row)
         await s.commit()
 
@@ -446,14 +459,16 @@ async def set_database(sid: str, database: str | None) -> None:
     """The session's database, also kept as its connection's last visited one;
     a change forgets the table, which belonged to the old database."""
     await _ensure_schema()
-    async with _open() as s:
+    # Under the write lock: patch_session rewrites last_visited too, and an
+    # unlocked read-modify-write here could drop its table or this database.
+    async with _writes, _open() as s:
         row = await s.get(Session, sid)
         if row is None:
             return
         row.database = database
         if row.connection_name and database is not None:
             visited = _json_dict(row.last_visited)
-            if (visited.get(row.connection_name) or {}).get("database") != database:
+            if _visited_entry(visited, row.connection_name).get("database") != database:
                 visited[row.connection_name] = {"database": database}
                 row.last_visited = json.dumps(visited)
         row.last_active_at = _now_ms()
