@@ -10,6 +10,7 @@ import sqlite3
 
 import pytest
 
+from queryview.drivers import sqlite
 from queryview.drivers.base import DatabasesResult, Err, FieldsResult, RowsResult, TablesResult, TextResult
 from queryview.drivers.sqlite import SqliteConfig, SqliteDriver
 
@@ -128,3 +129,36 @@ def test_execute_script_stops_at_the_first_failure_and_caps_rows(db_path):
         )
     )
     assert results[0].rows is not None and len(results[0].rows.data) == 100 and results[0].truncated is True
+
+
+def test_test_rejects_a_file_that_is_not_sqlite(tmp_path):
+    junk = tmp_path / "notes.txt"
+    junk.write_text("not a database")
+    r = _run(SqliteDriver().test(SqliteConfig(str(junk))))
+    assert r["ok"] is False and "not a database" in r["message"]
+
+
+def test_path_with_uri_characters_opens_that_file(tmp_path):
+    path = tmp_path / "report%41 #1?.sqlite"
+    sqlite3.connect(str(path)).execute("CREATE TABLE sqlitemetrics (x)").close()
+    r = _run(SqliteDriver().list_tables(SqliteConfig(str(path)), None))
+    assert r == TablesResult([{"name": "sqlitemetrics", "rows": None, "bytes": None}])
+
+
+def test_run_sql_refuses_attach_and_vacuum_into(tmp_path, db_path):
+    d = SqliteDriver()
+    for sql in (f"ATTACH '{tmp_path}/new.db' AS n", f"VACUUM INTO '{tmp_path}/copy.db'"):
+        assert isinstance(_run(d.run_sql(SqliteConfig(db_path), sql, None, 10)), Err)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["qv.sqlite"]
+
+
+def test_execute_script_does_not_create_a_missing_file(tmp_path):
+    results = _run(SqliteDriver().execute_script(SqliteConfig(str(tmp_path / "typo.sqlite")), "SELECT 1", None))
+    assert results[0].ok is False and not (tmp_path / "typo.sqlite").exists()
+
+
+def test_a_query_past_the_timeout_is_aborted(monkeypatch, db_path):
+    monkeypatch.setattr(sqlite, "RUN_SQL_TIMEOUT_SECONDS", 0)
+    endless = "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n) SELECT count(*) FROM n"
+    r = _run(SqliteDriver().run_sql(SqliteConfig(db_path), endless, None, 10))
+    assert isinstance(r, Err) and "interrupted" in r.message

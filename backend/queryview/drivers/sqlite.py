@@ -3,6 +3,7 @@ Postgres; the config is a file path and there is no database picker."""
 
 from __future__ import annotations
 
+import sqlite3
 import time
 from collections.abc import Iterable
 from contextlib import asynccontextmanager
@@ -14,6 +15,7 @@ import aiosqlite
 from .base import (
     RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_ROW_CAP,
+    SCRIPT_TIMEOUT_SECONDS,
     Column,
     DatabasesResult,
     Err,
@@ -46,16 +48,30 @@ def parse_sqlite_config(body: Any) -> tuple[SqliteConfig | None, str | None]:
     return SqliteConfig(path=path), None
 
 
+SQLITE_TIMEOUT_SECONDS = 5  # as Postgres's per-request timeout
+
+
+class _NoAttach(sqlite3.Connection):
+    """Refuses ATTACH and VACUUM INTO, which write files even under mode=ro."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.setlimit(sqlite3.SQLITE_LIMIT_ATTACHED, 0)
+
+
 @asynccontextmanager
-async def _connect(c: SqliteConfig, read_only: bool = True):
-    """Short-lived connection, closed on exit. Read-only opens refuse writes
-    and a missing file; the script run opens read-write (creating the file).
-    Autocommit, so a script's own BEGIN/COMMIT work and DDL/DML persist."""
-    uri = "file:" + c.path.replace("?", "%3f").replace("#", "%23")
-    if read_only:
-        uri += "?mode=ro"
-    conn = await aiosqlite.connect(uri, uri=True, isolation_level=None)
+async def _connect(c: SqliteConfig, timeout: float = SQLITE_TIMEOUT_SECONDS, read_only: bool = True):
+    """Short-lived autocommit connection (a script's own BEGIN/COMMIT work),
+    closed on exit. It never creates the file: reads open it read-only, the
+    script run read-write. Work still running `timeout` seconds after the open
+    is aborted: the progress handler is SQLite's only statement timeout."""
+    path = c.path.replace("%", "%25").replace("?", "%3f").replace("#", "%23")
+    uri = f"file:{path}?mode={'ro' if read_only else 'rw'}"
+    factory = _NoAttach if read_only else sqlite3.Connection
+    conn = await aiosqlite.connect(uri, uri=True, isolation_level=None, factory=factory)
     try:
+        deadline = time.monotonic() + timeout
+        await conn.set_progress_handler(lambda: time.monotonic() > deadline, 10_000)
         yield conn
     finally:
         await conn.close()
@@ -63,6 +79,8 @@ async def _connect(c: SqliteConfig, read_only: bool = True):
 
 # SQLite reports no column types for a query, only storage classes per value:
 # name each column by its first non-null value's class.
+# shortcut: an empty or all-NULL column gets no type; read declared types
+# (PRAGMA table_info) if a caller comes to need them.
 _CLASS_OF = {int: "INTEGER", float: "REAL", str: "TEXT", bytes: "BLOB"}
 
 
@@ -92,9 +110,10 @@ class SqliteDriver:
 
     async def test(self, config: SqliteConfig) -> dict[str, Any]:
         try:
-            async with _connect(config) as conn, conn.execute("SELECT 1") as cur:
+            # Reading the catalog, unlike SELECT 1, fails on a file that isn't SQLite.
+            async with _connect(config) as conn, conn.execute("SELECT count(*) FROM sqlite_master") as cur:
                 row = await cur.fetchone()
-                return {"ok": True, "message": f"Connected — SELECT 1 returned {row[0] if row else None}"}
+                return {"ok": True, "message": f"Connected — {row[0] if row else 0} schema objects"}
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "message": error_message(e)}
 
@@ -109,7 +128,7 @@ class SqliteDriver:
                 _connect(config) as conn,
                 conn.execute(
                     "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') "
-                    "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+                    "AND substr(name, 1, 7) <> 'sqlite_' ORDER BY name"
                 ) as cur,
             ):
                 return TablesResult([{"name": r[0], "rows": None, "bytes": None} for r in await cur.fetchall()])
@@ -145,14 +164,10 @@ class SqliteDriver:
             return Err(error_message(e))
 
     async def run_sql(self, config: SqliteConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
-        # The read-only open refuses writes; the progress handler is SQLite's
-        # only statement timeout (a non-zero return aborts the statement).
-        deadline = time.monotonic() + RUN_SQL_TIMEOUT_SECONDS
+        # The read-only, no-ATTACH open is what keeps unwrapped SQL from writing.
         try:
-            async with _connect(config) as conn:
-                await conn.set_progress_handler(lambda: time.monotonic() > deadline, 10_000)
-                async with conn.execute(sql) as cur:
-                    return RowsResult(_to_rows(cur, await cur.fetchmany(max_rows)))
+            async with _connect(config, RUN_SQL_TIMEOUT_SECONDS) as conn, conn.execute(sql) as cur:
+                return RowsResult(_to_rows(cur, await cur.fetchmany(max_rows)))
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
 
@@ -181,7 +196,7 @@ class SqliteDriver:
 
     async def execute_script(self, config: SqliteConfig, sql: str, database: str | None) -> list[StatementResult]:
         try:
-            async with _connect(config, read_only=False) as conn:
+            async with _connect(config, SCRIPT_TIMEOUT_SECONDS, read_only=False) as conn:
 
                 async def run_one(stmt: str) -> StatementResult:
                     try:
