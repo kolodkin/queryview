@@ -27,9 +27,12 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
 ```
 
 - **Saved connections** — most recent first: driver monogram, name, last
-  database, last used; the active one has a green dot. Clicking opens it: the
-  database picker (last-used database highlighted), or the explorer for a
-  picker-less driver (DuckDB, SQLite). Each card edits (✎), deletes (✕) and locks (🔒)
+  database, last used; the active one has a green dot. Clicking opens it on the
+  database and table this session last visited there (see
+  [session.md](./session.md#last-visited)); otherwise the database picker
+  (last-used database highlighted), or the explorer for a picker-less driver
+  (a DuckDB file, SQLite; a DuckDB folder lands on its root — see
+  [explorer.md](./explorer.md#duckdb-folder-mode)). Each card edits (✎), deletes (✕) and locks (🔒)
   its connection (see [connect.md](./connect.md)).
 - **New connection** — a card per driver, and the same entries in the **+ New**
   menu; either opens that driver's form in place (see

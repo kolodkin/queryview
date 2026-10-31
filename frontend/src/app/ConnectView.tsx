@@ -7,6 +7,7 @@ import {
   deleteConnection,
   fetchSavedConfig,
   lockConnection,
+  explorerUrl,
   openSaved,
   removeLock,
   unlockConnection,
@@ -160,7 +161,7 @@ function ConnectView({
     closeForm()
     setBrowsing(false)
     setError(null)
-    if (isReady(opened)) navigate('/explorer')
+    if (isReady(opened)) navigate(explorerUrl(opened))
     else void refreshSaved()
   }
 

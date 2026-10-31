@@ -11,6 +11,13 @@ from queryview import sessions
 from queryview.connect import _now_ms as _now_ms_for_test
 
 
+def _row(sid: str) -> sessions.SessionRec:
+    """The session's stored record, which these tests require to exist."""
+    rec = _run(sessions.get_session_rec(sid))
+    assert rec is not None
+    return rec
+
+
 def _run(coro):
     return asyncio.run(coro)
 
@@ -334,3 +341,53 @@ def test_agent_session_refuses_deletion_and_rename():
     assert rec is not None and sessions.display_label(rec) == "Agent"
     row = next(r for r in _run(sessions.list_sessions()) if r["id"] == sessions.AGENT_SESSION_ID)
     assert (row["label"], row["deletable"], row["renamable"]) == ("Agent", False, False)
+
+
+def test_last_visited_keeps_database_and_table_per_connection():
+    sid = _run(sessions.create_session()).id
+    _run(sessions.set_connection(sid, "warehouse"))
+    _run(sessions.set_database(sid, "sales_reporting"))
+    _run(sessions.patch_session(sid, table="orders"))
+    _run(sessions.set_connection(sid, "events"))
+    _run(sessions.set_database(sid, "clicks"))
+    lv = _row(sid).last_visited
+    assert lv == {
+        "warehouse": {"database": "sales_reporting", "table": "orders"},
+        "events": {"database": "clicks"},
+    }
+    # A different database forgets the table, which belonged to the old one.
+    _run(sessions.set_connection(sid, "warehouse"))
+    _run(sessions.set_database(sid, "finance"))
+    assert _row(sid).last_visited["warehouse"] == {"database": "finance"}
+    # Deselecting clears the table.
+    _run(sessions.patch_session(sid, table="ledger"))
+    _run(sessions.patch_session(sid, table=""))
+    assert _row(sid).last_visited["warehouse"] == {"database": "finance", "table": None}
+
+
+def test_last_visited_survives_a_malformed_entry():
+    # A hand-edited blob reads as nothing remembered rather than failing writes.
+    sid = _run(sessions.create_session()).id
+    _run(sessions.set_connection(sid, "warehouse"))
+
+    async def corrupt():
+        async with sessions._open() as s:
+            row = await s.get(sessions.Session, sid)
+            assert row is not None
+            row.last_visited = '{"warehouse": "x"}'
+            s.add(row)
+            await s.commit()
+
+    _run(corrupt())
+    _run(sessions.patch_session(sid, table="orders"))
+    _run(sessions.set_database(sid, "finance"))
+    assert _row(sid).last_visited["warehouse"] == {"database": "finance"}
+
+
+def test_deleting_a_connection_forgets_where_sessions_last_were_on_it():
+    sid = _run(sessions.create_session()).id
+    _run(sessions.set_connection(sid, "warehouse"))
+    _run(sessions.set_database(sid, "sales_reporting"))
+    _run(sessions.set_connection(sid, "events"))
+    _run(sessions.clear_connection("warehouse"))
+    assert "warehouse" not in _row(sid).last_visited

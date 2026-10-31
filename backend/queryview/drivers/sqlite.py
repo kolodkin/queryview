@@ -14,6 +14,7 @@ from typing import Any
 import aiosqlite
 
 from .base import (
+    DEFAULT_LIST_LIMIT,
     RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_ROW_CAP,
     SCRIPT_TIMEOUT_SECONDS,
@@ -134,11 +135,15 @@ class SqliteDriver:
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "message": error_message(e)}
 
-    async def list_databases(self, config: SqliteConfig) -> DatabasesResult | Err:
+    async def list_databases(
+        self, config: SqliteConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
+    ) -> DatabasesResult | Err:
         # No picker: queries run directly against the file.
         return DatabasesResult([])
 
-    async def list_tables(self, config: SqliteConfig, database: str | None) -> TablesResult | Err:
+    async def list_tables(
+        self, config: SqliteConfig, database: str | None, union: bool = False, limit: int = DEFAULT_LIST_LIMIT
+    ) -> TablesResult | Err:
         # Tables and views from the catalog; SQLite keeps no row or size estimates.
         try:
             async with (

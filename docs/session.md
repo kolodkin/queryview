@@ -19,6 +19,7 @@ deleted once that tab has closed or switched away from it.
 | --- | --- |
 | Route and URL | `/explorer?table=events`, `/dashboard?name=sales` |
 | Connection | the connection this session is on, and its selected database |
+| Last visited | per connection, the database (or DuckDB folder) and table it was last on |
 | Workspace | which workspace scopes its queries, dashboards and git sync |
 | Query panel | SQL text, page size, visible columns, sort |
 | Scripts | the script text |
@@ -33,6 +34,27 @@ table exactly as following the link would.
 
 Transient state is never written: open popovers, filter text, a drag in
 progress, fetched rows.
+
+## Last visited
+
+Each connection the session has been on keeps the database and table it was
+last on. Reopening that connection in the same session — its card on the
+Connect page, the pill menu, `?connection=`, an agent's `use_connection` —
+goes straight back to them, skipping the picker:
+
+- **Database** — restored if still listed. A DuckDB folder is checked by path
+  and falls back to its nearest parent (see
+  [explorer.md](./explorer.md#duckdb-folder-mode)); a database no longer
+  listed lands on the picker.
+- **Table** — the Explorer opens it if it is still in that database. Picking
+  another database forgets it. SQLite and a DuckDB file have no database, so
+  their entry is the table alone.
+
+Deleting a connection forgets every session's entry for it, so a new
+connection reusing the name starts fresh. The record is the session's, not
+the connection's: a new session opens a
+Postgres or ClickHouse connection on its picker, with the last database used
+anywhere highlighted.
 
 ## Refresh, new tabs, and the claim
 
@@ -134,6 +156,7 @@ database        TEXT
 workspace       TEXT
 url             TEXT              -- path + query string
 ui              TEXT              -- JSON, namespaced by view
+last_visited    TEXT              -- JSON {connection: {database, table}}
 claimed_by      TEXT              -- the tab token holding it
 claim_seen_at   INTEGER           -- unix ms; stale after 90s
 last_active_at  INTEGER           -- unix ms

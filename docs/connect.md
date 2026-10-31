@@ -34,10 +34,13 @@ commit it; the app applies it on next start.
  ClickHouse and Postgres take host/port/username/password and present
 a database picker — for ClickHouse the picker lists `SHOW DATABASES`, for Postgres
 it lists real databases (`pg_database`) and the chosen one is where queries run.
-DuckDB takes a **path** (or `:memory:`), has no network and **no picker** —
-connecting goes straight to the explorer; schema-qualify tables in SQL as
-needed. SQLite takes a **path** to an existing file (`:memory:` is refused: every
-request opens a fresh connection) and likewise has no picker;
+DuckDB takes a **path** (or `:memory:`) and has no network. A `.duckdb` file
+has **no picker** — connecting goes straight to the explorer; schema-qualify
+tables in SQL as needed. A **folder** gets the folder picker instead: its
+subfolders are the "databases" and its data files the tables, landing on the
+folder itself (see [explorer.md](./explorer.md#duckdb-folder-mode)).
+SQLite takes a **path** to an existing file (`:memory:` is refused: every
+request opens a fresh connection) and, like a `.duckdb` file, has no picker;
 every page but the script run opens it read-only. Windows network (UNC) paths
 like `\\fileserver\share\reports.db` don't open; map the share to a drive
 letter instead.
@@ -59,7 +62,9 @@ fails, the error suggests `host.docker.internal` (see the README's
   [queryview.md](./queryview.md)). One per session.
 - **Database selection** — after connecting, the user picks a database. Only
   then does the top-left indicator read `🟢 <connection> · <database>`. The choice
-  is remembered with the connection.
+  is remembered with the connection, and reopening the connection in the same
+  session goes straight back to it (see
+  [session.md](./session.md#last-visited)).
 
 ## Creating a connection
 
@@ -105,7 +110,8 @@ cards -- "New connection" card --> connection form
                                               v
                               (o) <connection> - <database>  (explorer)
 
-cards -- saved card --> opens <name>, activates it --> database picker --> pick
+cards -- saved card --> opens <name>, activates it --> last visited database
+                                                     (else the picker --> pick)
 ```
 
 ## Database picker

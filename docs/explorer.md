@@ -25,7 +25,8 @@ order-by select the query panel uses.
 ```
 
 - **Sidebar** — the tables of the session's selected database, from
-  `GET /api/db/tables`. Each entry shows the engine's row-count and size
+  `GET /api/db/tables`. A DuckDB folder connection adds a **Union by name**
+  checkbox beside the heading (see [DuckDB folder mode](#duckdb-folder-mode)). Each entry shows the engine's row-count and size
   estimates under the name (e.g. `1.2K rows · 3.4MB`), and a **copy** icon
   that copies the name without opening the table. Row counts abbreviate with K/M/G/T/P at each power of
   1000, byte sizes with KB/MB/GB/TB/PB at each power of 1024; an estimate the
@@ -86,9 +87,82 @@ engine doesn't track them:
 | ---------- | ----------------------------------------------------------- | --------- |
 | ClickHouse | `system.tables` for the selected database (same set as `SHOW TABLES`) | `total_rows` / `total_bytes` (null for views) |
 | Postgres   | `pg_class` for the `public` schema, tables and views — what an unqualified name resolves to under the default `search_path`; other schemas need explicit SQL on the query page | planner's `reltuples` (null until first ANALYZE/VACUUM) / `pg_total_relation_size` |
-| DuckDB     | `SHOW TABLES` against the file (no database picker)          | `duckdb_tables()`'s `estimated_size` rows; bytes = distinct `pragma_storage_info` blocks × block size (null for views / `:memory:`) |
+| DuckDB file | `SHOW TABLES` against the file (no database picker)         | `duckdb_tables()`'s `estimated_size` rows; bytes = distinct `pragma_storage_info` blocks × block size (null for views / `:memory:`) |
+| DuckDB folder | the selected folder's data files and `*.<ext>` globs (below) | rows null (never scanned); bytes = file size, summed for a glob |
 | SQLite     | `sqlite_master` tables and views (no database picker)        | none — SQLite keeps no estimates (both null) |
 
 Like `/api/db/query` and `/api/db/describe`, the endpoint is session-scoped and
 gated: no active connection or (for drivers with a picker) no selected database
 is a 409.
+
+## DuckDB folder mode
+
+A DuckDB connection whose **Path** is a directory browses the filesystem: the
+folders under it are the "databases" (relative paths, `.` being the root) and
+the data files in the selected folder are the tables. Connecting lands on the
+root; reopening the connection does too.
+
+```
++------------------------------------------------+
+| /data/exports/2024                             |  <- full path
+| [ Search 3 folders...                        ] |
+| [ .. ]                                         |  <- parent, hidden at root
+| [ q1 ]                                         |
+| [ q2 ]                                         |
+| [ archive ]                                    |
+| ---------------------------------------------- |
+| connections ...  [Disconnect]                  |
++------------------------------------------------+
+```
+
+- **Pill menu** — one level at a time: the selected folder's full path, then
+  its subfolders and **..**; picking one enters it, which lists its files in
+  the sidebar. The pill reads `<connection> · <folder name>` with the full path
+  as its tooltip. Only the selected folder's own subfolders are read, at connect,
+  on each pick and when the menu opens; hidden entries and symlinks are skipped.
+- **Tables** — files named `.parquet`, `.csv`, `.tsv`, `.json`, `.jsonl` or
+  `.ndjson`, the non-parquet ones also with a `.gz` or `.zst` suffix. The
+  browse query is the matching reader, e.g. `SELECT * FROM read_csv('items.csv')`.
+  An extension with two or more files also gets a **`*.<ext>`** entry (`*.csv`,
+  `*.csv.gz`) whose query lists those files, so a file added later needs a
+  refresh. Hidden files, symlinks and names with `*`, `?` or `[` are skipped.
+- **Path** — beside the selected file's name, its path from the root in small
+  type (`sub/nested.csv.gz`) with a copy button, for SQL on the query page.
+  A `*.<ext>` entry has none.
+- **Max entries** — the most subfolders and files listed per folder, default
+  1000 (1–100000); a blank or non-number entry is ignored. A cut list says so:
+  "More than N files" above the sidebar (its `*.<ext>` entries then read only
+  the listed files), "More than N folders" in the pill menu. It only trims
+  what a level shows: a folder past it stays reachable by path. Remembered with
+  the sidebar width; the server reads it from the session.
+- **Selecting by path** — a saved query, an agent or a backend restart can
+  select any folder under the root, checked one step at a time: a step that is
+  hidden, `.`/`..` or empty refuses the path; one that is missing or a symlink
+  ends it there, so a folder that is gone falls back to its nearest parent.
+- **Union by name** — adds `union_by_name = true` to `*.<ext>` queries, so a
+  column only some files have is kept (NULL elsewhere) rather than dropped.
+  Remembered with the sidebar width.
+- **Paths** — folder mode opens `:memory:` with `file_search_path` set to the
+  root, and queries name files by their path from it, so SQL reads the same
+  file whichever folder is selected. Only folders under the root can be
+  selected (see **Selecting by path**). **Test** and connecting both refuse a
+  root with a comma (DuckDB reads it as a list) or one that cannot be listed;
+  after a backend restart, a root that is gone leaves the session disconnected.
+
+## Why folder mode lists one level at a time
+
+The folder list is read per level, centred on the selected folder, rather than
+scanned across the whole tree at connect:
+
+- **The limit trims a view, not reachability.** With a whole-tree scan, a cap
+  hides deep folders whenever the tree grows or the cap drops, and a restart
+  or a saved query then loses the selected folder. Per level, the selected
+  folder is reached by its path, so neither can drop it.
+- **Connect costs one directory read** on any root size, instead of a scan
+  bounded only by the cap.
+- **Checking each step of the path,** not just the final folder, is what keeps
+  a symlink partway along (`link` -> `/etc`) from leading outside the root.
+- **A missing step stops at the nearest parent** rather than the root, so a
+  deleted folder leaves the user as close as possible to where they were.
+- The cost: the menu re-reads a level on each pick, and an agent listing
+  folders without a selection sees only the root's top level.

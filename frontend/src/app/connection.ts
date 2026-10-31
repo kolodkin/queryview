@@ -13,6 +13,12 @@ export type Connection = {
   database: string | null
   // The dialect's identifier quote (`"` or a backtick), for dashboard params.
   identQuote?: string
+  // The directory a DuckDB folder-mode connection browses (absolute).
+  root?: string
+  // The folder list was cut at the Explorer's Max entries.
+  foldersTruncated?: boolean
+  // The table this session last had open on this connection and database.
+  table?: string
   // False on a locked saved connection this tab holds no token for; the
   // shell prompts for the passphrase while it is.
   unlocked?: boolean
@@ -38,8 +44,16 @@ export function toConnection(data: Record<string, unknown>): Connection {
     databases: (data.databases ?? []) as string[],
     database: (data.database ?? null) as string | null,
     identQuote: data.ident_quote as string | undefined,
+    root: data.root as string | undefined,
+    foldersTruncated: data.databases_truncated === true,
     unlocked: data.unlocked as boolean | undefined,
+    table: data.table as string | undefined,
   }
+}
+
+// Where an opened connection lands: the Explorer, on its last visited table.
+export function explorerUrl(c: { table?: string }): string {
+  return c.table ? `/explorer?table=${encodeURIComponent(c.table)}` : '/explorer'
 }
 
 function postJson(path: string, body: unknown, method = 'POST'): Promise<Response> {
@@ -131,12 +145,45 @@ export function selectDatabase(database: string): Promise<boolean> {
   })
 }
 
+// Select a DuckDB folder: the server answers with the list centred on it (its
+// parent chain and subfolders), which replaces the connection's list; null on failure.
+export function selectFolder(
+  folder: string,
+): Promise<{ databases: string[]; foldersTruncated: boolean } | null> {
+  return withoutHeartbeat(async () => {
+    try {
+      const data = await (await postJson('/api/db/database', { database: folder })).json()
+      return data.ok
+        ? {
+            databases: data.databases as string[],
+            foldersTruncated: data.databases_truncated === true,
+          }
+        : null
+    } catch {
+      return null
+    }
+  })
+}
+
 // This session's databases, fresh from the server, with the connection they
 // belong to; null when the request failed.
-async function listDatabases(): Promise<{ name: string; databases: string[] } | null> {
+async function listDatabases(): Promise<{
+  name: string
+  databases: string[]
+  foldersTruncated: boolean
+  // Folder mode: the selected folder, which moves to its parent if it vanished.
+  database?: string
+} | null> {
   try {
     const data = await (await apiFetch('/api/db/databases')).json()
-    return data.ok ? { name: data.name as string, databases: data.databases as string[] } : null
+    return data.ok
+      ? {
+          name: data.name as string,
+          databases: data.databases as string[],
+          foldersTruncated: data.databases_truncated === true,
+          database: data.database as string | undefined,
+        }
+      : null
   } catch {
     return null
   }
@@ -154,12 +201,15 @@ export function useFreshDatabases(
     let live = true
     void listDatabases().then((fresh) => {
       if (!live || !fresh) return
-      const { name, databases } = fresh
+      const { name, databases, foldersTruncated, database } = fresh
       setConnection((c) => {
         if (!c || c.name !== name) return c
         const same =
-          databases.length === c.databases.length && databases.every((d, i) => d === c.databases[i])
-        return same ? c : { ...c, databases }
+          (database === undefined || database === c.database) &&
+          foldersTruncated === !!c.foldersTruncated &&
+          databases.length === c.databases.length &&
+          databases.every((d, i) => d === c.databases[i])
+        return same ? c : { ...c, databases, foldersTruncated, database: database ?? c.database }
       })
     })
     return () => {

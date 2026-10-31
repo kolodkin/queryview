@@ -5,7 +5,12 @@ import {
   MIN_SIDEBAR_WIDTH,
   clampSidebarWidth,
   loadSidebarWidth,
+  loadMaxEntries,
+  parseMaxEntries,
+  loadUnionByName,
   saveSidebarWidth,
+  saveMaxEntries,
+  saveUnionByName,
 } from './explorerSettings'
 
 // The width lives in the session's `ui` blob now, so the test fakes the session
@@ -64,5 +69,36 @@ describe('the remembered sidebar width', () => {
   it('defaults when the view has other settings but no width', () => {
     ui.view = { future: 'keep me' }
     expect(loadSidebarWidth()).toBe(DEFAULT_SIDEBAR_WIDTH)
+  })
+})
+
+describe('unionByName', () => {
+  it('is off until saved on', () => {
+    expect(loadUnionByName()).toBe(false)
+    saveUnionByName(true)
+    expect(loadUnionByName()).toBe(true)
+    saveUnionByName(false)
+    expect(loadUnionByName()).toBe(false)
+  })
+})
+
+describe('maxEntries', () => {
+  it('defaults to 1000 and clamps what is saved', () => {
+    expect(loadMaxEntries()).toBe(1000)
+    saveMaxEntries(5000)
+    expect(loadMaxEntries()).toBe(5000)
+    saveMaxEntries(0)
+    expect(loadMaxEntries()).toBe(1)
+    saveMaxEntries(10_000_000)
+    expect(loadMaxEntries()).toBe(100_000)
+  })
+})
+
+describe('parseMaxEntries', () => {
+  it('reads a typed number and rejects a blank or non-number', () => {
+    expect(parseMaxEntries('10')).toBe(10)
+    expect(parseMaxEntries(' 25 ')).toBe(25)
+    expect(parseMaxEntries('')).toBeNull()
+    expect(parseMaxEntries('abc')).toBeNull()
   })
 })

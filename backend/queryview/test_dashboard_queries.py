@@ -29,7 +29,7 @@ class _RowsDriver:
     async def test(self, c):
         return {"ok": True, "message": "ok"}
 
-    async def list_databases(self, c):
+    async def list_databases(self, c, limit=1000, current=None):
         return DatabasesResult([])
 
     async def run_query(self, c, sql, database, limit, offset, order_by):

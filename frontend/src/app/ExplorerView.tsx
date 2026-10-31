@@ -22,15 +22,28 @@ import {
   MIN_SIDEBAR_WIDTH,
   clampSidebarWidth,
   loadSidebarWidth,
+  loadMaxEntries,
+  parseMaxEntries,
+  loadUnionByName,
   saveSidebarWidth,
+  saveMaxEntries,
+  saveUnionByName,
 } from './explorerSettings'
+import { isFolderNav } from './folderNav'
 import { apiFetch } from './api'
+import { flushPatches, patchSession } from './session'
 
 // Sidebar entry from /api/db/tables. rows/bytes are engine estimates — null
 // when the engine doesn't track them (views, never-analyzed Postgres tables);
 // query is the ready-to-run browse SELECT, quoted server-side with the
-// driver's identifier quote.
-type TableInfo = { name: string; rows: number | null; bytes: number | null; query: string }
+// driver's identifier quote. path is a DuckDB folder file's path from the root.
+type TableInfo = {
+  name: string
+  rows: number | null
+  bytes: number | null
+  query: string
+  path?: string | null
+}
 
 // The "1.2K rows · 3.4MB" subline, or null when the engine knows neither.
 function tableMeta(t: TableInfo): string | null {
@@ -50,6 +63,11 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   const scope = connectionKey(connection)
   const [searchParams, setSearchParams] = useSearchParams()
   const table = searchParams.get('table') ?? ''
+  // Remember the selection for this connection, so reopening it comes back
+  // here. An empty one (a plain /explorer visit) keeps the remembered table.
+  useEffect(() => {
+    if (ready && table) void patchSession({ table })
+  }, [ready, table])
 
   const [tables, setTables] = useState<TableInfo[]>([])
   const [tablesError, setTablesError] = useState<string | null>(null)
@@ -69,6 +87,12 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   // Sidebar width, dragged on its right edge and remembered across reloads so
   // long table names stay readable.
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
+  // Folder mode's glob entries: union_by_name on or off (docs/explorer.md).
+  const [union, setUnion] = useState(loadUnionByName)
+  // Folder mode's list limit; the backend reads it from the session.
+  const [maxEntries, setMaxEntries] = useState(loadMaxEntries)
+  const [maxDraft, setMaxDraft] = useState(String(maxEntries))
+  const [tablesTruncated, setTablesTruncated] = useState(false)
   const [dragging, setDragging] = useState(false)
   const asideRef = useRef<HTMLElement | null>(null)
   // Captured on grab: the panel's left edge (fixed — widening the row's first
@@ -102,23 +126,26 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     setTablesLoading(true) // eslint-disable-line react-hooks/set-state-in-effect
     void (async () => {
       try {
-        const res = await apiFetch('/api/db/tables')
+        const res = await apiFetch(`/api/db/tables${union ? '?union=1' : ''}`)
         const data = await res.json()
         if (cancelled) return
         if (data.ok) {
           const list = (data.tables ?? []) as TableInfo[]
           setTables(list)
+          setTablesTruncated(data.truncated === true)
           setTablesError(null)
           if (table && !list.some((t) => t.name === table)) {
             setSearchParams({}, { replace: true })
           }
         } else {
           setTables([])
+          setTablesTruncated(false)
           setTablesError((data.message as string) ?? 'failed to list tables')
         }
       } catch (err) {
         if (!cancelled) {
           setTables([])
+          setTablesTruncated(false)
           setTablesError(err instanceof Error ? err.message : 'request failed')
         }
       } finally {
@@ -129,7 +156,18 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, scope])
+  }, [ready, scope, union, maxEntries])
+
+  // Save, then flush to the session before the re-list reads it there.
+  async function applyMaxEntries() {
+    const typed = parseMaxEntries(maxDraft)
+    if (typed === null) return setMaxDraft(String(maxEntries))
+    const next = saveMaxEntries(typed)
+    setMaxDraft(String(next))
+    if (next === maxEntries) return
+    await flushPatches()
+    setMaxEntries(next)
+  }
 
   const runQuery = useCallback(async (sql: string, lim: number, off: number, ord: OrderCol[]) => {
     const ticket = ++runSeq.current
@@ -314,6 +352,49 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
             </button>
           )}
         </div>
+        {connection && isFolderNav(connection) && (
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <label
+              className="flex items-center gap-1 text-xs text-slate-300"
+              title="Match glob columns by name"
+            >
+              <input
+                type="checkbox"
+                data-testid="explorer-union"
+                checked={union}
+                onChange={(e) => {
+                  setUnion(e.target.checked)
+                  saveUnionByName(e.target.checked)
+                }}
+              />
+              Union by name
+            </label>
+            <label
+              className="flex items-center gap-1 text-xs text-slate-300"
+              title="Most folders scanned, and files listed per folder"
+            >
+              Max entries
+              <input
+                type="number"
+                min={1}
+                data-testid="explorer-max-entries"
+                value={maxDraft}
+                onChange={(e) => setMaxDraft(e.target.value)}
+                onBlur={() => void applyMaxEntries()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void applyMaxEntries()
+                }}
+                className="glass-input w-20 px-1.5 py-0.5 text-xs"
+              />
+            </label>
+          </div>
+        )}
+        {tablesTruncated && (
+          <p data-testid="explorer-truncated" className="mt-2 text-xs text-amber-300">
+            More than {maxEntries} files: only the first {maxEntries} are listed, and *.ext entries
+            read only those.
+          </p>
+        )}
         {tables.length > 0 && (
           <form
             className="mt-2"
@@ -426,13 +507,24 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
             <div className="flex flex-wrap items-center gap-2">
               {/* flex-1 + min-w-0 truncates a long name rather than wrapping
                   the pagination controls onto a second row. */}
-              <h2
-                data-testid="explorer-table-name"
-                title={table}
-                className="min-w-0 flex-1 truncate text-lg font-semibold text-white"
-              >
-                {table}
-              </h2>
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <h2
+                  data-testid="explorer-table-name"
+                  title={table}
+                  className="min-w-0 truncate text-lg font-semibold text-white"
+                >
+                  {table}
+                </h2>
+                {/* A folder-mode file's path from the root, for SQL on the query page. */}
+                {selected?.path && (
+                  <span className="flex min-w-0 items-center text-xs text-slate-400">
+                    <span data-testid="explorer-table-path" className="truncate font-mono">
+                      {selected.path}
+                    </span>
+                    <CopyName name={selected.path} testid="explorer-table-path-copy" />
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => page(offset)}

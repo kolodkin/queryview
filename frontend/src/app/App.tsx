@@ -10,12 +10,16 @@ import {
 } from 'react-router-dom'
 
 import { SearchPanel, useDismiss } from '../core'
+import { PARENT, childFolders, folderLabel, fullPath, isFolderNav, parentFolder } from './folderNav'
+import { loadMaxEntries } from './explorerSettings'
 import {
   connectionKey,
+  explorerUrl,
   isReady,
   useFreshDatabases,
   openSaved,
   selectDatabase,
+  selectFolder,
   toConnection,
   unlockConnection,
   type Connection,
@@ -118,7 +122,9 @@ function ConnectionList({
 // The menu behind the connection pill: the database list, the connections,
 // then Disconnect.
 // Long connections list hundreds of databases, so it carries the landing
-// picker's filter; a picker-less driver gets just Disconnect.
+// picker's filter; a picker-less driver gets just Disconnect. A DuckDB folder
+// connection lists one level at a time: the current folder's subfolders plus
+// `..`, under the folder's full path (docs/explorer.md).
 function DatabaseMenu({
   connection,
   connections,
@@ -152,19 +158,43 @@ function DatabaseMenu({
       </div>
     )
   }
+  const folders = isFolderNav(connection)
+  const current = connection.database ?? '.'
+  const parent = folders ? parentFolder(current) : null
+  const items = folders
+    ? [...(parent === null ? [] : [PARENT]), ...childFolders(connection.databases, current)]
+    : connection.databases
+  const label = (db: string) => (folders && db !== PARENT ? folderLabel(db, connection.root) : db)
+  const path = fullPath(connection.root ?? '', current)
   return (
     <SearchPanel
-      items={connection.databases}
-      nameOf={(db) => db}
-      noun="databases"
+      items={items}
+      nameOf={label}
+      noun={folders ? 'folders' : 'databases'}
       testid="db-select"
       isSelected={(db) => db === connection.database}
-      onPick={onSelect}
+      onPick={(db) => onSelect(db === PARENT && parent !== null ? parent : db)}
       className="left-0 w-96 max-h-[75vh]"
-      renderItem={(db, current) => (
-        <span className={`truncate ${current ? 'text-indigo-200' : 'text-slate-200'}`}>{db}</span>
+      header={
+        folders && (
+          <div className="px-2 pt-1 text-xs">
+            <div data-testid="db-select-path" title={path} className="truncate text-slate-400">
+              {path}
+            </div>
+            {connection.foldersTruncated && (
+              <div data-testid="db-select-truncated" className="text-amber-300">
+                More than {loadMaxEntries()} folders: raise Max entries on the Explorer.
+              </div>
+            )}
+          </div>
+        )
+      }
+      renderItem={(db, selected) => (
+        <span className={`truncate ${selected ? 'text-indigo-200' : 'text-slate-200'}`}>
+          {label(db)}
+        </span>
       )}
-      itemAction={(db) => <CopyName name={db} testid="db-copy" />}
+      itemAction={(db) => (db === PARENT ? null : <CopyName name={db} testid="db-copy" />)}
       footer={footer}
     />
   )
@@ -260,7 +290,7 @@ function Shell() {
     const r = await openSaved(name)
     if (r.ok) setConnection(r.connection)
     else setToast(r.message)
-    navigate(r.ok && isReady(r.connection) ? '/explorer' : '/connect')
+    navigate(r.ok && isReady(r.connection) ? explorerUrl(r.connection) : '/connect')
   }
 
   // The live connection for the attached session. `/api/session` reads that
@@ -419,7 +449,10 @@ function Shell() {
   async function switchDatabase(database: string) {
     setDbOpen(false)
     if (!connection || database === connection.database) return
-    if (await selectDatabase(database)) setConnection({ ...connection, database })
+    if (isFolderNav(connection)) {
+      const listed = await selectFolder(database)
+      if (listed) setConnection({ ...connection, database, ...listed })
+    } else if (await selectDatabase(database)) setConnection({ ...connection, database })
   }
 
   // Drop the connection (saved connections survive) and go to the Connect
@@ -465,6 +498,11 @@ function Shell() {
                   onClick={() => setDbOpen((o) => !o)}
                   aria-haspopup="listbox"
                   aria-expanded={dbOpen}
+                  title={
+                    isFolderNav(connection)
+                      ? fullPath(connection.root ?? '', connection.database ?? '.')
+                      : undefined
+                  }
                   className={`flex min-w-0 items-center gap-2 py-1.5 pl-3 ${connection.database ? '' : 'pr-3'}`}
                 >
                   <span
@@ -474,7 +512,7 @@ function Shell() {
                   />
                   <span className="truncate">
                     {connection.database
-                      ? `${connection.name} · ${connection.database}`
+                      ? `${connection.name} · ${isFolderNav(connection) ? folderLabel(connection.database, connection.root) : connection.database}`
                       : connection.name}
                   </span>
                   <span className="text-xs text-slate-400">▾</span>

@@ -21,6 +21,13 @@ from queryview.drivers.base import (
 )
 
 
+def _row(sid: str) -> sessions.SessionRec:
+    """The session's stored record, which these tests require to exist."""
+    rec = _run(sessions.get_session_rec(sid))
+    assert rec is not None
+    return rec
+
+
 def _run(coro):
     return asyncio.run(coro)
 
@@ -42,7 +49,7 @@ class _FakeDriver:
     async def test(self, c):
         return {"ok": True, "message": "ok"}
 
-    async def list_databases(self, c):
+    async def list_databases(self, c, limit=1000, current=None):
         return DatabasesResult([])  # no picker
 
     async def run_query(self, c, sql, database, limit, offset, order_by):
@@ -54,7 +61,7 @@ class _FakeDriver:
     async def describe_query(self, c, sql, database):
         return FieldsResult([{"name": "x", "type": "int"}])
 
-    async def list_tables(self, c, database):
+    async def list_tables(self, c, database, union=False, limit=1000):
         return TablesResult([{"name": f"t-of-{database}", "rows": 1, "bytes": None}])
 
 
@@ -129,7 +136,7 @@ def test_run_query_requires_database_when_picker_present(monkeypatch):
         type = "fakedb"
         requires_database = True
 
-        async def list_databases(self, c):
+        async def list_databases(self, c, limit=1000, current=None):
             return DatabasesResult(["a", "b"])
 
     monkeypatch.setitem(DRIVERS, "fakedb", _WithDbs())
@@ -144,7 +151,7 @@ def test_list_tables_requires_database_when_picker_present(monkeypatch):
         type = "fakedb2"
         requires_database = True
 
-        async def list_databases(self, c):
+        async def list_databases(self, c, limit=1000, current=None):
             return DatabasesResult(["a", "b"])
 
     monkeypatch.setitem(DRIVERS, "fakedb2", _WithDbs())
@@ -207,7 +214,7 @@ def test_build_session_err_keeps_localhost_hint(monkeypatch):
     class _Down(_FakeDriver):
         type = "down"
 
-        async def list_databases(self, c):
+        async def list_databases(self, c, limit=1000, current=None):
             return Err("connection refused")
 
     # connect_new takes the driver's parsed config object; the hint reads its host.
@@ -226,7 +233,7 @@ class _GrowingDriver(_FakeDriver):
         self.databases = ["alpha", "beta"]
         self.fail = False
 
-    async def list_databases(self, c):
+    async def list_databases(self, c, limit=1000, current=None):
         if self.fail:
             return Err("listing failed")
         return DatabasesResult(list(self.databases))
@@ -278,3 +285,48 @@ def test_select_database_relists_on_a_miss(monkeypatch):
     driver.fail = True
     out = _run(connect.select_database(rec.id, "epsilon"))
     assert out["ok"] is False and out["message"] == "listing failed"
+
+
+def test_rebuild_keeps_an_unlisted_database_on_the_row_for_picker_drivers(monkeypatch):
+    # Only DuckDB folder mode falls back to its root; a ClickHouse/Postgres row
+    # keeps its selection, as refresh_databases does, even if no longer listed.
+    fake = _FakeDriver()
+
+    async def listed(c, limit=1000, current=None):
+        return DatabasesResult(["other"])
+
+    monkeypatch.setattr(fake, "list_databases", listed)
+    monkeypatch.setitem(DRIVERS, "fake", fake)
+    rec = _run(sessions.create_session())
+    _run(connect.connect_new(rec.id, "reporting-keep", {"v": 1}, "fake", session_only=True))
+    _run(sessions.set_database(rec.id, "gone"))
+    connect._sessions.clear()
+    _run(connect.get_session(rec.id))
+    assert _row(rec.id).database == "gone"
+
+
+def test_reopening_a_connection_goes_back_to_its_last_database_and_table(monkeypatch):
+    # A picker driver: reopening skips the picker for the database last visited
+    # in this session, and offers its table back.
+    fake = _FakeDriver()
+
+    async def two(c, limit=1000, current=None):
+        return DatabasesResult(["db_a", "db_b"])
+
+    monkeypatch.setattr(fake, "list_databases", two)
+    monkeypatch.setitem(DRIVERS, "fake", fake)
+    rec = _run(sessions.create_session())
+    _run(connect.connect_new(rec.id, "lv-a", {"v": 1}, "fake", session_only=True))
+    _run(connect.connect_new(rec.id, "lv-b", {"v": 2}, "fake", session_only=True))
+    _run(connect.open_saved(rec.id, "lv-a"))
+    assert _run(connect.select_database(rec.id, "db_b"))["ok"]
+    _run(sessions.patch_session(rec.id, table="orders"))
+    _run(connect.open_saved(rec.id, "lv-b"))
+    r = _run(connect.open_saved(rec.id, "lv-a"))
+    assert r["database"] == "db_b" and r["table"] == "orders"
+    assert _run(connect.get_session(rec.id))["table"] == "orders"
+    # A database no longer listed lands on the picker, as before.
+    _run(sessions.set_database(rec.id, "db_gone"))
+    _run(connect.open_saved(rec.id, "lv-b"))
+    r = _run(connect.open_saved(rec.id, "lv-a"))
+    assert r["database"] is None and "table" not in r
