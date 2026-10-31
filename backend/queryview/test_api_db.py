@@ -140,20 +140,20 @@ def test_folder_connection_lands_on_root_with_tables_and_union(tmp_path):
 
 
 def test_folder_lists_are_cut_at_the_explorer_max_entries(tmp_path):
-    for n in ("a.csv", "b.csv"):
-        (tmp_path / n).write_text("id\n1\n")
-    for d in ("x", "y"):
-        (tmp_path / d).mkdir()
+    for i in range(1, 13):
+        (tmp_path / f"f{i:02d}.csv").write_text("id\n1\n")
+        (tmp_path / f"d{i:02d}").mkdir()
     sid = asyncio.run(sessions.create_session()).id
-    asyncio.run(sessions.patch_session(sid, ui={"explorer": {"maxEntries": 1}}))
+    asyncio.run(sessions.patch_session(sid, ui={"explorer": {"maxEntries": 10}}))
     c = TestClient(app, headers={"X-QV-Session": sid})
     body = {"type": "duckdb", "name": "cap-duck", "path": str(tmp_path), "session": True}
     r = c.post("/api/db/connect", json=body).json()
-    assert r["databases"] == [".", "x"] and r["databases_truncated"] is True
+    assert r["databases"] == [".", *(f"d{i:02d}" for i in range(1, 11))] and r["databases_truncated"] is True
     assert c.get("/api/session").json()["databases_truncated"] is True
     t = c.get("/api/db/tables").json()
-    assert [x["name"] for x in t["tables"]] == ["a.csv"] and t["truncated"] is True
-    # A value the tab could not have meant falls back to the default.
+    assert [x["name"] for x in t["tables"]] == [*(f"f{i:02d}.csv" for i in range(1, 11)), "*.csv"]
+    assert t["truncated"] is True
+    # A value the tab could not have meant falls back to the default 1000.
     asyncio.run(sessions.patch_session(sid, ui={"explorer": {"maxEntries": True}}))
     r = c.get("/api/db/databases").json()
-    assert r["databases"] == [".", "x", "y"] and r.get("databases_truncated") is None
+    assert len(r["databases"]) == 13 and r.get("databases_truncated") is None

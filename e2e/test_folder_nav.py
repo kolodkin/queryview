@@ -80,33 +80,45 @@ def test_union_by_name_adds_columns_only_some_files_have(seeded_mixed_folder, pa
 
 
 def test_max_entries_cuts_lists_and_says_so(seeded_wide_folder, page: Page, shot) -> None:
+    files = [f"f{i:02d}.csv" for i in range(1, 13)]
+    folders = [f"d{i:02d}" for i in range(1, 13)]
     open_connect(page)
     start_new_connection(page, "duckdb")
     page.get_by_test_id("duck-path").fill(seeded_wide_folder)
     page.get_by_test_id("duck-connect").click()
     expect(page.get_by_test_id("duckdb-form")).to_have_count(0)
     names = page.locator('[data-testid="explorer-table"] > span:first-child')
-    expect(names).to_have_text(["a.csv", "b.csv", "c.csv", "*.csv"])
+    options = page.get_by_test_id("db-select").get_by_role("option")
+    status = page.get_by_test_id("connection-status")
+    # The default 1000 lists all twelve of each.
+    expect(names).to_have_text([*files, "*.csv"])
     expect(page.get_by_test_id("explorer-truncated")).to_have_count(0)
 
-    # Lower the limit: both lists are cut, and both say so.
+    # Max entries 10: the first ten files (and a glob over just those), ten folders.
     limit = page.get_by_test_id("explorer-max-entries")
-    limit.fill("1")
+    limit.fill("10")
     limit.press("Enter")
-    expect(names).to_have_text(["a.csv"])
-    expect(page.get_by_test_id("explorer-truncated")).to_contain_text("More than 1 files")
-    shot("max entries 1: file list cut, with notice")
-    page.get_by_test_id("connection-status").click()
-    expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_text(["x"])
-    expect(page.get_by_test_id("db-select-truncated")).to_contain_text("More than 1 folders")
-    shot("max entries 1: folder list cut, with notice")
-    page.get_by_test_id("connection-status").click()
+    expect(names).to_have_text([*files[:10], "*.csv"])
+    expect(page.get_by_test_id("explorer-truncated")).to_contain_text("More than 10 files")
+    shot("max entries 10: file list cut, with notice")
+    page.locator('[data-testid="explorer-table"][data-table="*.csv"]').click()
+    expect(page.get_by_test_id("explorer-panel").locator("tbody tr")).to_have_count(10)
+    status.click()
+    expect(options).to_have_text(folders[:10])
+    expect(page.get_by_test_id("db-select-truncated")).to_contain_text("More than 10 folders")
+    shot("max entries 10: folder list cut, with notice")
+    status.click()
 
-    # Raise it back: everything is listed again, no notices.
-    limit.fill("1000")
+    # The setting survives a reload: it lives in the session.
+    page.reload()
+    expect(page.get_by_test_id("explorer-max-entries")).to_have_value("10")
+    expect(names).to_have_text([*files[:10], "*.csv"])
+
+    # Raise it to 12: everything is listed again, no notices.
+    limit.fill("12")
     limit.press("Enter")
-    expect(names).to_have_text(["a.csv", "b.csv", "c.csv", "*.csv"])
+    expect(names).to_have_text([*files, "*.csv"])
     expect(page.get_by_test_id("explorer-truncated")).to_have_count(0)
-    page.get_by_test_id("connection-status").click()
-    expect(page.get_by_test_id("db-select").get_by_role("option")).to_have_text(["x", "y"])
+    status.click()
+    expect(options).to_have_text(folders)
     expect(page.get_by_test_id("db-select-truncated")).to_have_count(0)
