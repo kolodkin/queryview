@@ -25,8 +25,10 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
     # Each sidebar entry carries the engine's estimates. ClickHouse and DuckDB
     # know the seeded row count immediately; a freshly created Postgres table
     # has no reltuples estimate yet, so its subline is just the on-disk size.
+    # SQLite keeps no estimates at all, so it has no subline.
     meta = page.locator('[data-testid="explorer-table"][data-table="items"] [data-testid="explorer-table-meta"]')
-    expect(meta).to_be_visible()
+    if case.id != "sqlite":
+        expect(meta).to_be_visible()
     if case.id in ("clickhouse", "duckdb"):
         expect(meta).to_contain_text("3 rows")
     shot(f"{case.id} explorer table list")
