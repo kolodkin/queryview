@@ -545,14 +545,13 @@ async def _ensure_session(sid: str) -> None:
         return
     conn_type, config = found
     state, _ = await _build_session(rec.connection_name, config, rec.database, conn_type, await _list_limit(sid))
-    if state is not None and rec.database and state.type == "duckdb" and state.root is None:
-        # A DuckDB folder session whose folder is gone: file mode would create
-        # a database file at that path, so the session reads disconnected.
+    if state is None or (rec.database and state.type == "duckdb" and state.root is None):
+        # Unreachable, or a DuckDB folder session whose folder is gone: file
+        # mode would create a database file at that path. Reads disconnected.
         return
-    if state is not None:
-        _set_session_entry(sid, state)
-        if state.root is not None and state.database != rec.database:  # a vanished folder fell back to the root
-            await sessions.set_database(sid, state.database)
+    _set_session_entry(sid, state)
+    if state.root is not None and state.database != rec.database:  # a vanished folder fell back to the root
+        await sessions.set_database(sid, state.database)
 
 
 async def get_session(sid: str) -> dict[str, Any]:
