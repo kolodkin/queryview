@@ -382,3 +382,13 @@ def seeded_folder(tmp_path_factory) -> str:
     with gzip.open(root / "sub" / "nested.csv.gz", "wt") as f:
         f.write(rows)
     return str(root)
+
+
+@pytest.fixture(scope="module")
+def seeded_mixed_folder(tmp_path_factory) -> str:
+    """Two CSVs sharing `id` and `name` in a different order, one with an extra
+    `city` column, for the Union by name checkbox."""
+    root = tmp_path_factory.mktemp("duck_mixed")
+    (root / "a.csv").write_text("id,name\n1,alpha\n2,beta\n")
+    (root / "b.csv").write_text("name,id,city\ngamma,3,lisbon\n")
+    return str(root)
