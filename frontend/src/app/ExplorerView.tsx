@@ -32,8 +32,14 @@ import { apiFetch } from './api'
 // Sidebar entry from /api/db/tables. rows/bytes are engine estimates — null
 // when the engine doesn't track them (views, never-analyzed Postgres tables);
 // query is the ready-to-run browse SELECT, quoted server-side with the
-// driver's identifier quote.
-type TableInfo = { name: string; rows: number | null; bytes: number | null; query: string }
+// driver's identifier quote. path is a DuckDB folder file's path from the root.
+type TableInfo = {
+  name: string
+  rows: number | null
+  bytes: number | null
+  query: string
+  path?: string | null
+}
 
 // The "1.2K rows · 3.4MB" subline, or null when the engine knows neither.
 function tableMeta(t: TableInfo): string | null {
@@ -74,8 +80,6 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
   // Folder mode's glob entries: union_by_name on or off (docs/explorer.md).
   const [union, setUnion] = useState(loadUnionByName)
-  const folder = connection?.database ?? '.'
-  const tablePath = folder === '.' ? table : `${folder}/${table}`
   const [dragging, setDragging] = useState(false)
   const asideRef = useRef<HTMLElement | null>(null)
   // Captured on grab: the panel's left edge (fixed — widening the row's first
@@ -459,12 +463,12 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
                   {table}
                 </h2>
                 {/* A folder-mode file's path from the root, for SQL on the query page. */}
-                {connection && isFolderNav(connection) && !table.startsWith('*') && (
+                {selected?.path && (
                   <span className="flex min-w-0 items-center text-xs text-slate-400">
                     <span data-testid="explorer-table-path" className="truncate font-mono">
-                      {tablePath}
+                      {selected.path}
                     </span>
-                    <CopyName name={tablePath} testid="explorer-table-path-copy" />
+                    <CopyName name={selected.path} testid="explorer-table-path-copy" />
                   </span>
                 )}
               </div>

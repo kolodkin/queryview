@@ -12,10 +12,9 @@ const conn = (over: Partial<Connection>): Connection => ({
 })
 
 describe('isFolderNav', () => {
-  it('is a DuckDB connection with a folder list', () => {
-    expect(isFolderNav(conn({}))).toBe(true)
-    expect(isFolderNav(conn({ databases: [] }))).toBe(false)
-    expect(isFolderNav(conn({ type: 'postgres' }))).toBe(false)
+  it('is a connection the backend reports a folder root for', () => {
+    expect(isFolderNav(conn({ root: '/data' }))).toBe(true)
+    expect(isFolderNav(conn({}))).toBe(false)
   })
 })
 

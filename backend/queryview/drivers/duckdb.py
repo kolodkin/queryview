@@ -102,19 +102,15 @@ _READERS = {
 _COMPRESSIONS = (".gz", ".zst")
 
 
-def _data_ext(name: str) -> str | None:
-    """The full data extension of a file name (`.csv`, `.csv.gz`), or None
-    when the folder lister should skip the file."""
+def _data_ext(name: str) -> tuple[str, str] | None:
+    """A file name's data extension and compression suffix (`.csv`, `.gz`), or
+    None when the folder lister should skip the file."""
     lower = name.lower()
-    base, comp = lower, ""
-    for c in _COMPRESSIONS:
-        if lower.endswith(c):
-            base, comp = lower[: -len(c)], c
-            break
-    _stem, ext = os.path.splitext(base)
+    comp = next((c for c in _COMPRESSIONS if lower.endswith(c)), "")
+    _stem, ext = os.path.splitext(lower[: len(lower) - len(comp)])
     if ext not in _READERS or (comp and ext == ".parquet"):
         return None
-    return ext + comp
+    return ext, comp
 
 
 # Characters DuckDB reads as a glob pattern; a file so named is left out of the
@@ -122,13 +118,12 @@ def _data_ext(name: str) -> str | None:
 _GLOB_CHARS = set("*?[")
 
 
-def _read_query(ext: str, names: list[str], union: bool) -> str:
+def _read_query(ext: str, comp: str, names: list[str], union: bool) -> str:
     """The browse SELECT for one file or (a glob entry) the listed files of one
     extension, relative to file_search_path. Files are named explicitly, never
     as a pattern: a pattern would follow symlinks and hidden files the listing
     skips. Compression is spelled out since DuckDB only infers a lowercase suffix."""
-    comp = next((c for c in _COMPRESSIONS if ext.endswith(c)), "")
-    reader = _READERS[ext[: -len(comp)] if comp else ext]
+    reader = _READERS[ext]
     source = _sql_str(names[0]) if len(names) == 1 else "[" + ", ".join(_sql_str(n) for n in names) + "]"
     extra = ", compression = 'gzip'" if comp == ".gz" else ", compression = 'zstd'" if comp == ".zst" else ""
     extra += ", union_by_name = true" if union and len(names) > 1 else ""
@@ -141,23 +136,28 @@ def _list_files(root: str, folder: str, union: bool) -> list[dict[str, Any]]:
     from the root. rows is never estimated; bytes is the file size."""
     prefix = "" if folder == "." else folder + "/"
     files = sorted(
-        (e.name, e.stat().st_size, _data_ext(e.name) or "")
+        (e.name, prefix + e.name, e.stat().st_size, kind)
         for e in os.scandir(os.path.join(root, folder))
         if e.is_file(follow_symlinks=False)
         and not e.name.startswith(".")
         and not _GLOB_CHARS & set(e.name)
-        and _data_ext(e.name)
+        and (kind := _data_ext(e.name))
     )
+    # `path` is the file's path from the root, for the Explorer to show; a glob has none.
     tables = [
-        {"name": n, "rows": None, "bytes": b, "query": _read_query(ext, [prefix + n], union)} for n, b, ext in files
+        {"name": n, "path": p, "rows": None, "bytes": b, "query": _read_query(*kind, [p], union)}
+        for n, p, b, kind in files
     ]
-    globs: dict[str, list[tuple[str, int]]] = {}  # extension -> its (name, size) files
-    for n, b, ext in files:
-        globs.setdefault(ext, []).append((n, b))
-    for ext, members in sorted(globs.items()):
+    globs: dict[tuple[str, str], list[tuple[str, int]]] = {}  # (ext, comp) -> its (path, size) files
+    for _n, p, b, kind in files:
+        globs.setdefault(kind, []).append((p, b))
+    for kind, members in sorted(globs.items()):
         if len(members) >= 2:
-            query = _read_query(ext, [prefix + n for n, _ in members], union)
-            tables.append({"name": f"*{ext}", "rows": None, "bytes": sum(b for _, b in members), "query": query})
+            query = _read_query(*kind, [p for p, _ in members], union)
+            name = "*" + "".join(kind)
+            tables.append(
+                {"name": name, "path": None, "rows": None, "bytes": sum(b for _, b in members), "query": query}
+            )
     return tables
 
 
@@ -243,11 +243,10 @@ class DuckDBDriver:
                 def _bytes(name: str) -> int | None:
                     if name not in est:  # a view — no storage of its own
                         return None
-                    quoted = name.replace("'", "''")
                     try:
                         blocks = _scalar(
                             con,
-                            f"SELECT count(DISTINCT block_id) FROM pragma_storage_info('{quoted}') WHERE block_id >= 0",
+                            f"SELECT count(DISTINCT block_id) FROM pragma_storage_info({_sql_str(name)}) WHERE block_id >= 0",
                         )
                     except Exception:  # noqa: BLE001
                         return None

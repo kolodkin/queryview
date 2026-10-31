@@ -571,9 +571,14 @@ async def connect_new(
     await sessions.set_connection(sid, name)
     if state.database:  # folder mode's "." default: the tab reads it back from the row
         await sessions.set_database(sid, state.database)
+    return _opened(state)
+
+
+def _opened(state: _SessionState) -> dict[str, Any]:
+    """The connect/open response: the session state the tab builds its connection from."""
     return {
         "ok": True,
-        "name": name,
+        "name": state.name,
         "type": state.type,
         "databases": state.databases,
         "database": state.database,
@@ -609,14 +614,7 @@ async def open_saved(
         await select_database(sid, database)
     elif state.database:  # folder mode's "." default
         await sessions.set_database(sid, state.database)
-    return {
-        "ok": True,
-        "name": name,
-        "type": state.type,
-        "databases": state.databases,
-        "database": database if database is not None else state.database,
-        **({"root": state.root} if state.root else {}),
-    }
+    return {**_opened(state), "database": database if database is not None else state.database}
 
 
 async def disconnect(sid: str, by: Literal["agent", "user"] = "user") -> dict[str, Any]:

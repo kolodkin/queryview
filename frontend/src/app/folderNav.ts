@@ -7,8 +7,9 @@ import type { Connection } from './connection'
 // The menu's pseudo-entry that selects the parent folder.
 export const PARENT = '..'
 
+// The backend sends `root` only for a DuckDB folder connection.
 export function isFolderNav(c: Connection): boolean {
-  return c.type === 'duckdb' && c.databases.length > 0
+  return c.root !== undefined
 }
 
 // The folder one level up, or null at the root.

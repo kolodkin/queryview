@@ -191,6 +191,7 @@ def test_list_tables_in_folder_mode_lists_files_and_globs(folder):
     assert items["rows"] is None and items["bytes"] == os.path.getsize(os.path.join(folder, "items.csv"))
     assert items["query"] == "SELECT * FROM read_csv('items.csv')"
     glob = r.tables[-1]
+    assert glob["path"] is None  # a glob has no single file to name
     assert glob["query"] == "SELECT * FROM read_csv(['extra.csv', 'items.csv', 'o''neil.csv'])"
     assert glob["bytes"] == sum(t["bytes"] for t in r.tables[:-1])
     quoted = next(t for t in r.tables if t["name"] == "o'neil.csv")
@@ -211,6 +212,7 @@ def test_list_tables_union_flag_only_changes_globs(folder):
 def test_list_tables_recognizes_compressed_files_in_a_subfolder(folder):
     r = _run(DuckDBDriver().list_tables(DuckConfig(folder), "sub"))
     assert [t["name"] for t in r.tables] == ["nested.csv.gz"]
+    assert r.tables[0]["path"] == "sub/nested.csv.gz"  # shown and copied by the Explorer
     # Paths are from the root, so the same SQL works whichever folder is selected.
     assert r.tables[0]["query"] == "SELECT * FROM read_csv('sub/nested.csv.gz', compression = 'gzip')"
 
