@@ -372,8 +372,8 @@ def test_last_visited_survives_a_malformed_entry():
 
     async def corrupt():
         async with sessions._open() as s:
-            assert row is not None
             row = await s.get(sessions.Session, sid)
+            assert row is not None
             row.last_visited = '{"warehouse": "x"}'
             s.add(row)
             await s.commit()
