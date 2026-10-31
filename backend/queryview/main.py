@@ -240,6 +240,7 @@ async def sessions_patch(sid: str, request: Request):
         ui=ui if isinstance(ui, dict) else None,
         label=_str_or_none(b, "label"),
         workspace=_str_or_none(b, "workspace"),
+        table=_str_or_none(b, "table"),
     )
     if rec is None:
         return JSONResponse({"ok": False, "message": "unknown session"}, status_code=404)

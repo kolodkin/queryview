@@ -31,7 +31,7 @@ import {
 } from './explorerSettings'
 import { isFolderNav } from './folderNav'
 import { apiFetch } from './api'
-import { flushPatches } from './session'
+import { flushPatches, patchSession } from './session'
 
 // Sidebar entry from /api/db/tables. rows/bytes are engine estimates — null
 // when the engine doesn't track them (views, never-analyzed Postgres tables);
@@ -63,6 +63,10 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   const scope = connectionKey(connection)
   const [searchParams, setSearchParams] = useSearchParams()
   const table = searchParams.get('table') ?? ''
+  // Remember the selection for this connection, so reopening it comes back here.
+  useEffect(() => {
+    if (ready) void patchSession({ table })
+  }, [ready, table])
 
   const [tables, setTables] = useState<TableInfo[]>([])
   const [tablesError, setTablesError] = useState<string | null>(null)

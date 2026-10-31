@@ -14,6 +14,7 @@ import { PARENT, childFolders, folderLabel, fullPath, isFolderNav, parentFolder 
 import { loadMaxEntries } from './explorerSettings'
 import {
   connectionKey,
+  explorerUrl,
   isReady,
   useFreshDatabases,
   openSaved,
@@ -289,7 +290,7 @@ function Shell() {
     const r = await openSaved(name)
     if (r.ok) setConnection(r.connection)
     else setToast(r.message)
-    navigate(r.ok && isReady(r.connection) ? '/explorer' : '/connect')
+    navigate(r.ok && isReady(r.connection) ? explorerUrl(r.connection) : '/connect')
   }
 
   // The live connection for the attached session. `/api/session` reads that

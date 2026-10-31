@@ -17,6 +17,8 @@ export type Connection = {
   root?: string
   // The folder list was cut at the Explorer's Max entries.
   foldersTruncated?: boolean
+  // The table this session last had open on this connection and database.
+  table?: string
   // False on a locked saved connection this tab holds no token for; the
   // shell prompts for the passphrase while it is.
   unlocked?: boolean
@@ -45,7 +47,13 @@ export function toConnection(data: Record<string, unknown>): Connection {
     root: data.root as string | undefined,
     foldersTruncated: data.databases_truncated === true,
     unlocked: data.unlocked as boolean | undefined,
+    table: data.table as string | undefined,
   }
+}
+
+// Where an opened connection lands: the Explorer, on its last visited table.
+export function explorerUrl(c: { table?: string }): string {
+  return c.table ? `/explorer?table=${encodeURIComponent(c.table)}` : '/explorer'
 }
 
 function postJson(path: string, body: unknown, method = 'POST'): Promise<Response> {

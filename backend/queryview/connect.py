@@ -565,6 +565,7 @@ async def get_session(sid: str) -> dict[str, Any]:
         return {"connected": False}
     sc = _session_conn(sid, s.name)
     return {
+        **_last_table(await sessions.get_session_rec(sid), s.name, s.database),
         "connected": True,
         "name": s.name,
         "type": s.type,
@@ -608,6 +609,15 @@ async def connect_new(
     return _opened(state)
 
 
+def _last_table(rec: sessions.SessionRec | None, name: str, database: str | None) -> dict[str, Any]:
+    """`{"table": ...}` when the session last had a table open on this
+    connection and database, so the tab can open it again; else nothing."""
+    entry = rec.last_visited.get(name) if rec else None
+    if not isinstance(entry, dict) or entry.get("database") != database or not entry.get("table"):
+        return {}
+    return {"table": entry["table"]}
+
+
 def _opened(state: _SessionState) -> dict[str, Any]:
     """The connect/open response: the session state the tab builds its connection from."""
     return {
@@ -635,10 +645,15 @@ async def open_saved(
             "not_found": True,
         }
     conn_type, config = found
-    # Without a `database` opening lands on the picker (a folder connection on
-    # its root). With one, building on it checks it: listed, or in folder mode
-    # reachable by path.
-    state, message = await _build_session(name, config, database, conn_type, await _list_limit(sid))
+    # Without a `database` opening goes back to the one this session last
+    # visited on the connection, else the picker (a folder connection's root).
+    # Building on it checks it: listed, or in folder mode reachable by path.
+    rec = await sessions.get_session_rec(sid)
+    visited = rec.last_visited.get(name) if rec else None
+    start = database
+    if start is None and isinstance(visited, dict):
+        start = visited.get("database")
+    state, message = await _build_session(name, config, start, conn_type, await _list_limit(sid))
     if state is None:
         return {"ok": False, "message": message}
     if database is not None and state.database != database:
@@ -649,9 +664,9 @@ async def open_saved(
     await sessions.set_connection(sid, name, by)
     if database is not None:
         await select_database(sid, database)
-    elif state.database:  # folder mode's "." default
+    elif state.database:  # the last visited database, or folder mode's root
         await sessions.set_database(sid, state.database)
-    return _opened(state)
+    return {**_opened(state), **_last_table(rec, name, state.database)}
 
 
 async def disconnect(sid: str, by: Literal["agent", "user"] = "user") -> dict[str, Any]:

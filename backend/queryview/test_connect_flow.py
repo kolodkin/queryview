@@ -296,3 +296,30 @@ def test_rebuild_keeps_an_unlisted_database_on_the_row_for_picker_drivers(monkey
     connect._sessions.clear()
     _run(connect.get_session(rec.id))
     assert _run(sessions.get_session_rec(rec.id)).database == "gone"
+
+
+def test_reopening_a_connection_goes_back_to_its_last_database_and_table(monkeypatch):
+    # A picker driver: reopening skips the picker for the database last visited
+    # in this session, and offers its table back.
+    fake = _FakeDriver()
+
+    async def two(c, limit=1000, current=None):
+        return DatabasesResult(["db_a", "db_b"])
+
+    monkeypatch.setattr(fake, "list_databases", two)
+    monkeypatch.setitem(DRIVERS, "fake", fake)
+    rec = _run(sessions.create_session())
+    _run(connect.connect_new(rec.id, "lv-a", {"v": 1}, "fake", session_only=True))
+    _run(connect.connect_new(rec.id, "lv-b", {"v": 2}, "fake", session_only=True))
+    _run(connect.open_saved(rec.id, "lv-a"))
+    assert _run(connect.select_database(rec.id, "db_b"))["ok"]
+    _run(sessions.patch_session(rec.id, table="orders"))
+    _run(connect.open_saved(rec.id, "lv-b"))
+    r = _run(connect.open_saved(rec.id, "lv-a"))
+    assert r["database"] == "db_b" and r["table"] == "orders"
+    assert _run(connect.get_session(rec.id))["table"] == "orders"
+    # A database no longer listed lands on the picker, as before.
+    _run(sessions.set_database(rec.id, "db_gone"))
+    _run(connect.open_saved(rec.id, "lv-b"))
+    r = _run(connect.open_saved(rec.id, "lv-a"))
+    assert r["database"] is None and "table" not in r

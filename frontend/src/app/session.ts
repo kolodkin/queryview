@@ -29,7 +29,8 @@ export type SessionSummary = {
   renamable: boolean // false for the Agent session
 }
 
-export type SessionPatch = { url?: string; label?: string; workspace?: string }
+// `table` is the Explorer's selection, remembered per connection server-side.
+export type SessionPatch = { url?: string; label?: string; workspace?: string; table?: string }
 
 // Well inside the backend's 90s claim TTL, which also covers a hidden tab
 // throttled to about one beat a minute. `npm run build:e2e` shortens it so

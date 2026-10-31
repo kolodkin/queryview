@@ -334,3 +334,25 @@ def test_agent_session_refuses_deletion_and_rename():
     assert rec is not None and sessions.display_label(rec) == "Agent"
     row = next(r for r in _run(sessions.list_sessions()) if r["id"] == sessions.AGENT_SESSION_ID)
     assert (row["label"], row["deletable"], row["renamable"]) == ("Agent", False, False)
+
+
+def test_last_visited_keeps_database_and_table_per_connection():
+    sid = _run(sessions.create_session()).id
+    _run(sessions.set_connection(sid, "warehouse"))
+    _run(sessions.set_database(sid, "sales_reporting"))
+    _run(sessions.patch_session(sid, table="orders"))
+    _run(sessions.set_connection(sid, "events"))
+    _run(sessions.set_database(sid, "clicks"))
+    lv = _run(sessions.get_session_rec(sid)).last_visited
+    assert lv == {
+        "warehouse": {"database": "sales_reporting", "table": "orders"},
+        "events": {"database": "clicks"},
+    }
+    # A different database forgets the table, which belonged to the old one.
+    _run(sessions.set_connection(sid, "warehouse"))
+    _run(sessions.set_database(sid, "finance"))
+    assert _run(sessions.get_session_rec(sid)).last_visited["warehouse"] == {"database": "finance"}
+    # Deselecting clears the table.
+    _run(sessions.patch_session(sid, table="ledger"))
+    _run(sessions.patch_session(sid, table=""))
+    assert _run(sessions.get_session_rec(sid)).last_visited["warehouse"] == {"database": "finance", "table": None}

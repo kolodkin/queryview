@@ -57,7 +57,9 @@ fails, the error suggests `host.docker.internal` (see the README's
   [queryview.md](./queryview.md)). One per session.
 - **Database selection** — after connecting, the user picks a database. Only
   then does the top-left indicator read `🟢 <connection> · <database>`. The choice
-  is remembered with the connection.
+  is remembered with the connection, and reopening the connection in the same
+  session goes straight back to it (see
+  [session.md](./session.md#last-visited)).
 
 ## Creating a connection
 
@@ -103,7 +105,8 @@ cards -- "New connection" card --> connection form
                                               v
                               (o) <connection> - <database>  (explorer)
 
-cards -- saved card --> opens <name>, activates it --> database picker --> pick
+cards -- saved card --> opens <name>, activates it --> last visited database
+                                                     (else the picker --> pick)
 ```
 
 ## Database picker

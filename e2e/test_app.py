@@ -48,6 +48,18 @@ def test_queryview_e2e(page: Page) -> None:
     page.get_by_test_id("ch-connect").click()
     expect(page.get_by_test_id("db-picker")).to_be_visible()
     expect(page.locator('[data-db="default"]')).to_be_visible()
+    # The picker's Back returns to the cards; with no database visited yet, the
+    # card opens the picker again.
+    card = page.locator('[data-testid="conn-card"][data-conn="clickhouse"]')
+    page.get_by_test_id("picker-back").click()
+    expect(page.get_by_test_id("db-picker")).to_have_count(0)
+    card.click()
+    # The picker's filter narrows the chips (a non-match hides `default`).
+    db_filter = page.get_by_test_id("db-filter")
+    db_filter.fill("sys")
+    expect(page.locator('[data-db="default"]')).to_have_count(0)
+    expect(page.locator('[data-db="system"]')).to_be_visible()
+    db_filter.fill("")
 
     # selecting a database shows the connected indicator and, because the
     # connection is now ready, lands on the explorer. The session's URL write is
@@ -66,35 +78,19 @@ def test_queryview_e2e(page: Page) -> None:
     expect(page.get_by_test_id("connection-status")).to_contain_text("· default")
     expect(page).to_have_url(re.compile(r"/explorer"))
     # The saved connection's card, marked active and showing its database,
-    # reopens the picker; choose a different database.
+    # goes straight back to the database last visited in this session.
     page.get_by_test_id("nav-connect").click()
     card = page.locator('[data-testid="conn-card"][data-conn="clickhouse"]')
     expect(card).to_have_attribute("data-active", "true")
     expect(card).to_contain_text("default")
     card.click()
-    # The picker's Back returns to the cards; the card opens it again.
-    page.get_by_test_id("picker-back").click()
-    expect(page.get_by_test_id("db-picker")).to_have_count(0)
-    card.click()
-    # The picker's filter narrows the chips (a non-match hides `default`) and
-    # Enter selects the single remaining match.
-    db_filter = page.get_by_test_id("db-filter")
-    expect(db_filter).to_be_visible()
-    db_filter.fill("sys")
-    expect(page.locator('[data-db="default"]')).to_have_count(0)
-    expect(page.locator('[data-db="system"]')).to_be_visible()
-    page.keyboard.press("Enter")
-    expect(page.get_by_test_id("connection-status")).to_contain_text("· system")
+    expect(page).to_have_url(re.compile(r"/explorer"))
+    expect(page.get_by_test_id("connection-status")).to_contain_text("· default")
 
-    # opening with ?connection=<name> opens that connection. The database is
-    # not picked yet, so this stays on Connect rather than the explorer.
+    # opening with ?connection=<name> opens that connection, on its last database too.
     page.goto("/?connection=clickhouse", wait_until="networkidle")
-    expect(page.get_by_test_id("db-picker")).to_be_visible()
-    # The filter is case-insensitive, so both INFORMATION_SCHEMA chips remain;
-    # click the exact one.
-    page.get_by_test_id("db-filter").fill("information_schema")
-    page.locator('[data-db="information_schema"]').click()
-    expect(page.get_by_test_id("connection-status")).to_contain_text("· information_schema")
+    expect(page.get_by_test_id("connection-status")).to_contain_text("· default")
+    expect(page.get_by_test_id("db-picker")).to_have_count(0)
 
     # the connection pill's database menu carries the same filter
     page.get_by_test_id("connection-status").click()

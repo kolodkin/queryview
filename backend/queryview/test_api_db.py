@@ -127,9 +127,9 @@ def test_folder_connection_lands_on_root_with_tables_and_union(tmp_path):
     assert glob["query"] == "SELECT * FROM read_csv(['a.csv', 'b.csv'], union_by_name = true)"
     assert c.post("/api/db/database", json={"database": "sub"}).json()["ok"]
     assert [t["name"] for t in c.get("/api/db/tables").json()["tables"]] == ["c.csv"]
-    # Reopening resets to the root, as opening any connection resets its database.
+    # Reopening goes back to the folder last visited in this session.
     r = c.post("/api/db/open", json={"name": "folder-duck"}).json()
-    assert r["database"] == "." and r["root"] == root
+    assert r["database"] == "sub" and r["root"] == root
     # A rebuilt session whose remembered folder vanished falls back to the root.
     assert c.post("/api/db/database", json={"database": "sub"}).json()["ok"]
     shutil.rmtree(tmp_path / "sub")
@@ -210,3 +210,18 @@ def test_folders_past_the_limit_stay_reachable_by_path(tmp_path):
     connect._sessions.clear()
     assert c.get("/api/session").json()["database"] == "d12"
     assert asyncio.run(sessions.get_session_rec(sid)).database == "d12"
+
+
+def test_reopening_a_folder_connection_goes_back_to_its_last_folder_and_file(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "c.csv").write_text("id\n1\n")
+    sid = asyncio.run(sessions.create_session()).id
+    c = TestClient(app, headers={"X-QV-Session": sid})
+    body = {"type": "duckdb", "name": "lv-folder", "path": str(tmp_path), "session": True}
+    assert c.post("/api/db/connect", json=body).json()["ok"]
+    assert c.post("/api/db/database", json={"database": "sub"}).json()["ok"]
+    assert c.patch(f"/api/sessions/{sid}", json={"table": "c.csv"}).json()["ok"]
+    other = {"type": "duckdb", "name": "lv-other", "path": ":memory:", "session": True}
+    assert c.post("/api/db/connect", json=other).json()["ok"]
+    r = c.post("/api/db/open", json={"name": "lv-folder"}).json()
+    assert r["database"] == "sub" and r["table"] == "c.csv"

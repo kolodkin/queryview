@@ -55,6 +55,9 @@ class Session(SQLModel, table=True):
     workspace: str = Field(default="default")
     url: str = Field(default=DEFAULT_URL)  # path + search
     ui: str = Field(default="{}")  # JSON, namespaced by view
+    # JSON {connection: {database, table}}: where the session last was on each
+    # connection, so reopening one goes straight back (docs/session.md).
+    last_visited: str = Field(default="{}")
     claimed_by: str | None = Field(default=None, index=True)  # tab token
     claim_seen_at: int | None = Field(default=None)  # unix ms
     last_active_at: int = Field(index=True)  # unix ms
@@ -72,6 +75,7 @@ class SessionRec:
     url: str
     ui: dict[str, Any]
     held: bool
+    last_visited: dict[str, Any]
     last_active_at: int
 
 
@@ -82,16 +86,19 @@ def _is_held(row: Session, now: int) -> bool:
     return (now - row.claim_seen_at) < SESSION_CLAIM_TTL_MS
 
 
+def _json_dict(text: str) -> dict[str, Any]:
+    """A stored JSON object; a hand-edited blob reads as "nothing remembered"
+    rather than breaking the page, the same way the old localStorage store did."""
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def _to_rec(row: Session, now: int | None = None) -> SessionRec:
     now = _now_ms() if now is None else now
-    try:
-        ui = json.loads(row.ui)
-        if not isinstance(ui, dict):
-            ui = {}
-    except ValueError:
-        # A hand-edited blob reads as "nothing remembered" rather than breaking
-        # the page, the same way the old localStorage store did.
-        ui = {}
+    ui = _json_dict(row.ui)
     return SessionRec(
         id=row.id,
         seq=row.seq,
@@ -104,6 +111,7 @@ def _to_rec(row: Session, now: int | None = None) -> SessionRec:
         ui=ui,
         held=_is_held(row, now),
         last_active_at=row.last_active_at,
+        last_visited=_json_dict(row.last_visited),
     )
 
 
@@ -226,10 +234,13 @@ async def patch_session(
     ui: dict[str, Any] | None = None,
     label: str | None = None,
     workspace: str | None = None,
+    table: str | None = None,
 ) -> SessionRec | None:
-    """Apply the fields given; `ui` merges, the rest replace. The updated record
-    comes back so callers see server-derived values (the label an empty `label`
-    unpins). None if the session is unknown."""
+    """Apply the fields given; `ui` merges, the rest replace. `table` is the
+    Explorer's selection, kept in last_visited for the session's connection
+    (empty = none). The updated record comes back so callers see
+    server-derived values (the label an empty `label` unpins). None if the
+    session is unknown."""
     await _ensure_schema()
     async with _writes, _open() as s:
         row = await s.get(Session, sid)
@@ -244,6 +255,11 @@ async def patch_session(
             row.label = label.strip() or None
         if ui is not None:
             row.ui = json.dumps(_merge_ui(_to_rec(row).ui, ui))
+        if table is not None and row.connection_name:
+            visited = _json_dict(row.last_visited)
+            entry = visited.get(row.connection_name) or {"database": row.database}
+            visited[row.connection_name] = {**entry, "table": table or None}
+            row.last_visited = json.dumps(visited)
         row.last_active_at = _now_ms()
         s.add(row)
         await s.commit()
@@ -427,12 +443,19 @@ async def clear_connection(connection_name: str) -> None:
 
 
 async def set_database(sid: str, database: str | None) -> None:
+    """The session's database, also kept as its connection's last visited one;
+    a change forgets the table, which belonged to the old database."""
     await _ensure_schema()
     async with _open() as s:
         row = await s.get(Session, sid)
         if row is None:
             return
         row.database = database
+        if row.connection_name and database is not None:
+            visited = _json_dict(row.last_visited)
+            if (visited.get(row.connection_name) or {}).get("database") != database:
+                visited[row.connection_name] = {"database": database}
+                row.last_visited = json.dumps(visited)
         row.last_active_at = _now_ms()
         s.add(row)
         await s.commit()

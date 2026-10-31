@@ -5,6 +5,7 @@ path, and the Union by name checkbox changes the glob entry's query."""
 from __future__ import annotations
 
 import os
+import re
 
 from conftest import open_connect, start_new_connection
 from playwright.sync_api import Page, expect
@@ -122,3 +123,33 @@ def test_max_entries_cuts_lists_and_says_so(seeded_wide_folder, page: Page, shot
     status.click()
     expect(options).to_have_text(folders)
     expect(page.get_by_test_id("db-select-truncated")).to_have_count(0)
+
+
+def test_reopening_a_connection_goes_back_to_its_last_folder_and_file(seeded_folder, page: Page, shot) -> None:
+    open_connect(page)
+    start_new_connection(page, "duckdb")
+    page.get_by_test_id("duck-name").fill("lv-folder")
+    page.get_by_test_id("duck-path").fill(seeded_folder)
+    page.get_by_test_id("duck-connect").click()
+    status = page.get_by_test_id("connection-status")
+    status.click()
+    page.get_by_test_id("db-select").get_by_role("option").first.click()
+    expect(status).to_contain_text("· sub")
+    page.locator('[data-testid="explorer-table"][data-table="nested.csv.gz"]').click()
+    expect(page.get_by_test_id("explorer-panel")).to_contain_text("gamma")
+
+    # Switch to another connection, then reopen the first from its card.
+    open_connect(page)
+    start_new_connection(page, "duckdb")
+    page.get_by_test_id("duck-name").fill("lv-other")
+    page.get_by_test_id("duck-connect").click()
+    expect(status).to_contain_text("lv-other")
+    open_connect(page)
+    page.locator('[data-testid="conn-card"][data-conn="lv-folder"]').click()
+
+    # Straight back to the folder and the file, with its rows.
+    expect(status).to_contain_text("lv-folder · sub")
+    expect(page).to_have_url(re.compile(r"/explorer\?table=nested\.csv\.gz"))
+    expect(page.get_by_test_id("explorer-table-name")).to_have_text("nested.csv.gz")
+    expect(page.get_by_test_id("explorer-panel")).to_contain_text("gamma")
+    shot("reopened connection: back on its last folder and file")
