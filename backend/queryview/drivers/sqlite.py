@@ -66,7 +66,7 @@ async def _connect(c: SqliteConfig, timeout: float = SQLITE_TIMEOUT_SECONDS, rea
     closed on exit. It never creates the file: reads open it read-only, the
     script run read-write. Work still running `timeout` seconds after the open
     is aborted: the progress handler is SQLite's only statement timeout."""
-    uri = f"{Path(c.path).resolve().as_uri()}?mode={'ro' if read_only else 'rw'}"
+    uri = f"{Path(c.path).absolute().as_uri()}?mode={'ro' if read_only else 'rw'}"
     factory = _NoAttach if read_only else sqlite3.Connection
     conn = await aiosqlite.connect(uri, uri=True, isolation_level=None, factory=factory)
     try:
@@ -88,7 +88,7 @@ def _to_rows(cur: aiosqlite.Cursor, fetched: Iterable[Any], declared: Sequence[s
     names = [d[0] for d in cur.description or ()]
     meta = []
     for i, name in enumerate(names):
-        decl = declared[i] if declared else ""
+        decl = declared[i] if i < len(declared) else ""  # a concurrent ALTER can add a column
         first = next((r[i] for r in records if r[i] is not None), None)
         meta.append(Column(name, decl or _CLASS_OF.get(type(first), "")))
     return QueryRows(meta, [[to_json_value(v) for v in r] for r in records])
