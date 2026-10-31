@@ -13,6 +13,9 @@ from test_drivers import CASES, DriverCase, _connect
 # Mirrors DEFAULT_SIDEBAR_WIDTH in frontend/src/app/explorerSettings.ts.
 DEFAULT_WIDTH = 256
 
+# Driver-independent tests run once against DuckDB (a file, no service).
+DUCK = next(c for c in CASES if c.id == "duckdb")
+
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: Page, shot) -> None:
@@ -78,7 +81,7 @@ def test_explorer_browse_order_fields_paginate(case: DriverCase, request, page: 
     shot(f"{case.id} explorer short cells stay plain")
 
 
-def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: Page) -> None:
+def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_duckdb, page: Page) -> None:
     """Adding an order-by column and flipping its direction fire two browse runs
     back to back, and the server answers them concurrently. The rows shown must
     be the newest run's, not whichever response happens to land last.
@@ -86,7 +89,7 @@ def test_explorer_stale_run_does_not_overwrite_the_newest(seeded_test_db, page: 
     The two runs are held at the network and released in reverse, so the
     superseded ASC response always lands after the DESC one that replaced it.
     """
-    _connect(page, CASES[0], seeded_test_db)  # ClickHouse
+    _connect(page, DUCK, seeded_duckdb)
 
     page.get_by_test_id("nav-explorer").click()
     page.locator('[data-testid="explorer-table"][data-table="items"]').click()
@@ -161,10 +164,6 @@ def _hold(page: Page, ms: int):
             pass
 
     return slow
-
-
-# Driver-independent, so these run once against DuckDB (a file, no service).
-DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
 def test_sidebar_width_is_draggable_and_remembered(seeded_duckdb_long_names, page: Page, shot) -> None:

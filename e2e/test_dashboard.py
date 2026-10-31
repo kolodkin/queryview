@@ -1,13 +1,13 @@
 import re
 
 import httpx
-from conftest import arm_remote, connect_clickhouse_test_db
+from conftest import arm_remote
 from playwright.sync_api import Page, expect
+from test_drivers import CASES, _connect
 
-
-def _connect_and_select_test_db(page: Page) -> None:
-    """Connect to ClickHouse and select the seeded `qvtest` database."""
-    connect_clickhouse_test_db(page)
+# Dashboards run their queries through the same path as QueryView, which
+# test_drivers covers per driver, so these run once on DuckDB (no service).
+DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
 # A dashboard that reads window.queries and writes a value into the DOM, so the
@@ -30,9 +30,9 @@ _DASHBOARD_HTML = (
 )
 
 
-def test_dashboard_push_and_reopen(seeded_test_db, page: Page, base_url: str, shot) -> None:
-    _connect_and_select_test_db(page)
-    shot("connected to qvtest db")
+def test_dashboard_push_and_reopen(seeded_duckdb, page: Page, base_url: str, shot) -> None:
+    _connect(page, DUCK, seeded_duckdb)
+    shot("connected")
 
     session_id = arm_remote(page)
     shot("remote control armed")
@@ -72,10 +72,10 @@ def test_dashboard_push_and_reopen(seeded_test_db, page: Page, base_url: str, sh
     shot("reopened from store")
 
 
-def test_dashboard_runqueries_error_shows_banner(seeded_test_db, page: Page, base_url: str, shot) -> None:
+def test_dashboard_runqueries_error_shows_banner(seeded_duckdb, page: Page, base_url: str, shot) -> None:
     # Persist a dashboard whose query is invalid; reopening it should surface a
     # fail-fast error banner instead of rendering the iframe.
-    _connect_and_select_test_db(page)
+    _connect(page, DUCK, seeded_duckdb)
     res = httpx.post(
         f"{base_url}/api/dashboards",
         json={
@@ -94,10 +94,10 @@ def test_dashboard_runqueries_error_shows_banner(seeded_test_db, page: Page, bas
     shot("fail-fast error banner")
 
 
-def test_a_dashboard_runs_on_the_viewing_sessions_connection(seeded_test_db, page: Page, base_url: str) -> None:
+def test_a_dashboard_runs_on_the_viewing_sessions_connection(seeded_duckdb, page: Page, base_url: str) -> None:
     """A saved dashboard names no connection: a disconnected session is told to
     connect rather than failing on some connection the dashboard remembers."""
-    _connect_and_select_test_db(page)
+    _connect(page, DUCK, seeded_duckdb)
     httpx.post(
         f"{base_url}/api/dashboards",
         json={"name": "portable", "html": _DASHBOARD_HTML, "queries": {"items": "SELECT name FROM items ORDER BY id"}},
@@ -132,8 +132,8 @@ _PARAMS_HTML = (
 )
 
 
-def test_dashboard_params_resolve_and_rerun_through_set_params(seeded_test_db, page: Page, base_url: str) -> None:
-    _connect_and_select_test_db(page)
+def test_dashboard_params_resolve_and_rerun_through_set_params(seeded_duckdb, page: Page, base_url: str) -> None:
+    _connect(page, DUCK, seeded_duckdb)
     httpx.post(
         f"{base_url}/api/dashboards",
         json={

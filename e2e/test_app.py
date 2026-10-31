@@ -1,6 +1,7 @@
 import re
 
 import httpx
+import pytest
 from conftest import (
     CH_DB,
     CH_HOST,
@@ -16,10 +17,18 @@ from conftest import (
     start_new_connection,
 )
 from playwright.sync_api import Page, expect
-from test_drivers import CASES, _connect
+from test_drivers import CASES, DriverCase, _connect
 
 # Driver-agnostic behaviour is exercised on DuckDB: no server to stand up.
 _DUCKDB = next(c for c in CASES if c.id == "duckdb")
+
+# Drivers with a database picker switch databases differently (ClickHouse
+# passes the database per request, Postgres reconnects), so switching runs on
+# both: the SQL naming the current database and another database to switch to.
+_PICKER = [c for c in CASES if c.db_option]
+_CURRENT_DB = {"clickhouse": "currentDatabase()", "postgres": "current_database()"}
+_OTHER_DB = {"clickhouse": "system", "postgres": "postgres"}
+# Both start on CH_DB: conftest names the Postgres database the same (PG_DB).
 
 
 def test_queryview_e2e(page: Page) -> None:
@@ -104,11 +113,13 @@ def test_queryview_e2e(page: Page) -> None:
     expect(page.get_by_test_id("connection-status")).to_contain_text("· system")
 
 
-def test_a_database_switch_reruns_the_query_on_screen(seeded_test_db, page: Page) -> None:
+@pytest.mark.parametrize("case", _PICKER, ids=lambda c: c.id)
+def test_a_database_switch_reruns_the_query_on_screen(case: DriverCase, request, page: Page) -> None:
     """Switching the database from the pill re-runs the query on screen."""
-    connect_clickhouse_test_db(page)
+    _connect(page, case, request.getfixturevalue(case.seed_fixture))
+    other = _OTHER_DB[case.id]
     open_query_panel(page)
-    page.get_by_test_id("query-input").fill("SELECT currentDatabase() AS db")
+    page.get_by_test_id("query-input").fill(f"SELECT {_CURRENT_DB[case.id]} AS db")
     page.get_by_test_id("query-run").click()
     output = page.get_by_test_id("query-output")
     expect(output).to_contain_text(CH_DB)
@@ -116,8 +127,8 @@ def test_a_database_switch_reruns_the_query_on_screen(seeded_test_db, page: Page
     # An edit since the run is not what produced the results: the re-run is of
     # the run's own query, and the edit stays in the editor.
     page.get_by_test_id("query-input").fill("SELECT 'edited'")
-    _switch_database_from_pill(page, "system")
-    expect(output).to_contain_text("system")
+    _switch_database_from_pill(page, other)
+    expect(output).to_contain_text(other)
     expect(output).not_to_contain_text(CH_DB)
     expect(output).not_to_contain_text("edited")
     expect(page.get_by_test_id("query-input")).to_have_value("SELECT 'edited'")
@@ -162,41 +173,45 @@ def _switch_database_from_pill(page: Page, database: str) -> None:
     expect(page.get_by_test_id("connection-status")).to_contain_text(f"· {database}")
 
 
-def test_a_database_switch_refreshes_param_options(seeded_test_db, page: Page) -> None:
+@pytest.mark.parametrize("case", _PICKER, ids=lambda c: c.id)
+def test_a_database_switch_refreshes_param_options(case: DriverCase, request, page: Page) -> None:
     """`options_sql` choices are resolved on the session, so they follow its
     database like the results do."""
-    connect_clickhouse_test_db(page)
+    _connect(page, case, request.getfixturevalue(case.seed_fixture))
+    other = _OTHER_DB[case.id]
     open_query_panel(page)
     author_params_yaml(
         page,
         "by-database",
         "SELECT {db} AS picked",
-        "params:\n  - name: db\n    options_sql: SELECT currentDatabase()\n",
+        f"params:\n  - name: db\n    options_sql: SELECT {_CURRENT_DB[case.id]}\n",
     )
     sel = page.locator('[data-testid="param-select"][data-param="db"]')
     expect(sel.locator("option").first).to_have_text(CH_DB)
 
-    _switch_database_from_pill(page, "system")
-    expect(sel.locator("option").first).to_have_text("system")
+    _switch_database_from_pill(page, other)
+    expect(sel.locator("option").first).to_have_text(other)
 
 
-def test_a_database_switch_reruns_with_the_new_database_param_options(seeded_test_db, page: Page) -> None:
+@pytest.mark.parametrize("case", _PICKER, ids=lambda c: c.id)
+def test_a_database_switch_reruns_with_the_new_database_param_options(case: DriverCase, request, page: Page) -> None:
     """The re-run a database switch triggers substitutes `options_sql` values
     resolved on the new database, not the ones the old database produced."""
-    connect_clickhouse_test_db(page)
+    _connect(page, case, request.getfixturevalue(case.seed_fixture))
+    other = _OTHER_DB[case.id]
     open_query_panel(page)
     author_params_yaml(
         page,
         "by-database-run",
         "SELECT {db} AS picked",
-        "params:\n  - name: db\n    options_sql: SELECT currentDatabase()\n",
+        f"params:\n  - name: db\n    options_sql: SELECT {_CURRENT_DB[case.id]}\n",
     )
     page.get_by_test_id("query-run").click()
     output = page.get_by_test_id("query-output")
     expect(output).to_contain_text(CH_DB)
 
-    _switch_database_from_pill(page, "system")
-    expect(output).to_contain_text("system")
+    _switch_database_from_pill(page, other)
+    expect(output).to_contain_text(other)
     expect(output).not_to_contain_text(CH_DB)
 
 

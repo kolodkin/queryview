@@ -1,12 +1,17 @@
 import re
 
+import pytest
 from conftest import author_params_yaml, connect_clickhouse_test_db, open_query_panel
 from playwright.sync_api import Page, expect
+from test_drivers import CASES, DriverCase, _connect
 
-# The generic connect -> query -> paginate -> CSV -> describe flow (including
-# ClickHouse) is parameterized in test_drivers.py. This module covers the
-# ClickHouse-specific query features: cell views, query params, and the
-# default views for Array/Map/Tuple types.
+# The generic connect -> query -> paginate -> CSV -> describe flow is
+# parameterized in test_drivers.py. Here: query params run on every driver
+# (substitution and options_sql go through it); the UI features that only see
+# rows (cell views, pickers, long cells) run once on DuckDB, a file with no
+# service; ClickHouse's own types (Array/Map/Tuple) run on ClickHouse.
+
+DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
 def _open_query_panel(page: Page) -> None:
@@ -15,13 +20,18 @@ def _open_query_panel(page: Page) -> None:
     open_query_panel(page)
 
 
-def test_cell_view_renders_link_and_custom_html(seeded_test_db, page: Page, shot) -> None:
+def _open_case_panel(page: Page, case: DriverCase, seed) -> None:
+    _connect(page, case, seed)
+    open_query_panel(page)
+
+
+def test_cell_view_renders_link_and_custom_html(seeded_duckdb, page: Page, shot) -> None:
     """Saving a predefined query with a cell_view YAML map renders cells per
     the map: `link` becomes an <a href> using {cell}, `custom` injects the
     template with {cell} HTML-escaped. Both wrappers carry an automatic
     data-testid="cell-<col>" so tests can target them without baking testids
     into the YAML. The YAML is authored in a modal opened from the toolbar."""
-    _open_query_panel(page)
+    _open_case_panel(page, DUCK, seeded_duckdb)
 
     page.get_by_test_id("query-input").fill("SELECT id, name FROM items ORDER BY id LIMIT 2")
     shot("cell view toggle in toolbar")
@@ -71,12 +81,12 @@ def test_cell_view_renders_link_and_custom_html(seeded_test_db, page: Page, shot
     shot("results: name as link, id as custom HTML")
 
 
-def test_cell_view_row_placeholder_references_other_columns(seeded_test_db, page: Page, shot) -> None:
+def test_cell_view_row_placeholder_references_other_columns(seeded_duckdb, page: Page, shot) -> None:
     """A cell_view template can reference other columns of the same row via
     `{row.<col>}`. Here the `name` column renders as a link whose href is built
     from a sibling column (`{row.id}`), and a `custom` cell combines `{cell}`
     with `{row.name}` — each row resolves against its own values."""
-    _open_query_panel(page)
+    _open_case_panel(page, DUCK, seeded_duckdb)
 
     page.get_by_test_id("query-input").fill("SELECT id, name FROM items ORDER BY id LIMIT 2")
     page.once("dialog", lambda d: d.accept("with-row-refs"))
@@ -111,10 +121,10 @@ def test_cell_view_row_placeholder_references_other_columns(seeded_test_db, page
     shot("results: row.* placeholders resolved per row")
 
 
-def test_cell_view_cancel_discards_edits(seeded_test_db, page: Page, shot) -> None:
+def test_cell_view_cancel_discards_edits(seeded_duckdb, page: Page, shot) -> None:
     """Cancel in the cell-view modal closes without saving, so rendering still
     uses the saved cell_view (or none) — author-time edits never leak through."""
-    _open_query_panel(page)
+    _open_case_panel(page, DUCK, seeded_duckdb)
 
     page.get_by_test_id("query-input").fill("SELECT name FROM items ORDER BY id LIMIT 1")
     page.get_by_test_id("cell-view-toggle").click()
@@ -185,8 +195,8 @@ def test_default_views_for_array_map_tuple(seeded_test_db, page: Page, shot) -> 
     shot("default views: array expanded")
 
 
-def test_field_pickers_visibility_and_order_by(seeded_test_db, page: Page, shot) -> None:
-    _open_query_panel(page)
+def test_field_pickers_visibility_and_order_by(seeded_duckdb, page: Page, shot) -> None:
+    _open_case_panel(page, DUCK, seeded_duckdb)
     page.get_by_test_id("query-input").fill("SELECT id, name FROM items")
 
     # Fields describes the query's output columns and reveals both pickers.
@@ -251,11 +261,12 @@ def test_field_pickers_visibility_and_order_by(seeded_test_db, page: Page, shot)
     shot("ordered + limited results (order-by Run)")
 
 
-def test_query_param_dropdown_substitutes_value(seeded_test_db, page: Page, shot) -> None:
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
+def test_query_param_dropdown_substitutes_value(case: DriverCase, request, page: Page, shot) -> None:
     """A `params:` block in the cell_view YAML renders a dropdown per param; the
     selected value is substituted into the SQL via {name} (auto-quoted as a
     string) and the query re-runs immediately on change."""
-    _open_query_panel(page)
+    _open_case_panel(page, case, request.getfixturevalue(case.seed_fixture))
     author_params_yaml(
         page,
         "by-name",
@@ -267,31 +278,32 @@ def test_query_param_dropdown_substitutes_value(seeded_test_db, page: Page, shot
     sel = page.locator('[data-testid="param-select"][data-param="sel"]')
     expect(sel).to_be_visible()
     expect(sel.locator("option")).to_have_count(3)
-    shot("params dropdown rendered")
+    shot(f"{case.id} params dropdown rendered")
 
     # Selecting a value auto-re-runs the query; substitution is quoted correctly
-    # (an unquoted value would be a ClickHouse error, not a filtered result).
+    # (an unquoted value would be an SQL error, not a filtered result).
     sel.select_option("beta")
     output = page.get_by_test_id("query-output")
     expect(output).to_be_visible()
     expect(output).to_contain_text("beta")
     expect(output).not_to_contain_text("alpha")
     expect(output).not_to_contain_text("gamma")
-    shot("query re-run with sel=beta")
+    shot(f"{case.id} query re-run with sel=beta")
 
     # Switching the value re-runs again with the new substitution.
     sel.select_option("gamma")
     expect(output).to_contain_text("gamma")
     expect(output).not_to_contain_text("beta")
-    shot("query re-run with sel=gamma")
+    shot(f"{case.id} query re-run with sel=gamma")
 
 
-def test_query_param_options_sql_populates_dropdown(seeded_test_db, page: Page, shot) -> None:
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
+def test_query_param_options_sql_populates_dropdown(case: DriverCase, request, page: Page, shot) -> None:
     """`options_sql` resolves the dropdown choices from a query: the first column
     of every row becomes an option, in the query's own order. The first row is
     the default; substituting it and running returns that row, and switching the
     selection re-runs with the new value."""
-    _open_query_panel(page)
+    _open_case_panel(page, case, request.getfixturevalue(case.seed_fixture))
     author_params_yaml(
         page,
         "by-options-sql",
@@ -304,7 +316,7 @@ def test_query_param_options_sql_populates_dropdown(seeded_test_db, page: Page, 
     expect(sel).to_be_visible()
     expect(sel.locator("option")).to_have_count(3)
     expect(sel.locator("option").first).to_have_text("alpha")
-    shot("options_sql dropdown populated")
+    shot(f"{case.id} options_sql dropdown populated")
 
     # Default is the first option (alpha); running substitutes and returns it.
     page.get_by_test_id("query-run").click()
@@ -312,20 +324,20 @@ def test_query_param_options_sql_populates_dropdown(seeded_test_db, page: Page, 
     expect(output).to_be_visible()
     expect(output).to_contain_text("alpha")
     expect(output).not_to_contain_text("beta")
-    shot("options_sql default (alpha) run")
+    shot(f"{case.id} options_sql default (alpha) run")
 
     # Switching re-runs with the new substitution.
     sel.select_option("gamma")
     expect(output).to_contain_text("gamma")
     expect(output).not_to_contain_text("alpha")
-    shot("options_sql re-run with sel=gamma")
+    shot(f"{case.id} options_sql re-run with sel=gamma")
 
 
-def test_query_param_options_and_options_sql_are_mutually_exclusive(seeded_test_db, page: Page, shot) -> None:
+def test_query_param_options_and_options_sql_are_mutually_exclusive(seeded_duckdb, page: Page, shot) -> None:
     """A param declaring both `options` and `options_sql` is a config error:
     server-side cell_view validation rejects the save, so the modal stays open
     and no dropdown ever renders."""
-    _open_query_panel(page)
+    _open_case_panel(page, DUCK, seeded_duckdb)
     page.get_by_test_id("query-input").fill("SELECT name FROM items WHERE name = {sel} ORDER BY id")
     page.once("dialog", lambda d: d.accept("both-keys"))
     page.get_by_test_id("query-predefined-select").select_option("::new::")
@@ -343,11 +355,11 @@ def test_query_param_options_and_options_sql_are_mutually_exclusive(seeded_test_
     expect(page.locator('[data-testid="param-select"][data-param="sel"]')).to_have_count(0)
 
 
-def test_query_param_options_sql_no_rows_blocks_run(seeded_test_db, page: Page, shot) -> None:
+def test_query_param_options_sql_no_rows_blocks_run(seeded_duckdb, page: Page, shot) -> None:
     """An `options_sql` that returns zero rows has nothing to choose from: the
     main query is blocked (Execute disabled) and the error banner names the
     param and the empty result."""
-    _open_query_panel(page)
+    _open_case_panel(page, DUCK, seeded_duckdb)
     author_params_yaml(
         page,
         "empty-options",
@@ -362,10 +374,10 @@ def test_query_param_options_sql_no_rows_blocks_run(seeded_test_db, page: Page, 
     shot("options_sql empty -> blocked")
 
 
-def test_query_param_options_sql_error_blocks_run(seeded_test_db, page: Page, shot) -> None:
+def test_query_param_options_sql_error_blocks_run(seeded_duckdb, page: Page, shot) -> None:
     """An `options_sql` that errors blocks the main query (Execute disabled) and
     surfaces the failure through the banner, prefixed with the param name."""
-    _open_query_panel(page)
+    _open_case_panel(page, DUCK, seeded_duckdb)
     author_params_yaml(
         page,
         "bad-options",
@@ -379,13 +391,13 @@ def test_query_param_options_sql_error_blocks_run(seeded_test_db, page: Page, sh
     shot("options_sql error -> blocked")
 
 
-def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_test_db, page: Page, shot) -> None:
+def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_duckdb, page: Page, shot) -> None:
     """Result columns are a fixed width: a value longer than that scrolls inside
     its own cell and gains a button at the cell's left edge that opens the full
     value. The button's glyph reflects autodetection — `{ }` for text that
     parses as JSON/YAML, otherwise a plain expand arrow — and a detected value
     opens on a collapsible parsed tree with a Raw toggle."""
-    _open_query_panel(page)
+    _open_case_panel(page, DUCK, seeded_duckdb)
 
     page.get_by_test_id("query-input").fill(
         "SELECT 'alpha' AS brief, "
