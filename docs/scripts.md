@@ -94,9 +94,9 @@ same JSON shape as every other result
   page opens it read-only. DuckDB refuses a second open of one file with a
   different mode in the same process, so the explorer and QueryView error on
   that file until the run finishes. A `:memory:` database is new on every run.
-- **SQLite** — the file is opened read-write in autocommit mode for the run
-  (every other page opens it read-only), so a script's own `BEGIN`/`COMMIT`
-  work and each statement persists as it runs.
+- **SQLite** — the run opens the file read-write in autocommit mode; every
+  other page opens it read-only. Each statement persists as it runs, and a
+  script's own `BEGIN`/`COMMIT` works.
 
 ## Session
 
