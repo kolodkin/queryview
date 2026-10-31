@@ -18,12 +18,6 @@ from test_drivers import CASES, _connect
 DUCK = next(c for c in CASES if c.id == "duckdb")
 
 
-def _open_query_panel(page: Page) -> None:
-    """Connect to ClickHouse, select the seeded `qvtest` db, open the panel."""
-    connect_clickhouse_test_db(page)
-    open_query_panel(page)
-
-
 def test_mcp_push_script_fills_and_runs_the_scripts_editor(seeded_duckdb, page: Page, base_url: str) -> None:
     _connect(page, DUCK, seeded_duckdb)
     session_id = arm_remote(page)
@@ -48,8 +42,9 @@ def test_mcp_push_script_fills_and_runs_the_scripts_editor(seeded_duckdb, page: 
     expect(page.get_by_test_id("scripts-input")).to_have_value(script + " -- mine")
 
 
-def test_mcp_push_to_live_session(seeded_test_db, page: Page, base_url: str) -> None:
-    _open_query_panel(page)
+def test_mcp_push_to_live_session(seeded_duckdb, page: Page, base_url: str) -> None:
+    _connect(page, DUCK, seeded_duckdb)
+    open_query_panel(page)
 
     session_id = arm_remote(page)
 
