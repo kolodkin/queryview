@@ -113,6 +113,20 @@ runs it here. Focus in the page holds the
 [edit lock](./query.md#co-edit--edit-lock), so a push is refused with
 `blocked, user editing` while you type. See [remote.md](./remote.md).
 
+## File writes
+
+On a DuckDB or SQLite connection a script, the agent's included, can write
+any file QueryView's process can: DuckDB's `COPY ... TO` writes any path, and
+SQLite's `ATTACH` opens or creates any SQLite file, QueryView's own
+`db.sqlite` among them. `run_sql` refuses both.
+
+```sql
+ATTACH '/home/user/elsewhere.db' AS x;
+CREATE TABLE x.customers_copy AS SELECT * FROM customers
+```
+
+Keep an agent off file connections you wouldn't hand it the filesystem for.
+
 ## API
 
 `POST /api/db/execute` — see [api.md](./api.md).
