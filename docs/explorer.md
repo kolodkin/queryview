@@ -120,23 +120,18 @@ root; reopening the connection does too.
   as its tooltip. The folder list is walked once at connect, four levels deep;
   hidden entries and symlinks are skipped.
 - **Tables** — files named `.parquet`, `.csv`, `.tsv`, `.json`, `.jsonl` or
-  `.ndjson`, the non-parquet ones also with a `.gz` or `.zst` suffix (DuckDB
-  infers the compression). The browse query is the matching reader, e.g.
-  `SELECT * FROM read_csv('items.csv')`. An extension with two or more files
-  also gets a **`*.<ext>`** entry (`*.csv`, `*.csv.gz`) after the files; its
-  query names the listed files explicitly, so a file added later needs the
-  list refreshed. Hidden files, symlinks and names with `*`, `?` or `[` are
-  not listed.
+  `.ndjson`, the non-parquet ones also with a `.gz` or `.zst` suffix. The
+  browse query is the matching reader, e.g. `SELECT * FROM read_csv('items.csv')`.
+  An extension with two or more files also gets a **`*.<ext>`** entry (`*.csv`,
+  `*.csv.gz`) whose query lists those files, so a file added later needs a
+  refresh. Hidden files, symlinks and names with `*`, `?` or `[` are skipped.
 - **Path** — beside the selected file's name, its path from the root in small
   type (`sub/nested.csv.gz`) with a copy button, for SQL on the query page.
   A `*.<ext>` entry has none.
-- **Union by name** — the checkbox adds `union_by_name = true` to the glob
-  queries, so files whose columns differ in order or count are matched by
-  header name instead of position (missing columns read as NULL). Single files
-  are unaffected. The choice is remembered with the sidebar width.
-- **Paths** — folder mode opens `:memory:` with DuckDB's `file_search_path`
-  set to the root, and generated queries name files by their path from it
-  (`read_csv('sub/items.csv')`), so a saved query or SQL typed on the query
-  page reads the same file whichever folder is selected. Only folders under the
-  root can be selected. A root whose path has a comma is refused, since DuckDB
-  reads that setting as a list.
+- **Union by name** — adds `union_by_name = true` to `*.<ext>` queries, so a
+  column only some files have is kept (NULL elsewhere) rather than dropped.
+  Remembered with the sidebar width.
+- **Paths** — folder mode opens `:memory:` with `file_search_path` set to the
+  root, and queries name files by their path from it, so SQL reads the same
+  file whichever folder is selected. Only folders under the root can be
+  selected; a root path with a comma is refused (DuckDB reads it as a list).
