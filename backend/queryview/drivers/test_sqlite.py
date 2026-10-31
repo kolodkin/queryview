@@ -33,6 +33,7 @@ def db_path(tmp_path):
 def test_parse_config_requires_a_path():
     d = SqliteDriver()
     assert d.parse_config({"path": " "}) == (None, "path required")
+    assert d.parse_config({"path": ":memory:"})[0] is None
     assert d.parse_config({"path": " /tmp/x.sqlite "})[0] == SqliteConfig("/tmp/x.sqlite")
 
 

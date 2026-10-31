@@ -46,6 +46,8 @@ def parse_sqlite_config(body: Any) -> tuple[SqliteConfig | None, str | None]:
     path = raw.strip() if isinstance(raw, str) else ""
     if not path:
         return None, "path required"
+    if path == ":memory:":  # each request opens a fresh connection, so it would always be empty
+        return None, "in-memory SQLite isn't supported; give a file path"
     return SqliteConfig(path=path), None
 
 

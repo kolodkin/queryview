@@ -36,7 +36,8 @@ a database picker — for ClickHouse the picker lists `SHOW DATABASES`, for Post
 it lists real databases (`pg_database`) and the chosen one is where queries run.
 DuckDB takes a **path** (or `:memory:`), has no network and **no picker** —
 connecting goes straight to the explorer; schema-qualify tables in SQL as
-needed. SQLite takes a **path** to an existing file and likewise has no picker;
+needed. SQLite takes a **path** to an existing file (`:memory:` is refused: every
+request opens a fresh connection) and likewise has no picker;
 every page but the script run opens it read-only.
 
 A saved card that fails to open reports the error under the cards.
@@ -282,7 +283,7 @@ session.
 
 `test`/`connect` resolve the driver from `type` and validate per driver
 (ClickHouse/Postgres require `host` + `port` `1..65535`; DuckDB takes an optional
-`path`, SQLite a required one); validation errors return `400`. ClickHouse queries run over the HTTP
+`path`, SQLite a required file path); validation errors return `400`. ClickHouse queries run over the HTTP
 interface with HTTP Basic auth and a 5s timeout.
 
 ## CI
