@@ -336,15 +336,19 @@ def seeded_pg_db():
     _in_thread(_teardown)
 
 
-# --- DuckDB seeding for query tests ---------------------------------------
+# --- DuckDB and SQLite seeding for query tests ----------------------------
+_ITEMS_DDL = "CREATE TABLE {t} (id INTEGER, name TEXT)"
+_ITEMS_ROWS = "INSERT INTO {t} VALUES (1,'alpha'),(2,'beta'),(3,'gamma')"
+
+
 def _seed_duckdb(path, *names: str) -> str:
     """Create each named table with the suite's shared alpha/beta/gamma rows."""
     import duckdb
 
     con = duckdb.connect(str(path))
     for name in names:
-        con.execute(f"CREATE TABLE {name} (id INTEGER, name TEXT)")
-        con.execute(f"INSERT INTO {name} VALUES (1,'alpha'),(2,'beta'),(3,'gamma')")
+        con.execute(_ITEMS_DDL.format(t=name))
+        con.execute(_ITEMS_ROWS.format(t=name))
     con.close()
     return str(path)
 
@@ -363,8 +367,8 @@ def seeded_sqlite(tmp_path_factory) -> str:
 
     path = str(tmp_path_factory.mktemp("sqlite") / "qv.sqlite")
     con = sqlite3.connect(path)
-    con.execute("CREATE TABLE items (id INTEGER, name TEXT)")
-    con.execute("INSERT INTO items VALUES (1,'alpha'),(2,'beta'),(3,'gamma')")
+    con.execute(_ITEMS_DDL.format(t="items"))
+    con.execute(_ITEMS_ROWS.format(t="items"))
     con.commit()
     con.close()
     return path

@@ -139,7 +139,6 @@ class SqliteDriver:
         self,
         config: SqliteConfig,
         sql: str,
-        database: str | None,
         limit: int,
         offset: int,
         order_by: list[dict[str, Any]] | None,
@@ -159,7 +158,7 @@ class SqliteDriver:
         order_by: list[dict[str, Any]] | None,
     ) -> RowsResult | Err:
         try:
-            return RowsResult(await self._fetch_page(config, sql, database, limit, offset, order_by))
+            return RowsResult(await self._fetch_page(config, sql, limit, offset, order_by))
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
 
@@ -181,7 +180,7 @@ class SqliteDriver:
         order_by: list[dict[str, Any]] | None,
     ) -> TextResult | Err:
         try:
-            rows = await self._fetch_page(config, sql, database, limit, offset, order_by)
+            rows = await self._fetch_page(config, sql, limit, offset, order_by)
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
         return TextResult(to_csv([c.name for c in rows.meta], rows.data))
@@ -189,7 +188,7 @@ class SqliteDriver:
     async def describe_query(self, config: SqliteConfig, sql: str, database: str | None) -> FieldsResult | Err:
         # One row is enough to name each column's storage class.
         try:
-            rows = await self._fetch_page(config, sql, database, 1, 0, None)
+            rows = await self._fetch_page(config, sql, 1, 0, None)
             return FieldsResult([{"name": c.name, "type": c.type} for c in rows.meta])
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
