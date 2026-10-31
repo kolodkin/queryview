@@ -77,21 +77,30 @@ async def _connect(c: SqliteConfig, timeout: float = SQLITE_TIMEOUT_SECONDS, rea
         await conn.close()
 
 
-# SQLite reports no column types for a query, only storage classes per value:
-# name each column by its first non-null value's class.
-# shortcut: an empty or all-NULL column gets no type; read declared types
-# (PRAGMA table_info) if a caller comes to need them.
+# Python's sqlite3 reports no result column types. A column without a declared
+# type (an expression, or any script statement) is named by its first non-null
+# value's storage class instead.
 _CLASS_OF = {int: "INTEGER", float: "REAL", str: "TEXT", bytes: "BLOB"}
 
 
-def _to_rows(cur: aiosqlite.Cursor, fetched: Iterable[Any]) -> QueryRows:
+def _to_rows(cur: aiosqlite.Cursor, fetched: Iterable[Any], declared: list[str] | None = None) -> QueryRows:
     records = list(fetched)
     names = [d[0] for d in cur.description or ()]
     meta = []
     for i, name in enumerate(names):
+        decl = declared[i] if declared and i < len(declared) else ""
         first = next((r[i] for r in records if r[i] is not None), None)
-        meta.append(Column(name, _CLASS_OF.get(type(first), "")))
+        meta.append(Column(name, decl or _CLASS_OF.get(type(first), "")))
     return QueryRows(meta, [[to_json_value(v) for v in r] for r in records])
+
+
+async def _declared_types(conn: aiosqlite.Connection, select: str) -> list[str]:
+    """Each result column's declared type, "" for an expression, read from a
+    temp view of `select` (temp is writable on a read-only open, and dies with
+    the connection). Works on an empty result, unlike the value fallback."""
+    await conn.execute(f"CREATE TEMP VIEW _qv_types AS {select}")
+    async with conn.execute("PRAGMA temp.table_info(_qv_types)") as cur:
+        return [r[2] for r in await cur.fetchall()]
 
 
 class SqliteDriver:
@@ -145,8 +154,10 @@ class SqliteDriver:
     ) -> QueryRows:
         order_clause = build_order_by(order_by, '"')
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias="_qv")
-        async with _connect(config) as conn, conn.execute(paginated) as cur:
-            return _to_rows(cur, await cur.fetchall())
+        async with _connect(config) as conn:
+            declared = await _declared_types(conn, paginated)
+            async with conn.execute(paginated) as cur:
+                return _to_rows(cur, await cur.fetchall(), declared)
 
     async def run_query(
         self,

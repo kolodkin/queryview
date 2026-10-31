@@ -162,3 +162,25 @@ def test_a_query_past_the_timeout_is_aborted(monkeypatch, db_path):
     endless = "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n) SELECT count(*) FROM n"
     r = _run(SqliteDriver().run_sql(SqliteConfig(db_path), endless, None, 10))
     assert isinstance(r, Err) and "interrupted" in r.message
+
+
+def test_declared_types_name_columns_even_without_rows(db_path):
+    con = sqlite3.connect(db_path)
+    con.execute("CREATE TABLE prices (id INTEGER, amount NUMERIC, at DATETIME)")
+    con.execute("INSERT INTO prices VALUES ('not-an-int', NULL, NULL)")  # values needn't match the declaration
+    con.commit()
+    con.close()
+    d = SqliteDriver()
+    sql = "SELECT p.id, p.amount, p.at, i.id, i.id + 1 AS next FROM prices p JOIN items i ON 1"
+    r = _run(d.describe_query(SqliteConfig(db_path), sql + " WHERE 0", None))
+    assert isinstance(r, FieldsResult)
+    assert [f["type"] for f in r.fields] == ["INTEGER", "NUMERIC", "DATETIME", "INTEGER", ""]
+    r = _run(d.run_query(SqliteConfig(db_path), sql, None, 1, 0, None))
+    assert isinstance(r, RowsResult)
+    assert [c.type for c in r.rows.meta] == [
+        "INTEGER",
+        "NUMERIC",
+        "DATETIME",
+        "INTEGER",
+        "INTEGER",
+    ]  # expression: value class
