@@ -638,6 +638,8 @@ async def open_saved(
     """Open a connection by name for this session: one of its session
     connections, else a saved one. A `database` not on it fails before the
     session switches."""
+    if by == "agent" and await _lock_hash_of(name) is not None:  # the agent never holds an unlock token
+        return LOCKED
     found = await _resolve(sid, name)
     if found is None:
         return {
@@ -659,8 +661,6 @@ async def open_saved(
         return {"ok": False, "message": message}
     if database is not None and state.database != database:
         return {"ok": False, "message": "unknown database"}
-    if by == "agent" and state.locked:  # the agent never holds an unlock token
-        return LOCKED
     _set_session_entry(sid, state)
     if _session_conn(sid, name) is None:
         await _touch_connection(name)

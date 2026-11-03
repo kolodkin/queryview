@@ -204,14 +204,15 @@ A saved connection can be **locked** behind a passphrase: click the lock on
 its card and type one. On a session whose active connection is locked, every
 MCP tool that reads or writes data (`run_sql`, `run_script`, `select_database`,
 the table list in `session_info`, every push) answers `connection is locked`,
+as does `use_connection` naming a locked one,
 and so does every REST call without the tab's unlock token (`403`).
 `session_info` still names the connection and reports `locked: true`.
 `list_connections` and `list_databases` leave a locked connection out
 entirely, even while a tab has it unlocked: the lock is the connection's
 stored state, an unlock only that tab's. Session connections are never
-locked. A lock holds against the API only: an
-agent's script on any unlocked DuckDB or SQLite connection can reach every file
-QueryView can, a locked connection's file and `db.sqlite` included
+locked. A lock holds against the API only: an agent's script on any unlocked
+DuckDB or SQLite connection can reach every file QueryView can, a locked
+connection's file and `db.sqlite` included
 ([scripts.md](./scripts.md#file-writes)).
 
 Stored: only a salted scrypt hash of the passphrase (`lock_hash` on the

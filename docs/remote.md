@@ -56,11 +56,10 @@ tools (among others):
   and `select_database(session_id, database)` work on any unlocked one;
   `remove_connection(session_id, name)` only on the agent's own. In the
   browser, an add/remove refreshes an armed tab's connection lists (pill menu,
-  Connect). A `use_connection` marks
-  the session row `connection_by: agent`; every tab picks it up on its next
-  heartbeat, toasts "Agent switched to <name>", and the pill reads
-  `<connection> · <database>` with the menu entry marked active and badged
-  `agent`. Switches made in the UI never toast.
+  Connect). A `use_connection` marks the session row `connection_by: agent`;
+  every tab picks it up on its next heartbeat, toasts "Agent switched to
+  <name>", and the pill reads `<connection> · <database>` with the menu entry
+  marked active and badged `agent`. Switches made in the UI never toast.
 - `run_sql(session_id, sql, limit?=1000)` — run one read-only statement as
   written (so `DESCRIBE`/`SHOW`/`EXPLAIN` work; page with your own
   `LIMIT`/`OFFSET`) on the session's connection and database, returning
