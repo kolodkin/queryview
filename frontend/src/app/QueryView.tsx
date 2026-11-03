@@ -9,7 +9,6 @@ import {
   cellText,
   columnNames,
   columnTypes,
-  parseComplexType,
   parseQueryParams,
   presentationForSave,
   renderCell,
@@ -705,25 +704,9 @@ function QueryPanel({
     if (await save(value)) setCellViewModalOpen(false)
   }
 
-  // Stable across renders so the grid measures its columns once per result.
-  const { columns, resultRows } = useMemo(
-    () =>
-      result
-        ? { columns: columnNames(result), resultRows: result.data }
-        : { columns: [], resultRows: [] },
-    [result],
-  )
-  const shownIdx = useMemo(
-    () => shownColumnIndices(columns, fields, visibleCols),
-    [columns, fields, visibleCols],
-  )
-  // Custom views add text around the value and complex-type lists add an
-  // expander, both wider than the value's text the grid measures.
-  const capped = useCallback(
-    (col: string) =>
-      appliedViews[col]?.type === 'custom' || parseComplexType(colTypes[col] ?? '') !== null,
-    [appliedViews, colTypes],
-  )
+  const columns = result ? columnNames(result) : []
+  const resultRows = result ? result.data : []
+  const shownIdx = shownColumnIndices(columns, fields, visibleCols)
 
   const inputClass = 'glass-input px-3 py-2'
 
@@ -1030,7 +1013,6 @@ function QueryPanel({
           renderCell={(col, value, row) =>
             renderCell(col, value, appliedViews, row, columns, colTypes)
           }
-          capped={capped}
         />
       )}
       {displayError && (
