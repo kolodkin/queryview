@@ -392,9 +392,9 @@ def test_query_param_options_sql_error_blocks_run(seeded_duckdb, page: Page, sho
 
 
 def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_duckdb, page: Page, shot) -> None:
-    """Result columns fit their widest value up to a cap: a value longer than
-    that scrolls inside its own cell and gains a button at the cell's left edge
-    that opens the full value. The button's glyph reflects autodetection — `{ }` for text that
+    """Result columns fit their widest value up to a cap: a value past it scrolls
+    inside its own cell and gains a button at the cell's left edge that opens the
+    full value. The button's glyph reflects autodetection — `{ }` for text that
     parses as JSON/YAML, otherwise a plain expand arrow — and a detected value
     opens on a collapsible parsed tree with a Raw toggle."""
     _open_case_panel(page, DUCK, seeded_duckdb)

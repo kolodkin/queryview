@@ -210,10 +210,10 @@ value.
 
 ## Long values
 
-Each result column is as wide as its header or its widest value on the page,
-**capped at 50 characters**: a table of short values fits on screen, and one
-long-text column can't stretch the grid and push the others off-screen. A
-longer value **scrolls inside its own cell**; values that fit are untouched.
+Each result column fits its header or its widest value on the page, **capped at
+50 characters**, so a table of short values fits on screen and one long-text
+column can't push the others off-screen. A longer value **scrolls inside its own
+cell**.
 
 An overflowing cell gets a button at its **left edge**, outside the scroller so
 it stays put as the text moves. It opens the **cell popup** on the whole value,

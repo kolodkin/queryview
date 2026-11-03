@@ -3,10 +3,10 @@
 
 export const CELL_WIDTH_CH = 50
 
-// The cap on a column's content: the browser fits each column to its widest
-// rendered cell, and this `max-width` on the cell's scroller and the header
-// stops one long-text column from stretching the grid. The table is monospace
-// throughout, so `ch` means the same in every cell.
+// The cap on a column, as `max-width` on each cell's scroller and the header:
+// the browser fits columns to their widest cell, and this keeps one long-text
+// column from stretching the grid. The table is monospace throughout, so `ch`
+// means the same in every cell.
 export const CELL_MAX_WIDTH = `${CELL_WIDTH_CH}ch`
 
 // A value needs the cell's scroller and its popup button when it can't be read

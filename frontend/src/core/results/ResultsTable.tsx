@@ -3,11 +3,10 @@
 // shownColumnIndices in presentation.ts). It fills the rest of its flex-column
 // parent (at least 12rem) and scrolls inside, both ways.
 //
-// The browser fits each column to its widest rendered cell, so a short table
-// fits on screen; a cap on every cell (see cellWidth.ts) keeps one long-text
-// column from stretching the grid. A value that doesn't fit scrolls inside its
-// own cell and gets a button, at the cell's left edge, opening it in
-// CellDataModal.
+// The browser fits each column to its widest cell, so a short table fits on
+// screen; a cap on every cell (see cellWidth.ts) keeps one long-text column from
+// stretching the grid. A value past the cap scrolls inside its own cell and gets
+// a button, at the cell's left edge, opening it in CellDataModal.
 
 import { useMemo, useState } from 'react'
 
@@ -57,8 +56,7 @@ function BodyCell({
             {format ? '{ }' : '⤢'}
           </button>
         )}
-        {/* The cell's own scroller, so a long value never widens the column
-            past the cap. */}
+        {/* The cell's own scroller: a long value scrolls here, not the grid. */}
         <div
           style={{ maxWidth: CELL_MAX_WIDTH }}
           className="cell-scroll min-w-0 overflow-x-auto whitespace-pre"
@@ -112,9 +110,9 @@ export function ResultsTable({
                 </div>
               </th>
             ))}
-            {/* Takes the slack when the columns are narrower than the panel,
-                so they stay fitted and the header and row rules span it. A
-                `td`, so the header's `th`s are still one per column. */}
+            {/* Takes the slack when the columns are narrower than the panel, so
+                they stay fitted while the header and row rules span it. A `td`,
+                so the `th`s stay one per column. */}
             <td aria-hidden className="w-full border-b border-white/10" />
           </tr>
         </thead>
