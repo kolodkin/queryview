@@ -392,9 +392,9 @@ def test_query_param_options_sql_error_blocks_run(seeded_duckdb, page: Page, sho
 
 
 def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_duckdb, page: Page, shot) -> None:
-    """Result columns are a fixed width: a value longer than that scrolls inside
-    its own cell and gains a button at the cell's left edge that opens the full
-    value. The button's glyph reflects autodetection — `{ }` for text that
+    """Result columns fit their widest value up to a cap: a value past it scrolls
+    inside its own cell and gains a button at the cell's left edge that opens the
+    full value. The button's glyph reflects autodetection — `{ }` for text that
     parses as JSON/YAML, otherwise a plain expand arrow — and a detected value
     opens on a collapsible parsed tree with a Raw toggle."""
     _open_case_panel(page, DUCK, seeded_duckdb)
@@ -416,8 +416,9 @@ def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_duckdb, page: Page,
     expect(output.locator('[data-testid="cell-expand"][data-col="payload"]')).to_have_text("{ }")
     expect(output.locator('[data-testid="cell-expand"][data-col="notes"]')).to_have_text("⤢")
 
-    # Every column keeps the same fixed width, so one long column can no longer
-    # stretch the grid and push the others off-screen.
+    # The short column is only as wide as it needs; both long columns stop at
+    # the same cap, so one long column can't stretch the grid and push the
+    # others off-screen.
     def header_width(col: str) -> float:
         box = output.locator(f'thead th:has-text("{col}")').bounding_box()
         assert box is not None, f"no {col} header on screen"
@@ -425,8 +426,9 @@ def test_long_cells_scroll_and_open_in_the_cell_popup(seeded_duckdb, page: Page,
 
     widths = {col: header_width(col) for col in ("brief", "payload", "notes")}
     # Sub-pixel rounding differs by a hundredth of a pixel between columns.
-    assert max(widths.values()) - min(widths.values()) < 1, widths
-    shot("long cells - fixed width with expand buttons")
+    assert abs(widths["payload"] - widths["notes"]) < 1, widths
+    assert widths["brief"] < widths["payload"] / 2, widths
+    shot("long cells - fitted columns with expand buttons")
 
     # The JSON cell opens on the parsed tree, labelled with the format.
     output.locator('[data-testid="cell-expand"][data-col="payload"]').click()

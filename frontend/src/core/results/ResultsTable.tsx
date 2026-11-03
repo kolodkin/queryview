@@ -3,15 +3,16 @@
 // shownColumnIndices in presentation.ts). It fills the rest of its flex-column
 // parent (at least 12rem) and scrolls inside, both ways.
 //
-// Columns are a fixed width (see cellWidth.ts) so one long-text column can't
-// stretch the grid: a value that doesn't fit scrolls inside its own cell and
-// gets a button, at the cell's left edge, opening it in CellDataModal.
+// The browser fits each column to its widest cell, so a short table fits on
+// screen; a cap on every cell (see cellWidth.ts) keeps one long-text column from
+// stretching the grid. A value past the cap scrolls inside its own cell and gets
+// a button, at the cell's left edge, opening it in CellDataModal.
 
 import { useMemo, useState } from 'react'
 
 import { CellDataModal } from '../cells/CellDataModal'
 import { detectFormat } from '../cells/structured'
-import { CELL_WIDTH, isOverflowing } from './cellWidth'
+import { CELL_MAX_WIDTH, isOverflowing } from './cellWidth'
 import { cellText, type Cell } from './rows'
 
 type Opened = { column: string; value: Cell; type?: string }
@@ -40,10 +41,7 @@ function BodyCell({
   const format = useMemo(() => (isOverflowing(text) ? detectFormat(text) : null), [text])
 
   return (
-    <td
-      style={{ width: CELL_WIDTH }}
-      className="border-b border-white/5 px-2 py-1 align-top font-mono text-slate-200"
-    >
+    <td className="border-b border-white/5 px-2 py-1 align-top font-mono text-slate-200">
       <div className="flex items-start gap-1">
         {overflowing && (
           <button
@@ -53,13 +51,16 @@ function BodyCell({
             data-col={col}
             aria-label={`Open ${col} value`}
             title={format ? `Open parsed ${format}` : 'Open full value'}
-            className="shrink-0 rounded px-1 text-xs leading-5 text-slate-400 hover:bg-white/10 hover:text-indigo-200"
+            className="w-6 shrink-0 rounded text-center text-xs leading-5 text-slate-400 hover:bg-white/10 hover:text-indigo-200"
           >
             {format ? '{ }' : '⤢'}
           </button>
         )}
-        {/* The cell's own scroller, so long values never widen the column. */}
-        <div className="cell-scroll min-w-0 flex-1 overflow-x-auto whitespace-pre">
+        {/* The cell's own scroller: a long value scrolls here, not the grid. */}
+        <div
+          style={{ maxWidth: CELL_MAX_WIDTH }}
+          className="cell-scroll min-w-0 overflow-x-auto whitespace-pre"
+        >
           {renderCell ? renderCell(col, value, row) : text}
         </div>
       </div>
@@ -88,7 +89,6 @@ export function ResultsTable({
   dimmed?: boolean
 }) {
   const [open, setOpen] = useState<Opened | null>(null)
-
   return (
     <div
       data-testid={testid}
@@ -96,25 +96,24 @@ export function ResultsTable({
         dimmed ? 'opacity-50 transition-opacity' : ''
       }`}
     >
-      {/* `table-layout: fixed` only takes effect on a table with an explicit
-          width — left to `auto`, the browser falls back to automatic layout and
-          long values stretch their column again. */}
-      <table
-        style={{ width: `calc(${shownIdx.length} * ${CELL_WIDTH})` }}
-        className="table-fixed border-collapse text-left font-mono text-sm"
-      >
+      <table className="min-w-full border-collapse text-left font-mono text-sm">
         <thead className="sticky top-0 bg-[rgba(16,20,36,0.62)] backdrop-blur-lg">
           <tr>
             {shownIdx.map((i) => (
               <th
                 key={i}
-                style={{ width: CELL_WIDTH }}
                 title={columns[i]}
-                className="truncate border-b border-white/10 px-2 py-2 font-semibold text-slate-200"
+                className="border-b border-white/10 px-2 py-2 font-semibold text-slate-200"
               >
-                {columns[i]}
+                <div style={{ maxWidth: CELL_MAX_WIDTH }} className="truncate">
+                  {columns[i]}
+                </div>
               </th>
             ))}
+            {/* Takes the slack when the columns are narrower than the panel, so
+                they stay fitted while the header and row rules span it. A `td`,
+                so the `th`s stay one per column. */}
+            <td aria-hidden className="w-full border-b border-white/10" />
           </tr>
         </thead>
         <tbody>
@@ -131,6 +130,7 @@ export function ResultsTable({
                   onOpen={setOpen}
                 />
               ))}
+              <td aria-hidden className="border-b border-white/5" />
             </tr>
           ))}
         </tbody>

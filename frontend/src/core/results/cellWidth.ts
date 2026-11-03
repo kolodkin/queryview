@@ -3,10 +3,11 @@
 
 export const CELL_WIDTH_CH = 50
 
-// The column box: CELL_WIDTH_CH characters of content plus the cells' own px-2
-// padding on both sides, so exactly that many characters are visible. The table
-// is monospace throughout, so `ch` means the same in every cell.
-export const CELL_WIDTH = `calc(${CELL_WIDTH_CH}ch + 1rem)`
+// The cap on a column, as `max-width` on each cell's scroller and the header:
+// the browser fits columns to their widest cell, and this keeps one long-text
+// column from stretching the grid. The table is monospace throughout, so `ch`
+// means the same in every cell.
+export const CELL_MAX_WIDTH = `${CELL_WIDTH_CH}ch`
 
 // A value needs the cell's scroller and its popup button when it can't be read
 // in place: too wide for the column, or spanning lines — `whitespace-pre` turns
