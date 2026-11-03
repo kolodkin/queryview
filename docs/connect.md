@@ -209,7 +209,7 @@ and so does every REST call without the tab's unlock token (`403`).
 `list_connections` and `list_databases` leave a locked connection out
 entirely, even while a tab has it unlocked: the lock is the connection's
 stored state, an unlock only that tab's. Session connections are never
-locked: they are the agent's own. A lock holds against the API only: an
+locked. A lock holds against the API only: an
 agent's script on any unlocked DuckDB or SQLite connection can reach every file
 QueryView can, a locked connection's file and `db.sqlite` included
 ([scripts.md](./scripts.md#file-writes)).

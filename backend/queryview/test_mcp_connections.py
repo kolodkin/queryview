@@ -176,7 +176,7 @@ def test_agent_uses_but_cannot_remove_saved_or_user_connections():
         out = _run(remove_connection(sid, name))
         assert out["ok"] is False and "ask the user" in out["message"]
         assert _run(use_connection(sid, name))["ok"] is True
-    assert _run(use_connection(sid, "ag-absent"))["message"] == 'no connection named "ag-absent"'
+    assert _run(use_connection(sid, "ag-absent"))["not_found"] is True
 
 
 def test_select_database_on_any_active_connection(monkeypatch):

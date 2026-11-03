@@ -105,7 +105,7 @@ def test_mcp_tools_are_refused_on_a_locked_connection():
     listed = [x["name"] for x in _run(mcp_server.list_connections(sid))["connections"]]
     assert "lock-mcp-duck" not in listed  # though this session is on it, unlocked
     assert _run(mcp_server.select_database(sid, "memory"))["message"] == "connection is locked"
-    assert _run(mcp_server.use_connection(sid, "lock-mcp-duck"))["message"] == 'no connection named "lock-mcp-duck"'
+    assert _run(mcp_server.use_connection(sid, "lock-mcp-duck"))["message"] == "connection is locked"
     # The REST push surface, with the session id only.
     assert c.post("/api/remote/push", json={"session_id": sid, "query": "SELECT 1"}).json() == {
         "ok": False,

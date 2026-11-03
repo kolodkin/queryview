@@ -35,7 +35,7 @@ mcp = FastMCP(
     stateless_http=True,
     instructions=(
         f"Without a session id from the user, use the standing Agent session {sessions.AGENT_SESSION_ID}: "
-        "add_connection + use_connection for your own connection, or use the one the user put it on. "
+        "use_connection any connection list_connections shows, or add_connection your own. "
         "Pushes to it work once the user arms it in the QueryView UI. "
         "Asked to run a query, don't ask which tool: iterate read-only with run_sql, apply "
         "writes once with run_script, then push_script the final SQL with run=False (never "
@@ -64,7 +64,7 @@ async def push_query(
     remote control"; without one, use the standing Agent session "agent".
     To explore data first, use run_sql with the same id.
     A session on a locked connection (see session_info) refuses every push and
-    query with "connection is locked"; ask the user to switch.
+    query with "connection is locked"; use_connection another one.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -292,16 +292,6 @@ async def _databases_of(session_id: str, c: dict[str, Any]) -> dict[str, Any]:
 _AGENT_DRIVERS = ("clickhouse", "postgres")
 
 
-def _not_yours(session_id: str, name: str) -> str | None:
-    """Why the agent may not change `name`, or None for a session connection
-    it added itself."""
-    sc = _session_conn(session_id, name)
-    if sc is not None and sc.created_by == "agent":
-        return None
-    whose = "a session connection the user added" if sc is not None else "not one of your session connections"
-    return f'"{name}" is {whose}; ask the user to remove it in QueryView'
-
-
 @mcp.tool()
 async def add_connection(session_id: str, name: str, type: str, config: dict[str, Any]) -> dict[str, Any]:
     """Add a session connection of your own: kept in this session's memory
@@ -338,9 +328,10 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
 
     Returns {"ok": True} or {"ok": False, "message"}.
     """
-    err = _not_yours(session_id, name)
-    if err is not None:
-        return {"ok": False, "message": err}
+    sc = _session_conn(session_id, name)
+    if sc is None or sc.created_by != "agent":
+        whose = "a session connection the user added" if sc is not None else "not one of your session connections"
+        return {"ok": False, "message": f'"{name}" is {whose}; ask the user to remove it in QueryView'}
     return await remove_session_connection(session_id, name, by="agent")
 
 
@@ -353,8 +344,6 @@ async def use_connection(session_id: str, name: str, database: str | None = None
     Returns {"ok": True, "name", "type", "databases", "database"} or
     {"ok": False, "message"}.
     """
-    if name not in {c["name"] for c in await agent_connections_for(session_id)}:
-        return {"ok": False, "message": f'no connection named "{name}"'}  # locked reads as unknown
     return await open_saved(session_id, name, database, by="agent")
 
 
