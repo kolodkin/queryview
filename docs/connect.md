@@ -192,9 +192,9 @@ restarts (the session then reads as disconnected).
   agent's `use_connection` toasts "Agent switched to <name>", never the user's.
 - You add one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved connections and all sessions' ones.
-- The agent may add (ClickHouse or Postgres only: DuckDB and SQLite read local files),
-  switch to, pick the database of and remove its own. Anything else it may only
-  list, and query while active. See [remote.md](./remote.md#mcp-tools).
+- The agent may switch to, and pick the database of, any unlocked connection;
+  it may add (ClickHouse or Postgres only: DuckDB and SQLite read local files)
+  and remove only its own. See [remote.md](./remote.md#mcp-tools).
 - This keeps a cooperating agent in its lane; it is not a security boundary.
   For one, lock the connection.
 

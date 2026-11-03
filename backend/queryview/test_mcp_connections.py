@@ -166,32 +166,28 @@ def test_add_connection_refuses_a_taken_name_and_bad_input():
     assert _run(add_connection(sid, "x", "clickhouse", {"host": "h", "port": 0}))["ok"] is False
 
 
-def test_agent_cannot_use_or_remove_saved_or_user_connections():
+def test_agent_uses_but_cannot_remove_saved_or_user_connections():
     from queryview.connect import add_session_connection
     from queryview.mcp_server import remove_connection, use_connection
 
     sid = _connected_session("ag-saved")
     _run(add_session_connection(sid, "ag-user", DuckConfig(":memory:"), "duckdb", "user"))
     for name in ("ag-saved", "ag-user"):
-        for tool in (use_connection, remove_connection):
-            out = _run(tool(sid, name))
-            assert out["ok"] is False and "ask the user" in out["message"]
+        out = _run(remove_connection(sid, name))
+        assert out["ok"] is False and "ask the user" in out["message"]
+        assert _run(use_connection(sid, name))["ok"] is True
+    assert _run(use_connection(sid, "ag-absent"))["message"] == 'no connection named "ag-absent"'
 
 
-def test_select_database_only_on_the_agents_own_connection(monkeypatch):
+def test_select_database_on_any_active_connection(monkeypatch):
     from queryview import connect
-    from queryview.mcp_server import select_database, use_connection
+    from queryview.mcp_server import select_database
 
     async def one_db(conn_type, config, limit=1000, current=None):  # DuckDB lists none; fake a picker
         return DatabasesResult(["memory"]), None
 
     monkeypatch.setattr(connect, "_list_databases", one_db)
-    sid = _connected_session("ag-seldb")
-    out = _run(select_database(sid, "memory"))
-    assert out["ok"] is False and "ask the user" in out["message"]
-
-    assert _agent_add(sid, "ag-seldb-own")["ok"]
-    assert _run(use_connection(sid, "ag-seldb-own"))["ok"]
+    sid = _connected_session("ag-seldb")  # saved, not the agent's
     assert _run(select_database(sid, "nope"))["message"] == "unknown database"
     assert _run(select_database(sid, "memory"))["ok"] is True
     assert _run(sessions.database_of(sid)) == "memory"

@@ -203,9 +203,8 @@ async def session_info(session_id: str) -> dict[str, Any]:
     databases it can switch to, its workspace, and the selected database's
     tables. Start here to discover schema; then run_sql on the same session.
 
-    The user picks the server and database in the UI (connection pill); the
-    agent may only switch to session connections it added itself (see
-    list_connections). Fully-qualify tables as db.table to reach another one.
+    Switch with use_connection / select_database (any connection
+    list_connections shows). Fully-qualify tables as db.table to reach another one.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -238,9 +237,8 @@ async def list_connections(session_id: str) -> dict[str, Any]:
     ("session" | "saved"), "created_by" ("agent" | "user") and "active".
     Locked saved connections are left out, even while a tab has one unlocked.
 
-    You may use_connection / remove_connection only scope="session",
-    created_by="agent" entries; for anything else ask the user to switch in
-    QueryView.
+    You may use_connection any of them; remove_connection only
+    scope="session", created_by="agent" entries.
 
     Returns {"ok": True, "connections": [{name, type, scope, created_by,
     active}]} or {"ok": False, "message"} for an unknown session.
@@ -301,7 +299,7 @@ def _not_yours(session_id: str, name: str) -> str | None:
     if sc is not None and sc.created_by == "agent":
         return None
     whose = "a session connection the user added" if sc is not None else "not one of your session connections"
-    return f'"{name}" is {whose}; ask the user to switch in QueryView'
+    return f'"{name}" is {whose}; ask the user to remove it in QueryView'
 
 
 @mcp.tool()
@@ -348,35 +346,29 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def use_connection(session_id: str, name: str, database: str | None = None) -> dict[str, Any]:
-    """Switch the session to a session connection you added, optionally
+    """Switch the session to any connection list_connections shows, optionally
     selecting `database` (ClickHouse/Postgres need one before querying). The
-    browser follows within a few seconds. Anything else is refused — ask the
-    user to switch in QueryView.
+    browser follows within a few seconds. Locked connections are refused.
 
     Returns {"ok": True, "name", "type", "databases", "database"} or
     {"ok": False, "message"}.
     """
-    err = _not_yours(session_id, name)
-    if err is not None:
-        return {"ok": False, "message": err}
+    if name not in {c["name"] for c in await agent_connections_for(session_id)}:
+        return {"ok": False, "message": f'no connection named "{name}"'}  # locked reads as unknown
     return await open_saved(session_id, name, database, by="agent")
 
 
 @mcp.tool()
 async def select_database(session_id: str, database: str) -> dict[str, Any]:
-    """Switch the database of the session's active connection, if it is a
-    session connection you added; otherwise ask the user to switch in QueryView.
+    """Switch the database of the session's active connection.
 
-    Returns {"ok", "message", "database"}; not ok when disconnected, not your
-    connection, or the database does not exist (a name missing from
+    Returns {"ok", "message", "database"}; not ok when disconnected, the
+    connection is locked, or the database does not exist (a name missing from
     session_info's "databases" is re-checked against the server first).
     """
     cur = await get_session(session_id)
     if not cur["connected"]:
         return {"ok": False, "message": "not connected", "database": None}
-    err = _not_yours(session_id, cur["name"])
-    if err is not None:
-        return {"ok": False, "message": err, "database": cur["database"]}
     r = await connect_select_database(session_id, database)
     if not r["ok"]:
         return {"ok": False, "message": r["message"], "database": cur["database"]}
