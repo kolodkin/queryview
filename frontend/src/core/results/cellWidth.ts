@@ -25,12 +25,12 @@ export type ColumnSize = { chars: number; button: boolean }
 
 // Fit a column to its header or its widest cell line, between the floor and
 // the cap. Lines rather than whole values, since a multi-line value renders as
-// rows and is as wide as its widest one.
-export function columnSize(header: string, texts: Iterable<string>): ColumnSize {
-  let chars = Math.max(MIN_CELL_CH, header.length)
+// rows and is as wide as its widest one. A `capped` column (one drawn wider
+// than its text, by a cell view or a complex-type list) takes the cap outright.
+export function columnSize(header: string, texts: string[], capped = false): ColumnSize {
+  let chars = capped ? CELL_WIDTH_CH : Math.max(MIN_CELL_CH, header.length)
   let button = false
   for (const text of texts) {
-    if (chars >= CELL_WIDTH_CH && button) break
     if (isOverflowing(text)) button = true
     for (const line of text.split('\n')) chars = Math.max(chars, line.length)
   }
@@ -38,14 +38,15 @@ export function columnSize(header: string, texts: Iterable<string>): ColumnSize 
 }
 
 // The CSS width of these columns side by side: their characters, the cells'
-// px-2 padding on both sides, and the button's room where a column has one.
+// px-2 padding on both sides, and where a column has the button, its room: px-1
+// and three text-xs glyphs for `{ }`, plus the gap to the text, ~2.1rem.
 // The table is monospace throughout, so `ch` means the same in every cell.
 export function columnsWidth(sizes: ColumnSize[]): string {
   let ch = 0
   let rem = 0
   for (const s of sizes) {
     ch += s.chars
-    rem += s.button ? 3 : 1
+    rem += s.button ? 3.25 : 1
   }
   return `calc(${ch}ch + ${rem}rem)`
 }

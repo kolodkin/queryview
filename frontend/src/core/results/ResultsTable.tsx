@@ -6,14 +6,16 @@
 // Each column is as wide as its header or widest value, up to a cap (see
 // cellWidth.ts), so a short table fits on screen and one long-text column can't
 // stretch the grid: a value that doesn't fit scrolls inside its own cell and
-// gets a button, at the cell's left edge, opening it in CellDataModal.
+// gets a button, at the cell's left edge, opening it in CellDataModal. Widths
+// come from the values' text, so a column whose cells a view draws wider than
+// that (`capped`, or holding containers) keeps the cap.
 
 import { useMemo, useState } from 'react'
 
 import { CellDataModal } from '../cells/CellDataModal'
 import { detectFormat } from '../cells/structured'
 import { columnSize, columnsWidth, isOverflowing } from './cellWidth'
-import { cellText, type Cell } from './rows'
+import { cellText, isContainer, type Cell } from './rows'
 
 type Opened = { column: string; value: Cell; type?: string }
 
@@ -23,6 +25,7 @@ function BodyCell({
   col,
   type,
   value,
+  text,
   row,
   width,
   renderCell,
@@ -31,12 +34,13 @@ function BodyCell({
   col: string
   type?: string
   value: Cell
+  // cellText(value), measured once by the table for the column's width.
+  text: string
   row: Cell[]
   width: string
   renderCell?: RenderCell
   onOpen: (opened: Opened) => void
 }) {
-  const text = cellText(value)
   const overflowing = isOverflowing(text)
   // Detection only names the format for the glyph, so it is skipped for values
   // that fit and memoised so re-rendering doesn't re-parse.
@@ -76,6 +80,7 @@ export function ResultsTable({
   shownIdx,
   testid,
   renderCell,
+  capped,
   dimmed = false,
   types = {},
 }: {
@@ -87,22 +92,25 @@ export function ResultsTable({
   testid: string
   // Cell content; defaults to plain text (the query panel plugs in cell views).
   renderCell?: RenderCell
+  // Columns renderCell draws wider than their text: they keep the cap.
+  capped?: (col: string) => boolean
   // Faded while a re-run is in flight.
   dimmed?: boolean
 }) {
   const [open, setOpen] = useState<Opened | null>(null)
-  // Each shown column's size from the rows on screen, then its width and the
-  // table's: sized once, not per cell.
-  const sizes = useMemo(
-    () =>
-      shownIdx.map((i) =>
-        columnSize(
-          columns[i],
-          rows.map((row) => cellText(row[i])),
-        ),
+  // Each shown column's cell texts and size, from the rows on screen: measured
+  // once per result, not per cell or render.
+  const { texts, sizes } = useMemo(() => {
+    const texts = shownIdx.map((i) => rows.map((row) => cellText(row[i])))
+    const sizes = shownIdx.map((i, n) =>
+      columnSize(
+        columns[i],
+        texts[n],
+        capped?.(columns[i]) || rows.some((row) => isContainer(row[i])),
       ),
-    [columns, rows, shownIdx],
-  )
+    )
+    return { texts, sizes }
+  }, [columns, rows, shownIdx, capped])
   const widths = sizes.map((s) => columnsWidth([s]))
   const tableWidth = columnsWidth(sizes)
 
@@ -143,6 +151,7 @@ export function ResultsTable({
                   col={columns[j]}
                   type={types[columns[j]]}
                   value={row[j]}
+                  text={texts[n][i]}
                   row={row}
                   width={widths[n]}
                   renderCell={renderCell}

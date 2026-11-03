@@ -22,15 +22,22 @@ describe('isOverflowing', () => {
 
 describe('columnSize', () => {
   it('fits the header when the values are shorter', () => {
-    expect(columnSize('findings_total', ['6498947', '12'])).toEqual({
-      chars: 'findings_total'.length,
+    expect(columnSize('order_total', ['42', '1200'])).toEqual({
+      chars: 'order_total'.length,
       button: false,
     })
   })
 
   it('fits the widest value when it is longer than the header', () => {
-    expect(columnSize('scope', ['total', 'organizational_unit_fixes'])).toEqual({
-      chars: 'organizational_unit_fixes'.length,
+    expect(columnSize('region', ['north', 'regional_summary_rollup'])).toEqual({
+      chars: 'regional_summary_rollup'.length,
+      button: false,
+    })
+  })
+
+  it('takes the cap outright when capped, whatever the values', () => {
+    expect(columnSize('status', ['ok', 'no'], true)).toEqual({
+      chars: CELL_WIDTH_CH,
       button: false,
     })
   })
@@ -55,12 +62,12 @@ describe('columnSize', () => {
 describe('columnsWidth', () => {
   it('adds the padding per column and the button room where there is one', () => {
     expect(columnsWidth([{ chars: 5, button: false }])).toBe('calc(5ch + 1rem)')
-    expect(columnsWidth([{ chars: 5, button: true }])).toBe('calc(5ch + 3rem)')
+    expect(columnsWidth([{ chars: 5, button: true }])).toBe('calc(5ch + 3.25rem)')
     expect(
       columnsWidth([
         { chars: 5, button: false },
         { chars: 50, button: true },
       ]),
-    ).toBe('calc(55ch + 4rem)')
+    ).toBe('calc(55ch + 4.25rem)')
   })
 })
