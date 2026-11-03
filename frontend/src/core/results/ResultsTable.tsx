@@ -3,7 +3,8 @@
 // shownColumnIndices in presentation.ts). It fills the rest of its flex-column
 // parent (at least 12rem) and scrolls inside, both ways.
 //
-// Columns are a fixed width (see cellWidth.ts) so one long-text column can't
+// Each column is as wide as its header or widest value, up to a cap (see
+// cellWidth.ts), so a short table fits on screen and one long-text column can't
 // stretch the grid: a value that doesn't fit scrolls inside its own cell and
 // gets a button, at the cell's left edge, opening it in CellDataModal.
 
@@ -11,7 +12,7 @@ import { useMemo, useState } from 'react'
 
 import { CellDataModal } from '../cells/CellDataModal'
 import { detectFormat } from '../cells/structured'
-import { CELL_WIDTH, isOverflowing } from './cellWidth'
+import { columnSize, columnsWidth, isOverflowing } from './cellWidth'
 import { cellText, type Cell } from './rows'
 
 type Opened = { column: string; value: Cell; type?: string }
@@ -23,6 +24,7 @@ function BodyCell({
   type,
   value,
   row,
+  width,
   renderCell,
   onOpen,
 }: {
@@ -30,6 +32,7 @@ function BodyCell({
   type?: string
   value: Cell
   row: Cell[]
+  width: string
   renderCell?: RenderCell
   onOpen: (opened: Opened) => void
 }) {
@@ -41,7 +44,7 @@ function BodyCell({
 
   return (
     <td
-      style={{ width: CELL_WIDTH }}
+      style={{ width }}
       className="border-b border-white/5 px-2 py-1 align-top font-mono text-slate-200"
     >
       <div className="flex items-start gap-1">
@@ -88,6 +91,20 @@ export function ResultsTable({
   dimmed?: boolean
 }) {
   const [open, setOpen] = useState<Opened | null>(null)
+  // Each shown column's size from the rows on screen, then its width and the
+  // table's: sized once, not per cell.
+  const sizes = useMemo(
+    () =>
+      shownIdx.map((i) =>
+        columnSize(
+          columns[i],
+          rows.map((row) => cellText(row[i])),
+        ),
+      ),
+    [columns, rows, shownIdx],
+  )
+  const widths = sizes.map((s) => columnsWidth([s]))
+  const tableWidth = columnsWidth(sizes)
 
   return (
     <div
@@ -100,15 +117,15 @@ export function ResultsTable({
           width — left to `auto`, the browser falls back to automatic layout and
           long values stretch their column again. */}
       <table
-        style={{ width: `calc(${shownIdx.length} * ${CELL_WIDTH})` }}
+        style={{ width: tableWidth }}
         className="table-fixed border-collapse text-left font-mono text-sm"
       >
         <thead className="sticky top-0 bg-[rgba(16,20,36,0.62)] backdrop-blur-lg">
           <tr>
-            {shownIdx.map((i) => (
+            {shownIdx.map((i, n) => (
               <th
                 key={i}
-                style={{ width: CELL_WIDTH }}
+                style={{ width: widths[n] }}
                 title={columns[i]}
                 className="truncate border-b border-white/10 px-2 py-2 font-semibold text-slate-200"
               >
@@ -120,13 +137,14 @@ export function ResultsTable({
         <tbody>
           {rows.map((row, i) => (
             <tr key={i} className="odd:bg-transparent even:bg-white/[0.03]">
-              {shownIdx.map((j) => (
+              {shownIdx.map((j, n) => (
                 <BodyCell
                   key={j}
                   col={columns[j]}
                   type={types[columns[j]]}
                   value={row[j]}
                   row={row}
+                  width={widths[n]}
                   renderCell={renderCell}
                   onOpen={setOpen}
                 />
