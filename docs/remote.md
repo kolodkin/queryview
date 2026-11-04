@@ -53,10 +53,11 @@ tools (among others):
   connection, or of `connection` only.
   `add_connection(session_id, name, type, config)` adds a ClickHouse or
   Postgres session connection; `use_connection(session_id, name, database?)`
-  and `select_database(session_id, database)` work on any unlocked one;
-  `remove_connection(session_id, name)` only on the agent's own. In the
-  browser, an add/remove refreshes an armed tab's connection lists (pill menu,
-  Connect). A `use_connection` marks the session row `connection_by: agent`;
+  works on any unlocked ClickHouse or Postgres one (not DuckDB or SQLite: they
+  read local files), `select_database(session_id, database)` on any unlocked
+  active one; `remove_connection(session_id, name)` only on the agent's own.
+  In the browser, an add/remove refreshes an armed tab's connection lists
+  (pill menu, Connect). A `use_connection` marks the session row `connection_by: agent`;
   every tab picks it up on its next heartbeat, toasts "Agent switched to
   <name>", and the pill reads `<connection> · <database>` with the menu entry
   marked active and badged `agent`. Switches made in the UI never toast.

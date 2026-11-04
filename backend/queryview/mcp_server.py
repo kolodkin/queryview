@@ -35,7 +35,7 @@ mcp = FastMCP(
     stateless_http=True,
     instructions=(
         f"Without a session id from the user, use the standing Agent session {sessions.AGENT_SESSION_ID}: "
-        "use_connection any connection list_connections shows, or add_connection your own. "
+        "use_connection any ClickHouse/Postgres connection list_connections shows, or add_connection your own. "
         "Pushes to it work once the user arms it in the QueryView UI. "
         "Asked to run a query, don't ask which tool: iterate read-only with run_sql, apply "
         "writes once with run_script, then push_script the final SQL with run=False (never "
@@ -237,7 +237,7 @@ async def list_connections(session_id: str) -> dict[str, Any]:
     ("session" | "saved"), "created_by" ("agent" | "user") and "active".
     Locked saved connections are left out, even while a tab has one unlocked.
 
-    You may use_connection any of them; remove_connection only
+    You may use_connection any ClickHouse or Postgres one; remove_connection only
     scope="session", created_by="agent" entries.
 
     Returns {"ok": True, "connections": [{name, type, scope, created_by,
@@ -337,13 +337,19 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def use_connection(session_id: str, name: str, database: str | None = None) -> dict[str, Any]:
-    """Switch the session to any connection list_connections shows, optionally
-    selecting `database` (ClickHouse/Postgres need one before querying). The
-    browser follows within a few seconds. Locked connections are refused.
+    """Switch the session to any ClickHouse or Postgres connection
+    list_connections shows, optionally selecting `database` (both need one
+    before querying). The browser follows within a few seconds. Locked
+    connections are refused, and so are DuckDB and SQLite ones: they read local
+    files.
 
     Returns {"ok": True, "name", "type", "databases", "database"} or
     {"ok": False, "message"}.
     """
+    # shortcut: no switching to file drivers until DuckDB reads blob storage instead of local files
+    listed = next((c for c in await agent_connections_for(session_id) if c["name"] == name), None)
+    if listed is not None and listed["created_by"] != "agent" and listed["type"] not in _AGENT_DRIVERS:
+        return {"ok": False, "message": f"the agent may switch only to {' or '.join(_AGENT_DRIVERS)} connections"}
     return await open_saved(session_id, name, database, by="agent")
 
 
