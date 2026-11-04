@@ -166,32 +166,43 @@ def test_add_connection_refuses_a_taken_name_and_bad_input():
     assert _run(add_connection(sid, "x", "clickhouse", {"host": "h", "port": 0}))["ok"] is False
 
 
-def test_agent_cannot_use_or_remove_saved_or_user_connections():
+def test_agent_cannot_remove_saved_or_user_connections_nor_switch_to_their_duckdb():
     from queryview.connect import add_session_connection
     from queryview.mcp_server import remove_connection, use_connection
 
     sid = _connected_session("ag-saved")
     _run(add_session_connection(sid, "ag-user", DuckConfig(":memory:"), "duckdb", "user"))
     for name in ("ag-saved", "ag-user"):
-        for tool in (use_connection, remove_connection):
-            out = _run(tool(sid, name))
-            assert out["ok"] is False and "ask the user" in out["message"]
+        out = _run(remove_connection(sid, name))
+        assert out["ok"] is False and "ask the user" in out["message"]
+        out = _run(use_connection(sid, name))
+        assert out["ok"] is False and "clickhouse or postgres" in out["message"]
+    assert _run(use_connection(sid, "ag-absent"))["not_found"] is True
 
 
-def test_select_database_only_on_the_agents_own_connection(monkeypatch):
+def test_agent_switches_to_a_saved_network_connection(monkeypatch):
     from queryview import connect
-    from queryview.mcp_server import select_database, use_connection
+    from queryview.mcp_server import use_connection
+
+    async def one_db(conn_type, config, limit=1000, current=None):  # no live server
+        return DatabasesResult(["analytics"]), None
+
+    monkeypatch.setattr(connect, "_list_databases", one_db)
+    _run(_save_active_connection("ag-saved-ch", ChConfig("h.example.internal", 8123, "u", "p"), "clickhouse"))
+    sid = _connected_session("ag-saved-duck")
+    out = _run(use_connection(sid, "ag-saved-ch", "analytics"))
+    assert out["ok"] is True and out["database"] == "analytics"
+
+
+def test_select_database_on_any_active_connection(monkeypatch):
+    from queryview import connect
+    from queryview.mcp_server import select_database
 
     async def one_db(conn_type, config, limit=1000, current=None):  # DuckDB lists none; fake a picker
         return DatabasesResult(["memory"]), None
 
     monkeypatch.setattr(connect, "_list_databases", one_db)
-    sid = _connected_session("ag-seldb")
-    out = _run(select_database(sid, "memory"))
-    assert out["ok"] is False and "ask the user" in out["message"]
-
-    assert _agent_add(sid, "ag-seldb-own")["ok"]
-    assert _run(use_connection(sid, "ag-seldb-own"))["ok"]
+    sid = _connected_session("ag-seldb")  # saved, not the agent's
     assert _run(select_database(sid, "nope"))["message"] == "unknown database"
     assert _run(select_database(sid, "memory"))["ok"] is True
     assert _run(sessions.database_of(sid)) == "memory"

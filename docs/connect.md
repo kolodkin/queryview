@@ -192,9 +192,10 @@ restarts (the session then reads as disconnected).
   agent's `use_connection` toasts "Agent switched to <name>", never the user's.
 - You add one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved connections and all sessions' ones.
-- The agent may add (ClickHouse or Postgres only: DuckDB and SQLite read local files),
-  switch to, pick the database of and remove its own. Anything else it may only
-  list, and query while active. See [remote.md](./remote.md#mcp-tools).
+- The agent may switch to any unlocked ClickHouse or Postgres connection and
+  pick the database of whichever unlocked one it is on; it may add (also
+  ClickHouse or Postgres only: DuckDB and SQLite read local files) and remove
+  only its own. See [remote.md](./remote.md#mcp-tools).
 - This keeps a cooperating agent in its lane; it is not a security boundary.
   For one, lock the connection.
 
@@ -204,14 +205,15 @@ A saved connection can be **locked** behind a passphrase: click the lock on
 its card and type one. On a session whose active connection is locked, every
 MCP tool that reads or writes data (`run_sql`, `run_script`, `select_database`,
 the table list in `session_info`, every push) answers `connection is locked`,
+as does `use_connection` naming a locked one,
 and so does every REST call without the tab's unlock token (`403`).
 `session_info` still names the connection and reports `locked: true`.
 `list_connections` and `list_databases` leave a locked connection out
 entirely, even while a tab has it unlocked: the lock is the connection's
 stored state, an unlock only that tab's. Session connections are never
-locked: they are the agent's own. A lock holds against the API only: an
-agent's script on any unlocked DuckDB or SQLite connection can reach every file
-QueryView can, a locked connection's file and `db.sqlite` included
+locked. A lock holds against the API only: an agent's script on any unlocked
+DuckDB or SQLite connection can reach every file QueryView can, a locked
+connection's file and `db.sqlite` included
 ([scripts.md](./scripts.md#file-writes)).
 
 Stored: only a salted scrypt hash of the passphrase (`lock_hash` on the

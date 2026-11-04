@@ -263,7 +263,7 @@ def _now_ms() -> int:
 # A locked saved connection serves only requests carrying the unlock token its
 # tab got for the passphrase. MCP tool calls have no browser behind them and
 # never carry one, so the agent is refused on a locked connection whichever way
-# it comes in; the agent's own session connections are never locked.
+# it comes in; session connections are never locked.
 
 # The X-QV-Token of the request being served (main.py's middleware sets it);
 # None inside an MCP tool call.
@@ -638,6 +638,8 @@ async def open_saved(
     """Open a connection by name for this session: one of its session
     connections, else a saved one. A `database` not on it fails before the
     session switches."""
+    if by == "agent" and await _lock_hash_of(name) is not None:  # the agent never holds an unlock token
+        return LOCKED
     found = await _resolve(sid, name)
     if found is None:
         return {

@@ -45,21 +45,22 @@ tools (among others):
 - `session_info(session_id)` — what the session is on: `{ok, connected,
   connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
-  discovery. The agent switches only to its own session connections (below).
+  discovery. The agent may switch to any listed connection (below).
 - Connections ([access rule](./connect.md#session-connections)):
   `list_connections(session_id)` tags each with `scope`, `created_by`,
   `active`, leaving out [locked](./connect.md#locked-connections) ones;
   `list_databases(session_id, connection?)` lists the databases of each listed
   connection, or of `connection` only.
   `add_connection(session_id, name, type, config)` adds a ClickHouse or
-  Postgres session connection; `use_connection(session_id, name, database?)`,
-  `select_database(session_id, database)` and `remove_connection(session_id,
-  name)` act only on the agent's own. In the browser, an add/remove refreshes an
-  armed tab's connection lists (pill menu, Connect). A `use_connection` marks
-  the session row `connection_by: agent`; every tab picks it up on its next
-  heartbeat, toasts "Agent switched to <name>", and the pill reads
-  `<connection> · <database>` with the menu entry marked active and badged
-  `agent`. Switches made in the UI never toast.
+  Postgres session connection; `use_connection(session_id, name, database?)`
+  works on any unlocked ClickHouse or Postgres one (not DuckDB or SQLite: they
+  read local files), `select_database(session_id, database)` on any unlocked
+  active one; `remove_connection(session_id, name)` only on the agent's own.
+  In the browser, an add/remove refreshes an armed tab's connection lists
+  (pill menu, Connect). A `use_connection` marks the session row `connection_by: agent`;
+  every tab picks it up on its next heartbeat, toasts "Agent switched to
+  <name>", and the pill reads `<connection> · <database>` with the menu entry
+  marked active and badged `agent`. Switches made in the UI never toast.
 - `run_sql(session_id, sql, limit?=1000)` — run one read-only statement as
   written (so `DESCRIBE`/`SHOW`/`EXPLAIN` work; page with your own
   `LIMIT`/`OFFSET`) on the session's connection and database, returning
