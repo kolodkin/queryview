@@ -34,9 +34,10 @@ Prefer Docker? See [docker.md](docs/docker.md).
 
 ## What you can do
 
-Open http://localhost:8000 — it lands on the **Connect** page:
+Ask your agent — it drives the page for you in your open tab at
+http://localhost:8000. Or do it by hand on that page:
 
-| Prompt | Page | What happens |
+| Ask your agent | Or open this page | What happens |
 |---|---|---|
 | *Add a Postgres connection to db.example.internal:5432 as analyst* | **Connect** → *New connection* card | Create a ClickHouse, Postgres, DuckDB or SQLite connection — host, port and credentials, or a file path for DuckDB and SQLite. Passwords are encrypted at rest. |
 | *Switch to the sales_reporting database* | **Connect** → a saved card | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
