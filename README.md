@@ -3,12 +3,9 @@
 A local SQL workbench for **ClickHouse**, **Postgres**, **DuckDB** and **SQLite** — and a
 place to let an AI agent do the querying for you.
 
-Pick a saved connection from its card to open a database, then **Studio** to
-run SQL, **Scripts** to run a script of statements as written, **Explorer** to
-click through tables, **Dashboard** to open a saved dashboard. Saved queries and dashboards live in workspaces that can back
-themselves up to a git remote. A built-in MCP server lets an agent run
-read-only queries, push a query or a whole dashboard into your open browser tab,
-and snapshot your work to git.
+Ask an agent over the built-in MCP server, or click through yourself: run SQL
+and scripts, browse tables, build live dashboards. Saved work lives in
+workspaces that back up to git.
 
 QueryView is a **single-user tool that runs on your own machine**. It has no
 login and assumes it is reachable only from localhost — don't expose its port.
@@ -34,16 +31,17 @@ Prefer Docker? See [docker.md](docs/docker.md).
 
 ## What you can do
 
-Open http://localhost:8000 — it lands on the **Connect** page:
+Ask your agent ([MCP usage](docs/mcp.md)) — it drives the page for you in your open tab at
+http://localhost:8000. Or do it by hand on that page:
 
-| Page | What happens |
-|---|---|
-| **Connect** → *New connection* card | Create a ClickHouse, Postgres, DuckDB or SQLite connection — host, port and credentials, or a file path for DuckDB and SQLite. Passwords are encrypted at rest. |
-| **Connect** → a saved card | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
-| **Studio** | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
-| **Scripts** | A flat SQL scratchpad: run the statement under the cursor or the whole `;`-separated script as written — writes and DDL included, stopping at the first error — see the last statement's rows, hand it to Studio. |
-| **Explorer** | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
-| **Dashboard** | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |
+| Ask your agent | Or open this page | What happens |
+|---|---|---|
+| *Use queryview to add a Postgres connection to db.example.internal:5432 as readonly user* | **Connect** → *New connection* card | Create a ClickHouse, Postgres, DuckDB or SQLite connection — host, port and credentials, or a file path for DuckDB and SQLite. Passwords are encrypted at rest. |
+| *Use queryview to switch to the sales_reporting database* | **Connect** → a saved card | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
+| *Use queryview to show me the top 10 customers by revenue this month, revenue in bold and each name linked to its CRM page* | **Studio** | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
+| *Use queryview to create a staging table and copy last week's orders into it* | **Scripts** | A flat SQL scratchpad: run the statement under the cursor or the whole `;`-separated script as written — writes and DDL included, stopping at the first error — see the last statement's rows, hand it to Studio. |
+| *Use queryview to open the orders table in the explorer* | **Explorer** | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
+| *Use queryview to build a dashboard of daily signups and revenue for the last 30 days* | **Dashboard** | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |
 
 Beyond those pages:
 
