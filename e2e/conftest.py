@@ -203,8 +203,12 @@ def _git_sync_remote(base_url: str) -> None:
 def browser_type_launch_args(browser_type_launch_args: dict) -> dict:
     args = {**browser_type_launch_args, "args": ["--no-sandbox"]}
     # Environments with a pre-installed browser (no network to download the
-    # pinned revision) can point the launch at it instead.
-    exe = os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE")
+    # pinned revision) can point the launch at it instead; the Claude Code web
+    # container ships one at a fixed path.
+    web_chromium = "/opt/pw-browsers/chromium"
+    exe = os.environ.get("PLAYWRIGHT_CHROMIUM_EXECUTABLE") or (
+        web_chromium if os.environ.get("CLAUDE_CODE_REMOTE") == "true" and os.path.exists(web_chromium) else None
+    )
     if exe:
         args["executable_path"] = exe
     return args
