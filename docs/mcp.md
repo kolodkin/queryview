@@ -26,6 +26,7 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 | `push_query` | Open a query in the browser's QueryView |
 | `push_script` | Fill the browser's Scripts editor, optionally run it |
 | `push_dashboard` | Render a dashboard in the browser as a draft |
+| `open_explorer` | Open the browser's Explorer on a database, or on one of its tables |
 | `list_queries` / `list_dashboards` | List saved queries and dashboards |
 | `list_connections` / `list_databases` | List connections and their databases |
 | `add_connection` / `remove_connection` | Add or remove a session connection |

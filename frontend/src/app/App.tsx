@@ -398,8 +398,8 @@ function Shell() {
   }, [sessionChecked, location.pathname, location.search])
 
   // When armed, open an SSE channel: `ready` gives the session id; `query`,
-  // `script` and `dashboard` events carry payloads that navigate to the
-  // matching page.
+  // `script`, `dashboard` and `explorer` events carry payloads that navigate to
+  // the matching page.
   useEffect(() => {
     if (!armed) return
     // EventSource cannot send headers, so the session id travels in the query
@@ -432,6 +432,10 @@ function Shell() {
       setDashboardPush(payload)
       setToast('Agent updated the dashboard')
       navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
+    })
+    on<{ table: string | null }>('explorer', (payload) => {
+      setToast('Agent opened the Explorer')
+      navigate(explorerUrl(payload))
     })
     return () => {
       es.close()

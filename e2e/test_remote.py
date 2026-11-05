@@ -1,3 +1,4 @@
+import re
 import uuid
 
 import httpx
@@ -103,3 +104,21 @@ def test_agent_switch_names_the_connection_and_toasts(seeded_test_db, page: Page
     entry = page.locator(f'[data-testid="pill-conn"][data-conn="{name}"]')
     expect(entry).to_have_attribute("data-active", "true")
     expect(entry.get_by_test_id("conn-agent-badge")).to_have_text("agent")
+
+
+def test_mcp_open_explorer_browses_the_table(seeded_test_db, page: Page, base_url: str) -> None:
+    connect_clickhouse_test_db(page)
+    open_query_panel(page)
+    session_id = arm_remote(page)
+
+    out = mcp_call(base_url, "open_explorer", {"session_id": session_id, "database": CH_DB, "table": "items"})
+    assert out["ok"] is True, out
+
+    # The browser left the query panel for the Explorer, browsing the table.
+    expect(page).to_have_url(re.compile(r"/explorer\?table=items$"))
+    expect(page.get_by_test_id("agent-toast")).to_contain_text("Agent opened the Explorer")
+    expect(page.get_by_test_id("explorer-output")).to_contain_text("gamma")
+
+    # A table the database doesn't list is refused before anything is pushed.
+    missing = mcp_call(base_url, "open_explorer", {"session_id": session_id, "database": CH_DB, "table": "nope"})
+    assert missing == {"ok": False, "message": f'no table "nope" in {CH_DB}', "database": CH_DB}
