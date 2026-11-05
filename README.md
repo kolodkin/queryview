@@ -30,6 +30,8 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 `--scope user` is recommended: QueryView is one local server, so registering it
 once makes it available in every project instead of only the current one.
 
+Prefer Docker? See [Run with Docker](#run-with-docker).
+
 ## What you can do
 
 Open http://localhost:8000 — it lands on the **Connect** page:
