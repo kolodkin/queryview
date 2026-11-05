@@ -15,31 +15,22 @@ login and assumes it is reachable only from localhost — don't expose its port.
 
 ## Quick start
 
-Run the released package — API + bundled SPA on http://localhost:8000:
-
 ```bash
 uvx queryview
 ```
 
-`--port` (or the `PORT` env var) picks the listen port, default 8000:
-`uvx queryview --port 9000`.
+`--port` (or the `PORT` env var) picks the listen port, default 8000: `uvx queryview --port 9000`.
 
-Or run the container image — every release publishes
-`ghcr.io/kolodkin/queryview` to GHCR for `linux/amd64` and `linux/arm64`, tagged
-`vX.Y.Z` and (for non-pre-releases) `latest`:
+Then register the MCP server with Claude Code:
 
 ```bash
-docker run -p 8000:8000 ghcr.io/kolodkin/queryview:latest
+claude mcp add --scope user --transport http queryview http://localhost:8000/mcp/
 ```
 
-To serve on a different host port, remap it (the container keeps listening on
-8000, which its healthcheck probes): `docker run -p 9000:8000 ...`. QueryView
-expects to be reached from localhost only, so prefer binding the published port
-to loopback: `docker run -p 127.0.0.1:8000:8000 ...`.
+`--scope user` is recommended: QueryView is one local server, so registering it
+once makes it available in every project instead of only the current one.
 
-The command above keeps its state inside the container, so connections and
-workspaces are lost when the container is removed. See
-[Run with Docker](#run-with-docker) for a persistent setup.
+Prefer Docker? See [docker.md](docs/docker.md).
 
 ## What you can do
 
@@ -63,119 +54,7 @@ Beyond those pages:
   workspace between instances with no git involved —
   [export-import.md](docs/export-import.md).
 - **MCP** lets an agent query your databases and author dashboards — see
-  [below](#mcp-server).
-
-## Run with Docker
-
-The image runs as the non-root user `queryview` (UID 1000) and sets
-`DATA_DIR=/var/lib/queryview`, so every piece of state lives directly under that
-one directory:
-
-| Path | Contents |
-|---|---|
-| `/var/lib/queryview/db.sqlite` | SQLite store: connections, workspaces, queries, dashboards |
-| `/var/lib/queryview/encryption.key` | Key that encrypts stored connection passwords |
-| `/var/lib/queryview/gitsync/` | Local clones used by workspace git sync |
-
-Mount a volume at `/var/lib/queryview` and all three persist across container
-restarts, removals and upgrades.
-
-### Persisting it
-
-```bash
-mkdir -p ~/.queryview
-docker run -d --name queryview \
-  -p 127.0.0.1:8000:8000 \
-  -v ~/.queryview:/var/lib/queryview \
-  ghcr.io/kolodkin/queryview:latest
-```
-
-Create the directory first so Docker doesn't create it owned by root. The
-container runs as UID 1000, the first user on most Linux distributions; if
-`id -u` prints something else, add `--user "$(id -u):$(id -g)"` so the
-container writes the files as you.
-
-`~/.queryview` is also where a local `uvx queryview` keeps its state, so the
-container and a local run share one database, key and set of clones with no
-extra setup. Don't run both at once: each would serve the same SQLite file.
-
-To let Docker own the location instead, swap the path for a named volume,
-`-v queryview-data:/var/lib/queryview`. Docker seeds it from the image, so
-ownership is already right and there is nothing to create up front, but the
-state no longer lines up with a local run.
-
-### Connecting to databases on your machine
-
-Inside the container, `localhost` is the container itself. To reach a database:
-
-- **On the host:** use `host.docker.internal` (on Linux, add
-  `--add-host=host.docker.internal:host-gateway`).
-- **In another container:** `docker network connect <net> queryview`, then use
-  its container name as the host.
-- **Host networking:** `--network host` makes `localhost` your machine (Linux,
-  or Docker Desktop 4.34+ with host networking enabled); `-p` is then ignored.
-
-### Git sync
-
-The image ships `git`, so workspace git sync works in the container, and its
-clones live under `/var/lib/queryview/gitsync/`, which the mount above already
-covers. Give the workspace an HTTPS remote carrying a scoped, expiring token —
-[docs/gitsync.md](docs/gitsync.md) has the URL form and what becomes of the
-credential.
-
-SSH also works, but nothing in the container can answer a prompt: the key must
-be passphrase-free and `known_hosts` must already list the host. Mount one
-dedicated deploy key, not your whole `.ssh`, readable by UID 1000:
-
-```bash
-docker run -d --name queryview \
-  -p 127.0.0.1:8000:8000 \
-  -v ~/.queryview:/var/lib/queryview \
-  -v ~/.ssh/queryview_deploy:/home/queryview/.ssh/id_ed25519:ro \
-  -v ~/.ssh/known_hosts:/home/queryview/.ssh/known_hosts:ro \
-  ghcr.io/kolodkin/queryview:latest
-```
-
-## MCP server
-
-The backend mounts a FastMCP server (Streamable HTTP) at
-`http://localhost:8000/mcp/`. There is nothing extra to start — it runs inside
-the server process (`uvx queryview`, `npm run dev`, ...). Registering the client
-is a separate, one-time step on the machine running the agent: an HTTP MCP
-server can't install itself into someone else's client.
-
-```bash
-claude mcp add --transport http queryview http://localhost:8000/mcp/
-```
-
-Three things to get right:
-
-- **Prefer the trailing slash.** The mount serves `/mcp/`. The slashless
-  `/mcp` also works — it 307-redirects — but registering the canonical path
-  skips a round trip on every call.
-- **Match the port.** The URL must point at the port QueryView actually
-  listens on — `--port 9000` means `http://localhost:9000/mcp/`, and
-  `docker run -p 9000:8000` means the *host* port, `9000`, not the container's
-  `8000`.
-- **Start QueryView first.** The client dials this URL when it starts; if
-  nothing is listening it reports a connection error and stays failed until you
-  reconnect it.
-
-QueryView is a **local, single-user tool**: it assumes it is reachable only from
-localhost. `/mcp/` is unauthenticated, and its tools can query every configured
-connection and rewrite workspace git state, so don't publish the port. Bind the
-container to loopback — `docker run -p 127.0.0.1:8000:8000 ...` — since a plain
-`-p 8000:8000` listens on all interfaces.
-
-Tools: `session_info` (the session's connection, database, databases,
-workspace and tables), `run_sql` (read-only SQL on the session's connection,
-rows returned to the agent), `run_script` (a script with writes, per-statement
-results returned to the agent), `push_query`, `push_script` and `push_dashboard` (fill a live browser session),
-`list_queries` / `list_dashboards`, and `git_store` / `git_history` /
-`git_restore` (workspace git backups). `session_info`, `run_sql` and the push tools target an **armed** browser session: enable
-"Allow remote control" from the agent icon next to the connection pill and use
-the session id it shows. See [docs/remote.md](docs/remote.md) for the full
-protocol.
+  [mcp.md](docs/mcp.md).
 
 ## Where your data lives
 
@@ -197,8 +76,10 @@ and let [git sync](docs/gitsync.md) do it.
 - [workspace.md](docs/workspace.md) — workspaces.
 - [gitsync.md](docs/gitsync.md) — git backup, history and restore.
 - [export-import.md](docs/export-import.md) — YAML export and import.
+- [mcp.md](docs/mcp.md) — connecting an agent and what it can do.
 - [remote.md](docs/remote.md) — the remote-control protocol behind the MCP push tools.
 - [api.md](docs/api.md) — the full HTTP endpoint reference.
+- [docker.md](docs/docker.md) — running the container image and persisting its state.
 
 ## Contributing
 

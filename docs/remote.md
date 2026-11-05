@@ -21,11 +21,7 @@ Without a copied id the agent uses the standing
 
 ## Connecting a client
 
-The server runs inside the backend process — nothing extra to start — but the
-client registration is a separate one-time step: point it at
-`http://localhost:8000/mcp/` (the slashless `/mcp` redirects there; match the
-port QueryView listens on, and start it first). See
-[the README](../README.md#mcp-server).
+Register the client once — see [mcp.md](./mcp.md).
 
 ## MCP tools
 
