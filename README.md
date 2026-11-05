@@ -36,14 +36,14 @@ Prefer Docker? See [docker.md](docs/docker.md).
 
 Open http://localhost:8000 — it lands on the **Connect** page:
 
-| Page | What happens |
-|---|---|
-| **Connect** → *New connection* card | Create a ClickHouse, Postgres, DuckDB or SQLite connection — host, port and credentials, or a file path for DuckDB and SQLite. Passwords are encrypted at rest. |
-| **Connect** → a saved card | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
-| **Studio** | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
-| **Scripts** | A flat SQL scratchpad: run the statement under the cursor or the whole `;`-separated script as written — writes and DDL included, stopping at the first error — see the last statement's rows, hand it to Studio. |
-| **Explorer** | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
-| **Dashboard** | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |
+| Prompt | Page | What happens |
+|---|---|---|
+| *Lorem ipsum dolor sit amet.* | **Connect** → *New connection* card | Create a ClickHouse, Postgres, DuckDB or SQLite connection — host, port and credentials, or a file path for DuckDB and SQLite. Passwords are encrypted at rest. |
+| *Consectetur adipiscing elit.* | **Connect** → a saved card | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
+| *Sed do eiusmod tempor.* | **Studio** | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
+| *Incididunt ut labore et dolore.* | **Scripts** | A flat SQL scratchpad: run the statement under the cursor or the whole `;`-separated script as written — writes and DDL included, stopping at the first error — see the last statement's rows, hand it to Studio. |
+| *Magna aliqua ut enim.* | **Explorer** | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
+| *Ad minim veniam quis.* | **Dashboard** | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |
 
 Beyond those pages:
 
