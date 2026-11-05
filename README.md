@@ -3,12 +3,9 @@
 A local SQL workbench for **ClickHouse**, **Postgres**, **DuckDB** and **SQLite** — and a
 place to let an AI agent do the querying for you.
 
-Pick a saved connection from its card to open a database, then **Studio** to
-run SQL, **Scripts** to run a script of statements as written, **Explorer** to
-click through tables, **Dashboard** to open a saved dashboard. Saved queries and dashboards live in workspaces that can back
-themselves up to a git remote. A built-in MCP server lets an agent run
-read-only queries, push a query or a whole dashboard into your open browser tab,
-and snapshot your work to git.
+Ask an agent over the built-in MCP server, or click through yourself: run SQL
+and scripts, browse tables, build live dashboards. Saved work lives in
+workspaces that back up to git.
 
 QueryView is a **single-user tool that runs on your own machine**. It has no
 login and assumes it is reachable only from localhost — don't expose its port.
