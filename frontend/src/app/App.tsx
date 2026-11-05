@@ -743,8 +743,6 @@ function Shell() {
           {/* Only `/` picks a landing page. An unknown path is just a bad URL,
               not a landing question. */}
           <Route path="/" element={<Navigate to={ready ? '/explorer' : '/connect'} replace />} />
-          {/* The page's old path: saved sessions and bookmarks still carry it. */}
-          <Route path="/queryview" element={<Navigate to="/studio" replace />} />
           <Route path="*" element={<Navigate to="/connect" replace />} />
         </Routes>
       ) : (
