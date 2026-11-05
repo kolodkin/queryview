@@ -59,9 +59,9 @@ const NEW_NAME_OPTION = '::new::'
 // Sentinel for the dropdown item that shows or hides deleted queries.
 const TOGGLE_DELETED_OPTION = '::deleted::'
 
-// The query page (`/queryview`), mounted by the App shell only for a ready
+// The query page (`/studio`), mounted by the App shell only for a ready
 // connection; picking one happens on the Connect page (ConnectView).
-function QueryView({
+function StudioView({
   connectionType,
   runOn,
   pushed,
@@ -82,7 +82,7 @@ function QueryView({
     <div className="viewport-page flex w-full flex-col">
       <div className="mb-6 flex items-center justify-center">
         <h1 className="text-3xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
-          QueryView
+          Studio
         </h1>
       </div>
       <QueryPanel
@@ -1024,4 +1024,4 @@ function QueryPanel({
   )
 }
 
-export default QueryView
+export default StudioView

@@ -125,7 +125,7 @@ shows "No databases match". Each row has a copy icon for its name. Selecting a d
 - sets the session's selected database,
 - persists it on the saved connection (`POST /api/db/database`),
 - collapses the picker and shows the top-left indicator `🟢 <connection> · <database>`,
-- makes the query panel available on QueryView (see [query.md](./query.md)),
+- makes the query panel available on Studio (see [query.md](./query.md)),
 - and lands on the explorer (see
   [queryview.md](./queryview.md#landing-page)).
 

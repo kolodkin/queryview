@@ -24,7 +24,7 @@ import {
   unlockConnection,
   type Connection,
 } from './connection'
-import QueryView, { type QueryPush } from './QueryView'
+import StudioView, { type QueryPush } from './StudioView'
 import ScriptsView, { type ScriptPush } from './ScriptsView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
@@ -202,7 +202,7 @@ function DatabaseMenu({
 
 // App shell: routing, shared connection state, the connection pill + agent
 // popover, and the armed/SSE remote-control channel. Pages: /connect,
-// /queryview, /scripts, /explorer, /dashboard.
+// /studio, /scripts, /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -346,7 +346,7 @@ function Shell() {
 
   // The session decides the landing page, the live connection and what the
   // query panel holds, so nothing renders until this resolves. Which session a
-  // tab gets is the server's call — see attach() in backend/queryview/sessions.py.
+  // tab gets is the server's call — see attach() in backend/studio/sessions.py.
   useEffect(() => {
     let stopHeartbeat = () => {}
     let stopRows = () => {}
@@ -421,7 +421,7 @@ function Shell() {
     on<QueryPush>('query', (payload) => {
       setQueryPush(payload)
       setToast('Agent updated the query')
-      navigate('/queryview')
+      navigate('/studio')
     })
     on<ScriptPush>('script', (payload) => {
       setScriptPush(payload)
@@ -634,14 +634,14 @@ function Shell() {
               Connect
             </Link>
             {/* Straight to Connect until there's a database: a round trip
-                through the /queryview redirect would remount it. */}
+                through the /studio redirect would remount it. */}
             <Link
-              to={ready ? '/queryview' : '/connect'}
-              data-testid="nav-queryview"
+              to={ready ? '/studio' : '/connect'}
+              data-testid="nav-studio"
               onClick={() => setNavOpen(false)}
-              className={navLinkClass('/queryview')}
+              className={navLinkClass('/studio')}
             >
-              QueryView
+              Studio
             </Link>
             <Link
               to={ready ? '/scripts' : '/connect'}
@@ -676,10 +676,10 @@ function Shell() {
       {sessionChecked ? (
         <Routes>
           <Route
-            path="/queryview"
+            path="/studio"
             element={withDatabase(
               connection && (
-                <QueryView
+                <StudioView
                   key={`${sessionKey}:${workspace}`}
                   connectionType={connection.type}
                   runOn={connectionKey(connection)}
@@ -812,7 +812,7 @@ const NAV_ROW =
   'md:static md:mt-0 md:flex md:w-auto md:min-w-0 md:flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-filter-none'
 
 function pageTitle(path: string): string {
-  if (path.startsWith('/queryview')) return 'QueryView'
+  if (path.startsWith('/studio')) return 'Studio'
   if (path.startsWith('/scripts')) return 'Scripts'
   if (path.startsWith('/explorer')) return 'Explorer'
   if (path.startsWith('/dashboard')) return 'Dashboard'
