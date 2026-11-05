@@ -371,40 +371,21 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def open_explorer_db(session_id: str, database: str) -> dict[str, Any]:
-    """Switch the session to `database` and open its table list on the
-    browser's Explorer page (the table navigator).
-
-    Returns {"ok", "message", "database"}; not ok when select_database fails or
-    the push does (unknown session, "blocked, user editing"). A failed push
-    still leaves the session on `database`.
-
-    Args:
-        session_id: The session id shown in the QueryView popover.
-        database: A database of the session's connection.
-    """
-    return await _open_explorer(session_id, database, None)
-
-
-@mcp.tool()
-async def open_explorer_table(session_id: str, database: str, table: str) -> dict[str, Any]:
-    """Switch the session to `database` and open `table` on the browser's
-    Explorer page, which browses its rows (SELECT * with field and order-by
-    pickers). Use push_query instead for custom SQL.
+async def open_explorer(session_id: str, database: str, table: str | None = None) -> dict[str, Any]:
+    """Switch the session to `database` and open the browser's Explorer page
+    (the table navigator) on it; with `table`, browse that table's rows (SELECT *
+    with field and order-by pickers). Use push_query instead for custom SQL.
 
     Returns {"ok", "message", "database"}; not ok when select_database fails,
-    the table isn't in the database, or the push fails. Past select_database,
-    a failure still leaves the session on `database`.
+    the table isn't in the database, or the push fails (unknown session,
+    "blocked, user editing"). Past select_database, a failure still leaves the
+    session on `database`.
 
     Args:
         session_id: The session id shown in the QueryView popover.
         database: A database of the session's connection.
-        table: A table name as session_info's "tables" lists it.
+        table: Optional table name as session_info's "tables" lists it.
     """
-    return await _open_explorer(session_id, database, table)
-
-
-async def _open_explorer(session_id: str, database: str, table: str | None) -> dict[str, Any]:
     r = await select_database(session_id, database)
     if not r["ok"]:
         return r
