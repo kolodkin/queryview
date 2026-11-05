@@ -18,12 +18,23 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 
 ## Tools
 
-The agent can run read-only SQL (`run_sql`) or a script with writes
-(`run_script`), push a query, script or dashboard into your open tab, list saved
-queries and dashboards, and store, list and restore workspace git snapshots.
-Tools that target a browser tab need it armed: click the agent icon next to the
-connection pill, enable **Allow remote control**, and give the agent the session
-id it shows. [remote.md](./remote.md) has the full tool reference.
+| Tool | What it does |
+|---|---|
+| `session_info` | The session's connection, database, workspace and tables |
+| `run_sql` | Run read-only SQL; rows go to the agent |
+| `run_script` | Run a `;`-separated script, writes allowed; results go to the agent |
+| `push_query` | Open a query in the browser's QueryView |
+| `push_script` | Fill the browser's Scripts editor, optionally run it |
+| `push_dashboard` | Render a dashboard in the browser as a draft |
+| `list_queries` / `list_dashboards` | List saved queries and dashboards |
+| `list_connections` / `list_databases` | List connections and their databases |
+| `add_connection` / `remove_connection` | Add or remove a session connection |
+| `use_connection` / `select_database` | Switch the session's connection or database |
+| `git_store` / `git_history` / `git_restore` | Back up, list and restore a query or dashboard via workspace git |
+
+Tools act on a browser session. To target your tab, click the agent icon next
+to the connection pill, enable **Allow remote control**, and give the agent the
+session id it shows. [remote.md](./remote.md) has each tool's arguments.
 
 ## Related docs
 
