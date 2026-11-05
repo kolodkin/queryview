@@ -15,31 +15,20 @@ login and assumes it is reachable only from localhost — don't expose its port.
 
 ## Quick start
 
-Run the released package — API + bundled SPA on http://localhost:8000:
-
 ```bash
 uvx queryview
 ```
 
-`--port` (or the `PORT` env var) picks the listen port, default 8000:
-`uvx queryview --port 9000`.
+`--port` (or the `PORT` env var) picks the listen port, default 8000: `uvx queryview --port 9000`.
 
-Or run the container image — every release publishes
-`ghcr.io/kolodkin/queryview` to GHCR for `linux/amd64` and `linux/arm64`, tagged
-`vX.Y.Z` and (for non-pre-releases) `latest`:
+Then register the MCP server with Claude Code:
 
 ```bash
-docker run -p 8000:8000 ghcr.io/kolodkin/queryview:latest
+claude mcp add --scope user --transport http queryview http://localhost:8000/mcp/
 ```
 
-To serve on a different host port, remap it (the container keeps listening on
-8000, which its healthcheck probes): `docker run -p 9000:8000 ...`. QueryView
-expects to be reached from localhost only, so prefer binding the published port
-to loopback: `docker run -p 127.0.0.1:8000:8000 ...`.
-
-The command above keeps its state inside the container, so connections and
-workspaces are lost when the container is removed. See
-[Run with Docker](#run-with-docker) for a persistent setup.
+`--scope user` is recommended: QueryView is one local server, so registering it
+once makes it available in every project instead of only the current one.
 
 ## What you can do
 
@@ -66,6 +55,18 @@ Beyond those pages:
   [below](#mcp-server).
 
 ## Run with Docker
+
+Every release publishes `ghcr.io/kolodkin/queryview` to GHCR for `linux/amd64`
+and `linux/arm64`, tagged `vX.Y.Z` and (for non-pre-releases) `latest`:
+
+```bash
+docker run -p 127.0.0.1:8000:8000 ghcr.io/kolodkin/queryview:latest
+```
+
+To serve on a different host port, remap it (the container keeps listening on
+8000, which its healthcheck probes): `docker run -p 127.0.0.1:9000:8000 ...`.
+This keeps state inside the container, so it is lost when the container is
+removed — see [Persisting it](#persisting-it).
 
 The image runs as the non-root user `queryview` (UID 1000) and sets
 `DATA_DIR=/var/lib/queryview`, so every piece of state lives directly under that
@@ -145,7 +146,7 @@ is a separate, one-time step on the machine running the agent: an HTTP MCP
 server can't install itself into someone else's client.
 
 ```bash
-claude mcp add --transport http queryview http://localhost:8000/mcp/
+claude mcp add --scope user --transport http queryview http://localhost:8000/mcp/
 ```
 
 Three things to get right:
