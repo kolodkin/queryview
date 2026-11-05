@@ -1,6 +1,6 @@
 """The Scripts page (`/scripts`): a flat SQL textbox that runs a `;`-separated
 script as written — writes included — leaving one status line and, when the
-last statement returned rows, a results table and an Open-in-QueryView button,
+last statement returned rows, a results table and an Open-in-Studio button,
 parameterized across every driver (same seeds as test_drivers)."""
 
 from __future__ import annotations
@@ -81,8 +81,8 @@ def test_run_all_writes_and_shows_the_last_select(case: DriverCase, request, pag
         f"{_DDL[case.id].format(t=table)};\nINSERT INTO {table} (id, name) VALUES (1, 'one'), (2, 'two');\n{select}"
     )
     page.get_by_test_id("scripts-input").fill(script)
-    # Nothing has run yet: no rows to hand to QueryView.
-    expect(page.get_by_test_id("scripts-open-queryview")).to_be_disabled()
+    # Nothing has run yet: no rows to hand to Studio.
+    expect(page.get_by_test_id("scripts-open-studio")).to_be_disabled()
     shot(f"{case.id} script typed")
     page.get_by_test_id("scripts-run-all").click()
 
@@ -98,11 +98,11 @@ def test_run_all_writes_and_shows_the_last_select(case: DriverCase, request, pag
     expect(output).to_contain_text("two")
     shot(f"{case.id} script results")
 
-    # Open in QueryView carries that SELECT over.
-    page.get_by_test_id("scripts-open-queryview").click()
+    # Open in Studio carries that SELECT over.
+    page.get_by_test_id("scripts-open-studio").click()
     expect(page.get_by_test_id("query-panel")).to_be_visible()
     expect(page.get_by_test_id("query-input")).to_have_value(select)
-    shot(f"{case.id} opened in QueryView")
+    shot(f"{case.id} opened in Studio")
 
     # Back on Scripts the script is still there; run just the DROP under the cursor.
     _open_scripts_page(page)
@@ -169,7 +169,7 @@ def test_run_all_stops_at_the_first_failing_statement(seeded_duckdb, page: Page,
     expect(mark).to_have_count(0)
     # The last statement run failed, so there is no table to show.
     expect(page.get_by_test_id("scripts-output")).to_have_count(0)
-    expect(page.get_by_test_id("scripts-open-queryview")).to_be_disabled()
+    expect(page.get_by_test_id("scripts-open-studio")).to_be_disabled()
 
 
 def test_run_current_runs_the_statement_under_the_cursor(seeded_duckdb, page: Page) -> None:

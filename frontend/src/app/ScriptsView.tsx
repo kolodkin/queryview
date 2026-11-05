@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { ResultsTable, columnNames, columnTypes, type QueryRows } from '../core'
 import { apiFetch } from './api'
 import { Spinner } from './controls/Spinner'
-import { loadIntoQueryView } from './queryPanel'
+import { loadIntoStudio } from './queryPanel'
 import { flushPatches, patchView, viewState } from './session'
 import { useEditLock } from './sessionLock'
 import {
@@ -127,7 +127,7 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
 
   const summary = runSummary(results ?? [])
   // The last statement run, when it returned rows: the table below, and what
-  // Open in QueryView carries over. A failed statement has no meta.
+  // Open in Studio carries over. A failed statement has no meta.
   const last = results?.at(-1) ?? null
   const lastRows: QueryRows | null = useMemo(
     () => (last?.meta && last.data ? { meta: last.meta, data: last.data } : null),
@@ -234,15 +234,15 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
             type="button"
             onClick={() => {
               if (!last) return
-              loadIntoQueryView(last.sql)
-              navigate('/queryview')
+              loadIntoStudio(last.sql)
+              navigate('/studio')
             }}
             disabled={!lastRows}
-            data-testid="scripts-open-queryview"
-            title="Load the last statement's SQL into QueryView for paging, saving and presentation"
+            data-testid="scripts-open-studio"
+            title="Load the last statement's SQL into Studio for paging, saving and presentation"
             className="glass-btn px-3 py-2 text-sm font-medium"
           >
-            Open in QueryView
+            Open in Studio
           </button>
           {busy && (
             <span data-testid="scripts-busy" role="status" aria-label="Running">
