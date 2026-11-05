@@ -1,7 +1,7 @@
 # Explorer — the classical table navigator
 
 The landing page for a live connection (`/explorer`, next to
-[queries](./queryview.md) and [dashboards](./dashboard.md) in the corner nav —
+[Studio](./query.md) and [dashboards](./dashboard.md) in the corner nav —
 see [queryview.md](./queryview.md#landing-page)): a sidebar lists the active
 database's tables; clicking one browses its rows. No SQL is typed — the page generates
 `SELECT * FROM "<table>"` and drives it with the same field select and
@@ -11,7 +11,7 @@ order-by select the query panel uses.
 
 ```
 +------------------------------------------------------------+
-| (o) test                     QueryView Explorer Dashboard  |
+| (o) test                        Studio Explorer Dashboard  |
 |                                                            |
 | +--------+ +---------------------------------------------+ |
 | | Tables | | items (refresh) Limit [100] < Prev Next >   | |
@@ -44,12 +44,12 @@ order-by select the query panel uses.
 - **Rows panel** — the selected table's rows. The selection lives in the URL
   (`/explorer?table=<name>`), so reloads and links land on the same table.
 - **Viewport height** — the page fills the window (min 30rem, then the page
-  scrolls), as the QueryView page does; the table list and rows grid scroll
+  scrolls), as the Studio page does; the table list and rows grid scroll
   internally, keeping the grid's horizontal scrollbar on screen.
 - **Loading** — panels show *Loading tables…* / *Loading rows…* rather than
   sitting empty. Re-running a loaded table (paging, a new order-by) keeps its
   rows on screen, dimmed, with a spinner by the table name.
-- Without a ready connection the page shows a hint to connect on the QueryView
+- Without a ready connection the page shows a hint to connect on the Connect
   page first; connection state is shared app-wide (see
   [queryview.md](./queryview.md)).
 

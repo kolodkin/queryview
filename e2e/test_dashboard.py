@@ -5,7 +5,7 @@ from conftest import arm_remote
 from playwright.sync_api import Page, expect
 from test_drivers import CASES, _connect
 
-# Dashboards run their queries through the same path as QueryView, which
+# Dashboards run their queries through the same path as Studio, which
 # test_drivers covers per driver, so these run once on DuckDB (no service).
 DUCK = next(c for c in CASES if c.id == "duckdb")
 

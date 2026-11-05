@@ -81,8 +81,8 @@ def author_params_yaml(page: Page, name: str, sql: str, params_yaml: str) -> Non
 
 
 def open_query_panel(page: Page) -> None:
-    """Open the query panel from wherever the test is, via the QueryView page."""
-    page.get_by_test_id("nav-queryview").click()
+    """Open the query panel from wherever the test is, via the Studio page."""
+    page.get_by_test_id("nav-studio").click()
     expect(page.get_by_test_id("query-panel")).to_be_visible()
 
 

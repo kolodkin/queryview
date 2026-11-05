@@ -2,7 +2,7 @@
 
 The Connect page (`/connect`) is where a disconnected session lands: a card per
 saved connection and a "new connection" card per driver. The other pages are
-`/queryview` (redirects here until a database is selected), `/scripts` (the
+`/studio` (see [query.md](./query.md); redirects here until a database is selected), `/scripts` (the
 SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
 [explorer.md](./explorer.md)) and `/dashboard` (see
 [dashboard.md](./dashboard.md)). The old `/prompt` URL redirects here.
@@ -84,7 +84,7 @@ to browse (see [explorer.md](./explorer.md)).
   to a page is honored as typed, and becomes the session's URL.
 - **Connecting** — picking a database (or connecting a picker-less driver)
   navigates from the connect handler itself. Nothing watches the connection, so
-  the nav gets back to QueryView, a pill database switch stays put, and an
+  the nav gets back to Studio, a pill database switch stays put, and an
   agent's query push is not pulled away.
 
 ## Design principles

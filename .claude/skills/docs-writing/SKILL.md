@@ -16,7 +16,7 @@ running shortify on the pages you touched.
 - Present tense, describing current behavior.
   No history ("now", "previously", "since vX"); proposals go in `future.md`
   and move into the feature's page when they ship.
-- The opening paragraph names the route (`/queryview`, `/explorer`, …) and
+- The opening paragraph names the route (`/studio`, `/explorer`, …) and
   links the neighboring pages a reader may have meant instead.
 - UI labels are **bold**, exactly as the screen shows them. A page about a
   screen may open with a layout sketch; the `devpowers:ui-sketch` skill draws it.
