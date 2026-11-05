@@ -34,7 +34,7 @@ Prefer Docker? See [docker.md](docs/docker.md).
 
 ## What you can do
 
-Ask your agent — it drives the page for you in your open tab at
+Ask your agent ([MCP usage](docs/mcp.md)) — it drives the page for you in your open tab at
 http://localhost:8000. Or do it by hand on that page:
 
 | Ask your agent | Or open this page | What happens |
