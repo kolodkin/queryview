@@ -54,48 +54,7 @@ Beyond those pages:
   workspace between instances with no git involved —
   [export-import.md](docs/export-import.md).
 - **MCP** lets an agent query your databases and author dashboards — see
-  [below](#mcp-server).
-
-## MCP server
-
-The backend mounts a FastMCP server (Streamable HTTP) at
-`http://localhost:8000/mcp/`. There is nothing extra to start — it runs inside
-the server process (`uvx queryview`, `npm run dev`, ...). Registering the client
-is a separate, one-time step on the machine running the agent: an HTTP MCP
-server can't install itself into someone else's client.
-
-```bash
-claude mcp add --scope user --transport http queryview http://localhost:8000/mcp/
-```
-
-Three things to get right:
-
-- **Prefer the trailing slash.** The mount serves `/mcp/`. The slashless
-  `/mcp` also works — it 307-redirects — but registering the canonical path
-  skips a round trip on every call.
-- **Match the port.** The URL must point at the port QueryView actually
-  listens on — `--port 9000` means `http://localhost:9000/mcp/`, and
-  `docker run -p 9000:8000` means the *host* port, `9000`, not the container's
-  `8000`.
-- **Start QueryView first.** The client dials this URL when it starts; if
-  nothing is listening it reports a connection error and stays failed until you
-  reconnect it.
-
-QueryView is a **local, single-user tool**: it assumes it is reachable only from
-localhost. `/mcp/` is unauthenticated, and its tools can query every configured
-connection and rewrite workspace git state, so don't publish the port. Bind the
-container to loopback — `docker run -p 127.0.0.1:8000:8000 ...` — since a plain
-`-p 8000:8000` listens on all interfaces.
-
-Tools: `session_info` (the session's connection, database, databases,
-workspace and tables), `run_sql` (read-only SQL on the session's connection,
-rows returned to the agent), `run_script` (a script with writes, per-statement
-results returned to the agent), `push_query`, `push_script` and `push_dashboard` (fill a live browser session),
-`list_queries` / `list_dashboards`, and `git_store` / `git_history` /
-`git_restore` (workspace git backups). `session_info`, `run_sql` and the push tools target an **armed** browser session: enable
-"Allow remote control" from the agent icon next to the connection pill and use
-the session id it shows. See [docs/remote.md](docs/remote.md) for the full
-protocol.
+  [mcp.md](docs/mcp.md).
 
 ## Where your data lives
 
@@ -117,6 +76,7 @@ and let [git sync](docs/gitsync.md) do it.
 - [workspace.md](docs/workspace.md) — workspaces.
 - [gitsync.md](docs/gitsync.md) — git backup, history and restore.
 - [export-import.md](docs/export-import.md) — YAML export and import.
+- [mcp.md](docs/mcp.md) — connecting an agent and what it can do.
 - [remote.md](docs/remote.md) — the remote-control protocol behind the MCP push tools.
 - [api.md](docs/api.md) — the full HTTP endpoint reference.
 - [docker.md](docs/docker.md) — running the container image and persisting its state.
