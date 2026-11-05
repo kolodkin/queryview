@@ -41,7 +41,7 @@ http://localhost:8000. Or do it by hand on that page:
 |---|---|---|
 | *Use queryview to add a Postgres connection to db.example.internal:5432 user: read-only* | **Connect** → *New connection* card | Create a ClickHouse, Postgres, DuckDB or SQLite connection — host, port and credentials, or a file path for DuckDB and SQLite. Passwords are encrypted at rest. |
 | *Use queryview to switch to the sales_reporting database* | **Connect** → a saved card | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
-| *Use queryview to show me the top 10 customers by revenue this month* | **Studio** | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
+| *Use queryview to show me the top 10 customers by revenue this month, revenue in bold and each name linked to its CRM page* | **Studio** | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
 | *Use queryview to create a staging table and copy last week's orders into it* | **Scripts** | A flat SQL scratchpad: run the statement under the cursor or the whole `;`-separated script as written — writes and DDL included, stopping at the first error — see the last statement's rows, hand it to Studio. |
 | *Use queryview to open the orders table in the explorer* | **Explorer** | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
 | *Use queryview to build a dashboard of daily signups and revenue for the last 30 days* | **Dashboard** | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |
