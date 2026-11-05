@@ -433,7 +433,7 @@ function Shell() {
       setToast('Agent updated the dashboard')
       navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
     })
-    on<{ table?: string }>('explorer', (payload) => {
+    on<{ table: string | null }>('explorer', (payload) => {
       setToast('Agent opened the Explorer')
       navigate(explorerUrl(payload))
     })

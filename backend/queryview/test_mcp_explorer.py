@@ -41,7 +41,7 @@ def test_open_explorer_table_refuses_a_missing_table(rid):
 
 def test_open_explorer_db_pushes_without_a_table(rid):
     assert _run(open_explorer_db(rid, "db"))["ok"] is True
-    assert _run(remote.next_message(rid, 1.0)) == {"type": "explorer"}
+    assert _run(remote.next_message(rid, 1.0)) == {"type": "explorer", "table": None}
     assert _run(open_explorer_db(rid, "no_such_db"))["message"] == "unknown database"
 
 

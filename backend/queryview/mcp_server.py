@@ -415,7 +415,7 @@ async def _open_explorer(session_id: str, database: str, table: str | None) -> d
         # A truncated list can't prove absence; the Explorer drops an unknown table itself.
         if not listed.get("truncated") and not any(t["name"] == table for t in listed["tables"]):
             return {"ok": False, "message": f'no table "{table}" in {database}', "database": database}
-    ok, message = await push(session_id, {"type": "explorer", **({"table": table} if table is not None else {})})
+    ok, message = await push(session_id, {"type": "explorer", "table": table})
     return {"ok": ok, "message": message, "database": database}
 
 

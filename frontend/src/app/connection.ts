@@ -52,7 +52,7 @@ export function toConnection(data: Record<string, unknown>): Connection {
 }
 
 // Where an opened connection lands: the Explorer, on its last visited table.
-export function explorerUrl(c: { table?: string }): string {
+export function explorerUrl(c: { table?: string | null }): string {
   return c.table ? `/explorer?table=${encodeURIComponent(c.table)}` : '/explorer'
 }
 
