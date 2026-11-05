@@ -80,6 +80,10 @@ tools (among others):
   `{ok, message, database}`; `ok:false` for an unknown id, a held lock
   (`"blocked, user editing"`), or a session whose Scripts page can't open yet
   (`"not connected"`, `"select a database first"`).
+- `open_explorer_db(session_id, database)` / `open_explorer_table(session_id, database, table)` —
+  switch the session to `database` and send the browser to its
+  [Explorer](./explorer.md), on `table` when given (refused when the database
+  doesn't list it). Returns `{ok, message, database}`.
 - `push_dashboard(session_id, name, html, queries, params?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
   renders it. Only the user's **Save** persists it, unless the workspace has

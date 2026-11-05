@@ -370,6 +370,52 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
     return {"ok": True, "message": "selected", "database": database}
 
 
+@mcp.tool()
+async def open_explorer_db(session_id: str, database: str) -> dict[str, Any]:
+    """Switch the session to `database` and open it on the browser's Explorer
+    page (the table navigator), keeping its last selected table if it has one.
+
+    Returns {"ok", "message", "database"}; not ok when select_database fails or
+    the push does (unknown session, "blocked, user editing").
+
+    Args:
+        session_id: The session id shown in the QueryView popover.
+        database: A database of the session's connection.
+    """
+    return await _open_explorer(session_id, database, None)
+
+
+@mcp.tool()
+async def open_explorer_table(session_id: str, database: str, table: str) -> dict[str, Any]:
+    """Switch the session to `database` and open `table` on the browser's
+    Explorer page, which browses its rows (SELECT * with field and order-by
+    pickers). Use push_query instead for custom SQL.
+
+    Returns {"ok", "message", "database"}; not ok when select_database fails,
+    the table isn't in the database, or the push fails.
+
+    Args:
+        session_id: The session id shown in the QueryView popover.
+        database: A database of the session's connection.
+        table: A table name as session_info's "tables" lists it.
+    """
+    return await _open_explorer(session_id, database, table)
+
+
+async def _open_explorer(session_id: str, database: str, table: str | None) -> dict[str, Any]:
+    r = await select_database(session_id, database)
+    if not r["ok"]:
+        return r
+    if table is not None:
+        listed = await list_tables(session_id)
+        if not listed["ok"]:
+            return {"ok": False, "message": listed["message"], "database": database}
+        if not any(t["name"] == table for t in listed["tables"]):
+            return {"ok": False, "message": f'no table "{table}" in {database}', "database": database}
+    ok, message = await push(session_id, {"type": "explorer", **({"table": table} if table else {})})
+    return {"ok": ok, "message": message, "database": database}
+
+
 async def _session_workspace_rec(session_id: str | None):
     """The workspace the given session is on, read from its row, else the
     fallback workspace. MCP is deliberately workspace-unaware: the human picks
