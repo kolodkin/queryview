@@ -43,3 +43,12 @@ def test_open_explorer_db_pushes_without_a_table(rid):
     assert _run(open_explorer_db(rid, "db"))["ok"] is True
     assert _run(remote.next_message(rid, 1.0)) == {"type": "explorer"}
     assert _run(open_explorer_db(rid, "no_such_db"))["message"] == "unknown database"
+
+
+def test_open_explorer_table_trusts_a_truncated_list(rid, monkeypatch):
+    async def truncated(sid):
+        return {"ok": True, "tables": [{"name": "items"}], "truncated": True}
+
+    monkeypatch.setattr(mcp_server, "list_tables", truncated)
+    assert _run(open_explorer_table(rid, "db", "past_the_cap"))["ok"] is True
+    assert _run(remote.next_message(rid, 1.0)) == {"type": "explorer", "table": "past_the_cap"}

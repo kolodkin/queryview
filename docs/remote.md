@@ -83,7 +83,8 @@ tools (among others):
 - `open_explorer_db(session_id, database)` / `open_explorer_table(session_id, database, table)` —
   switch the session to `database` and send the browser to its
   [Explorer](./explorer.md), on `table` when given (refused when the database
-  doesn't list it). Returns `{ok, message, database}`.
+  doesn't list it). Returns `{ok, message, database}`; past the switch, a
+  failure still leaves the session on `database`.
 - `push_dashboard(session_id, name, html, queries, params?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
   renders it. Only the user's **Save** persists it, unless the workspace has

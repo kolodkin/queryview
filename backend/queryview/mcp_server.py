@@ -372,11 +372,12 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def open_explorer_db(session_id: str, database: str) -> dict[str, Any]:
-    """Switch the session to `database` and open it on the browser's Explorer
-    page (the table navigator), keeping its last selected table if it has one.
+    """Switch the session to `database` and open its table list on the
+    browser's Explorer page (the table navigator).
 
     Returns {"ok", "message", "database"}; not ok when select_database fails or
-    the push does (unknown session, "blocked, user editing").
+    the push does (unknown session, "blocked, user editing"). A failed push
+    still leaves the session on `database`.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -392,7 +393,8 @@ async def open_explorer_table(session_id: str, database: str, table: str) -> dic
     pickers). Use push_query instead for custom SQL.
 
     Returns {"ok", "message", "database"}; not ok when select_database fails,
-    the table isn't in the database, or the push fails.
+    the table isn't in the database, or the push fails. Past select_database,
+    a failure still leaves the session on `database`.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -410,9 +412,10 @@ async def _open_explorer(session_id: str, database: str, table: str | None) -> d
         listed = await list_tables(session_id)
         if not listed["ok"]:
             return {"ok": False, "message": listed["message"], "database": database}
-        if not any(t["name"] == table for t in listed["tables"]):
+        # A truncated list can't prove absence; the Explorer drops an unknown table itself.
+        if not listed.get("truncated") and not any(t["name"] == table for t in listed["tables"]):
             return {"ok": False, "message": f'no table "{table}" in {database}', "database": database}
-    ok, message = await push(session_id, {"type": "explorer", **({"table": table} if table else {})})
+    ok, message = await push(session_id, {"type": "explorer", **({"table": table} if table is not None else {})})
     return {"ok": ok, "message": message, "database": database}
 
 
