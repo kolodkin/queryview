@@ -78,6 +78,7 @@ and let [git sync](docs/gitsync.md) do it.
 - [remote.md](docs/remote.md) — the remote-control protocol behind the MCP push tools.
 - [api.md](docs/api.md) — the full HTTP endpoint reference.
 - [docker.md](docs/docker.md) — running the container image and persisting its state.
+- [security.md](docs/security.md) — how connection credentials are protected.
 
 ## Contributing
 
