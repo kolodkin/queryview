@@ -60,7 +60,8 @@ One gap remains on a folder connection: DuckDB does not apply
 `allowed_directories` to `read_text`, `read_blob`, or `glob`, so SQL on a
 folder connection can still read a file outside the folder, including
 `encryption.key`. A DuckDB build that enforces `allowed_directories` for those
-functions, or an OS-level sandbox, closes it.
+functions, or an OS-level filesystem sandbox (for example a Linux Landlock
+ruleset that denies the query process any path outside the folder), closes it.
 
 ## SQLite
 
