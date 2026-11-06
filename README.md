@@ -10,6 +10,10 @@ workspaces that back up to git.
 QueryView is a **single-user tool that runs on your own machine**. It has no
 login and assumes it is reachable only from localhost — don't expose its port.
 
+**Give QueryView only read-only, least-privilege database credentials — never
+production write credentials.** It is an agent-driven analytic tool; see
+[creds.md](docs/creds.md).
+
 ## Quick start
 
 ```bash

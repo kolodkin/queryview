@@ -1,5 +1,9 @@
 # Credentials
 
+**Give QueryView only read-only, least-privilege database credentials — never
+production write credentials.** It is a local, agent-driven analytic tool, so
+treat anything it can reach as readable by the agent.
+
 How QueryView stores connection credentials and keeps them from leaking: where
 they live, and why neither the agent nor a stray error can read them back. For
 how you create and lock connections see [connect.md](./connect.md); for the
