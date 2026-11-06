@@ -37,22 +37,38 @@ header, Postgres as a discrete connect argument — never in a query string. A
 failure surfaces the exception text, which can name the host, port, and
 username, but the password is never interpolated into a message.
 
-## Local-file drivers cannot read the store
+## Disk-access connections
 
-DuckDB and SQLite connections read local files, so their SQL is sandboxed
-away from QueryView's own `encryption.key` and `db.sqlite`. SQLite opens
-read-only with `ATTACH` disabled. A DuckDB file or in-memory connection runs
-with external file access turned off; a DuckDB folder connection is scoped to
-its folder with `allowed_directories`. `lock_configuration` seals it: a
-script that tries to re-enable external access fails on that statement, so SQL
-cannot lift the lockdown. The agent also cannot switch to or create a
-file-driver connection.
+DuckDB and SQLite read local files, unlike the network drivers, so their SQL
+is sandboxed away from QueryView's own `encryption.key` and `db.sqlite`. The
+agent cannot switch to or create either — only a tab can open one.
 
-A folder connection keeps one gap: DuckDB does not apply `allowed_directories`
-to `read_text`, `read_blob`, or `glob`, so SQL on a folder connection can still
-read a file outside the folder, including `encryption.key`. A DuckDB build that
-enforces `allowed_directories` for those functions, or an OS-level sandbox,
-closes it.
+## DuckDB
+
+A file or in-memory connection runs with external file access turned off, which
+blocks `read_text`, `read_blob`, `read_csv`, `glob`, `ATTACH`, and `COPY` —
+every external read or write. Queries and writes to the connection's own
+database still work. A folder connection instead scopes access to its folder
+with `allowed_directories`, so relative reads of the folder's own data files
+work while reads outside it do not.
+
+`lock_configuration` seals both: a script that tries to re-enable external
+access fails on that statement, so SQL cannot lift the lockdown, and every
+query reopens a freshly-locked connection.
+
+One gap remains on a folder connection: DuckDB does not apply
+`allowed_directories` to `read_text`, `read_blob`, or `glob`, so SQL on a
+folder connection can still read a file outside the folder, including
+`encryption.key`. A DuckDB build that enforces `allowed_directories` for those
+functions, or an OS-level sandbox, closes it.
+
+## SQLite
+
+Browsing and queries open the database file read-only, with `ATTACH` and
+`VACUUM INTO` disabled so unwrapped SQL cannot reach or write another file.
+SQLite has no `read_text`-style function, so there is nothing to read an
+arbitrary file with. The Scripts page opens the file read-write so a script's
+own statements can write; `ATTACH` is available there.
 
 ## Related docs
 
