@@ -76,14 +76,14 @@ def test_file_connection_cannot_read_other_host_files(duck_path, tmp_path):
     assert isinstance(_run(d.run_sql(DuckConfig(duck_path), "SELECT count(*) FROM items", None, 10)), RowsResult)
 
 
-def test_script_cannot_undo_the_filesystem_lockdown(duck_path, tmp_path):
-    # run_script allows writes and multiple statements, but lock_configuration
-    # seals the sandbox: re-enabling external access fails and the read never runs.
+def test_script_cannot_re_enable_external_access(duck_path, tmp_path):
+    # run_script allows writes and multiple statements, but DuckDB refuses to
+    # turn external access back on at runtime, so the read never runs.
     secret = tmp_path / "secret.txt"
     secret.write_text("TOP SECRET")
-    script = f"SET lock_configuration=false; SET enable_external_access=true; SELECT content FROM read_text('{secret}')"
+    script = f"SET enable_external_access=true; SELECT content FROM read_text('{secret}')"
     results = _run(DuckDBDriver().execute_script(DuckConfig(duck_path), script, None))
-    assert results[0].ok is False and "configuration" in results[0].message
+    assert results[0].ok is False and "external access" in results[0].message
     # Stopped at the first error: the read_text statement never ran.
     assert not any("TOP SECRET" in str(r.rows) for r in results if r.rows is not None)
 

@@ -43,33 +43,28 @@ username, but the password is never interpolated into a message.
 
 ## Disk-access connections
 
-DuckDB and SQLite read local files, unlike the network drivers, so their SQL
-is sandboxed away from QueryView's own `encryption.key` and `db.sqlite`. The
-agent cannot switch to or create either — only a tab can open one.
+DuckDB and SQLite read local files, unlike the network drivers. The agent
+cannot switch to or create either — only a tab can open one. How far their SQL
+reaches into the filesystem differs by driver, below.
 
 ## DuckDB
 
 A file or in-memory connection runs with external file access turned off, which
 blocks `read_text`, `read_blob`, `read_csv`, `glob`, `ATTACH`, and `COPY` —
 every external read or write. Queries and writes to the connection's own
-database still work. A folder connection instead scopes access to its folder
-with `allowed_directories`, so relative reads of the folder's own data files
-work while reads outside it do not.
+database still work, and DuckDB refuses to re-enable external access at
+runtime, so a script cannot turn it back on; each query reopens the connection
+fresh.
 
-`lock_configuration` seals both: a script that tries to re-enable external
-access fails on that statement, so SQL cannot lift the lockdown, and every
-query reopens a freshly-locked connection.
+A folder connection must keep external access on to read its own data files,
+and DuckDB 1.5.4 enforces no runtime directory scope, so it can read any local
+file. That is not a driver defect: QueryView is a local, single-user tool whose
+driving agent already has the user's filesystem read, `encryption.key` included
+— no in-tool setting makes a local file private from it.
 
-A folder connection keeps external file access on so the folder's data files
-can be read, and that reach is not perfectly confined to the folder. This is
-not a driver defect: QueryView is a local, single-user tool, and the agent that
-drives it generally already has read access to the user's files, `encryption.key`
-included. No in-tool setting makes a local file private from an agent that can
-already read the disk.
-
-So credentials are protected operationally, not by a sandbox: store only
-read-only, least-privilege connections in QueryView, never production or write
-credentials. Then a stored config, or the key itself, yields nothing powerful.
+So credentials are protected operationally: store only read-only,
+least-privilege connections, never production write credentials. Then a stolen
+config, or the key itself, is worth little.
 
 ## SQLite
 
