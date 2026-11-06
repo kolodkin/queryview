@@ -63,13 +63,11 @@ folder connection can still read a file outside the folder, including
 functions, or an OS-level filesystem sandbox (for example a Linux Landlock
 ruleset that denies the query process any path outside the folder), closes it.
 
-Connecting a folder to the agent is itself read access. The agent reads every
-data file in that folder, as the connection intends, and — through the residual
-above — can reach files outside it. This is inherent in pointing a SQL agent at
-local files: the agent borrows the user's own filesystem read, independent of
-QueryView. The protections here limit its reach and bar it from opening a
-file-driver connection on its own; they do not make a folder the user has
-connected private from the agent.
+An agent driving QueryView usually already has read access to the user's
+filesystem, the encryption key included, so this gap grants it little it could
+not already reach. The safeguard is operational, not a sandbox: never store
+production or write credentials in QueryView — give it read-only,
+least-privilege connections, so a leaked credential is low-impact.
 
 ## SQLite
 
