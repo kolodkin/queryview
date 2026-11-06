@@ -11,7 +11,8 @@ QueryView is a **single-user tool that runs on your own machine**. It has no
 login and assumes it is reachable only from localhost — don't expose its port.
 
 **Give QueryView only read-only, least-privilege database credentials — never
-production write credentials.** It is an agent-driven analytic tool; see
+production write credentials.** It is an agent-driven analytic tool, and the
+agent can run any statement the credentials allow, writes included; see
 [creds.md](docs/creds.md).
 
 ## Quick start
