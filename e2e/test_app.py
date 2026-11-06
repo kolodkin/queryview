@@ -1,4 +1,5 @@
 import re
+import uuid
 
 import httpx
 import pytest
@@ -171,6 +172,50 @@ def _switch_database_from_pill(page: Page, database: str) -> None:
     page.get_by_test_id("db-select-filter").fill(database)
     page.keyboard.press("Enter")
     expect(page.get_by_test_id("connection-status")).to_contain_text(f"· {database}")
+
+
+def test_a_connection_picked_from_the_pill_picks_its_database_in_place(
+    seeded_test_db, seeded_duckdb, page: Page, base_url: str
+) -> None:
+    """A connection opened from the pill's list that still needs a database
+    stays on the explorer, with the pill's menu reopened to pick one, rather
+    than going back to the Connect page."""
+    _connect(page, _DUCKDB, seeded_duckdb)
+    sid = page.evaluate("() => sessionStorage.getItem('qv_session')")
+    name = f"side-ch-{uuid.uuid4().hex[:8]}"
+    r = httpx.post(
+        f"{base_url}/api/db/connect",
+        json={
+            "type": "clickhouse",
+            "host": CH_HOST,
+            "port": CH_PORT,
+            "username": CH_USER,
+            "password": CH_PASSWORD,
+            "name": name,
+            "session": True,
+        },
+        headers={"X-QV-Session": sid},
+    )
+    assert r.json()["ok"] is True
+    # The tab follows the server onto the new, database-less connection: the
+    # pill shows it (name only) and the explorer asks for a database.
+    status = page.get_by_test_id("connection-status")
+    expect(status).to_contain_text(name)
+    expect(page.get_by_test_id("explorer-hint")).to_contain_text("connection menu")
+
+    status.click()
+    page.locator('[data-testid="pill-conn"][data-conn="duckdb"]').click()
+    expect(page.get_by_test_id("explorer-tables")).to_be_visible()
+
+    status.click()
+    page.locator(f'[data-testid="pill-conn"][data-conn="{name}"]').click()
+    expect(page).to_have_url(re.compile(r"/explorer"))
+    expect(status).to_contain_text(name)
+    expect(page.get_by_test_id("db-select")).to_be_visible()
+    page.get_by_test_id("db-select-filter").fill(CH_DB)
+    page.keyboard.press("Enter")
+    expect(status).to_contain_text(f"· {CH_DB}")
+    expect(page.get_by_test_id("explorer-tables")).to_contain_text("items")
 
 
 @pytest.mark.parametrize("case", _PICKER, ids=lambda c: c.id)

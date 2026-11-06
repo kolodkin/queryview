@@ -132,7 +132,9 @@ shows "No databases match". Each row has a copy icon for its name. Selecting a d
 Clicking the `🟢 <connection> · <database>` pill reopens the same list as a
 dropdown — same filter, plus **Escape** to close — so the database can be
 switched from any page without going back to Connect. Below the databases it
-lists the connections; clicking one opens it. Both the dropdown and the picker
+lists the connections; clicking one opens it, on the explorer, with the
+dropdown reopened when the connection still needs a database picked (one
+visited earlier in the session reopens on that database). Both the dropdown and the picker
 re-list the databases on open, so one created since the connect appears; a
 failed re-list keeps the list on screen.
 

@@ -285,12 +285,17 @@ function Shell() {
   )
 
   // A failed deep-link open just leaves us disconnected. Ready already (a
-  // picker-less driver) means tables to browse; otherwise Connect's picker.
-  async function openConnection(name: string) {
+  // picker-less driver, or a database visited earlier this session) means
+  // tables to browse; otherwise `picker` is where the database gets chosen:
+  // Connect's picker, or the Explorer under the pill's own menu. Returns
+  // whether a database is still to be picked.
+  async function openConnection(name: string, picker = '/connect') {
     const r = await openSaved(name)
     if (r.ok) setConnection(r.connection)
     else setToast(r.message)
-    navigate(r.ok && isReady(r.connection) ? explorerUrl(r.connection) : '/connect')
+    const ready = r.ok && isReady(r.connection)
+    navigate(ready ? explorerUrl(r.connection) : picker)
+    return r.ok && !ready
   }
 
   // The live connection for the attached session. `/api/session` reads that
@@ -490,7 +495,7 @@ function Shell() {
       {/* One row: labels truncate as the window narrows instead of the two
           groups overlapping. */}
       <header className="absolute inset-x-4 top-4 z-10 flex items-center gap-2">
-        {ready && connection && (
+        {connection && (
           <div className="flex min-w-0 items-center gap-2">
             <div ref={dbRef} className="relative min-w-0">
               {/* The copy icon is a sibling of the toggle, not a child: a
@@ -530,9 +535,12 @@ function Shell() {
                   connection={connection}
                   connections={connections}
                   onSelect={(db) => void switchDatabase(db)}
-                  onOpenConnection={(name) => {
+                  onOpenConnection={async (name) => {
                     setDbOpen(false)
-                    if (name !== connection.name) void openConnection(name)
+                    // Stay on the data: a connection that still needs a
+                    // database reopens this menu rather than going to Connect.
+                    if (name !== connection.name && (await openConnection(name, '/explorer')))
+                      setDbOpen(true)
                   }}
                   onDisconnect={() => void disconnect()}
                 />

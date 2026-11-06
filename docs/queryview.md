@@ -48,12 +48,14 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
   - the new-connection cards are hidden; **+ New** remains.
 - **← Connections** — on the form and the picker; back to the cards.
 - **Connection status** — the one element that persists across every page: a
-  pill in the **top-left** corner, hidden until a database is selected, then
-  showing 🟢 `<connection> · <database>`, with a copy icon for the database name.
+  pill in the **top-left** corner, hidden while disconnected, showing
+  🟢 `<connection> · <database>` (just the name until a database is selected),
+  with a copy icon for the database name.
   Clicking it opens a searchable database switcher; each row's **copy** icon
   copies the name without switching. Below it, the connections (this session's
   own, the agent's badged `agent`, then saved; the active one marked) switch
-  on click, and **Disconnect** at the bottom drops the connection and goes to
+  on click — one that still needs a database lands on the explorer with this
+  menu reopened to pick it — and **Disconnect** at the bottom drops the connection and goes to
   `/connect` (a picker-less driver's menu has just these two).
   Next to it, an **agent icon** opens the remote-control popover (opt-in "Allow
   remote control"); see [remote.md](./remote.md).
