@@ -10,6 +10,10 @@ workspaces that back up to git.
 QueryView is a **single-user tool that runs on your own machine**. It has no
 login and assumes it is reachable only from localhost — don't expose its port.
 
+**Give QueryView only read-only, least-privilege database credentials — never
+production write credentials.** It is an agent-driven analytic tool; see
+[creds.md](docs/creds.md).
+
 ## Quick start
 
 ```bash
@@ -78,6 +82,7 @@ and let [git sync](docs/gitsync.md) do it.
 - [remote.md](docs/remote.md) — the remote-control protocol behind the MCP push tools.
 - [api.md](docs/api.md) — the full HTTP endpoint reference.
 - [docker.md](docs/docker.md) — running the container image and persisting its state.
+- [creds.md](docs/creds.md) — how connection credentials are stored and protected.
 
 ## Contributing
 

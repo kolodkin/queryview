@@ -346,7 +346,7 @@ function Shell() {
 
   // The session decides the landing page, the live connection and what the
   // query panel holds, so nothing renders until this resolves. Which session a
-  // tab gets is the server's call — see attach() in backend/studio/sessions.py.
+  // tab gets is the server's call — see attach() in backend/queryview/sessions.py.
   useEffect(() => {
     let stopHeartbeat = () => {}
     let stopRows = () => {}

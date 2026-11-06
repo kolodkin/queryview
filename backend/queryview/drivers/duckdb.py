@@ -108,12 +108,22 @@ def _open(path: str, database: str | None, read_only: bool = True):
     if _is_folder(path):
         con = duckdb.connect(":memory:")
         con.execute(f"SET file_search_path = {_sql_str(path)}")
+        # Folder mode needs external file access for its own data files, and
+        # DuckDB 1.5.4 enforces no runtime directory scope, so this connection
+        # can read any local file. The guard is operational: read-only creds.
         return con
     if database is not None:  # only folder mode selects one: the folder is gone
         raise FileNotFoundError(f"folder not found: {path}")
     # read_only avoids lock contention between concurrent describe/query opens;
     # :memory: cannot be read_only, so open it read-write.
-    return duckdb.connect(path, read_only=(read_only and path != ":memory:"))
+    con = duckdb.connect(path, read_only=(read_only and path != ":memory:"))
+    # A file/memory connection queries its own DB; it never needs other local
+    # files, so block them — no read_text/read_csv/ATTACH of the host (e.g.
+    # QueryView's encryption.key) through unwrapped SQL. Writes to the open DB
+    # still work. DuckDB refuses to re-enable external access at runtime, so SQL
+    # cannot undo this; no config lock is needed (that would also block SET).
+    con.execute("SET enable_external_access = false")
+    return con
 
 
 # Data files a folder lists as tables: base extension -> DuckDB reader. A

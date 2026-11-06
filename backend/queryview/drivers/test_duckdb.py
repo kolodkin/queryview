@@ -64,6 +64,30 @@ def test_execute_script_reports_a_runtime_error_as_a_failed_statement(duck_path)
     assert "abc" in results[1].message
 
 
+def test_file_connection_cannot_read_other_host_files(duck_path, tmp_path):
+    # A file/memory connection has external access locked off, so unwrapped SQL
+    # cannot read the host (e.g. QueryView's encryption.key) via read_text.
+    secret = tmp_path / "secret.txt"
+    secret.write_text("TOP SECRET")
+    d = DuckDBDriver()
+    r = _run(d.run_sql(DuckConfig(duck_path), f"SELECT content FROM read_text('{secret}')", None, 10))
+    assert isinstance(r, Err) and "Permission" in r.message
+    # The connection still queries its own tables.
+    assert isinstance(_run(d.run_sql(DuckConfig(duck_path), "SELECT count(*) FROM items", None, 10)), RowsResult)
+
+
+def test_script_cannot_re_enable_external_access(duck_path, tmp_path):
+    # run_script allows writes and multiple statements, but DuckDB refuses to
+    # turn external access back on at runtime, so the read never runs.
+    secret = tmp_path / "secret.txt"
+    secret.write_text("TOP SECRET")
+    script = f"SET enable_external_access=true; SELECT content FROM read_text('{secret}')"
+    results = _run(DuckDBDriver().execute_script(DuckConfig(duck_path), script, None))
+    assert results[0].ok is False and "external access" in results[0].message
+    # Stopped at the first error: the read_text statement never ran.
+    assert not any("TOP SECRET" in str(r.rows) for r in results if r.rows is not None)
+
+
 # --- folder mode -------------------------------------------------------------
 
 
