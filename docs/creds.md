@@ -48,6 +48,11 @@ the opposite trade: it hides the connections you choose; on the rest the agent
 runs anything the credentials allow, writes included. The lock protects
 connections, not tables — so the credentials themselves must be read-only.
 
+None of these local setups is real protection: the agent shares the machine
+with the credentials. Real protection is a hosted service with user
+authentication in front, where credentials stay on the server and the agent
+only holds a scoped user login.
+
 ## Errors never echo passwords
 
 Driver auth is sent out of band — ClickHouse in an HTTP `Authorization`
