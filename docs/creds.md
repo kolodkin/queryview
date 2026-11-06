@@ -32,7 +32,8 @@ A saved connection can be locked behind a passphrase. Only its scrypt hash is
 stored, never the passphrase. Unlocking exchanges the passphrase for a
 per-session token; wrong attempts back off exponentially, up to 30 seconds. A
 locked connection is hidden from the agent entirely and cannot be queried
-until a tab unlocks it.
+until a tab unlocks it. Why a passphrase rather than a startup token is
+under [Design decisions](#design-decisions).
 
 ## Errors never echo passwords
 
@@ -73,6 +74,26 @@ Browsing and queries open the database file read-only, with `ATTACH` and
 SQLite has no `read_text`-style function, so there is nothing to read an
 arbitrary file with. The Scripts page opens the file read-write so a script's
 own statements can write; `ATTACH` is available there.
+
+## Design decisions
+
+Both follow from one fact: the browser and the agent reach the same HTTP API,
+and nothing in a request tells them apart. The agent is a local process on the
+same `localhost` the tab is.
+
+**A passphrase per connection, not a startup token.** A Jupyter-style token
+printed at launch would gate every `/api/` route behind a secret the agent, a
+separate process, never holds. QueryView locks per connection instead, because
+the agent is its main user: every connection is the agent's to query by
+default, and a lock marks the exceptions. A startup token inverts that default,
+is void when the agent starts the server, and signs every tab out on a restart.
+
+**A lock at all, unlike DataGrip and DBeaver.** Both expose MCP as their only
+programmatic door and gate it with per-connection opt-in or per-tool grants.
+They need nothing stronger because their UI talks to the engine in-process: a
+confirmation dialog is a native window no HTTP request can answer. QueryView's
+UI is a web page on the same door the agent uses, so a typed secret is the only
+way to keep a connection human-only.
 
 ## Related docs
 
