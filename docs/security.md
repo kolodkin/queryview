@@ -43,8 +43,10 @@ DuckDB and SQLite connections read local files, so their SQL is sandboxed
 away from QueryView's own `encryption.key` and `db.sqlite`. SQLite opens
 read-only with `ATTACH` disabled. A DuckDB file or in-memory connection runs
 with external file access turned off; a DuckDB folder connection is scoped to
-its folder with `allowed_directories`. The lockdown is locked so SQL cannot
-lift it. The agent also cannot switch to or create a file-driver connection.
+its folder with `allowed_directories`. `lock_configuration` seals it: a
+script that tries to re-enable external access fails on that statement, so SQL
+cannot lift the lockdown. The agent also cannot switch to or create a
+file-driver connection.
 
 A folder connection keeps one gap: DuckDB does not apply `allowed_directories`
 to `read_text`, `read_blob`, or `glob`, so SQL on a folder connection can still
