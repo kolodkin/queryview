@@ -192,52 +192,12 @@ restarts (the session then reads as disconnected).
   agent's `use_connection` toasts "Agent switched to <name>", never the user's.
 - You add one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved connections and all sessions' ones.
-- The agent may switch to any unlocked ClickHouse or Postgres connection and
-  pick the database of whichever unlocked one it is on; it may add (also
+- The agent may switch to any ClickHouse or Postgres connection and pick the
+  database of whichever one it is on; it may add (also
   ClickHouse or Postgres only: DuckDB and SQLite read local files) and remove
   only its own. See [remote.md](./remote.md#mcp-tools).
-- This keeps a cooperating agent in its lane; it is not a security boundary.
-  For one, lock the connection.
-
-## Locked connections
-
-A saved connection can be **locked** behind a passphrase: click the lock on
-its card and type one. On a session whose active connection is locked, every
-MCP tool that reads or writes data (`run_sql`, `run_script`, `select_database`,
-the table list in `session_info`, every push) answers `connection is locked`,
-as does `use_connection` naming a locked one,
-and so does every REST call without the tab's unlock token (`403`).
-`session_info` still names the connection and reports `locked: true`.
-`list_connections` and `list_databases` leave a locked connection out
-entirely, even while a tab has it unlocked: the lock is the connection's
-stored state, an unlock only that tab's. Session connections are never
-locked. A lock holds against the API only: an agent's script on any unlocked
-DuckDB or SQLite connection can reach every file QueryView can, a locked
-connection's file and `db.sqlite` included
-([scripts.md](./scripts.md#file-writes)).
-
-Stored: only a salted scrypt hash of the passphrase (`lock_hash` on the
-`connections` row). Held by the tab: an **unlock token**, a random string the
-server issues for the passphrase and keeps in memory per session, kept in
-`sessionStorage` (`qv_token`) and sent as `X-QV-Token` on every request.
-Locking hands the locking tab its token, so the connection it is on keeps
-working.
-
-- **Opening** a locked card lands on it like any other; the shell then asks
-  for the passphrase unless the tab holds a token for it, as it does when a
-  session resumes on a locked connection without one (a new tab, a backend
-  restart). Cancelling disconnects.
-- **Reload** keeps the token; closing the tab drops it. A restart drops the
-  server side, so the next request asks again.
-- **Removing** the lock takes the passphrase, and so does **deleting** the
-  connection. **Editing** needs the tab's token: without one the passphrase
-  is asked first. A forgotten passphrase means deleting and re-adding the
-  connection.
-- Attempts on a connection back off exponentially (2s, 4s … 30s), whoever
-  sends them.
-
-Not covered: typing the passphrase where the agent can read it, or handing the
-agent the browser tab that holds the token.
+- This keeps a cooperating agent in its lane; it is not a security boundary
+  ([creds.md](./creds.md#design-decisions)).
 
 ## Sessions & reconnecting
 
@@ -277,13 +237,10 @@ session.
 | ------ | ----------------------------- | -------------------------------------- | ------ |
 | POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
 | POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
-| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by, locked}]}`: this session's connections, then the saved ones most recent first (never the config) |
-| GET    | `/api/db/connections/<name>` | —                               | `{ok, name, type, config}` the saved config with the password blanked, for the edit form; unknown → `404`, locked without the token → `403` |
-| DELETE | `/api/db/connections` | `{name, passphrase?}`                  | `{ok}`; deletes a connection (this session's own, else a saved one) and disconnects every session on it; a locked one needs its passphrase (`403` without) |
-| POST   | `/api/db/open`        | `{name}`                               | `{ok, …}` the same state as `GET /api/session` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card); on a locked one `unlocked` says whether this tab's token opens it |
-| POST   | `/api/db/lock`        | `{name, passphrase}`                   | Lock a saved connection; `{ok, token}` for this tab. Empty passphrase, unknown or already locked → `400` |
-| POST   | `/api/db/unlock`      | `{name, passphrase}`                   | `{ok, token}` — this session's unlock token; wrong passphrase → `403`, not locked → `400` |
-| DELETE | `/api/db/lock`        | `{name, passphrase}`                   | Remove the lock; `{ok}`, wrong passphrase → `403` |
+| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by}]}`: this session's connections, then the saved ones most recent first (never the config) |
+| GET    | `/api/db/connections/<name>` | —                               | `{ok, name, type, config}` the saved config with the password blanked, for the edit form; unknown → `404` |
+| DELETE | `/api/db/connections` | `{name}`                               | `{ok}`; deletes a connection (this session's own, else a saved one) and disconnects every session on it |
+| POST   | `/api/db/open`        | `{name}`                               | `{ok, …}` the same state as `GET /api/session` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card) |
 | GET    | `/api/db/databases`   | —                                      | `{ok, name, databases}` \| `{ok:false, message}`; re-lists the connection's databases; no session → `409` |
 | POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database (a name not in the cached list is re-listed once) |
 | POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |

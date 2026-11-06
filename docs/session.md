@@ -136,8 +136,6 @@ copying an id.
 - A new tab never auto-resumes it, and it can't be deleted or renamed.
 - Otherwise it is an ordinary session: pick it in the session switcher to see
   what the agent is on, and arm it with **Allow remote control** for pushes.
-- [Locked](./connect.md#locked-connections) connections refuse it like any
-  other session.
 - Its row remembers its last connection, but an agent-added session
   connection is in-memory and gone after a restart.
 

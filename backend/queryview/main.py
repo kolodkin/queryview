@@ -31,17 +31,12 @@ from .connect import (
     get_session,
     list_connections_for,
     list_tables,
-    lock_connection,
     open_saved,
     parse_driver_config,
-    push,
     refresh_databases,
-    remove_lock,
-    request_token,
     run_query,
     saved_config,
     select_database,
-    unlock_connection,
 )
 from .dashboard_queries import run_dashboard_queries
 from .dashboards import _upsert_and_push, get_dashboard, list_dashboards
@@ -144,8 +139,6 @@ async def session_header(request: Request, call_next):
     """Identify the session from the header the SPA sends on every /api call.
     There is no cookie: a session is named by its id, not by the browser."""
     request.state.sid = request.headers.get("X-QV-Session") or ""
-    # The unlock token for a locked connection (docs/connect.md#locked-connections).
-    request_token.set(request.headers.get("X-QV-Token"))
     return await call_next(request)
 
 
@@ -335,39 +328,7 @@ async def db_open(request: Request):
     r = await open_saved(request.state.sid, name)
     if not r["ok"]:
         return JSONResponse({"ok": False, "message": r["message"]}, status_code=404 if r.get("not_found") else 200)
-    # The full session state: a locked connection lands with `unlocked` so the
-    # tab knows to ask for the passphrase.
     return {"ok": True, **await get_session(request.state.sid)}
-
-
-def _lock_body(body: Any) -> tuple[str, str]:
-    b = body if isinstance(body, dict) else {}
-    passphrase = b.get("passphrase")
-    return _clean_str(b.get("name")), passphrase if isinstance(passphrase, str) else ""
-
-
-# Lock a saved connection behind a passphrase; this tab gets its unlock token.
-@app.post("/api/db/lock")
-async def db_lock(request: Request):
-    name, passphrase = _lock_body(await _read_json(request))
-    r = await lock_connection(request.state.sid, name, passphrase)
-    return r if r["ok"] else _gate_error(r, (), default=400)
-
-
-# Remove a lock, given its passphrase.
-@app.delete("/api/db/lock")
-async def db_lock_remove(request: Request):
-    name, passphrase = _lock_body(await _read_json(request))
-    r = await remove_lock(name, passphrase)
-    return r if r["ok"] else _gate_error(r, (), default=400)
-
-
-# Exchange a locked connection's passphrase for this tab's unlock token.
-@app.post("/api/db/unlock")
-async def db_unlock(request: Request):
-    name, passphrase = _lock_body(await _read_json(request))
-    r = await unlock_connection(request.state.sid, name, passphrase)
-    return r if r["ok"] else _gate_error(r, (), default=400)
 
 
 # A saved connection's config for the edit form, password blanked.
@@ -377,11 +338,11 @@ async def db_connection(name: str, request: Request):
     return r if r["ok"] else _gate_error(r, (), default=404 if r.get("not_found") else 400)
 
 
-# Delete a connection; a locked one takes its passphrase.
+# Delete a connection.
 @app.delete("/api/db/connections")
 async def db_connection_delete(request: Request):
-    name, passphrase = _lock_body(await _read_json(request))
-    r = await delete_connection(request.state.sid, name, passphrase)
+    b = await _read_json(request)
+    r = await delete_connection(request.state.sid, _clean_str(b.get("name") if isinstance(b, dict) else None))
     return r if r["ok"] else _gate_error(r, (), default=404 if r.get("not_found") else 400)
 
 
@@ -405,11 +366,9 @@ async def db_database(request: Request):
 
 
 def _gate_error(r: dict[str, Any], reasons_409: tuple[str, ...], default: int = 200) -> JSONResponse:
-    """Failed query/describe/tables result → response. A locked connection is
-    403, session-gate reasons in `reasons_409` 409; anything else (a driver
-    error) stays `default`."""
-    reason = r.get("reason")
-    status = 403 if reason == "locked" else 409 if reason in reasons_409 else default
+    """Failed query/describe/tables result → response. Session-gate reasons in
+    `reasons_409` are 409; anything else (a driver error) stays `default`."""
+    status = 409 if r.get("reason") in reasons_409 else default
     return JSONResponse({"ok": False, "message": r["message"]}, status_code=status)
 
 
@@ -665,7 +624,7 @@ async def remote_push(request: Request):
         "cell_view": cell_view,
         "name": name,
     }
-    ok, message = await push(session_id, payload)
+    ok, message = remote.push(session_id, payload)
     return {"ok": ok, "message": message}
 
 

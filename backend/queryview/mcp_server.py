@@ -14,14 +14,13 @@ from .connect import (
     _gated_session,
     _session_conn,
     add_session_connection,
-    agent_connections_for,
     execute_script,
     get_session,
+    list_connections_for,
     list_databases_of,
     list_tables,
     open_saved,
     parse_driver_config,
-    push,
     remove_session_connection,
 )
 from .connect import run_sql as connect_run_sql
@@ -63,8 +62,6 @@ async def push_query(
     the agent icon next to the connection status pill, after enabling "Allow
     remote control"; without one, use the standing Agent session "agent".
     To explore data first, use run_sql with the same id.
-    A session on a locked connection (see session_info) refuses every push and
-    query with "connection is locked"; use_connection another one.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -95,7 +92,7 @@ async def push_query(
         "cell_view": cell_view,
         "name": name,
     }
-    ok, message = await push(session_id, payload)
+    ok, message = remote.push(session_id, payload)
     return {"ok": ok, "message": message, "database": await sessions.database_of(session_id)}
 
 
@@ -210,17 +207,15 @@ async def session_info(session_id: str) -> dict[str, Any]:
         session_id: The session id shown in the QueryView popover.
 
     Returns {"ok": True, "connected", "connection", "type", "scope",
-    "created_by", "locked", "database", "databases", "workspace",
+    "created_by", "database", "databases", "workspace",
     "tables": [{name, ...}]}; a disconnected session
     has "connected": False and no connection fields; "tables" is empty until a
-    database is selected, and on a locked connection ("locked": True), which
-    the agent may not query at all. Unknown session → {"ok": False, "message"}.
+    database is selected. Unknown session → {"ok": False, "message"}.
     """
     rec = await sessions.get_session_rec(session_id) if session_id else None
     if rec is None:
         return {"ok": False, "message": "unknown session"}
     info: dict[str, Any] = {"ok": True, "workspace": rec.workspace, **await get_session(session_id)}
-    info.pop("unlocked", None)  # the tab's business, not the agent's
     if info["connected"]:
         info["connection"] = info.pop("name")
         listed = await list_tables(session_id)  # not ok until a database is picked
@@ -235,7 +230,6 @@ async def list_connections(session_id: str) -> dict[str, Any]:
     """List the connections a session can use: its session connections (memory
     only, this session only) and the saved ones, each tagged with "scope"
     ("session" | "saved"), "created_by" ("agent" | "user") and "active".
-    Locked saved connections are left out, even while a tab has one unlocked.
 
     You may use_connection any ClickHouse or Postgres one; remove_connection only
     scope="session", created_by="agent" entries.
@@ -256,27 +250,25 @@ async def list_connections(session_id: str) -> dict[str, Any]:
                 "created_by": c["created_by"],
                 "active": c["name"] == rec.connection_name,  # names are unique
             }
-            for c in await agent_connections_for(session_id)
+            for c in await list_connections_for(session_id)
         ],
     }
 
 
 @mcp.tool()
 async def list_databases(session_id: str, connection: str | None = None) -> dict[str, Any]:
-    """List the databases of every connection list_connections shows (locked
-    ones are left out), fetched live from each server; only `connection`'s
-    when given.
+    """List the databases of every connection list_connections shows, fetched
+    live from each server; only `connection`'s when given.
 
     Returns {"ok": True, "connections": [{name, type, databases}]}, where a
     connection that cannot be reached has "error" in place of "databases";
-    {"ok": False, "message"} for an unknown session, or a `connection` that is
-    unknown or locked.
+    {"ok": False, "message"} for an unknown session or an unknown `connection`.
     """
     if await sessions.get_session_rec(session_id) is None:
         return {"ok": False, "message": "unknown session"}
-    conns = [c for c in await agent_connections_for(session_id) if connection in (None, c["name"])]
+    conns = [c for c in await list_connections_for(session_id) if connection in (None, c["name"])]
     if connection is not None and not conns:
-        return {"ok": False, "message": f'no connection named "{connection}"'}  # locked reads as unknown
+        return {"ok": False, "message": f'no connection named "{connection}"'}
     return {"ok": True, "connections": list(await asyncio.gather(*(_databases_of(session_id, c) for c in conns)))}
 
 
@@ -339,15 +331,14 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
 async def use_connection(session_id: str, name: str, database: str | None = None) -> dict[str, Any]:
     """Switch the session to any ClickHouse or Postgres connection
     list_connections shows, optionally selecting `database` (both need one
-    before querying). The browser follows within a few seconds. Locked
-    connections are refused, and so are DuckDB and SQLite ones: they read local
-    files.
+    before querying). The browser follows within a few seconds. DuckDB and
+    SQLite connections are refused: they read local files.
 
     Returns {"ok": True, "name", "type", "databases", "database"} or
     {"ok": False, "message"}.
     """
     # shortcut: no switching to file drivers until DuckDB reads blob storage instead of local files
-    listed = next((c for c in await agent_connections_for(session_id) if c["name"] == name), None)
+    listed = next((c for c in await list_connections_for(session_id) if c["name"] == name), None)
     if listed is not None and listed["created_by"] != "agent" and listed["type"] not in _AGENT_DRIVERS:
         return {"ok": False, "message": f"the agent may switch only to {' or '.join(_AGENT_DRIVERS)} connections"}
     return await open_saved(session_id, name, database, by="agent")
@@ -357,8 +348,8 @@ async def use_connection(session_id: str, name: str, database: str | None = None
 async def select_database(session_id: str, database: str) -> dict[str, Any]:
     """Switch the database of the session's active connection.
 
-    Returns {"ok", "message", "database"}; not ok when disconnected, the
-    connection is locked, or the database does not exist (a name missing from
+    Returns {"ok", "message", "database"}; not ok when disconnected or the
+    database does not exist (a name missing from
     session_info's "databases" is re-checked against the server first).
     """
     cur = await get_session(session_id)
@@ -396,7 +387,7 @@ async def open_explorer(session_id: str, database: str, table: str | None = None
         # A truncated list can't prove absence; the Explorer drops an unknown table itself.
         if not listed.get("truncated") and not any(t["name"] == table for t in listed["tables"]):
             return {"ok": False, "message": f'no table "{table}" in {database}', "database": database}
-    ok, message = await push(session_id, {"type": "explorer", "table": table})
+    ok, message = remote.push(session_id, {"type": "explorer", "table": table})
     return {"ok": ok, "message": message, "database": database}
 
 

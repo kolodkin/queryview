@@ -44,14 +44,13 @@ tools (among others):
   discovery. The agent may switch to any listed connection (below).
 - Connections ([access rule](./connect.md#session-connections)):
   `list_connections(session_id)` tags each with `scope`, `created_by`,
-  `active`, leaving out [locked](./connect.md#locked-connections) ones;
+  `active`;
   `list_databases(session_id, connection?)` lists the databases of each listed
   connection, or of `connection` only.
   `add_connection(session_id, name, type, config)` adds a ClickHouse or
   Postgres session connection; `use_connection(session_id, name, database?)`
-  works on any unlocked ClickHouse or Postgres one (not DuckDB or SQLite: they
-  read local files), `select_database(session_id, database)` on any unlocked
-  active one; `remove_connection(session_id, name)` only on the agent's own.
+  works on any ClickHouse or Postgres one (not DuckDB or SQLite: they read
+  local files), `select_database(session_id, database)` on the active one; `remove_connection(session_id, name)` only on the agent's own.
   In the browser, an add/remove refreshes an armed tab's connection lists
   (pill menu, Connect). A `use_connection` marks the session row `connection_by: agent`;
   every tab picks it up on its next heartbeat, toasts "Agent switched to
@@ -113,12 +112,6 @@ channel; the SSE stream delivers the payload and the panel fills `query` /
 Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](./workspace.md)).
-
-**Locked connections keep the agent out.** A saved connection the user
-[locked](./connect.md#locked-connections) behind a passphrase refuses every
-tool above while a session is on it (`connection is locked`), and refuses REST
-calls without the tab's unlock token too, so copying a session id into
-`/api/db/query` gets the agent nowhere.
 
 **Arming is the gate, not the id.** Disarming closes the channel, and any later
 push fails with `unknown or inactive session`. The id is stable across refreshes

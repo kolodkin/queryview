@@ -6,7 +6,7 @@ treat anything it can reach as readable by the agent.
 
 How QueryView stores connection credentials and keeps them from leaking: where
 they live, and why neither the agent nor a stray error can read them back. For
-how you create and lock connections see [connect.md](./connect.md); for the
+how you create connections see [connect.md](./connect.md); for the
 agent's tool surface see [mcp.md](./mcp.md).
 
 ## Credentials at rest
@@ -25,15 +25,6 @@ creator, selected database. No tool returns a stored config. The edit form's
 endpoint blanks the password before sending it, so a saved password leaves the
 server only as an empty string. A connection the agent adds itself with
 `add_connection` is held in session memory and is never readable back.
-
-## Locked connections
-
-A saved connection can be locked behind a passphrase. Only its scrypt hash is
-stored, never the passphrase. Unlocking exchanges the passphrase for a
-per-session token; wrong attempts back off exponentially, up to 30 seconds. A
-locked connection is hidden from the agent entirely and cannot be queried
-until a tab unlocks it. Why a passphrase rather than a startup token is
-under [Design decisions](#design-decisions).
 
 ## Errors never echo passwords
 
@@ -77,23 +68,10 @@ own statements can write; `ATTACH` is available there.
 
 ## Design decisions
 
-Both follow from one fact: the browser and the agent reach the same HTTP API,
-and nothing in a request tells them apart. The agent is a local process on the
-same `localhost` the tab is.
-
-**A passphrase per connection, not a startup token.** A Jupyter-style token
-printed at launch would gate every `/api/` route behind a secret the agent, a
-separate process, never holds. QueryView locks per connection instead, because
-the agent is its main user: every connection is the agent's to query by
-default, and a lock marks the exceptions. A startup token inverts that default,
-is void when the agent starts the server, and signs every tab out on a restart.
-
-**A lock at all, unlike DataGrip and DBeaver.** Both expose MCP as their only
-programmatic door and gate it with per-connection opt-in or per-tool grants.
-They need nothing stronger because their UI talks to the engine in-process: a
-confirmation dialog is a native window no HTTP request can answer. QueryView's
-UI is a web page on the same door the agent uses, so a typed secret is the only
-way to keep a connection human-only.
+A local QueryView cannot be secured against a local agent: the agent runs as
+the same user, reads the same files, and reaches the same `localhost` API the
+tab does, so no in-tool gate holds against it. Security comes with a hosted
+QueryView, with user authentication in front; nothing local claims it.
 
 ## Related docs
 

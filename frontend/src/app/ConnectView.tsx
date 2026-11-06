@@ -6,22 +6,17 @@ import {
   isReady,
   deleteConnection,
   fetchSavedConfig,
-  lockConnection,
   explorerUrl,
   openSaved,
-  removeLock,
-  unlockConnection,
   useFreshDatabases,
   selectDatabase,
   toConnection,
   type Connection,
-  type LockResult,
 } from './connection'
 import { DRIVERS, type DriverMeta } from './drivers'
 import { Loading, Spinner } from './controls/Spinner'
 import { AgentBadge } from './controls/AgentBadge'
 import { CopyName } from './controls/CopyName'
-import { PassphrasePrompt } from './controls/PassphrasePrompt'
 import { timeAgo } from './timeAgo'
 import {
   MANY_THRESHOLD,
@@ -35,23 +30,6 @@ import {
 import { apiFetch } from './api'
 
 type TestResult = { ok: boolean; message: string }
-
-// What the passphrase prompt is for, and the call it makes; `edit` only
-// unlocks, the form opens once the tab holds the token.
-type PromptKind = 'lock' | 'unlock' | 'edit' | 'delete'
-const PROMPT_CALLS: Record<PromptKind, (name: string, passphrase: string) => Promise<LockResult>> =
-  {
-    lock: lockConnection,
-    unlock: removeLock,
-    edit: unlockConnection,
-    delete: deleteConnection,
-  }
-const PROMPT_TITLES: Record<PromptKind, (name: string) => [string, string]> = {
-  lock: (name) => [`Lock ${name} with a passphrase`, 'Lock'],
-  unlock: (name) => [`Remove the lock from ${name}`, 'Remove lock'],
-  edit: (name) => [`${name} is locked`, 'Unlock'],
-  delete: (name) => [`Delete ${name}? Its passphrase confirms.`, 'Delete'],
-}
 
 const sectionLabel = 'text-xs font-semibold uppercase tracking-wider text-slate-400'
 const cardGrid = 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
@@ -90,10 +68,6 @@ function ConnectView({
   // The card being opened, for its spinner; and the last open's failure.
   const [opening, setOpening] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // The passphrase prompt up, if any: to lock a card, remove its lock, or
-  // edit or delete a locked one (docs/connect.md#locked-connections). Opening
-  // a locked card needs none: the shell asks once the session lands on it.
-  const [prompt, setPrompt] = useState<{ kind: PromptKind; name: string } | null>(null)
 
   const refreshSaved = useCallback(async () => {
     try {
@@ -174,31 +148,12 @@ function ConnectView({
     else setError(r.message)
   }
 
-  // The prompt's answer: an error to show, or null once the action went through.
-  async function submitPassphrase(passphrase: string): Promise<string | null> {
-    if (!prompt) return null
-    const { kind, name } = prompt
-    const r = await PROMPT_CALLS[kind](name, passphrase)
-    if (!r.ok) return r.message
-    setPrompt(null)
-    if (kind === 'edit') await edit(name)
-    else await afterChange(name)
-    return null
-  }
-
-  // The list after a lock change or a delete; a deleted active connection is gone.
-  async function afterChange(name: string) {
-    if (prompt?.kind === 'delete' && connection?.name === name) setConnection(null)
-    await refreshSaved()
-  }
-
   function closeForm() {
     setFormType(null)
     setEditing(null)
   }
 
-  // Open the driver form on a saved connection's values. A locked one asks
-  // for its passphrase first unless this tab holds the token.
+  // Open the driver form on a saved connection's values.
   async function edit(name: string) {
     setError(null)
     const r = await fetchSavedConfig(name)
@@ -206,13 +161,11 @@ function ConnectView({
       setEditing({ name, values: r.values })
       setFormType(r.type)
       setNewOpen(false)
-    } else if (r.locked) setPrompt({ kind: 'edit', name })
-    else setError(r.message)
+    } else setError(r.message)
   }
 
   async function remove(conn: SavedConnection) {
     setError(null)
-    if (conn.locked) return setPrompt({ kind: 'delete', name: conn.name })
     if (!window.confirm(`Delete connection '${conn.name}'?`)) return
     const r = await deleteConnection(conn.name)
     if (!r.ok) return setError(r.message)
@@ -256,7 +209,6 @@ function ConnectView({
 
   const form = formType ? DRIVERS[formType] : undefined
   const active = connection?.name ?? null
-  const [promptTitle, promptAction] = prompt ? PROMPT_TITLES[prompt.kind](prompt.name) : ['', '']
 
   function startNew(type: string) {
     setEditing(null)
@@ -278,7 +230,6 @@ function ConnectView({
           busy={opening === c.name}
           disabled={opening !== null}
           onOpen={() => void open(c.name)}
-          onToggleLock={() => setPrompt({ kind: c.locked ? 'unlock' : 'lock', name: c.name })}
           onEdit={() => void edit(c.name)}
           onDelete={() => void remove(c)}
         />
@@ -305,14 +256,6 @@ function ConnectView({
 
   return (
     <div className={`w-full ${form ? 'max-w-md' : 'max-w-3xl'}`} data-testid="connect-page">
-      {prompt && (
-        <PassphrasePrompt
-          title={promptTitle}
-          action={promptAction}
-          onSubmit={submitPassphrase}
-          onCancel={() => setPrompt(null)}
-        />
-      )}
       {heading}
       {form ? (
         <ConnectionForm
@@ -492,7 +435,6 @@ function SavedCard({
   busy,
   disabled,
   onOpen,
-  onToggleLock,
   onEdit,
   onDelete,
 }: {
@@ -502,7 +444,6 @@ function SavedCard({
   busy: boolean
   disabled: boolean
   onOpen: () => void
-  onToggleLock: () => void
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -513,7 +454,7 @@ function SavedCard({
     e.stopPropagation()
     f()
   }
-  // A div, not a button: the lock toggle inside it is a button of its own.
+  // A div, not a button: the edit and delete controls inside it are buttons of their own.
   return (
     <div
       role="button"
@@ -522,7 +463,6 @@ function SavedCard({
       data-conn={conn.name}
       data-active={active}
       data-highlighted={highlighted}
-      data-locked={!!conn.locked}
       onClick={disabled ? undefined : onOpen}
       onKeyDown={(e) => {
         if (disabled || (e.key !== 'Enter' && e.key !== ' ')) return
@@ -561,25 +501,8 @@ function SavedCard({
           <span className="shrink-0">{timeAgo(conn.last_active_at)}</span>
         </span>
       </span>
-      {/* The card's controls, stacked on its right edge: lock, edit, delete. */}
+      {/* The card's controls, stacked on its right edge: edit, delete. */}
       <span className="flex shrink-0 flex-col gap-1">
-        {saved && (
-          <button
-            type="button"
-            data-testid="conn-lock"
-            onClick={inCard(onToggleLock)}
-            disabled={disabled}
-            aria-label={conn.locked ? `Remove the lock from ${conn.name}` : `Lock ${conn.name}`}
-            title={
-              conn.locked
-                ? 'Locked: the agent is kept off. Click to remove the lock.'
-                : 'Lock behind a passphrase'
-            }
-            className={`glass-btn px-2 py-0.5 text-xs ${conn.locked ? 'text-amber-300' : 'text-slate-500'}`}
-          >
-            {conn.locked ? '🔒' : '🔓'}
-          </button>
-        )}
         {saved && (
           <button
             type="button"

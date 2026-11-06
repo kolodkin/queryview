@@ -5,16 +5,11 @@ delegated to the driver registry; nothing here is ClickHouse-specific."""
 
 from __future__ import annotations
 
-import asyncio
 import base64
-import hashlib
-import hmac
 import json
 import os
-import secrets
 import time
 from collections import OrderedDict
-from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
@@ -51,7 +46,6 @@ class Connection(SQLModel, table=True):
     config: str  # base64(AES-GCM(json.dumps(driver config))) — never plaintext
     database: str | None = Field(default=None)
     last_active_at: int  # unix ms; the max is the "latest active"
-    lock_hash: str | None = Field(default=None)  # salt$scrypt of the passphrase; null when unlocked
 
 
 def _data_dir() -> Path:
@@ -219,7 +213,6 @@ async def list_connections() -> list[dict[str, Any]]:
                 "type": r.type,
                 "database": r.database,
                 "last_active_at": r.last_active_at,
-                "locked": r.lock_hash is not None,
             }
             for r in rows.all()
         ]
@@ -258,131 +251,6 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-# --- Locked connections (docs/connect.md#locked-connections) ---------------
-#
-# A locked saved connection serves only requests carrying the unlock token its
-# tab got for the passphrase. MCP tool calls have no browser behind them and
-# never carry one, so the agent is refused on a locked connection whichever way
-# it comes in; session connections are never locked.
-
-# The X-QV-Token of the request being served (main.py's middleware sets it);
-# None inside an MCP tool call.
-request_token: ContextVar[str | None] = ContextVar("request_token", default=None)
-
-# A session's one token and the connection names it opens. Memory only: a
-# restart means typing the passphrase again.
-_tokens: dict[str, str] = {}
-_unlocked: dict[str, set[str]] = {}
-# connection name -> consecutive wrong passphrases, for the unlock back-off.
-_unlock_failures: dict[str, int] = {}
-_backoff = asyncio.sleep  # a name tests can replace without touching asyncio itself
-
-LOCKED = {"ok": False, "message": "connection is locked", "reason": "locked"}
-
-
-def _hash_passphrase(passphrase: str, salt: bytes | None = None) -> str:
-    salt = salt or secrets.token_bytes(16)
-    key = hashlib.scrypt(passphrase.encode("utf-8"), salt=salt, n=2**14, r=8, p=1)
-    return f"{base64.b64encode(salt).decode('ascii')}${base64.b64encode(key).decode('ascii')}"
-
-
-def _passphrase_matches(stored: str, passphrase: str) -> bool:
-    salt = base64.b64decode(stored.split("$", 1)[0])
-    return hmac.compare_digest(_hash_passphrase(passphrase, salt), stored)
-
-
-async def _lock_hash_of(name: str) -> str | None:
-    await _ensure_schema()
-    async with AsyncSession(_engine_for_db()) as s:
-        return (await s.exec(select(Connection.lock_hash).where(Connection.name == name))).first()
-
-
-def _is_unlocked(sid: str, name: str) -> bool:
-    """Whether the request being served carries `sid`'s token and `sid` unlocked `name`."""
-    sent = request_token.get()
-    return name in _unlocked.get(sid, ()) and sent is not None and hmac.compare_digest(_tokens[sid], sent)
-
-
-def _issue_token(sid: str, name: str) -> str:
-    """The session's token, now good for `name` too: a tab holds one token."""
-    _unlocked.setdefault(sid, set()).add(name)
-    return _tokens.setdefault(sid, secrets.token_urlsafe(32))
-
-
-async def _verify_passphrase(name: str, passphrase: str) -> dict[str, Any] | None:
-    """None when `passphrase` opens `name`, else the error. Attempts on a
-    connection back off exponentially (up to 30s), whoever sends them; the
-    attempt is counted before the wait so a burst queues instead of racing."""
-    stored = await _lock_hash_of(name)
-    if stored is None:
-        return {"ok": False, "message": f'"{name}" is not a locked connection'}
-    attempts = _unlock_failures[name] = _unlock_failures.get(name, 0) + 1
-    if attempts > 1:
-        await _backoff(min(2 ** (attempts - 1), 30))
-    if not await asyncio.to_thread(_passphrase_matches, stored, passphrase):
-        return {"ok": False, "message": "wrong passphrase", "reason": "locked"}
-    _unlock_failures.pop(name, None)
-    return None
-
-
-async def lock_connection(sid: str, name: str, passphrase: str) -> dict[str, Any]:
-    """Lock a saved connection behind `passphrase`, storing only its salted
-    hash. The locking session's tab gets the unlock token right away, so the
-    connection it is on keeps working."""
-    if not passphrase:
-        return {"ok": False, "message": "passphrase required"}
-    await _ensure_schema()
-    async with AsyncSession(_engine_for_db()) as s:
-        row = (await s.exec(select(Connection).where(Connection.name == name))).first()
-        if row is None:
-            return {"ok": False, "message": await unknown_connection_message(name, sid)}
-        if row.lock_hash is not None:
-            return {"ok": False, "message": f'"{name}" is already locked'}
-        row.lock_hash = await asyncio.to_thread(_hash_passphrase, passphrase)
-        s.add(row)
-        await s.commit()
-    for state in _sessions.values():
-        if state.name == name:
-            state.locked = True
-    return {"ok": True, "token": _issue_token(sid, name)}
-
-
-async def unlock_connection(sid: str, name: str, passphrase: str) -> dict[str, Any]:
-    """Exchange the passphrase for this session's unlock token on `name`."""
-    if not sid:
-        return {"ok": False, "message": "no session"}
-    if (err := await _verify_passphrase(name, passphrase)) is not None:
-        return err
-    return {"ok": True, "token": _issue_token(sid, name)}
-
-
-async def remove_lock(name: str, passphrase: str) -> dict[str, Any]:
-    """Unlock `name` for good; takes the passphrase, like unlocking does."""
-    if (err := await _verify_passphrase(name, passphrase)) is not None:
-        return err
-    async with AsyncSession(_engine_for_db()) as s:
-        row = (await s.exec(select(Connection).where(Connection.name == name))).first()
-        if row is not None:
-            row.lock_hash = None
-            s.add(row)
-            await s.commit()
-    for names in _unlocked.values():
-        names.discard(name)
-    for state in _sessions.values():
-        if state.name == name:
-            state.locked = False
-    return {"ok": True}
-
-
-async def push(sid: str, payload: dict[str, Any]) -> tuple[bool, str]:
-    """remote.push behind the lock: a push reaches the browser, which would run
-    it with the tab's token, so a locked session refuses it like a query."""
-    s, err = await _unlocked_session(sid)
-    if s is None and err is LOCKED:
-        return False, LOCKED["message"]
-    return remote.push(sid, payload)
-
-
 # --- Sessions (one active connection per session, keyed by a cookie) ------
 
 
@@ -393,7 +261,6 @@ class _SessionState:
     config: DriverConfig
     databases: list[str]
     database: str | None
-    locked: bool = False  # a locked saved connection: data calls need the tab's token
     root: str | None = None  # the folder a DuckDB folder-mode connection browses
     truncated: bool = False  # the folder list was cut at the session's list limit
 
@@ -505,8 +372,7 @@ async def _build_session(
     conn_type: str = "clickhouse",
     limit: int = DEFAULT_LIST_LIMIT,
 ) -> tuple[_SessionState | None, str | None]:
-    """List a connection's databases and build a session object. A session
-    connection's name is never in the table, so it reads as unlocked."""
+    """List a connection's databases and build a session object."""
     listed, message = await _list_databases(conn_type, config, limit, database)
     if listed is None:
         return None, message
@@ -524,7 +390,6 @@ async def _build_session(
             config=config,
             databases=databases,
             database=database,
-            locked=await _lock_hash_of(name) is not None,
             root=listed.root,
             truncated=listed.truncated,
         ),
@@ -578,9 +443,6 @@ async def get_session(sid: str) -> dict[str, Any]:
         "ident_quote": DRIVERS[s.type].ident_quote,
         "scope": "session" if sc else "saved",
         "created_by": sc.created_by if sc else "user",
-        "locked": s.locked,
-        # Whether this request's token opens it: the tab prompts when not.
-        "unlocked": _is_unlocked(sid, s.name) if s.locked else True,
     }
 
 
@@ -599,9 +461,6 @@ async def connect_new(
     if state is None:
         return {"ok": False, "message": message}
     if not session_only:
-        # Re-saving keeps a lock, and needs its token: the config is behind it too.
-        if state.locked and not _is_unlocked(sid, name):
-            return LOCKED
         await _save_active_connection(name, config, conn_type)
     _set_session_entry(sid, state)
     await sessions.set_connection(sid, name)
@@ -638,8 +497,6 @@ async def open_saved(
     """Open a connection by name for this session: one of its session
     connections, else a saved one. A `database` not on it fails before the
     session switches."""
-    if by == "agent" and await _lock_hash_of(name) is not None:  # the agent never holds an unlock token
-        return LOCKED
     found = await _resolve(sid, name)
     if found is None:
         return {
@@ -694,21 +551,18 @@ async def _with_stored_password(name: str, config: DriverConfig, conn_type: str)
 
 
 async def saved_config(sid: str, name: str) -> dict[str, Any]:
-    """A saved connection's config for the edit form, password blanked. The
-    config is behind the lock: a locked one needs the tab's token."""
+    """A saved connection's config for the edit form, password blanked."""
     stored = await _connection_by_name(name)
     if stored is None:
         return {"ok": False, "message": await unknown_connection_message(name, sid), "not_found": True}
-    if await _lock_hash_of(name) is not None and not _is_unlocked(sid, name):
-        return LOCKED
     data = DRIVERS[stored.type].config_to_dict(stored.config)
     config = {k: "" if k == "password" else v for k, v in data.items()}
     return {"ok": True, "name": name, "type": stored.type, "config": config}
 
 
-async def delete_connection(sid: str, name: str, passphrase: str) -> dict[str, Any]:
-    """Delete a connection: this session's own, else a saved one, which when
-    locked takes the passphrase. Every session on it is disconnected."""
+async def delete_connection(sid: str, name: str) -> dict[str, Any]:
+    """Delete a connection: this session's own, else a saved one. Every
+    session on it is disconnected."""
     if _session_conn(sid, name) is not None:
         return await remove_session_connection(sid, name)
     await _ensure_schema()
@@ -716,15 +570,8 @@ async def delete_connection(sid: str, name: str, passphrase: str) -> dict[str, A
         row = (await s.exec(select(Connection).where(Connection.name == name))).first()
         if row is None:
             return {"ok": False, "message": await unknown_connection_message(name, sid), "not_found": True}
-        if row.lock_hash is not None:
-            if not passphrase:
-                return LOCKED
-            if (err := await _verify_passphrase(name, passphrase)) is not None:
-                return err
         await s.delete(row)
         await s.commit()
-    for names in _unlocked.values():
-        names.discard(name)
     for other in [k for k, state in _sessions.items() if state.name == name]:
         _sessions.pop(other)
     await sessions.clear_connection(name)
@@ -742,17 +589,10 @@ async def list_connections_for(sid: str) -> list[dict[str, Any]]:
             "last_active_at": c.added_at,
             "scope": "session",
             "created_by": c.created_by,
-            "locked": False,
         }
         for n, c in _session_conns.get(sid, {}).items()
     ]
     return own + [{**c, "scope": "saved", "created_by": "user"} for c in await list_connections()]
-
-
-async def agent_connections_for(sid: str) -> list[dict[str, Any]]:
-    """list_connections_for minus locked ones: the agent never sees those, even
-    while a tab has one unlocked (the lock is the connection's stored state)."""
-    return [c for c in await list_connections_for(sid) if not c["locked"]]
 
 
 async def list_databases_of(sid: str, name: str) -> tuple[list[str] | None, str | None]:
@@ -814,8 +654,6 @@ def forget_session(sid: str) -> None:
     """Drop a deleted session's in-memory state, its session connections too."""
     _session_conns.pop(sid, None)
     _sessions.pop(sid, None)
-    _unlocked.pop(sid, None)
-    _tokens.pop(sid, None)
 
 
 async def _relist(sid: str, s: _SessionState, current: str | None = None) -> DatabasesResult | dict[str, Any]:
@@ -833,7 +671,7 @@ async def refresh_databases(sid: str) -> dict[str, Any]:
     """Re-list this session's connection's databases; the cached list dates
     from the connect. The selected database is kept even if no longer listed:
     the session is still on it, and the next select tells the user."""
-    s, err = await _unlocked_session(sid)
+    s, err = await _connected_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
     listed = await _relist(sid, s)
@@ -856,7 +694,7 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
     """Select this session's active connection's database. A name not in the
     cached list is checked against a fresh one first, so a database created
     since the connect can be selected."""
-    s, err = await _unlocked_session(sid)
+    s, err = await _connected_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
     unknown = {"ok": False, "message": "unknown database", "reason": "unknown"}
@@ -887,22 +725,19 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
     return {"ok": True, "databases": s.databases, **({"databases_truncated": True} if s.truncated else {})}
 
 
-async def _unlocked_session(sid: str) -> tuple[_SessionState | None, dict[str, Any] | None]:
-    """This session's state, or why the request may not use its connection:
-    not connected, or locked without the tab's token (docs/connect.md#locked-connections)."""
+async def _connected_session(sid: str) -> tuple[_SessionState | None, dict[str, Any] | None]:
+    """This session's state, or the not-connected error."""
     await _ensure_session(sid)
     s = _get_session_entry(sid)
     if s is None:
         return None, {"ok": False, "message": "not connected", "reason": "no-session"}
-    if s.locked and not _is_unlocked(sid, s.name):
-        return None, LOCKED
     return s, None
 
 
 async def _gated_session(sid: str) -> tuple[_SessionState | None, dict[str, Any] | None]:
-    """`_unlocked_session`, plus — for drivers with a picker — a database
+    """`_connected_session`, plus — for drivers with a picker — a database
     selected: the gate every query-shaped operation (query/describe/tables) shares."""
-    s, err = await _unlocked_session(sid)
+    s, err = await _connected_session(sid)
     if s is None:
         return None, err
     if DRIVERS[s.type].requires_database and not s.database:

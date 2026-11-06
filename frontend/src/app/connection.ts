@@ -2,7 +2,6 @@ import { useEffect, type Dispatch, type SetStateAction } from 'react'
 
 import { apiFetch } from './api'
 import { withoutHeartbeat } from './session'
-import { TOKEN_KEY, tabWrite } from './tabStorage'
 
 // The active connection as reported by /api/session.
 
@@ -19,9 +18,6 @@ export type Connection = {
   foldersTruncated?: boolean
   // The table this session last had open on this connection and database.
   table?: string
-  // False on a locked saved connection this tab holds no token for; the
-  // shell prompts for the passphrase while it is.
-  unlocked?: boolean
 }
 
 // Ready to query when a database is selected, or the driver has no picker
@@ -46,7 +42,6 @@ export function toConnection(data: Record<string, unknown>): Connection {
     identQuote: data.ident_quote as string | undefined,
     root: data.root as string | undefined,
     foldersTruncated: data.databases_truncated === true,
-    unlocked: data.unlocked as boolean | undefined,
     table: data.table as string | undefined,
   }
 }
@@ -79,51 +74,29 @@ export async function openSaved(
   }
 }
 
-export type LockResult = { ok: true } | { ok: false; message: string }
-
-async function lockCall(
-  method: string,
-  path: string,
+// Delete a connection.
+export async function deleteConnection(
   name: string,
-  passphrase: string,
-): Promise<LockResult> {
+): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
-    const data = await (await postJson(path, { name, passphrase }, method)).json()
-    if (!data.ok) return { ok: false, message: data.message ?? 'request failed' }
-    // Locking and unlocking both hand this tab the connection's unlock token.
-    if (typeof data.token === 'string') tabWrite(TOKEN_KEY, data.token)
-    return { ok: true }
+    const data = await (await postJson('/api/db/connections', { name }, 'DELETE')).json()
+    return data.ok ? { ok: true } : { ok: false, message: data.message ?? 'request failed' }
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : 'request failed' }
   }
 }
 
-// Lock a saved connection behind a passphrase (docs/connect.md#locked-connections).
-export const lockConnection = (name: string, passphrase: string) =>
-  lockCall('POST', '/api/db/lock', name, passphrase)
-// Exchange the passphrase for this tab's unlock token on a locked connection.
-export const unlockConnection = (name: string, passphrase: string) =>
-  lockCall('POST', '/api/db/unlock', name, passphrase)
-// Remove a lock for good; takes the passphrase like unlocking does.
-export const removeLock = (name: string, passphrase: string) =>
-  lockCall('DELETE', '/api/db/lock', name, passphrase)
-// Delete a connection; a locked one takes its passphrase.
-export const deleteConnection = (name: string, passphrase = '') =>
-  lockCall('DELETE', '/api/db/connections', name, passphrase)
-
-// A saved connection's form values (password blank), for editing it. `locked`
-// means this tab must unlock it first.
+// A saved connection's form values (password blank), for editing it.
 export async function fetchSavedConfig(
   name: string,
 ): Promise<
   | { ok: true; type: string; values: Record<string, string> }
-  | { ok: false; message: string; locked?: boolean }
+  | { ok: false; message: string }
 > {
   try {
     const res = await apiFetch(`/api/db/connections/${encodeURIComponent(name)}`)
     const data = await res.json()
-    if (!data.ok)
-      return { ok: false, message: data.message ?? 'request failed', locked: res.status === 403 }
+    if (!data.ok) return { ok: false, message: data.message ?? 'request failed' }
     const values = Object.fromEntries(
       Object.entries(data.config as Record<string, unknown>).map(([k, v]) => [k, String(v ?? '')]),
     )
