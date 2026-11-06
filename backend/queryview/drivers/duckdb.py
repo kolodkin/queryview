@@ -108,12 +108,25 @@ def _open(path: str, database: str | None, read_only: bool = True):
     if _is_folder(path):
         con = duckdb.connect(":memory:")
         con.execute(f"SET file_search_path = {_sql_str(path)}")
+        # Keep unwrapped SQL from reaching the host's own files (e.g.
+        # QueryView's encryption.key) via read_csv/ATTACH outside the folder.
+        # shortcut: DuckDB 1.5.4 still lets read_text/read_blob/glob escape allowed_directories; a build that enforces it, or an OS sandbox, closes that residual.
+        con.execute(f"SET allowed_directories = [{_sql_str(path)}]")
+        con.execute("SET lock_configuration = true")
         return con
     if database is not None:  # only folder mode selects one: the folder is gone
         raise FileNotFoundError(f"folder not found: {path}")
     # read_only avoids lock contention between concurrent describe/query opens;
     # :memory: cannot be read_only, so open it read-write.
-    return duckdb.connect(path, read_only=(read_only and path != ":memory:"))
+    con = duckdb.connect(path, read_only=(read_only and path != ":memory:"))
+    # A file/memory connection queries its own DB; it never needs other local
+    # files, so block them — no read_text/read_csv/ATTACH of the host (e.g.
+    # QueryView's encryption.key) through unwrapped SQL. Writes to the open DB
+    # still work; only external-file access is blocked, and locked so SQL can't
+    # re-enable it.
+    con.execute("SET enable_external_access = false")
+    con.execute("SET lock_configuration = true")
+    return con
 
 
 # Data files a folder lists as tables: base extension -> DuckDB reader. A
