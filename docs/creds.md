@@ -43,7 +43,8 @@ Each is a dilemma, how neighbouring tools resolve it, and the choice taken.
   connection. QueryView takes the opposite trade: the per-connection lock
   hides the connections you choose, and on the rest the agent runs anything
   the credentials allow, writes included. The lock protects connections, not
-  tables — so the credentials themselves must be read-only.
+  tables. Avoid giving QueryView privileged user credentials, since it has
+  write capability.
 - **Expose a REST API or MCP only?** DBeaver and DataGrip expose MCP alone.
   QueryView also serves REST, so a tab, a script, or a curl can drive it; the
   same lock and metadata-only rules apply on both surfaces.
