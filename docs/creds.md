@@ -38,20 +38,33 @@ until a tab unlocks it.
 
 Each is a dilemma, how neighbouring tools resolve it, and the choice taken.
 
-- **Hide connections or restrict queries?** DBeaver's MCP can be limited to
-  read-only queries, DataGrip's allows everything; both show the agent every
-  connection. QueryView takes the opposite trade: the per-connection lock
-  hides the connections you choose, and on the rest the agent runs anything
-  the credentials allow, writes included. The lock protects connections, not
-  tables. Avoid giving QueryView privileged user credentials, since it has
-  write capability.
-- **Expose a REST API or MCP only?** DBeaver and DataGrip expose MCP alone.
-  QueryView also serves REST, so a tab, a script, or a curl can drive it; the
-  same lock and metadata-only rules apply on both surfaces.
-- **Is a startup token protection?** Jupyter gates its client with a token
-  printed at startup. That keeps strangers out, not the agent: an agent running
-  commands on the machine reads the token. QueryView does not pretend
-  otherwise and binds to localhost with no login instead.
+- **Hide connections or restrict statements?** The dedicated database MCP
+  servers restrict statements: [mcp-clickhouse](https://github.com/ClickHouse/mcp-clickhouse)
+  runs with `readonly=1` unless `CLICKHOUSE_ALLOW_WRITE_ACCESS` is set, and
+  [Postgres MCP Pro](https://github.com/crystaldba/postgres-mcp) has a
+  `--access-mode=restricted` read-only mode. The IDEs pick per connection:
+  [DBeaver](https://dbeaver.com/docs/dbeaver/Model-Context-Protocol-Server/)
+  exposes only connections with **Enable MCP access to this connection**
+  ticked, and [DataGrip](https://www.jetbrains.com/help/datagrip/mcp-server.html)
+  lists every data source and offers no read-only switch. QueryView sides
+  with the IDEs: the per-connection lock hides the connections you choose,
+  and on the rest the agent runs anything the credentials allow, writes
+  included. The lock protects connections, not tables. Avoid giving
+  QueryView privileged user credentials, since it has write capability.
+- **Who enforces read-only?** Every vendor answers the same way: the
+  database user. DataGrip's docs say to "use a database user with properly
+  restricted (read-only) privileges"; mcp-clickhouse says its statement check
+  "is not a security boundary. The security boundary is the ClickHouse user's
+  grants." QueryView adds no statement filter and relies on the same rule.
+- **Expose a REST API or MCP only?** DBeaver and DataGrip serve MCP alone,
+  DBeaver bound to localhost. QueryView also serves REST, so a tab, a script,
+  or a curl can drive it; the same lock and metadata-only rules apply on both
+  surfaces.
+- **Is a startup token protection?** [Jupyter](https://jupyter-server.readthedocs.io/en/latest/operators/security.html)
+  gates its server with a token printed at startup. That keeps other hosts
+  out, not the agent: a process on the same machine reads the token from the
+  server's runtime files. QueryView does not pretend otherwise and binds to
+  localhost with no login instead.
 - **What is real protection?** None of these local setups: the agent shares
   the machine with the credentials. Real protection is a hosted service with
   user authentication in front, where credentials stay on the server and the
