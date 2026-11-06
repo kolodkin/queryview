@@ -34,24 +34,27 @@ per-session token; wrong attempts back off exponentially, up to 30 seconds. A
 locked connection is hidden from the agent entirely and cannot be queried
 until a tab unlocks it.
 
-## Compared with other tools
+## Design decisions
 
-| Tool | Agent access | What hides a connection from the agent |
-|---|---|---|
-| DBeaver | MCP, can be limited to read-only queries | Nothing per connection |
-| DataGrip | MCP, full access | Nothing per connection |
-| Jupyter | Shell access | A startup token, which only gates the client; an agent running commands reads it |
-| QueryView | MCP and REST, full query access | Per-connection lock: a locked connection is invisible to the agent |
+Each is a dilemma, how neighbouring tools resolve it, and the choice taken.
 
-A read-only MCP mode guards the data but shows every connection. The lock is
-the opposite trade: it hides the connections you choose; on the rest the agent
-runs anything the credentials allow, writes included. The lock protects
-connections, not tables — so the credentials themselves must be read-only.
-
-None of these local setups is real protection: the agent shares the machine
-with the credentials. Real protection is a hosted service with user
-authentication in front, where credentials stay on the server and the agent
-only holds a scoped user login.
+- **Hide connections or restrict queries?** DBeaver's MCP can be limited to
+  read-only queries, DataGrip's allows everything; both show the agent every
+  connection. QueryView takes the opposite trade: the per-connection lock
+  hides the connections you choose, and on the rest the agent runs anything
+  the credentials allow, writes included. The lock protects connections, not
+  tables — so the credentials themselves must be read-only.
+- **Expose a REST API or MCP only?** DBeaver and DataGrip expose MCP alone.
+  QueryView also serves REST, so a tab, a script, or a curl can drive it; the
+  same lock and metadata-only rules apply on both surfaces.
+- **Is a startup token protection?** Jupyter gates its client with a token
+  printed at startup. That keeps strangers out, not the agent: an agent running
+  commands on the machine reads the token. QueryView does not pretend
+  otherwise and binds to localhost with no login instead.
+- **What is real protection?** None of these local setups: the agent shares
+  the machine with the credentials. Real protection is a hosted service with
+  user authentication in front, where credentials stay on the server and the
+  agent only holds a scoped user login.
 
 ## Errors never echo passwords
 
