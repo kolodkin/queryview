@@ -34,6 +34,20 @@ per-session token; wrong attempts back off exponentially, up to 30 seconds. A
 locked connection is hidden from the agent entirely and cannot be queried
 until a tab unlocks it.
 
+## Compared with other tools
+
+| Tool | Agent access | What hides a connection from the agent |
+|---|---|---|
+| DBeaver | MCP, can be limited to read-only queries | Nothing per connection |
+| DataGrip | MCP, full access | Nothing per connection |
+| Jupyter | Shell access | A startup token, which only gates the client; an agent running commands reads it |
+| QueryView | MCP and REST, full query access | Per-connection lock: a locked connection is invisible to the agent |
+
+A read-only MCP mode guards the data but shows every connection. The lock is
+the opposite trade: it hides the connections you choose; on the rest the agent
+runs anything the credentials allow, writes included. The lock protects
+connections, not tables — so the credentials themselves must be read-only.
+
 ## Errors never echo passwords
 
 Driver auth is sent out of band — ClickHouse in an HTTP `Authorization`
