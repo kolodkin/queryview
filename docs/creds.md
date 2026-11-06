@@ -1,7 +1,7 @@
-# Security
+# Credentials
 
-How QueryView keeps connection credentials from leaking: where they are
-stored, and why neither the agent nor a stray error can read them back. For
+How QueryView stores connection credentials and keeps them from leaking: where
+they live, and why neither the agent nor a stray error can read them back. For
 how you create and lock connections see [connect.md](./connect.md); for the
 agent's tool surface see [mcp.md](./mcp.md).
 
@@ -62,6 +62,14 @@ folder connection can still read a file outside the folder, including
 `encryption.key`. A DuckDB build that enforces `allowed_directories` for those
 functions, or an OS-level filesystem sandbox (for example a Linux Landlock
 ruleset that denies the query process any path outside the folder), closes it.
+
+Connecting a folder to the agent is itself read access. The agent reads every
+data file in that folder, as the connection intends, and — through the residual
+above — can reach files outside it. This is inherent in pointing a SQL agent at
+local files: the agent borrows the user's own filesystem read, independent of
+QueryView. The protections here limit its reach and bar it from opening a
+file-driver connection on its own; they do not make a folder the user has
+connected private from the agent.
 
 ## SQLite
 
