@@ -56,18 +56,16 @@ work while reads outside it do not.
 access fails on that statement, so SQL cannot lift the lockdown, and every
 query reopens a freshly-locked connection.
 
-One gap remains on a folder connection: DuckDB does not apply
-`allowed_directories` to `read_text`, `read_blob`, or `glob`, so SQL on a
-folder connection can still read a file outside the folder, including
-`encryption.key`. A DuckDB build that enforces `allowed_directories` for those
-functions, or an OS-level filesystem sandbox (for example a Linux Landlock
-ruleset that denies the query process any path outside the folder), closes it.
+A folder connection keeps external file access on so the folder's data files
+can be read, and that reach is not perfectly confined to the folder. This is
+not a driver defect: QueryView is a local, single-user tool, and the agent that
+drives it generally already has read access to the user's files, `encryption.key`
+included. No in-tool setting makes a local file private from an agent that can
+already read the disk.
 
-An agent driving QueryView usually already has read access to the user's
-filesystem, the encryption key included, so this gap grants it little it could
-not already reach. The safeguard is operational, not a sandbox: never store
-production or write credentials in QueryView — give it read-only,
-least-privilege connections, so a leaked credential is low-impact.
+So credentials are protected operationally, not by a sandbox: store only
+read-only, least-privilege connections in QueryView, never production or write
+credentials. Then a stored config, or the key itself, yields nothing powerful.
 
 ## SQLite
 
