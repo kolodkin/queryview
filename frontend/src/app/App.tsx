@@ -12,6 +12,7 @@ import {
 import { SearchPanel, useDismiss } from '../core'
 import { PARENT, childFolders, folderLabel, fullPath, isFolderNav, parentFolder } from './folderNav'
 import { loadMaxEntries } from './explorerSettings'
+import { QueryTimeoutChip } from './QueryTimeoutChip'
 import {
   connectionKey,
   explorerUrl,
@@ -603,6 +604,7 @@ function Shell() {
                 </div>
               )}
             </div>
+            <QueryTimeoutChip />
           </div>
         )}
 

@@ -30,12 +30,15 @@ if TYPE_CHECKING:
 from .drivers import DRIVERS
 from .drivers.base import (
     DEFAULT_LIST_LIMIT,
+    DEFAULT_QUERY_TIMEOUT_SECONDS,
     MAX_LIST_LIMIT,
+    MAX_QUERY_TIMEOUT_SECONDS,
     DatabasesResult,
     DriverConfig,
     Err,
     RowsResult,
     error_message,
+    query_timeout,
     select_all_sql,
 )
 
@@ -476,15 +479,28 @@ def _with_localhost_hint(message: str, config: DriverConfig) -> str:
     return message
 
 
-async def _list_limit(sid: str) -> int:
-    """The Explorer's **Max entries** for this session (docs/explorer.md), from
-    the session's `ui` blob; the tab writes it, so anything else is the default."""
+async def _ui_setting(sid: str, view: str, key: str) -> Any:
+    """One setting from this session's `ui` blob, or None. The tab writes the
+    blob, so a caller treats anything but a value it could have meant as the default."""
     rec = await sessions.get_session_rec(sid) if sid else None
-    view = rec.ui.get("explorer") if rec else None
-    raw = view.get("maxEntries") if isinstance(view, dict) else None
+    block = rec.ui.get(view) if rec else None
+    return block.get(key) if isinstance(block, dict) else None
+
+
+async def _list_limit(sid: str) -> int:
+    """The Explorer's **Max entries** for this session (docs/explorer.md)."""
+    raw = await _ui_setting(sid, "explorer", "maxEntries")
     if isinstance(raw, int) and not isinstance(raw, bool) and 1 <= raw <= MAX_LIST_LIMIT:
         return raw
     return DEFAULT_LIST_LIMIT
+
+
+async def _apply_query_timeout(sid: str) -> None:
+    """Set the drivers' per-request timeout to this session's **Query timeout**
+    (docs/queryview.md) for the rest of the current request."""
+    raw = await _ui_setting(sid, "app", "queryTimeout")
+    ok = isinstance(raw, (int, float)) and not isinstance(raw, bool) and 1 <= raw <= MAX_QUERY_TIMEOUT_SECONDS
+    query_timeout.set(int(raw) if ok else DEFAULT_QUERY_TIMEOUT_SECONDS)
 
 
 async def _list_databases(
@@ -535,8 +551,13 @@ async def _build_session(
 async def _ensure_session(sid: str) -> None:
     """Rebuild this session's live driver state from its row. The row is the
     durable truth; `_sessions` is only a cache of the decrypted config and the
-    database list, so a backend restart costs one reconnect, not the session."""
-    if not sid or _get_session_entry(sid):
+    database list, so a backend restart costs one reconnect, not the session.
+    Every request on the session passes through here, so it also applies the
+    row's query timeout to the drivers."""
+    if not sid:
+        return
+    await _apply_query_timeout(sid)
+    if _get_session_entry(sid):
         return
     rec = await sessions.get_session_rec(sid)
     if rec is None or rec.connection_name is None:
@@ -589,6 +610,7 @@ async def connect_new(
 ) -> dict[str, Any]:
     """Create: open a config, save + activate it for this session. With
     `session_only` it becomes a session connection instead of being saved."""
+    await _apply_query_timeout(sid)
     if session_only:
         state, message = await add_session_connection(sid, name, config, conn_type, "user")
     elif _session_name_taken(name):
@@ -648,6 +670,7 @@ async def open_saved(
             "not_found": True,
         }
     conn_type, config = found
+    await _apply_query_timeout(sid)
     # Without a `database` opening goes back to the one this session last
     # visited on the connection, else the picker (a folder connection's root).
     # Building on it checks it: listed, or in folder mode reachable by path.
@@ -762,6 +785,7 @@ async def list_databases_of(sid: str, name: str) -> tuple[list[str] | None, str 
     if found is None:  # deleted meanwhile, or its config no longer decrypts
         return None, "connection unavailable"
     try:
+        await _apply_query_timeout(sid)
         listed, message = await _list_databases(*found, await _list_limit(sid))
         return (listed.databases if listed else None), message
     except Exception as e:
@@ -791,6 +815,7 @@ async def add_session_connection(
         return None, "no session"
     if (taken := await _name_taken(name)) is not None:
         return None, taken
+    await _apply_query_timeout(sid)
     state, message = await _build_session(name, config, None, conn_type, await _list_limit(sid))
     if state is not None:
         _session_conns.setdefault(sid, {})[name] = _SessionConn(conn_type, config, created_by, _now_ms())

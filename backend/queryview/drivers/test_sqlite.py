@@ -10,7 +10,7 @@ import sqlite3
 import pytest
 
 from queryview.drivers import sqlite
-from queryview.drivers.base import Err, FieldsResult, RowsResult, TablesResult
+from queryview.drivers.base import Err, FieldsResult, RowsResult, TablesResult, query_timeout
 from queryview.drivers.sqlite import SqliteConfig, SqliteDriver
 
 
@@ -91,6 +91,13 @@ def test_a_query_past_the_timeout_is_aborted(monkeypatch, db_path):
     monkeypatch.setattr(sqlite, "RUN_SQL_TIMEOUT_SECONDS", 0)
     endless = "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n) SELECT count(*) FROM n"
     r = _run(SqliteDriver().run_sql(SqliteConfig(db_path), endless, None, 10))
+    assert isinstance(r, Err) and "interrupted" in r.message
+    # The query page's limit is the session's query timeout.
+    token = query_timeout.set(0)
+    try:
+        r = _run(SqliteDriver().run_query(SqliteConfig(db_path), endless, None, 10, 0, None))
+    finally:
+        query_timeout.reset(token)
     assert isinstance(r, Err) and "interrupted" in r.message
 
 

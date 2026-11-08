@@ -27,11 +27,10 @@ from .base import (
     build_order_by,
     error_message,
     parse_host_port_config,
+    query_timeout,
     run_script,
     wrap_paginated,
 )
-
-CH_TIMEOUT_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -118,7 +117,7 @@ async def ch_fetch(
     write: bool = False,
     client: httpx.AsyncClient | None = None,
 ) -> str | Err:
-    """Run a query against the ClickHouse HTTP interface (Basic auth, 5s timeout)
+    """Run a query against the ClickHouse HTTP interface (Basic auth, the query timeout)
     and return the body as text. `clause` appends a `FORMAT` clause; `database`
     scopes the query; `settings` are passed as URL parameters. Queries go as a
     GET, which ClickHouse treats as read-only — that is what keeps every other
@@ -145,7 +144,7 @@ async def ch_fetch(
         if client is not None:
             res = await send(client)
         else:
-            async with httpx.AsyncClient(timeout=CH_TIMEOUT_SECONDS) as own:
+            async with httpx.AsyncClient(timeout=query_timeout.get()) as own:
                 res = await send(own)
     except httpx.TimeoutException:
         return Err(f"connection timed out (query_id {query_id})")
@@ -264,7 +263,7 @@ class ClickHouseDriver:
             "result_overflow_mode": "break",
             "max_execution_time": str(RUN_SQL_TIMEOUT_SECONDS),
         }
-        timeout = httpx.Timeout(CH_TIMEOUT_SECONDS, read=RUN_SQL_TIMEOUT_SECONDS + CH_TIMEOUT_SECONDS)
+        timeout = httpx.Timeout(query_timeout.get(), read=RUN_SQL_TIMEOUT_SECONDS + query_timeout.get())
         async with httpx.AsyncClient(timeout=timeout) as client:
             return await ch_query(config, sql, ChRows, database, settings, client=client)
 
@@ -293,7 +292,7 @@ class ClickHouseDriver:
         # temporary tables carry from statement to statement; a statement may
         # run far longer than a read-only probe before it is given up on.
         settings = {**SCRIPT_SETTINGS, "session_id": uuid.uuid4().hex, "session_timeout": str(SCRIPT_TIMEOUT_SECONDS)}
-        timeout = httpx.Timeout(CH_TIMEOUT_SECONDS, read=SCRIPT_TIMEOUT_SECONDS)
+        timeout = httpx.Timeout(query_timeout.get(), read=SCRIPT_TIMEOUT_SECONDS)
         async with httpx.AsyncClient(timeout=timeout) as client:
 
             async def run_one(stmt: str) -> StatementResult:

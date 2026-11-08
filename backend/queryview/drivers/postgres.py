@@ -28,13 +28,13 @@ from .base import (
     build_order_by,
     error_message,
     parse_host_port_config,
+    query_timeout,
     run_script,
     to_csv,
     to_json_value,
     wrap_paginated,
 )
 
-PG_TIMEOUT_SECONDS = 5
 _BOOTSTRAP_DBS = ("postgres", "template1")
 
 
@@ -53,15 +53,17 @@ def parse_pg_config(body: Any) -> tuple[PgConfig | None, str | None]:
     return PgConfig(**fields), None
 
 
-async def _raw_connect(c: PgConfig, database: str | None, command_timeout: float = PG_TIMEOUT_SECONDS):
+async def _raw_connect(c: PgConfig, database: str | None, command_timeout: float | None = None):
+    """Connect within the query timeout; statements get `command_timeout`, by
+    default the query timeout too (a run_sql or a script may run longer)."""
     return await asyncpg.connect(
         host=c.host,
         port=c.port,
         user=c.username or None,
         password=c.password or None,
         database=database,
-        timeout=PG_TIMEOUT_SECONDS,
-        command_timeout=command_timeout,
+        timeout=query_timeout.get(),
+        command_timeout=query_timeout.get() if command_timeout is None else command_timeout,
     )
 
 
@@ -78,7 +80,7 @@ async def _raw_connect_bootstrap(c: PgConfig):
 
 
 @asynccontextmanager
-async def _connect(c: PgConfig, database: str | None, command_timeout: float = PG_TIMEOUT_SECONDS):
+async def _connect(c: PgConfig, database: str | None, command_timeout: float | None = None):
     """Short-lived connection to a specific database, closed on exit."""
     conn = await _raw_connect(c, database, command_timeout)
     try:
