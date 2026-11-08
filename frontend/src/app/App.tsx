@@ -627,18 +627,21 @@ function Shell() {
               onRenamed={setSessionLabel}
               onSwitch={applySession}
             />
-            <WorkspaceSwitcher
-              workspace={workspace}
-              onSwitch={switchWorkspace}
-              onSaved={() => setSettingsNonce((n) => n + 1)}
-            />
             <Link
-              to="/connect"
-              data-testid="nav-connect"
+              to="/dashboard"
+              data-testid="nav-dashboard"
               onClick={() => setNavOpen(false)}
-              className={navLinkClass('/connect')}
+              className={navLinkClass('/dashboard')}
             >
-              Connect
+              Dashboard
+            </Link>
+            <Link
+              to="/explorer"
+              data-testid="nav-explorer"
+              onClick={() => setNavOpen(false)}
+              className={navLinkClass('/explorer')}
+            >
+              Explorer
             </Link>
             {/* Straight to Connect until there's a database: a round trip
                 through the /studio redirect would remount it. */}
@@ -659,21 +662,18 @@ function Shell() {
               Scripts
             </Link>
             <Link
-              to="/explorer"
-              data-testid="nav-explorer"
+              to="/connect"
+              data-testid="nav-connect"
               onClick={() => setNavOpen(false)}
-              className={navLinkClass('/explorer')}
+              className={navLinkClass('/connect')}
             >
-              Explorer
+              Connect
             </Link>
-            <Link
-              to="/dashboard"
-              data-testid="nav-dashboard"
-              onClick={() => setNavOpen(false)}
-              className={navLinkClass('/dashboard')}
-            >
-              Dashboard
-            </Link>
+            <WorkspaceSwitcher
+              workspace={workspace}
+              onSwitch={switchWorkspace}
+              onSaved={() => setSettingsNonce((n) => n + 1)}
+            />
           </div>
         </nav>
       </header>

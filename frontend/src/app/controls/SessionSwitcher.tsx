@@ -84,9 +84,10 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="glass-toggle flex max-w-full items-center gap-1 px-3 py-1.5 text-sm"
+        className="glass-toggle flex max-w-full items-center gap-1.5 px-3 py-1.5 text-sm"
       >
-        <span className="truncate">{label}</span>
+        <span className="shrink-0 text-xs text-slate-400">Session</span>
+        <span className="truncate font-medium">{label}</span>
         <span className="text-xs text-slate-400">▾</span>
       </button>
       {open && (

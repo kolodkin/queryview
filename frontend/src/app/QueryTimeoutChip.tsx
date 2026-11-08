@@ -12,7 +12,7 @@ export function QueryTimeoutChip() {
   const field = useNumberSetting(QUERY_TIMEOUT)
   return (
     <label
-      className="glass-chip flex shrink-0 items-center gap-1 py-1.5 pl-3 pr-2 text-xs text-slate-300"
+      className="glass-toggle flex shrink-0 items-center gap-1 py-1.5 pl-3 pr-2 text-xs"
       title="Seconds one query may take before it is given up on"
     >
       Timeout
