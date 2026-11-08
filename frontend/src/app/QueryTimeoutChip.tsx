@@ -16,7 +16,7 @@ export function QueryTimeoutChip() {
       title="Seconds one query may take before it is given up on"
     >
       Timeout
-      <NumberInput field={field} testid="query-timeout" className="w-14" />s
+      <NumberInput field={field} testid="query-timeout" className="w-14 rounded-none" />s
     </label>
   )
 }
