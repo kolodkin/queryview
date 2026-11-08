@@ -90,13 +90,13 @@ to browse (see [explorer.md](./explorer.md)).
 
 ## Query timeout
 
-The **Timeout** chip beside the connection pill is how long one request to the
-database may take: a query page, a describe, a table or database list, the
-connect probe, and the connect of an agent's `run_sql` or a script run (which
-then have their own, longer limits). Whole seconds, 1–600, 30 by default;
-applied on blur or Enter, remembered with the session, and read by the server
-on each request. It is a client-side limit (ClickHouse, Postgres and SQLite);
-a DuckDB query runs to completion.
+The **Timeout** chip beside the connection pill: how long one request to the
+database may take, in whole seconds 1–600, 30 by default. It covers queries,
+describes, table and database lists and the connect probe; an agent's `run_sql`
+and a script run connect within it, then have their own longer limits. Applied
+on blur or Enter, remembered with the session and read by the server on each
+request. ClickHouse, Postgres and SQLite honour it; a DuckDB query runs to
+completion.
 
 ## Design principles
 

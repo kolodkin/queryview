@@ -3,7 +3,7 @@
 // The Tables sidebar width, so a sidebar dragged wide enough for long table
 // names stays that way, and the DuckDB folder mode's union-by-name flag.
 
-import { loadNumber, type NumberSetting } from './numberSetting'
+import type { NumberSetting } from './numberSetting'
 import { patchView, viewState } from './session'
 
 const VIEW = 'explorer'
@@ -35,10 +35,6 @@ export const MAX_ENTRIES: NumberSetting = {
   key: 'maxEntries',
   fallback: 1000,
   max: 100_000,
-}
-
-export function loadMaxEntries(): number {
-  return loadNumber(MAX_ENTRIES)
 }
 
 // Whether folder-mode glob entries match columns by name across files.

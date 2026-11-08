@@ -500,8 +500,8 @@ def _apply_settings(rec: SessionRec | None) -> int:
 
 
 async def session_settings(sid: str) -> int:
-    """`_apply_settings` from the session's row; the call before any driver
-    call that is not on a session's cached state."""
+    """`_apply_settings` from the session's row, for a driver call that
+    `_ensure_session` does not precede: a connect, a probe, a listing."""
     return _apply_settings(await sessions.get_session_rec(sid) if sid else None)
 
 

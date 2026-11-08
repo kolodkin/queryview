@@ -11,7 +11,8 @@ import {
 
 import { SearchPanel, useDismiss } from '../core'
 import { PARENT, childFolders, folderLabel, fullPath, isFolderNav, parentFolder } from './folderNav'
-import { loadMaxEntries } from './explorerSettings'
+import { MAX_ENTRIES } from './explorerSettings'
+import { loadNumber } from './numberSetting'
 import { QueryTimeoutChip } from './QueryTimeoutChip'
 import {
   connectionKey,
@@ -184,7 +185,7 @@ function DatabaseMenu({
             </div>
             {connection.foldersTruncated && (
               <div data-testid="db-select-truncated" className="text-amber-300">
-                More than {loadMaxEntries()} folders: raise Max entries on the Explorer.
+                More than {loadNumber(MAX_ENTRIES)} folders: raise Max entries on the Explorer.
               </div>
             )}
           </div>

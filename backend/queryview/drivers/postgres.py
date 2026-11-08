@@ -74,6 +74,8 @@ async def _raw_connect_bootstrap(c: PgConfig):
     for db in candidates:
         try:
             return await _raw_connect(c, db)
+        except TimeoutError:  # the host is not answering: the next name would wait as long
+            raise
         except Exception as e:  # noqa: BLE001
             last = e
     raise last if last is not None else RuntimeError("could not connect")
