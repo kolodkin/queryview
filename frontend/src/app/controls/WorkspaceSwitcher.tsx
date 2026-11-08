@@ -215,13 +215,14 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
           setOpen((o) => !o)
           if (!open) void reload()
         }}
-        className="glass-chip flex max-w-full items-center gap-2 px-3 py-1.5 text-sm font-medium"
+        className="glass-toggle flex max-w-full items-center gap-1.5 px-3 py-1.5 text-sm"
       >
-        <span className="truncate">{workspace}</span>
+        <span className="shrink-0 text-xs text-slate-400">Workspace</span>
+        <span className="truncate font-medium">{workspace}</span>
         <span className="text-xs text-slate-400">▾</span>
       </button>
       {open && (
-        <div className="glass-popover absolute right-0 top-full z-10 mt-2 w-64 p-1 text-sm">
+        <div className="glass-popover absolute left-0 top-full z-10 mt-2 w-64 p-1 text-sm md:left-auto md:right-0">
           {list.map((w) => (
             <button
               key={w.name}

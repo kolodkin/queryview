@@ -622,11 +622,6 @@ function Shell() {
           {/* One set of controls: an inline row from `md` up, a dropdown panel
               below it, so nothing renders twice. */}
           <div className={`${navOpen ? 'flex' : 'hidden'} ${NAV_PANEL} ${NAV_ROW}`}>
-            <SessionSwitcher
-              label={sessionLabel}
-              onRenamed={setSessionLabel}
-              onSwitch={applySession}
-            />
             <WorkspaceSwitcher
               workspace={workspace}
               onSwitch={switchWorkspace}
@@ -640,6 +635,14 @@ function Shell() {
             >
               Connect
             </Link>
+            <Link
+              to={ready ? '/scripts' : '/connect'}
+              data-testid="nav-scripts"
+              onClick={() => setNavOpen(false)}
+              className={navLinkClass('/scripts')}
+            >
+              Scripts
+            </Link>
             {/* Straight to Connect until there's a database: a round trip
                 through the /studio redirect would remount it. */}
             <Link
@@ -649,14 +652,6 @@ function Shell() {
               className={navLinkClass('/studio')}
             >
               Studio
-            </Link>
-            <Link
-              to={ready ? '/scripts' : '/connect'}
-              data-testid="nav-scripts"
-              onClick={() => setNavOpen(false)}
-              className={navLinkClass('/scripts')}
-            >
-              Scripts
             </Link>
             <Link
               to="/explorer"
@@ -674,6 +669,11 @@ function Shell() {
             >
               Dashboard
             </Link>
+            <SessionSwitcher
+              label={sessionLabel}
+              onRenamed={setSessionLabel}
+              onSwitch={applySession}
+            />
           </div>
         </nav>
       </header>
