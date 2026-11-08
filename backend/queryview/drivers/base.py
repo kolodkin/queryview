@@ -12,6 +12,7 @@ import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, NamedTuple, Protocol, TypeAlias, runtime_checkable
@@ -89,6 +90,13 @@ DEFAULT_LIST_LIMIT = 1000
 MAX_LIST_LIMIT = 100_000
 # How long an agent's read-only run_sql may run, server- and client-side.
 RUN_SQL_TIMEOUT_SECONDS = 60
+# How long one request to the database may take — a query page, a describe, a
+# table or database list, a connect probe, and the connect of a longer run.
+# The session layer sets it per request from the **Query timeout** chip
+# (docs/queryview.md); the default covers anything outside a session.
+DEFAULT_QUERY_TIMEOUT_SECONDS = 30
+MAX_QUERY_TIMEOUT_SECONDS = SCRIPT_TIMEOUT_SECONDS
+query_timeout: ContextVar[int] = ContextVar("query_timeout", default=DEFAULT_QUERY_TIMEOUT_SECONDS)
 
 
 def error_message(e: BaseException) -> str:

@@ -5,13 +5,12 @@ import {
   MIN_SIDEBAR_WIDTH,
   clampSidebarWidth,
   loadSidebarWidth,
-  loadMaxEntries,
-  parseMaxEntries,
+  MAX_ENTRIES,
   loadUnionByName,
   saveSidebarWidth,
-  saveMaxEntries,
   saveUnionByName,
 } from './explorerSettings'
+import { loadNumber, parseNumber, saveNumber } from './numberSetting'
 
 // The width lives in the session's `ui` blob now, so the test fakes the session
 // mirror rather than a storage backend.
@@ -82,23 +81,27 @@ describe('unionByName', () => {
   })
 })
 
-describe('maxEntries', () => {
-  it('defaults to 1000 and clamps what is saved', () => {
-    expect(loadMaxEntries()).toBe(1000)
-    saveMaxEntries(5000)
-    expect(loadMaxEntries()).toBe(5000)
-    saveMaxEntries(0)
-    expect(loadMaxEntries()).toBe(1)
-    saveMaxEntries(10_000_000)
-    expect(loadMaxEntries()).toBe(100_000)
+describe('maxEntries, a number setting', () => {
+  it('defaults to 1000 and clamps what is saved to a whole number in range', () => {
+    expect(loadNumber(MAX_ENTRIES)).toBe(1000)
+    expect(saveNumber(MAX_ENTRIES, 5000)).toBe(5000)
+    expect(loadNumber(MAX_ENTRIES)).toBe(5000)
+    saveNumber(MAX_ENTRIES, 0)
+    expect(loadNumber(MAX_ENTRIES)).toBe(1)
+    saveNumber(MAX_ENTRIES, 10_000_000)
+    expect(loadNumber(MAX_ENTRIES)).toBe(100_000)
+    expect(saveNumber(MAX_ENTRIES, 2.6)).toBe(3)
+    expect(saveNumber(MAX_ENTRIES, Number.NaN)).toBe(1000)
+    ui.view = { maxEntries: 'many' }
+    expect(loadNumber(MAX_ENTRIES)).toBe(1000)
   })
 })
 
-describe('parseMaxEntries', () => {
+describe('parseNumber', () => {
   it('reads a typed number and rejects a blank or non-number', () => {
-    expect(parseMaxEntries('10')).toBe(10)
-    expect(parseMaxEntries(' 25 ')).toBe(25)
-    expect(parseMaxEntries('')).toBeNull()
-    expect(parseMaxEntries('abc')).toBeNull()
+    expect(parseNumber('10')).toBe(10)
+    expect(parseNumber(' 25 ')).toBe(25)
+    expect(parseNumber('')).toBeNull()
+    expect(parseNumber('abc')).toBeNull()
   })
 })

@@ -56,7 +56,8 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
   on click, and **Disconnect** at the bottom drops the connection and goes to
   `/connect` (a picker-less driver's menu has just these two).
   Next to it, an **agent icon** opens the remote-control popover (opt-in "Allow
-  remote control"); see [remote.md](./remote.md).
+  remote control"); see [remote.md](./remote.md). Then the
+  [**Timeout** chip](#query-timeout).
 - **Narrow windows** — below `md` the cards stack in one column, the session,
   workspace and page links collapse into one **☰ &lt;page&gt;** menu, and
   full-height pages keep a 48rem minimum width, scrolling sideways rather than
@@ -86,6 +87,16 @@ to browse (see [explorer.md](./explorer.md)).
   navigates from the connect handler itself. Nothing watches the connection, so
   the nav gets back to Studio, a pill database switch stays put, and an
   agent's query push is not pulled away.
+
+## Query timeout
+
+The **Timeout** chip beside the connection pill: how long one request to the
+database may take, in whole seconds 1–600, 30 by default. It covers queries,
+describes, table and database lists and the connect probe; an agent's `run_sql`
+and a script run connect within it, then have their own longer limits. Applied
+on blur or Enter, remembered with the session and read by the server on each
+request. ClickHouse, Postgres and SQLite honour it; a DuckDB query runs to
+completion.
 
 ## Design principles
 

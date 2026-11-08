@@ -294,7 +294,8 @@ session.
 `test`/`connect` resolve the driver from `type` and validate per driver
 (ClickHouse/Postgres require `host` + `port` `1..65535`; DuckDB takes an optional
 `path`, SQLite a required file path); validation errors return `400`. ClickHouse queries run over the HTTP
-interface with HTTP Basic auth and a 5s timeout.
+interface with HTTP Basic auth, within the session's
+[query timeout](./queryview.md#query-timeout).
 
 ## CI
 

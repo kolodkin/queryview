@@ -3,6 +3,7 @@
 // The Tables sidebar width, so a sidebar dragged wide enough for long table
 // names stays that way, and the DuckDB folder mode's union-by-name flag.
 
+import type { NumberSetting } from './numberSetting'
 import { patchView, viewState } from './session'
 
 const VIEW = 'explorer'
@@ -29,26 +30,11 @@ export function saveSidebarWidth(width: number): void {
 
 // Folder mode's list limit: folders scanned and files listed per folder. The
 // backend reads it from the session, so it must be flushed before a re-list.
-export const DEFAULT_MAX_ENTRIES = 1000
-export const MAX_MAX_ENTRIES = 100_000
-
-export function loadMaxEntries(): number {
-  const stored = viewState(VIEW).maxEntries
-  return typeof stored === 'number' ? stored : DEFAULT_MAX_ENTRIES
-}
-
-// The typed value, or null for a blank or non-number field (keep the current one).
-export function parseMaxEntries(draft: string): number | null {
-  const n = Number(draft)
-  return draft.trim() !== '' && Number.isFinite(n) ? n : null
-}
-
-export function saveMaxEntries(n: number): number {
-  const clamped = Number.isFinite(n)
-    ? Math.min(MAX_MAX_ENTRIES, Math.max(1, Math.round(n)))
-    : DEFAULT_MAX_ENTRIES
-  patchView(VIEW, { maxEntries: clamped })
-  return clamped
+export const MAX_ENTRIES: NumberSetting = {
+  view: VIEW,
+  key: 'maxEntries',
+  fallback: 1000,
+  max: 100_000,
 }
 
 // Whether folder-mode glob entries match columns by name across files.

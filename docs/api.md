@@ -1,7 +1,8 @@
 # API
 
 The FastAPI backend exposes a small JSON API under `/api/*`. ClickHouse queries
-run over the HTTP interface with HTTP Basic auth and a 5s timeout. All
+run over the HTTP interface with HTTP Basic auth, within the session's
+[query timeout](./queryview.md#query-timeout). All
 connection-config bodies validate `host` (non-empty) and `port` (integer
 `1..65535`); validation errors return `400`.
 

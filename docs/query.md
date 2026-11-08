@@ -342,8 +342,8 @@ backplane.
 | POST   | `/api/predefined-queries`   | `{query_name, type, query, cell_view?, order_by?, fields?}` | `{ok}`; upserts a predefined query. `cell_view` is optional raw YAML; `order_by`/`fields` persist the saved presentation (validated; malformed → `400`). Missing required fields → `400`. |
 | POST   | `/api/remote/lock`          | `{session_id, action:"acquire"\|"release"}`   | `{ok, message}`; browser-only edit lock for a live session (acquire on panel focus + ~10s heartbeat, release on blur). Bad action → `400`. |
 
-Queries run over the ClickHouse HTTP interface (HTTP Basic auth, 5s timeout),
-scoped to the session's selected database.
+Queries run over the ClickHouse HTTP interface (HTTP Basic auth), scoped to the
+session's selected database, within its [query timeout](./queryview.md#query-timeout).
 
 ## Related docs
 

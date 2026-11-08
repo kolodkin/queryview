@@ -355,3 +355,30 @@ def test_many_connections(seeded_test_db, page: Page, base_url: str) -> None:
     page.keyboard.press("Enter")
     expect(page).to_have_url(re.compile(r"/explorer"))
     expect(page.get_by_test_id("connection-status")).to_contain_text(name)
+
+
+def test_the_query_timeout_chip_is_remembered_with_the_session(seeded_duckdb, page: Page, shot) -> None:
+    """The header's Timeout chip shows the default, takes whole seconds in
+    1..600, and keeps its value across a reload: it lives in the session."""
+    _connect(page, _DUCKDB, seeded_duckdb)
+    chip = page.get_by_test_id("query-timeout")
+    expect(chip).to_have_value("30")
+
+    chip.fill("45")
+    chip.press("Enter")
+    expect(chip).to_have_value("45")
+    shot("query timeout chip set to 45")
+    page.reload()
+    expect(page.get_by_test_id("query-timeout")).to_have_value("45")
+
+    # Out-of-range or blank entries clamp or keep the value.
+    chip = page.get_by_test_id("query-timeout")
+    chip.fill("0")
+    chip.press("Enter")
+    expect(chip).to_have_value("1")
+    chip.fill("")
+    chip.press("Enter")
+    expect(chip).to_have_value("1")
+    chip.fill("9999")
+    chip.press("Enter")
+    expect(chip).to_have_value("600")

@@ -29,6 +29,7 @@ from .base import (
     TextResult,
     build_order_by,
     error_message,
+    query_timeout,
     run_script,
     to_csv,
     to_json_value,
@@ -52,9 +53,6 @@ def parse_sqlite_config(body: Any) -> tuple[SqliteConfig | None, str | None]:
     return SqliteConfig(path=path), None
 
 
-SQLITE_TIMEOUT_SECONDS = 5  # as Postgres's per-request timeout
-
-
 class _NoAttach(sqlite3.Connection):
     """Refuses ATTACH and VACUUM INTO, which write files even under mode=ro."""
 
@@ -64,16 +62,17 @@ class _NoAttach(sqlite3.Connection):
 
 
 @asynccontextmanager
-async def _connect(c: SqliteConfig, timeout: float = SQLITE_TIMEOUT_SECONDS, read_only: bool = True):
+async def _connect(c: SqliteConfig, timeout: float | None = None, read_only: bool = True):
     """Short-lived autocommit connection (a script's own BEGIN/COMMIT work),
     closed on exit. It never creates the file: reads open it read-only, the
-    script run read-write. Work still running `timeout` seconds after the open
-    is aborted: the progress handler is SQLite's only statement timeout."""
+    script run read-write. Work still running `timeout` seconds (the query
+    timeout by default) after the open is aborted: the progress handler is
+    SQLite's only statement timeout."""
     uri = f"{Path(c.path).absolute().as_uri()}?mode={'ro' if read_only else 'rw'}"
     factory = _NoAttach if read_only else sqlite3.Connection
     conn = await aiosqlite.connect(uri, uri=True, isolation_level=None, factory=factory)
     try:
-        deadline = time.monotonic() + timeout
+        deadline = time.monotonic() + (query_timeout.get() if timeout is None else timeout)
         await conn.set_progress_handler(lambda: time.monotonic() > deadline, 10_000)
         yield conn
     finally:

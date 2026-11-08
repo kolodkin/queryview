@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from queryview.drivers.base import (
+    RUN_SQL_TIMEOUT_SECONDS,
     SCRIPT_TIMEOUT_SECONDS,
     Column,
     DatabasesResult,
@@ -19,8 +21,17 @@ from queryview.drivers.base import (
     RowsResult,
     TablesResult,
     TextResult,
+    query_timeout,
 )
-from queryview.drivers.clickhouse import JSON_COMPACT_SETTINGS, ChConfig, ChCsv, ChRows, ChText, ClickHouseDriver
+from queryview.drivers.clickhouse import (
+    JSON_COMPACT_SETTINGS,
+    ChConfig,
+    ChCsv,
+    ChRows,
+    ChText,
+    ClickHouseDriver,
+    ch_fetch,
+)
 
 JSON_COMPACT = (
     '{"meta":[{"name":"id","type":"UInt64"},{"name":"tags","type":"Array(String)"}],"data":[["1",["a","b"]]],"rows":1}'
@@ -288,3 +299,32 @@ def test_ch_fetch_sends_query_id_and_names_it_in_errors():
     r = asyncio.run(go())
     assert len(seen["query_id"]) == 32 and seen["cancel_http_readonly_queries_on_client_close"] == "1"
     assert isinstance(r, Err) and f"query_id {seen['query_id']}" in r.message
+
+
+def test_requests_connect_within_the_query_timeout(monkeypatch):
+    """A probe's whole request, and the connect of a run_sql (whose read then
+    gets its own limit), take the session's query timeout."""
+    seen = []
+
+    class FakeClient:
+        def __init__(self, timeout):
+            seen.append(timeout)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return None
+
+        async def get(self, url, params, auth):
+            return SimpleNamespace(text=JSON_COMPACT, is_success=True, status_code=200)
+
+    monkeypatch.setattr("queryview.drivers.clickhouse.httpx.AsyncClient", FakeClient)
+    token = query_timeout.set(45)
+    try:
+        assert asyncio.run(ch_fetch(CFG, "SELECT 1")) == JSON_COMPACT
+        assert isinstance(asyncio.run(ClickHouseDriver().run_sql(CFG, "SELECT 1", "db", 10)), RowsResult)
+    finally:
+        query_timeout.reset(token)
+    assert seen[0] == 45
+    assert seen[1].connect == 45 and seen[1].read == RUN_SQL_TIMEOUT_SECONDS + 45

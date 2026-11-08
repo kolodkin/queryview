@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from queryview.drivers.base import (
     SCRIPT_ROW_CAP,
     SCRIPT_TIMEOUT_SECONDS,
@@ -16,8 +18,9 @@ from queryview.drivers.base import (
     RowsResult,
     TablesResult,
     TextResult,
+    query_timeout,
 )
-from queryview.drivers.postgres import PgConfig, PostgresDriver
+from queryview.drivers.postgres import PgConfig, PostgresDriver, _raw_connect, _raw_connect_bootstrap
 
 
 def test_run_query_builds_aliased_double_quoted_sql(monkeypatch):
@@ -310,3 +313,37 @@ def test_run_sql_runs_as_written_in_a_read_only_transaction(monkeypatch):
         "sql": "SHOW search_path",
         "n": 11,
     }
+
+
+def test_connects_within_the_query_timeout(monkeypatch):
+    """Connecting and, unless a longer run asks otherwise, each statement take
+    the session's query timeout."""
+    seen = []
+
+    async def fake_connect(**kwargs):
+        seen.append(kwargs)
+
+    monkeypatch.setattr("queryview.drivers.postgres.asyncpg.connect", fake_connect)
+    token = query_timeout.set(45)
+    try:
+        asyncio.run(_raw_connect(PgConfig("h", 5432, "u", ""), "mydb"))
+        asyncio.run(_raw_connect(PgConfig("h", 5432, "u", ""), "mydb", SCRIPT_TIMEOUT_SECONDS))
+    finally:
+        query_timeout.reset(token)
+    assert (seen[0]["timeout"], seen[0]["command_timeout"]) == (45, 45)
+    assert (seen[1]["timeout"], seen[1]["command_timeout"]) == (45, SCRIPT_TIMEOUT_SECONDS)
+
+
+def test_bootstrap_stops_at_the_first_connect_timeout(monkeypatch):
+    """A host that is not answering fails once, within the query timeout, not
+    once per candidate database."""
+    attempts = []
+
+    async def fake_connect(c, database, command_timeout=None):
+        attempts.append(database)
+        raise TimeoutError
+
+    monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
+    with pytest.raises(TimeoutError):
+        asyncio.run(_raw_connect_bootstrap(PgConfig("h", 5432, "u", "")))
+    assert attempts == ["u"]

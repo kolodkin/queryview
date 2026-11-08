@@ -257,3 +257,41 @@ def test_reopening_a_picker_less_connection_goes_back_to_its_last_table(tmp_path
     r = c.post("/api/db/open", json={"name": f"lv-{driver}"}).json()
     assert r["ok"] and r["database"] is None and r["table"] == "refunds"
     assert c.get("/api/session").json()["table"] == "refunds"
+
+
+def test_requests_run_within_the_session_query_timeout(monkeypatch, tmp_path):
+    """The **Timeout** chip's value in the session's `ui` blob reaches the
+    driver on the connect probe and on each query; a value the chip could not
+    have written falls back to the default 30."""
+    from queryview.drivers import DRIVERS
+    from queryview.drivers.base import Column, DatabasesResult, QueryRows, RowsResult, query_timeout
+
+    seen = []
+    driver = DRIVERS["duckdb"]
+
+    async def list_databases(config, limit=1000, current=None):
+        seen.append(("list", query_timeout.get()))
+        return DatabasesResult(databases=[])
+
+    async def run_query(config, sql, database, limit, offset, order_by):
+        seen.append(("query", query_timeout.get()))
+        return RowsResult(QueryRows(meta=[Column("x", "INTEGER")], data=[[1]]))
+
+    async def test(config):
+        seen.append(("test", query_timeout.get()))
+        return {"ok": True}
+
+    monkeypatch.setattr(driver, "list_databases", list_databases)
+    monkeypatch.setattr(driver, "run_query", run_query)
+    monkeypatch.setattr(driver, "test", test)
+    sid = asyncio.run(sessions.create_session()).id
+    asyncio.run(sessions.patch_session(sid, ui={"app": {"queryTimeout": 45}}))
+    c = TestClient(app, headers={"X-QV-Session": sid})
+    body = {"type": "duckdb", "name": "timed-duck", "path": str(tmp_path / "t.duckdb"), "session": True}
+    assert c.post("/api/db/test", json=body).json()["ok"] is True
+    assert c.post("/api/db/connect", json=body).json()["ok"] is True
+    assert c.post("/api/db/query", json={"query": "SELECT 1", "limit": 1, "offset": 0}).json()["ok"] is True
+    for bad in (True, 0, 601, "45"):
+        asyncio.run(sessions.patch_session(sid, ui={"app": {"queryTimeout": bad}}))
+        assert c.post("/api/db/query", json={"query": "SELECT 1", "limit": 1, "offset": 0}).json()["ok"] is True
+    assert seen == [("test", 45), ("list", 45), ("query", 45), *[("query", 30)] * 4]
