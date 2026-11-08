@@ -222,7 +222,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
         <span className="text-xs text-slate-400">▾</span>
       </button>
       {open && (
-        <div className="glass-popover absolute left-0 top-full z-10 mt-2 w-64 p-1 text-sm md:left-auto md:right-0">
+        <div className="glass-popover absolute right-0 top-full z-10 mt-2 w-64 p-1 text-sm">
           {list.map((w) => (
             <button
               key={w.name}

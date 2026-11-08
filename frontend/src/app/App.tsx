@@ -622,26 +622,26 @@ function Shell() {
           {/* One set of controls: an inline row from `md` up, a dropdown panel
               below it, so nothing renders twice. */}
           <div className={`${navOpen ? 'flex' : 'hidden'} ${NAV_PANEL} ${NAV_ROW}`}>
-            <WorkspaceSwitcher
-              workspace={workspace}
-              onSwitch={switchWorkspace}
-              onSaved={() => setSettingsNonce((n) => n + 1)}
+            <SessionSwitcher
+              label={sessionLabel}
+              onRenamed={setSessionLabel}
+              onSwitch={applySession}
             />
             <Link
-              to="/connect"
-              data-testid="nav-connect"
+              to="/dashboard"
+              data-testid="nav-dashboard"
               onClick={() => setNavOpen(false)}
-              className={navLinkClass('/connect')}
+              className={navLinkClass('/dashboard')}
             >
-              Connect
+              Dashboard
             </Link>
             <Link
-              to={ready ? '/scripts' : '/connect'}
-              data-testid="nav-scripts"
+              to="/explorer"
+              data-testid="nav-explorer"
               onClick={() => setNavOpen(false)}
-              className={navLinkClass('/scripts')}
+              className={navLinkClass('/explorer')}
             >
-              Scripts
+              Explorer
             </Link>
             {/* Straight to Connect until there's a database: a round trip
                 through the /studio redirect would remount it. */}
@@ -654,25 +654,25 @@ function Shell() {
               Studio
             </Link>
             <Link
-              to="/explorer"
-              data-testid="nav-explorer"
+              to={ready ? '/scripts' : '/connect'}
+              data-testid="nav-scripts"
               onClick={() => setNavOpen(false)}
-              className={navLinkClass('/explorer')}
+              className={navLinkClass('/scripts')}
             >
-              Explorer
+              Scripts
             </Link>
             <Link
-              to="/dashboard"
-              data-testid="nav-dashboard"
+              to="/connect"
+              data-testid="nav-connect"
               onClick={() => setNavOpen(false)}
-              className={navLinkClass('/dashboard')}
+              className={navLinkClass('/connect')}
             >
-              Dashboard
+              Connect
             </Link>
-            <SessionSwitcher
-              label={sessionLabel}
-              onRenamed={setSessionLabel}
-              onSwitch={applySession}
+            <WorkspaceSwitcher
+              workspace={workspace}
+              onSwitch={switchWorkspace}
+              onSaved={() => setSettingsNonce((n) => n + 1)}
             />
           </div>
         </nav>
