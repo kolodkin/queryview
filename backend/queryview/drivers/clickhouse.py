@@ -263,7 +263,8 @@ class ClickHouseDriver:
             "result_overflow_mode": "break",
             "max_execution_time": str(RUN_SQL_TIMEOUT_SECONDS),
         }
-        timeout = httpx.Timeout(query_timeout.get(), read=RUN_SQL_TIMEOUT_SECONDS + query_timeout.get())
+        connect = query_timeout.get()
+        timeout = httpx.Timeout(connect, read=RUN_SQL_TIMEOUT_SECONDS + connect)
         async with httpx.AsyncClient(timeout=timeout) as client:
             return await ch_query(config, sql, ChRows, database, settings, client=client)
 

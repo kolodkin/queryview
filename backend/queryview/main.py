@@ -41,6 +41,7 @@ from .connect import (
     run_query,
     saved_config,
     select_database,
+    session_settings,
     unlock_connection,
 )
 from .dashboard_queries import run_dashboard_queries
@@ -306,6 +307,7 @@ async def db_test(request: Request):
     if isinstance(resolved, JSONResponse):
         return resolved
     driver, config = resolved
+    await session_settings(request.state.sid)  # the probe runs within the session's query timeout
     return await driver.test(config)
 
 

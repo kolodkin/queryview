@@ -277,15 +277,21 @@ def test_requests_run_within_the_session_query_timeout(monkeypatch, tmp_path):
         seen.append(("query", query_timeout.get()))
         return RowsResult(QueryRows(meta=[Column("x", "INTEGER")], data=[[1]]))
 
+    async def test(config):
+        seen.append(("test", query_timeout.get()))
+        return {"ok": True}
+
     monkeypatch.setattr(driver, "list_databases", list_databases)
     monkeypatch.setattr(driver, "run_query", run_query)
+    monkeypatch.setattr(driver, "test", test)
     sid = asyncio.run(sessions.create_session()).id
     asyncio.run(sessions.patch_session(sid, ui={"app": {"queryTimeout": 45}}))
     c = TestClient(app, headers={"X-QV-Session": sid})
     body = {"type": "duckdb", "name": "timed-duck", "path": str(tmp_path / "t.duckdb"), "session": True}
+    assert c.post("/api/db/test", json=body).json()["ok"] is True
     assert c.post("/api/db/connect", json=body).json()["ok"] is True
     assert c.post("/api/db/query", json={"query": "SELECT 1", "limit": 1, "offset": 0}).json()["ok"] is True
     for bad in (True, 0, 601, "45"):
         asyncio.run(sessions.patch_session(sid, ui={"app": {"queryTimeout": bad}}))
         assert c.post("/api/db/query", json={"query": "SELECT 1", "limit": 1, "offset": 0}).json()["ok"] is True
-    assert seen == [("list", 45), ("query", 45), *[("query", 30)] * 4]
+    assert seen == [("test", 45), ("list", 45), ("query", 45), *[("query", 30)] * 4]

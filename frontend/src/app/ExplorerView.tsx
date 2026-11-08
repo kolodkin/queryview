@@ -22,16 +22,16 @@ import {
   MIN_SIDEBAR_WIDTH,
   clampSidebarWidth,
   loadSidebarWidth,
-  loadMaxEntries,
-  parseMaxEntries,
+  MAX_ENTRIES,
   loadUnionByName,
   saveSidebarWidth,
-  saveMaxEntries,
   saveUnionByName,
 } from './explorerSettings'
+import { NumberInput } from './NumberInput'
+import { useNumberSetting } from './useNumberSetting'
 import { isFolderNav } from './folderNav'
 import { apiFetch } from './api'
-import { flushPatches, patchSession } from './session'
+import { patchSession } from './session'
 
 // Sidebar entry from /api/db/tables. rows/bytes are engine estimates — null
 // when the engine doesn't track them (views, never-analyzed Postgres tables);
@@ -90,8 +90,8 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   // Folder mode's glob entries: union_by_name on or off (docs/explorer.md).
   const [union, setUnion] = useState(loadUnionByName)
   // Folder mode's list limit; the backend reads it from the session.
-  const [maxEntries, setMaxEntries] = useState(loadMaxEntries)
-  const [maxDraft, setMaxDraft] = useState(String(maxEntries))
+  const maxEntriesField = useNumberSetting(MAX_ENTRIES)
+  const maxEntries = maxEntriesField.value
   const [tablesTruncated, setTablesTruncated] = useState(false)
   const [dragging, setDragging] = useState(false)
   const asideRef = useRef<HTMLElement | null>(null)
@@ -157,17 +157,6 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, scope, union, maxEntries])
-
-  // Save, then flush to the session before the re-list reads it there.
-  async function applyMaxEntries() {
-    const typed = parseMaxEntries(maxDraft)
-    if (typed === null) return setMaxDraft(String(maxEntries))
-    const next = saveMaxEntries(typed)
-    setMaxDraft(String(next))
-    if (next === maxEntries) return
-    await flushPatches()
-    setMaxEntries(next)
-  }
 
   const runQuery = useCallback(async (sql: string, lim: number, off: number, ord: OrderCol[]) => {
     const ticket = ++runSeq.current
@@ -374,18 +363,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               title="Most folders scanned, and files listed per folder"
             >
               Max entries
-              <input
-                type="number"
-                min={1}
-                data-testid="explorer-max-entries"
-                value={maxDraft}
-                onChange={(e) => setMaxDraft(e.target.value)}
-                onBlur={() => void applyMaxEntries()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void applyMaxEntries()
-                }}
-                className="glass-input w-20 px-1.5 py-0.5 text-xs"
-              />
+              <NumberInput field={maxEntriesField} testid="explorer-max-entries" className="w-20" />
             </label>
           </div>
         )}

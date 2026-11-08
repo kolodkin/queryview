@@ -604,7 +604,7 @@ function Shell() {
                 </div>
               )}
             </div>
-            <QueryTimeoutChip />
+            <QueryTimeoutChip key={sessionKey} />
           </div>
         )}
 
