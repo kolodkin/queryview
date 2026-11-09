@@ -34,22 +34,19 @@ privacy rule: invented names only.
 
 ## e2e
 
-- Needs a real ClickHouse on `:8123` and Postgres on `:5432`, plus a built SPA
-  (`npm run build:e2e`, a 2s session heartbeat). In the Claude Code web container, the `claudeai-run`
-  skill starts the databases.
-- `e2e/fixtures.ts` holds the navigation helpers, seeds and MCP client; extend them
-  before writing a new click sequence.
+- Needs ClickHouse on `:8123`, Postgres on `:5432` and a built SPA
+  (`npm run build:e2e`, a 2s session heartbeat). In the Claude Code web
+  container, the `claudeai-run` skill starts the databases.
+- `e2e/fixtures.ts` holds the navigation helpers, seeds and MCP client; extend
+  them before writing a new click sequence.
 - Locate elements by `data-testid` (`page.getByTestId(...)`), adding a
   kebab-case attribute in the component when missing (`db-picker`,
-  `ch-connect`). Assert with `expect` (15 s default)
-  rather than sleeps.
-- Every test gets its own backend session via the `context` fixture. Seeded
-  data comes from the worker-scoped `seeds` fixture (`await seeds.duckdb()`),
-  and each worker seeds its own ClickHouse/Postgres database (`chDb()`);
-  don't hard-code `qvtest`.
-- `shot(label)` saves a numbered screenshot only under `E2E_SHOTS=1` (off in
-  CI, for speed); set it to collect them for a visual report.
-- `BASE_URL=http://localhost:5173 npx playwright test --workers 1` runs the
-  suite against a server you started.
+  `ch-connect`). Assert with `expect` (15 s default), not sleeps.
+- Every test gets its own backend session (the `context` fixture). Seed data
+  with the worker-scoped `seeds` fixture (`await seeds.duckdb()`); each worker
+  has its own ClickHouse/Postgres database, `chDb()` — never hard-code `qvtest`.
+- `shot(label)` saves a screenshot only under `E2E_SHOTS=1`.
+- `BASE_URL=http://localhost:5173 npx playwright test` runs against a server
+  you started, on one worker.
 
 `CONTRIBUTING.md` covers installing the tooling and the full command set.

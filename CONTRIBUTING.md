@@ -98,8 +98,8 @@ npx playwright test -g workspaces    # reuse the existing build
 ```
 
 To test a server you started yourself (e.g. `npm run dev`, or a built preview),
-point at it with `BASE_URL=http://localhost:5173 npx playwright test --workers 1`;
-workers would otherwise share that one server.
+point at it with `BASE_URL=http://localhost:5173 npx playwright test`; it then
+runs on one worker.
 
 The suite needs a real ClickHouse (`:8123`) and Postgres (`:5432`), the way CI
 has them. The scripts under `claudeai/` install and run both locally (standalone
