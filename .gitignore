@@ -11,7 +11,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Playwright (pytest)
+# Playwright
 /test-results/
 /report/
 

@@ -45,7 +45,7 @@ Then run the suite with the git remote the daemon serves, so the git-sync
 round trip runs instead of skipping:
 
 ```bash
-E2E_GIT_REMOTE=git://127.0.0.1:9418/queryview.git npm run e2e   # or scripts/e2e.sh -k <expr>
+E2E_GIT_REMOTE=git://127.0.0.1:9418/queryview.git npm run e2e   # or npx playwright test -g <expr>
 ```
 
 ## Stop

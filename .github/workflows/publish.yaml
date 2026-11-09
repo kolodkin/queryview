@@ -273,7 +273,7 @@ jobs:
 
   # Playwright e2e against the installed wheel: server and SPA are the exact
   # bytes being published (no Node/frontend build — the wheel ships the SPA).
-  # The checkout supplies only e2e/, uv.lock, and the git-daemon action.
+  # The checkout supplies e2e/, the lockfiles, and the git-daemon action.
   # Runs after the packaged pytest gate so the expensive leg starts only once
   # the cheap one passes.
   test-package-e2e:
@@ -308,11 +308,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install test dependencies (project not installed)
-        run: uv sync --frozen --group test --no-install-project
+      # The backend's runtime deps, which the suite's seeding also uses.
+      - name: Install backend dependencies (project not installed)
+        run: uv sync --frozen --no-install-project
+
+      - name: Install Playwright
+        run: npm ci
 
       - name: Download dist artifacts
         uses: actions/download-artifact@v4
@@ -324,19 +335,16 @@ jobs:
         run: uv pip install --no-deps dist/queryview-*.whl
 
       - name: Install Playwright browser
-        run: uv run --no-sync playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Start git daemon
         uses: ./.github/actions/start-git-daemon
 
-      # The suite starts a backend per worker from this environment's
-      # `queryview-backend` — the installed wheel's, since the project itself
-      # is not installed here (see e2e/conftest.py).
+      # The suite starts a backend per worker from .venv's `queryview-backend`
+      # — the installed wheel's, since the project itself is not installed
+      # here (see e2e/fixtures.ts).
       - name: Run Playwright e2e tests
-        run: |
-          uv run --no-sync pytest e2e -n 4 \
-            --tracing retain-on-failure \
-            --output test-results
+        run: npx playwright test --workers 4
 
       - name: Upload trace artifacts
         if: ${{ !cancelled() }}

@@ -109,15 +109,15 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install backend + test dependencies
-        run: uv sync --frozen --group test
+      - name: Install backend
+        run: uv sync --frozen
 
       - name: Install frontend dependencies
         run: npm ci
 
       - name: Get Playwright version
         id: pw
-        run: echo "version=$(uv run --frozen --group test python -c 'import playwright; print(playwright.__version__)')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(npx playwright --version)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browser
         id: pw-cache
@@ -128,7 +128,7 @@ jobs:
 
       - name: Install Playwright browser
         if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: uv run --frozen --group test playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Build frontend
         run: npm run build:e2e -w frontend
@@ -137,14 +137,10 @@ jobs:
         uses: ./.github/actions/start-git-daemon
 
       # The suite starts a backend per worker (built SPA, throwaway DATA_DIR);
-      # see e2e/conftest.py.
+      # see e2e/fixtures.ts.
       - name: Run Playwright e2e tests
         id: e2e
-        run: |
-          uv run --frozen --group test pytest e2e -n 4 \
-            --tracing retain-on-failure \
-            --output test-results \
-            --html=report/index.html --self-contained-html
+        run: npx playwright test --workers 4
 
       - name: Upload trace artifacts
         if: ${{ !cancelled() }}
