@@ -446,10 +446,12 @@ export const test = base.extend<
   },
 
   /** Save labeled, numbered screenshots into the test's output directory, so
-   * an e2e screenshot report can keep call order. */
+   * an e2e screenshot report can keep call order. Off unless E2E_SHOTS=1:
+   * full-page captures cost CI time nobody looks at. */
   shot: async ({ page }, use, testInfo) => {
     let n = 0;
     await use(async (label) => {
+      if (process.env.E2E_SHOTS !== "1") return;
       n += 1;
       const safe = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "shot";
       await page.screenshot({ path: testInfo.outputPath(`${String(n).padStart(2, "0")}-${safe}.png`), fullPage: true });

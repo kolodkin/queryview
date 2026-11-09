@@ -37,14 +37,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
 
       - name: Run pre-commit
         uses: pre-commit/action@v3.0.1
 
+      # Restoring node_modules whole beats npm ci re-extracting it every run.
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
+      - name: Install frontend dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
       - name: Run frontend unit tests
-        run: npm ci && npm test -w frontend
+        run: npm test -w frontend
 
   test-backend:
     runs-on: ubuntu-latest
@@ -101,8 +111,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
@@ -112,7 +120,16 @@ jobs:
       - name: Install backend
         run: uv sync --frozen
 
+      # Restoring node_modules whole beats npm ci re-extracting it every run.
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
       - name: Install frontend dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Get Playwright version

@@ -47,6 +47,8 @@ privacy rule: invented names only.
   data comes from the worker-scoped `seeds` fixture (`await seeds.duckdb()`),
   and each worker seeds its own ClickHouse/Postgres database (`chDb()`);
   don't hard-code `qvtest`.
+- `shot(label)` saves a numbered screenshot only under `E2E_SHOTS=1` (off in
+  CI, for speed); set it to collect them for a visual report.
 - `BASE_URL=http://localhost:5173 npx playwright test --workers 1` runs the
   suite against a server you started.
 
