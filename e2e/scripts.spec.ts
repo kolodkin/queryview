@@ -3,7 +3,7 @@
 // last statement returned rows, a results table and an Open-in-Studio button,
 // for every driver (same seeds as drivers.spec.ts).
 import type { Page } from "@playwright/test";
-import { CASES, DUCK, type DriverCase, caseById, chDb, chExec, connect, dbExec, expect, test } from "./fixtures";
+import { CASES, CH, DUCK, type DriverCase, chDb, chExec, connect, dbExec, expect, test } from "./fixtures";
 
 // A table the write round-trip creates: unique per run, so parallel workers
 // sharing one database server never collide; dropTable cleans it up.
@@ -28,8 +28,7 @@ const uniqueTable = (prefix: string) => `${prefix}_${crypto.randomUUID().replace
 async function dropTable(c: DriverCase, seed: string, table: string): Promise<void> {
   const sql = `DROP TABLE IF EXISTS ${table}`;
   if (c.id === "clickhouse") await chExec(`DROP TABLE IF EXISTS ${chDb()}.${table}`);
-  else if (c.id === "postgres") dbExec("pg", seed, sql);
-  else dbExec(c.id as "duckdb" | "sqlite", seed, sql);
+  else await dbExec(c.id === "postgres" ? "pg" : (c.id as "duckdb" | "sqlite"), seed, sql);
 }
 
 async function openScriptsPage(page: Page): Promise<void> {
@@ -107,7 +106,7 @@ for (const c of CASES) {
 test("clickhouse row cap leaves subqueries alone", async ({ page, seeds }) => {
   // The cap is a setting on the ClickHouse session; it must bound only the
   // statement's own result, never what a subquery feeds it.
-  await connect(page, caseById("clickhouse"), await seeds.testDb());
+  await connect(page, CH, await seeds.testDb());
   await openScriptsPage(page);
 
   await page.getByTestId("scripts-input").fill("SELECT count() AS n FROM (SELECT number FROM numbers(200000))");

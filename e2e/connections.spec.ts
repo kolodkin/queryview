@@ -3,11 +3,9 @@
 // lock survives a reload but asks again in a fresh tab
 // (docs/connect.md#locked-connections).
 import type { Page } from "@playwright/test";
-import { DUCK, api, armRemote, connect, expect, mcpCall, openConnect, openQueryPanel, test } from "./fixtures";
+import { DUCK, api, armRemote, connCard as card, connect, expect, mcpCall, openConnect, openQueryPanel, test } from "./fixtures";
 
 const PASSPHRASE = "open sesame";
-
-const card = (page: Page, name: string) => page.locator(`[data-testid="conn-card"][data-conn="${name}"]`);
 
 async function answerPrompt(page: Page, passphrase: string): Promise<void> {
   await expect(page.getByTestId("passphrase-prompt")).toBeVisible();

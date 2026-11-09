@@ -1,7 +1,7 @@
 // Renaming, deleting, undeleting and purging a saved (predefined) query from
 // the query panel. Uses DuckDB and a uniquely-named workspace per run.
 import type { Page } from "@playwright/test";
-import { DUCK, api, connect, expect, openQueryPanel, test } from "./fixtures";
+import { DUCK, api, connect, expect, openQueryPanel, switchWorkspace, test } from "./fixtures";
 
 async function names(baseURL: string, ws: string, deleted = false): Promise<string[]> {
   const q = new URLSearchParams({ type: "duckdb", workspace: ws, include_deleted: "1" });
@@ -25,9 +25,7 @@ async function openNewWorkspace(
     await api(`${baseURL}/api/predefined-queries`, { json: { query_name: name, type: "duckdb", workspace: ws, ...fields } });
 
   await connect(page, DUCK, seed);
-  await page.getByTestId("workspace-switcher").click();
-  await page.getByTestId("workspace-option").filter({ hasText: ws }).click();
-  await expect(page.getByTestId("workspace-switcher")).toContainText(ws);
+  await switchWorkspace(page, ws);
   await openQueryPanel(page);
   return ws;
 }

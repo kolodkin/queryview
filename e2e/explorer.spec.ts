@@ -1,12 +1,10 @@
 // The explorer page: table sidebar -> rows with the field/order-by selects and
 // pagination, for every driver (same seeds as drivers.spec.ts).
-import type { Page, Route } from "@playwright/test";
-import { CASES, DUCK, caseById, chDb, chExec, connect, expect, test } from "./fixtures";
+import type { Route } from "@playwright/test";
+import { CASES, CH, DUCK, chDb, chExec, connect, expect, tableRow, test } from "./fixtures";
 
 // Mirrors DEFAULT_SIDEBAR_WIDTH in frontend/src/app/explorerSettings.ts.
 const DEFAULT_WIDTH = 256;
-
-const tableRow = (page: Page, name: string) => page.locator(`[data-testid="explorer-table"][data-table="${name}"]`);
 
 /** A route handler that holds the response for `ms`, long enough for a loader
  * to be observable. */
@@ -129,7 +127,7 @@ test("refresh reloads the rows from the database", async ({ page, seeds }) => {
   await chExec(`CREATE TABLE ${table} (id UInt32, name String) ENGINE = MergeTree ORDER BY id`);
   try {
     await chExec(`INSERT INTO ${table} VALUES (1, 'first')`);
-    await connect(page, caseById("clickhouse"), chDb());
+    await connect(page, CH, chDb());
     await page.getByTestId("nav-explorer").click();
     await tableRow(page, "fresh_rows").click();
     const output = page.getByTestId("explorer-output");

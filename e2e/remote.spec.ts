@@ -1,4 +1,5 @@
 import {
+  CH,
   CH_HOST,
   CH_PASSWORD,
   CH_PORT,
@@ -8,7 +9,6 @@ import {
   armRemote,
   chDb,
   connect,
-  connectClickhouseTestDb,
   expect,
   mcpCall,
   openQueryPanel,
@@ -84,7 +84,7 @@ test("agent switch names the connection and toasts", async ({ page, seeds, baseU
   // use_connection reaches an unarmed tab by heartbeat: the pill names the
   // agent's connection, a toast says the agent switched, the menu badges it.
   await seeds.testDb();
-  await connectClickhouseTestDb(page);
+  await connect(page, CH, chDb());
   const sid = await sessionId(page);
   const name = `agent-ch-${crypto.randomUUID().slice(0, 6)}`;
   const config = { host: CH_HOST, port: Number(CH_PORT), username: CH_USER, password: CH_PASSWORD };
@@ -101,7 +101,7 @@ test("agent switch names the connection and toasts", async ({ page, seeds, baseU
 
 test("mcp open_explorer browses the table", async ({ page, seeds, baseURL }) => {
   await seeds.testDb();
-  await connectClickhouseTestDb(page);
+  await connect(page, CH, chDb());
   await openQueryPanel(page);
   const sid = await armRemote(page);
 

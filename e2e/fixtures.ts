@@ -1,8 +1,9 @@
-import { execFileSync, spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
 import { test as base, expect, type Page } from "@playwright/test";
 
@@ -18,10 +19,10 @@ export const CH_HOST = process.env.CLICKHOUSE_HOST ?? "localhost";
 export const CH_PORT = process.env.CLICKHOUSE_PORT ?? "8123";
 export const CH_USER = process.env.CLICKHOUSE_USER ?? "default";
 export const CH_PASSWORD = process.env.CLICKHOUSE_PASSWORD ?? "";
-export const PG_HOST = process.env.PG_HOST ?? "localhost";
-export const PG_PORT = process.env.PG_PORT ?? "5432";
-export const PG_USER = process.env.PG_USER ?? "postgres";
-export const PG_PASSWORD = process.env.PG_PASSWORD ?? "";
+const PG_HOST = process.env.PG_HOST ?? "localhost";
+const PG_PORT = process.env.PG_PORT ?? "5432";
+const PG_USER = process.env.PG_USER ?? "postgres";
+const PG_PASSWORD = process.env.PG_PASSWORD ?? "";
 
 // Not `test`: a name that generic may already hold someone's data, and the
 // seeding drops it. Each worker seeds (and drops) its own database, so one
@@ -113,11 +114,10 @@ else:
     con.close()
 `;
 
-/** Run statements on Postgres database `db`, or a DuckDB/SQLite file. */
-export function dbExec(kind: "pg" | "duckdb" | "sqlite", target: string, ...stmts: string[]): void {
-  execFileSync(join(VENV_BIN, "python"), ["-c", PY_EXEC, kind, target, ...stmts], {
+/** Run statements on Postgres database `target`, or a DuckDB/SQLite file. */
+export async function dbExec(kind: "pg" | "duckdb" | "sqlite", target: string, ...stmts: string[]): Promise<void> {
+  await promisify(execFile)(join(VENV_BIN, "python"), ["-c", PY_EXEC, kind, target, ...stmts], {
     env: { ...process.env, PG_HOST, PG_PORT, PG_USER, PG_PASSWORD },
-    stdio: ["ignore", "ignore", "inherit"],
   });
 }
 
@@ -141,15 +141,11 @@ export async function openConnect(page: Page): Promise<void> {
 export async function startNewConnection(page: Page, driver: string): Promise<void> {
   await page.getByTestId("new-menu-toggle").click();
   await page.getByTestId("new-menu").getByTestId(`new-conn-${driver}`).click();
-  const servers: Record<string, [string, string[]]> = {
-    clickhouse: ["ch", [CH_HOST, CH_PORT, CH_USER, CH_PASSWORD]],
-    postgres: ["pg", [PG_HOST, PG_PORT, PG_USER, PG_PASSWORD]],
+  const servers: Record<string, Record<string, string>> = {
+    clickhouse: { "ch-host": CH_HOST, "ch-port": CH_PORT, "ch-username": CH_USER, "ch-password": CH_PASSWORD },
+    postgres: { "pg-host": PG_HOST, "pg-port": PG_PORT, "pg-username": PG_USER, "pg-password": PG_PASSWORD },
   };
-  if (driver in servers) {
-    const [prefix, values] = servers[driver];
-    const fields = ["host", "port", "username", "password"];
-    for (const [i, field] of fields.entries()) await page.getByTestId(`${prefix}-${field}`).fill(values[i]);
-  }
+  for (const [id, value] of Object.entries(servers[driver] ?? {})) await page.getByTestId(id).fill(value);
 }
 
 /** Connect to ClickHouse and stop on the database picker. */
@@ -159,13 +155,6 @@ export async function openClickhousePicker(page: Page): Promise<void> {
   await expect(page.getByTestId("clickhouse-form")).toBeVisible();
   await page.getByTestId("ch-connect").click();
   await expect(page.getByTestId("db-picker")).toBeVisible();
-}
-
-/** Connect to ClickHouse and select the seeded database; ends on the explorer. */
-export async function connectClickhouseTestDb(page: Page): Promise<void> {
-  await openClickhousePicker(page);
-  await page.locator(`[data-db="${chDb()}"]`).click();
-  await expect(page.getByTestId("connection-status")).toContainText(`· ${chDb()}`);
 }
 
 /** Fill the SQL, name the query, and author a `params:` block via the
@@ -200,80 +189,59 @@ export async function armRemote(page: Page): Promise<string> {
   return sessionId;
 }
 
+export const tableRow = (page: Page, name: string) =>
+  page.locator(`[data-testid="explorer-table"][data-table="${name}"]`);
+export const connCard = (page: Page, name: string) => page.locator(`[data-testid="conn-card"][data-conn="${name}"]`);
+
+export async function switchWorkspace(page: Page, ws: string): Promise<void> {
+  await page.getByTestId("workspace-switcher").click();
+  await page.getByTestId("workspace-option").filter({ hasText: ws }).click();
+  await expect(page.getByTestId("workspace-switcher")).toContainText(ws);
+}
+
 export const sessionId = (page: Page): Promise<string> =>
   page.evaluate(() => sessionStorage.getItem("qv_session")!);
 
 // --- Drivers ---------------------------------------------------------------
 
-export type SeedName = "testDb" | "pgDb" | "duckdb" | "sqlite";
-
 export type DriverCase = {
-  id: string;
-  formTestid: string; // connection form testid
+  id: string; // also names its form: `${id}-form`
   connectTestid: string; // the Connect button testid
-  seed: SeedName; // the `seeds` entry that seeds an `items` table
-  status: () => string; // expected connection-status text after connecting
-  pathField?: string; // a file-path field to fill with the seed value
-  hasPicker?: boolean; // picks the seeded database from a picker
+  seed: keyof Seeds; // the `seeds` entry that seeds an `items` table
+  pathField?: string; // a file-path field to fill with the seed; without one, a database picker
 };
 
 // Every case seeds the same `items(id, name)` table with alpha/beta/gamma.
 export const CASES: DriverCase[] = [
-  {
-    id: "clickhouse",
-    formTestid: "clickhouse-form",
-    connectTestid: "ch-connect",
-    seed: "testDb",
-    status: () => `· ${chDb()}`,
-    hasPicker: true,
-  },
-  {
-    id: "postgres",
-    formTestid: "postgres-form",
-    connectTestid: "pg-connect",
-    seed: "pgDb",
-    status: () => `· ${chDb()}`,
-    hasPicker: true,
-  },
-  {
-    id: "duckdb",
-    formTestid: "duckdb-form",
-    connectTestid: "duck-connect",
-    seed: "duckdb",
-    status: () => "duckdb",
-    pathField: "duck-path",
-  },
-  {
-    id: "sqlite",
-    formTestid: "sqlite-form",
-    connectTestid: "sq-connect",
-    seed: "sqlite",
-    status: () => "sqlite",
-    pathField: "sq-path",
-  },
+  { id: "clickhouse", connectTestid: "ch-connect", seed: "testDb" },
+  { id: "postgres", connectTestid: "pg-connect", seed: "pgDb" },
+  { id: "duckdb", connectTestid: "duck-connect", seed: "duckdb", pathField: "duck-path" },
+  { id: "sqlite", connectTestid: "sq-connect", seed: "sqlite", pathField: "sq-path" },
 ];
 export const caseById = (id: string) => CASES.find((c) => c.id === id)!;
 export const DUCK = caseById("duckdb");
+export const CH = caseById("clickhouse");
 
 export async function connect(page: Page, c: DriverCase, seed: string): Promise<void> {
   await openConnect(page);
   await startNewConnection(page, c.id);
-  await expect(page.getByTestId(c.formTestid)).toBeVisible();
+  const form = page.getByTestId(`${c.id}-form`);
+  await expect(form).toBeVisible();
   if (c.pathField) await page.getByTestId(c.pathField).fill(seed);
   await page.getByTestId(c.connectTestid).click();
   // The status pill can already read "connected" from the session the shell
   // auto-resumed on load, so wait for the form to close: only the connect
   // response's handler dismisses it, and that handler moves on to the picker
   // or the explorer.
-  await expect(page.getByTestId(c.formTestid)).toHaveCount(0);
-  if (c.hasPicker) {
+  await expect(form).toHaveCount(0);
+  if (!c.pathField) {
     await expect(page.getByTestId("db-picker")).toBeVisible();
     await page.locator(`[data-db="${chDb()}"]`).click();
   } else {
     // Picker-less driver (DuckDB, SQLite): connecting goes straight to ready.
     await expect(page.getByTestId("db-picker")).toHaveCount(0);
   }
-  await expect(page.getByTestId("connection-status")).toContainText(c.status());
+  await expect(page.getByTestId("connection-status")).toContainText(c.pathField ? c.id : `· ${chDb()}`);
 }
 
 /** Start `queryview-backend` on a free port and a throwaway DATA_DIR. */
@@ -381,9 +349,9 @@ export const test = base.extend<
         if (!memo.has(key)) memo.set(key, Promise.resolve(make()));
         return memo.get(key)!;
       };
-      const duck = (name: string, ...tables: string[]) => {
+      const duck = async (name: string, ...tables: string[]) => {
         const path = join(tmp, `${name}.duckdb`);
-        dbExec("duckdb", path, ...tables.flatMap((t) => [ITEMS_DDL(t), ITEMS_ROWS(t)]));
+        await dbExec("duckdb", path, ...tables.flatMap((t) => [ITEMS_DDL(t), ITEMS_ROWS(t)]));
         return path;
       };
       const dir = (name: string, files: Record<string, string | Buffer>) => {
@@ -400,18 +368,18 @@ export const test = base.extend<
           await chExec(`DROP DATABASE IF EXISTS ${db}`);
           await chExec(`CREATE DATABASE ${db}`);
           await chExec(`CREATE TABLE ${db}.items (id UInt32, name String) ENGINE = MergeTree ORDER BY id`);
-          await chExec(`INSERT INTO ${db}.items (id, name) VALUES (1, 'alpha'), (2, 'beta'), (3, 'gamma')`);
+          await chExec(ITEMS_ROWS(`${db}.items`));
           return db;
         }),
-        pgDb: once("pgDb", () => {
-          dbExec("pg", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`, `CREATE DATABASE ${db}`);
-          dbExec("pg", db, "CREATE TABLE items (id int, name text)", ITEMS_ROWS("items"));
+        pgDb: once("pgDb", async () => {
+          await dbExec("pg", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`, `CREATE DATABASE ${db}`);
+          await dbExec("pg", db, ITEMS_DDL("items"), ITEMS_ROWS("items"));
           return db;
         }),
         duckdb: once("duckdb", () => duck("qv", "items")),
-        sqlite: once("sqlite", () => {
+        sqlite: once("sqlite", async () => {
           const path = join(tmp, "qv.sqlite");
-          dbExec("sqlite", path, ITEMS_DDL("items"), ITEMS_ROWS("items"));
+          await dbExec("sqlite", path, ITEMS_DDL("items"), ITEMS_ROWS("items"));
           return path;
         }),
         duckdbLongNames: once("duckdbLongNames", () =>
@@ -439,7 +407,7 @@ export const test = base.extend<
       };
       await use(seeds);
       if (memo.has("testDb")) await chExec(`DROP DATABASE IF EXISTS ${db}`);
-      if (memo.has("pgDb")) dbExec("pg", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`);
+      if (memo.has("pgDb")) await dbExec("pg", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`);
       rmSync(tmp, { recursive: true, force: true });
     },
     { scope: "worker" },

@@ -1,6 +1,6 @@
 // Workspaces, YAML export/import, git sync and popovers: none needs a database.
 import { readFileSync } from "node:fs";
-import { api, expect, sessionId, test } from "./fixtures";
+import { api, expect, sessionId, switchWorkspace, test } from "./fixtures";
 
 test("switcher isolates dashboards", async ({ page, baseURL }) => {
   // Uses a uniquely-named workspace and cleans it up so reruns are idempotent.
@@ -19,9 +19,7 @@ test("switcher isolates dashboards", async ({ page, baseURL }) => {
     expect(body.dashboards.map((d: { name: string }) => d.name)).not.toContain(dash);
 
     // Switch: the page views remount and the dashboard resolves in that workspace.
-    await page.getByTestId("workspace-switcher").click();
-    await page.getByTestId("workspace-option").filter({ hasText: ws }).click();
-    await expect(page.getByTestId("workspace-switcher")).toContainText(ws);
+    await switchWorkspace(page, ws);
     await page.goto(`/dashboard?name=${encodeURIComponent(dash)}`);
     await expect(page.locator("body")).not.toContainText("not found");
   } finally {

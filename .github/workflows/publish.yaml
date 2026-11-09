@@ -322,8 +322,9 @@ jobs:
       - name: Install backend dependencies (project not installed)
         run: uv sync --frozen --no-install-project
 
+      # The root package only: the frontend workspace isn't built here.
       - name: Install Playwright
-        run: npm ci
+        run: npm ci --workspaces=false --include-workspace-root
 
       - name: Download dist artifacts
         uses: actions/download-artifact@v4
@@ -334,7 +335,19 @@ jobs:
       - name: Install built wheel
         run: uv pip install --no-deps dist/queryview-*.whl
 
+      - name: Get Playwright version
+        id: pw
+        run: echo "version=$(npx playwright --version)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
       - name: Install Playwright browser
+        if: steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Start git daemon
@@ -344,7 +357,7 @@ jobs:
       # — the installed wheel's, since the project itself is not installed
       # here (see e2e/fixtures.ts).
       - name: Run Playwright e2e tests
-        run: npx playwright test --workers 4
+        run: npx playwright test --workers 4 --reporter=list
 
       - name: Upload trace artifacts
         if: ${{ !cancelled() }}

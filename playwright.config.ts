@@ -14,7 +14,8 @@ export default defineConfig({
   fullyParallel: true,
   timeout: 60_000,
   expect: { timeout: 15_000 },
-  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : "100%",
+  // A BASE_URL server is one backend every worker would share.
+  workers: process.env.BASE_URL ? 1 : process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : "100%",
   reporter: [["list"], ["html", { outputFolder: "report", open: "never" }]],
   // A failing test reruns once in CI, recording a trace: recording every
   // run costs about a third of the suite's time. Passing on the rerun still

@@ -3,7 +3,7 @@
 // path, and the Union by name checkbox changes the glob entry's query.
 import { basename } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, openConnect, startNewConnection, test } from "./fixtures";
+import { connCard, expect, openConnect, startNewConnection, tableRow, test } from "./fixtures";
 
 async function connectFolder(page: Page, path: string, name?: string): Promise<void> {
   await openConnect(page);
@@ -12,6 +12,13 @@ async function connectFolder(page: Page, path: string, name?: string): Promise<v
   await page.getByTestId("duck-path").fill(path);
   await page.getByTestId("duck-connect").click();
   await expect(page.getByTestId("duckdb-form")).toHaveCount(0);
+}
+
+/** Pick a folder from the open pill menu by keyboard: a long saved-connections
+ * list can squeeze the option rows too small to click. */
+async function pickFolder(page: Page, name: string): Promise<void> {
+  await page.getByTestId("db-select-filter").fill(name);
+  await page.keyboard.press("Enter");
 }
 
 // The table names, not their sizes.
@@ -35,7 +42,7 @@ test("folder connection navigates folders and browses files", async ({ page, see
   const options = page.getByTestId("db-select").getByRole("option");
   await expect(options).toHaveText(["sub"]);
   await shot("folder picker at the root: full path, no parent");
-  await options.first().click();
+  await pickFolder(page, "sub");
   await expect(status).toContainText("· sub");
   await expect(status).toHaveAttribute("title", `${folder}/sub`);
   await expect(names(page)).toHaveText(["nested.csv.gz"]);
@@ -48,7 +55,7 @@ test("folder connection navigates folders and browses files", async ({ page, see
   await status.click();
   await expect(options).toHaveText([".."]);
   await shot("folder picker in a subfolder: parent entry");
-  await options.first().click();
+  await pickFolder(page, "..");
   await expect(names(page)).toHaveText(["extra.csv", "items.csv", "*.csv"]);
 
   // Union by name: the glob entry still browses, now across both files.
@@ -62,7 +69,7 @@ test("folder connection navigates folders and browses files", async ({ page, see
 
 test("union by name adds columns only some files have", async ({ page, seeds, shot }) => {
   await connectFolder(page, await seeds.mixedFolder());
-  await page.locator('[data-testid="explorer-table"][data-table="*.csv"]').click();
+  await tableRow(page, "*.csv").click();
   const panel = page.getByTestId("explorer-panel");
   const headers = panel.locator("thead th");
 
@@ -96,7 +103,7 @@ test("max entries cuts lists and says so", async ({ page, seeds, shot }) => {
   await expect(names(page)).toHaveText([...files.slice(0, 10), "*.csv"]);
   await expect(page.getByTestId("explorer-truncated")).toContainText("More than 10 files");
   await shot("max entries 10: file list cut, with notice");
-  await page.locator('[data-testid="explorer-table"][data-table="*.csv"]').click();
+  await tableRow(page, "*.csv").click();
   await expect(page.getByTestId("explorer-panel").locator("tbody tr")).toHaveCount(10);
   await status.click();
   await expect(options).toHaveText(folders.slice(0, 10));
@@ -123,9 +130,9 @@ test("reopening a connection goes back to its last folder and file", async ({ pa
   await connectFolder(page, await seeds.folder(), "lv-folder");
   const status = page.getByTestId("connection-status");
   await status.click();
-  await page.getByTestId("db-select").getByRole("option").first().click();
+  await pickFolder(page, "sub");
   await expect(status).toContainText("· sub");
-  await page.locator('[data-testid="explorer-table"][data-table="nested.csv.gz"]').click();
+  await tableRow(page, "nested.csv.gz").click();
   await expect(page.getByTestId("explorer-panel")).toContainText("gamma");
   // Visiting another page and coming back through the nav keeps the memory.
   await page.getByTestId("nav-studio").click();
@@ -139,7 +146,7 @@ test("reopening a connection goes back to its last folder and file", async ({ pa
   await page.getByTestId("duck-connect").click();
   await expect(status).toContainText("lv-other");
   await openConnect(page);
-  await page.locator('[data-testid="conn-card"][data-conn="lv-folder"]').click();
+  await connCard(page, "lv-folder").click();
 
   // Straight back to the folder and the file, with its rows.
   await expect(status).toContainText("lv-folder · sub");

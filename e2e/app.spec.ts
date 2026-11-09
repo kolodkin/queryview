@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import {
   CASES,
+  CH,
   CH_HOST,
   CH_PASSWORD,
   CH_PORT,
@@ -10,14 +11,15 @@ import {
   authorParamsYaml,
   chDb,
   chExec,
+  connCard,
   connect,
-  connectClickhouseTestDb,
   expect,
   openClickhousePicker,
   openConnect,
   openQueryPanel,
   sessionId,
   startNewConnection,
+  tableRow,
   test,
 } from "./fixtures";
 
@@ -25,7 +27,7 @@ import {
 // passes the database per request, Postgres reconnects), so switching runs on
 // both: the SQL naming the current database and another database to switch to.
 // Both start on chDb(): the Postgres database has the same name.
-const PICKER = CASES.filter((c) => c.hasPicker);
+const PICKER = CASES.filter((c) => !c.pathField);
 const CURRENT_DB: Record<string, string> = { clickhouse: "currentDatabase()", postgres: "current_database()" };
 const OTHER_DB: Record<string, string> = { clickhouse: "system", postgres: "postgres" };
 
@@ -64,7 +66,7 @@ test("queryview e2e", async ({ page }) => {
   await expect(page.locator('[data-db="default"]')).toBeVisible();
   // The picker's Back returns to the cards; with no database visited yet, the
   // card opens the picker again.
-  let card = page.locator('[data-testid="conn-card"][data-conn="clickhouse"]');
+  let card = connCard(page, "clickhouse");
   await page.getByTestId("picker-back").click();
   await expect(page.getByTestId("db-picker")).toHaveCount(0);
   await card.click();
@@ -96,7 +98,7 @@ test("queryview e2e", async ({ page }) => {
   // The saved connection's card, marked active and showing its database,
   // goes straight back to the database last visited in this session.
   await page.getByTestId("nav-connect").click();
-  card = page.locator('[data-testid="conn-card"][data-conn="clickhouse"]');
+  card = connCard(page, "clickhouse");
   await expect(card).toHaveAttribute("data-active", "true");
   await expect(card).toContainText("default");
   await card.click();
@@ -186,7 +188,7 @@ test("the pill menu relists databases on open", async ({ page, seeds }) => {
   // opens, without reconnecting.
   await seeds.testDb();
   const fresh = `${chDb()}_fresh`;
-  await connectClickhouseTestDb(page);
+  await connect(page, CH, chDb());
   try {
     await chExec(`CREATE DATABASE IF NOT EXISTS ${fresh}`);
     await page.getByTestId("connection-status").click();
@@ -220,8 +222,8 @@ test("a database switched elsewhere reaches the tab on its heartbeat", async ({ 
   // A switch this tab did not make (an API caller here; another tab is the
   // same path) reaches its pill and views on the next heartbeat.
   await seeds.testDb();
-  await connectClickhouseTestDb(page);
-  await expect(page.locator('[data-testid="explorer-table"][data-table="items"]')).toBeVisible();
+  await connect(page, CH, chDb());
+  await expect(tableRow(page, "items")).toBeVisible();
 
   const r = await api(`${baseURL}/api/db/database`, {
     json: { database: "system" },
@@ -231,8 +233,8 @@ test("a database switched elsewhere reaches the tab on its heartbeat", async ({ 
 
   await expect(page.getByTestId("connection-status")).toContainText("· system");
   // The explorer reloads its sidebar for the new database.
-  await expect(page.locator('[data-testid="explorer-table"][data-table="items"]')).toHaveCount(0);
-  await expect(page.locator('[data-testid="explorer-table"][data-table="databases"]')).toBeVisible();
+  await expect(tableRow(page, "items")).toHaveCount(0);
+  await expect(tableRow(page, "databases")).toBeVisible();
 });
 
 test("ready connection shows query panel", async ({ page, seeds }) => {
@@ -258,7 +260,7 @@ test("connect page and disconnect", async ({ page, seeds }) => {
 
   await page.getByTestId("nav-connect").click();
   await expect(page).toHaveURL(/\/connect/);
-  await expect(page.locator('[data-testid="conn-card"][data-conn="duckdb"]')).toHaveAttribute("data-active", "true");
+  await expect(connCard(page, "duckdb")).toHaveAttribute("data-active", "true");
   await expect(page.getByTestId("query-panel")).toHaveCount(0);
 
   await page.getByTestId("connection-status").click();

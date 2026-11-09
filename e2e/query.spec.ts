@@ -7,11 +7,12 @@ import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import {
   CASES,
+  CH,
   DUCK,
   type DriverCase,
   authorParamsYaml,
+  chDb,
   connect,
-  connectClickhouseTestDb,
   expect,
   openQueryPanel,
   test,
@@ -19,7 +20,7 @@ import {
 
 /** Connect to ClickHouse, select the seeded db, open the panel. */
 async function openChPanel(page: Page): Promise<void> {
-  await connectClickhouseTestDb(page);
+  await connect(page, CH, chDb());
   await openQueryPanel(page);
 }
 

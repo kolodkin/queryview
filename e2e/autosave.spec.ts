@@ -2,7 +2,7 @@
 // successful run (never a failed one). Agent-push persistence is covered in the
 // backend tests (test_dashboards.py). Uses a uniquely-named workspace per run.
 import type { Page } from "@playwright/test";
-import { DUCK, api, armRemote, connect, expect, mcpCall, openQueryPanel, test } from "./fixtures";
+import { DUCK, api, armRemote, connect, expect, mcpCall, openQueryPanel, switchWorkspace, test } from "./fixtures";
 
 const newWorkspace = () => `e2e-auto-${crypto.randomUUID().slice(0, 6)}`;
 
@@ -10,12 +10,6 @@ async function storedSql(baseURL: string, ws: string, name: string): Promise<str
   const q = new URLSearchParams({ type: "duckdb", workspace: ws });
   const { body } = await api(`${baseURL}/api/predefined-queries?${q}`);
   return body.queries.find((x: { query_name: string }) => x.query_name === name)?.query;
-}
-
-async function switchWorkspace(page: Page, ws: string): Promise<void> {
-  await page.getByTestId("workspace-switcher").click();
-  await page.getByTestId("workspace-option").filter({ hasText: ws }).click();
-  await expect(page.getByTestId("workspace-switcher")).toContainText(ws);
 }
 
 async function setAutosave(page: Page, on: boolean): Promise<void> {
