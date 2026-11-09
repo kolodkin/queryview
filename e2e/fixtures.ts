@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
-import { createWriteStream, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -38,14 +38,15 @@ export async function api(
   url: string,
   opts: { method?: string; json?: unknown; headers?: Record<string, string>; ok?: false } = {},
 ): Promise<{ status: number; body: any }> {
+  const method = opts.method ?? (opts.json === undefined ? "GET" : "POST");
   const res = await fetch(url, {
-    method: opts.method ?? (opts.json === undefined ? "GET" : "POST"),
+    method,
     headers: { "content-type": "application/json", ...opts.headers },
     body: opts.json === undefined ? undefined : JSON.stringify(opts.json),
     signal: AbortSignal.timeout(10_000),
   });
   const text = await res.text();
-  if (opts.ok !== false && !res.ok) throw new Error(`${opts.method ?? "GET"} ${url} -> ${res.status}: ${text}`);
+  if (opts.ok !== false && !res.ok) throw new Error(`${method} ${url} -> ${res.status}: ${text}`);
   let body: any = text;
   try {
     body = JSON.parse(text);
@@ -66,7 +67,8 @@ export async function mcpCall(baseURL: string, tool: string, args: Json): Promis
   });
   const text = await res.text();
   // An SSE reply carries the JSON-RPC message on its `data:` line.
-  const data = text.startsWith("{") ? text : text.split("\n").find((l) => l.startsWith("data:"))!.slice(5);
+  const data = text.startsWith("{") ? text : text.split("\n").find((l) => l.startsWith("data:"))?.slice(5);
+  if (!res.ok || !data) throw new Error(`MCP ${tool} -> ${res.status}: ${text}`);
   const msg = JSON.parse(data);
   expect(msg.error, JSON.stringify(msg)).toBeUndefined();
   expect(msg.result.isError, JSON.stringify(msg)).toBeFalsy();
@@ -274,6 +276,52 @@ export async function connect(page: Page, c: DriverCase, seed: string): Promise<
   await expect(page.getByTestId("connection-status")).toContainText(c.status());
 }
 
+/** Start `queryview-backend` on a free port and a throwaway DATA_DIR. */
+async function startBackend(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const bin = join(VENV_BIN, "queryview-backend");
+  if (!existsSync(bin)) throw new Error(`${bin} not found: run \`uv sync\` first`);
+  const port = await new Promise<number>((ok) => {
+    const srv = createServer().listen(0, () => {
+      const p = (srv.address() as { port: number }).port;
+      srv.close(() => ok(p));
+    });
+  });
+  const dataDir = mkdtempSync(join(tmpdir(), "qv-e2e-data-"));
+  const logPath = join(dataDir, "backend.log");
+  const log = createWriteStream(logPath);
+  const proc = spawn(bin, [], {
+    env: { ...process.env, SERVE_STATIC: "1", PORT: String(port), DATA_DIR: dataDir },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  proc.stdout.pipe(log);
+  proc.stderr.pipe(log);
+  const exited = new Promise((r) => proc.once("exit", r));
+  const stop = async () => {
+    if (proc.exitCode === null && proc.signalCode === null) {
+      proc.kill();
+      await Promise.race([exited, new Promise((r) => setTimeout(r, 10_000))]);
+      if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
+    }
+    log.end();
+    rmSync(dataDir, { recursive: true, force: true });
+  };
+  const url = `http://localhost:${port}`;
+  const deadline = Date.now() + 60_000;
+  for (;;) {
+    const up = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1000) }).then(
+      (r) => r.ok,
+      () => false,
+    );
+    if (up) return { url, stop };
+    if (proc.exitCode !== null || Date.now() > deadline) {
+      const output = readFileSync(logPath, "utf-8");
+      await stop();
+      throw new Error(`backend did not come up:\n${output}`);
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
 // --- Fixtures --------------------------------------------------------------
 
 type Seeds = {
@@ -305,46 +353,15 @@ export const test = base.extend<
    * connections, workspaces or sessions; only the database servers are shared. */
   backendURL: [
     async ({}, use) => {
-      if (process.env.BASE_URL) return use(process.env.BASE_URL);
-      const port = await new Promise<number>((ok) => {
-        const srv = createServer().listen(0, () => {
-          const p = (srv.address() as { port: number }).port;
-          srv.close(() => ok(p));
-        });
-      });
-      const dataDir = mkdtempSync(join(tmpdir(), "qv-e2e-data-"));
-      const logPath = join(dataDir, "backend.log");
-      const log = createWriteStream(logPath);
-      const proc = spawn(join(VENV_BIN, "queryview-backend"), [], {
-        env: { ...process.env, SERVE_STATIC: "1", PORT: String(port), DATA_DIR: dataDir },
-        stdio: ["ignore", "pipe", "pipe"],
-      });
-      proc.stdout.pipe(log);
-      proc.stderr.pipe(log);
-      const url = `http://localhost:${port}`;
+      const backend = process.env.BASE_URL ? { url: process.env.BASE_URL, stop: async () => {} } : await startBackend();
       try {
-        const deadline = Date.now() + 60_000;
-        for (;;) {
-          const up = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1000) }).then(
-            (r) => r.ok,
-            () => false,
-          );
-          if (up) break;
-          if (proc.exitCode !== null || Date.now() > deadline)
-            throw new Error(`backend did not come up:\n${readFileSync(logPath, "utf-8")}`);
-          await new Promise((r) => setTimeout(r, 100));
-        }
         // Point the default workspace at the remote CI stood up, through the
         // same API a user would. Unset locally: git sync stays disabled.
         const remote = process.env.E2E_GIT_REMOTE;
-        if (remote) await api(`${url}/api/workspaces/default`, { method: "PATCH", json: { remote } });
-        await use(url);
+        if (remote) await api(`${backend.url}/api/workspaces/default`, { method: "PATCH", json: { remote } });
+        await use(backend.url);
       } finally {
-        const exited = new Promise((r) => proc.once("exit", r));
-        proc.kill();
-        await Promise.race([exited, new Promise((r) => setTimeout(r, 10_000))]);
-        if (proc.exitCode === null) proc.kill("SIGKILL");
-        rmSync(dataDir, { recursive: true, force: true });
+        await backend.stop();
       }
     },
     { scope: "worker", timeout: 90_000 },

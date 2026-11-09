@@ -81,14 +81,17 @@ test("git controls disabled when unconfigured", async ({ page, baseURL }) => {
 
 test("git commit and restore dashboard round trip", async ({ page, baseURL }) => {
   test.skip(!(await gitConfigured(baseURL!)), "git sync is not configured for this stack");
+  // Unique per attempt: a CI retry shares the remote, which keeps the first
+  // attempt's commit.
+  const name = `gs e2e ${crypto.randomUUID().slice(0, 6)}`;
   const save = (v: number) =>
     api(`${baseURL}/api/dashboards`, {
-      json: { name: "gs e2e", html: `<html><body>v${v}</body></html>`, queries: { q: `SELECT ${v}` } },
+      json: { name, html: `<html><body>v${v}</body></html>`, queries: { q: `SELECT ${v}` } },
     });
 
   // Seed v1 via the API, then commit it from the UI.
   await save(1);
-  await page.goto("/dashboard?name=gs%20e2e");
+  await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
   await expect(page.getByTestId("git-commit")).toBeEnabled();
   await page.getByTestId("git-commit").click();
   await expect(page.getByTestId("git-commit")).toHaveText("Committed");
@@ -102,7 +105,7 @@ test("git commit and restore dashboard round trip", async ({ page, baseURL }) =>
   await rows.first().getByTestId("git-revision-restore").click();
   // The picker closes on a successful restore; only then check the store.
   await expect(page.getByTestId("git-revisions")).toBeHidden();
-  const { body } = await api(`${baseURL}/api/dashboards/gs%20e2e`);
+  const { body } = await api(`${baseURL}/api/dashboards/${encodeURIComponent(name)}`);
   expect(body.html).toContain("v1");
   expect(body.queries).toEqual({ q: "SELECT 1" });
 });

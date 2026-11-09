@@ -17,8 +17,10 @@ export default defineConfig({
   workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : "100%",
   reporter: [["list"], ["html", { outputFolder: "report", open: "never" }]],
   // A failing test reruns once in CI, recording a trace: recording every
-  // run costs about a third of the suite's time.
+  // run costs about a third of the suite's time. Passing on the rerun still
+  // fails the run.
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: Boolean(process.env.CI),
   use: {
     viewport: { width: 1280, height: 900 },
     trace: "on-first-retry",
