@@ -28,7 +28,8 @@ const PG_PASSWORD = process.env.PG_PASSWORD ?? "";
 // seeding drops it. Each worker seeds (and drops) its own database, so one
 // worker's teardown can't pull the table out from under another's test.
 // Postgres uses the same name. Read in a test, never at import time.
-export const chDb = () => `qvtest_${test.info().parallelIndex}`;
+const dbName = (index: number) => `qvtest_${index}`;
+export const chDb = () => dbName(test.info().parallelIndex);
 
 // --- HTTP ------------------------------------------------------------------
 
@@ -341,9 +342,9 @@ export const test = base.extend<
    * ends. Each drops its target up front too, so a run left behind by a
    * crashed worker never leaks rows into this one. */
   seeds: [
-    async ({}, use) => {
+    async ({}, use, workerInfo) => {
       const tmp = mkdtempSync(join(tmpdir(), "qv-e2e-seed-"));
-      const db = chDb();
+      const db = dbName(workerInfo.parallelIndex);
       const memo = new Map<string, Promise<string>>();
       const once = (key: string, make: () => Promise<string> | string) => () => {
         if (!memo.has(key)) memo.set(key, Promise.resolve(make()));
