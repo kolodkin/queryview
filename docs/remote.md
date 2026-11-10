@@ -107,8 +107,8 @@ dashboards sit side by side:
 - A later push to the same name lands in that tab. The reply's `tab_session`
   is the tab's own session id, which every tool accepts.
 - A tab is a [tab session](./session.md#tabs): each push puts it on whatever
-  connection and database the agent's session is on, and it goes away once
-  its browser tab has closed.
+  connection the agent's session is on (its database is its own once open),
+  and it goes away once its browser tab has closed.
 - Arming the session is the consent for its tabs: a push with `tab` to a
   disarmed session fails like any push, and the tab it opens arms itself. A
   tab can't have tabs.

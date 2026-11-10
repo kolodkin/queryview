@@ -32,7 +32,7 @@ import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
-import { TabOffer, type TabOpen } from './controls/TabOffer'
+import { TabOffers, type TabOpen } from './controls/TabOffer'
 import { PassphrasePrompt } from './controls/PassphrasePrompt'
 import { Loading } from './controls/Spinner'
 import { CopyName } from './controls/CopyName'
@@ -219,8 +219,8 @@ function Shell() {
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  // A tab the agent asked for that the browser would not open by itself.
-  const [tabOffer, setTabOffer] = useState<TabOpen | null>(null)
+  // Tabs the agent asked for that the browser would not open by itself.
+  const [tabOffers, setTabOffers] = useState<TabOpen[]>([])
   const [dbOpen, setDbOpen] = useState(false)
   // The pill menu's connection list, refetched on open and on a `connections`
   // push; the nonce also refreshes Connect.
@@ -459,7 +459,10 @@ function Shell() {
     // a page opens without a click, and this is not one: then the offer's
     // button is the click.
     on<TabOpen>('tab', (payload) => {
-      if (!window.open(payload.url, payload.session)) setTabOffer(payload)
+      if (window.open(payload.url, payload.session)) return
+      setTabOffers((list) => [...list.filter((o) => o.session !== payload.session), payload])
+      // Gone with the push parked for it; a newer offer for the tab is another object.
+      window.setTimeout(() => setTabOffers((list) => list.filter((o) => o !== payload)), 60_000)
     })
     return () => {
       es.close()
@@ -778,7 +781,10 @@ function Shell() {
         <Loading label="Restoring session…" testid="session-loading" />
       )}
       <Toast message={toast} onDone={() => setToast(null)} />
-      <TabOffer offer={tabOffer} onDone={() => setTabOffer(null)} />
+      <TabOffers
+        offers={tabOffers}
+        onDone={(session) => setTabOffers((list) => list.filter((o) => o.session !== session))}
+      />
       {connection?.unlocked === false && (
         <PassphrasePrompt
           title={`${connection.name} is locked`}

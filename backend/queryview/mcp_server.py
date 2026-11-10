@@ -549,8 +549,10 @@ _TAB_ERRORS = {"unknown": "unknown session", "nested": "a tab can't have tabs", 
 
 async def _tab_session(session_id: str, tab: str) -> tuple[str | None, str]:
     """The tab session named `tab` under `session_id`, on the parent's
-    connection, database and workspace: the tab is on what the agent is on.
-    The parent must be armed — arming it is the consent for its tabs."""
+    connection and workspace: the tab is on what the agent is on. Its database
+    is its own once open (open_explorer moves it), starting from the parent's
+    when the tab opens or the connection changes. The parent must be armed —
+    arming it is the consent for its tabs."""
     if not remote.is_armed(session_id):
         return None, "unknown or inactive session"
     parent = await sessions.get_session_rec(session_id)
@@ -559,12 +561,12 @@ async def _tab_session(session_id: str, tab: str) -> tuple[str | None, str]:
         return None, _TAB_ERRORS.get(reason, reason)
     share_session_connections(child.id, session_id)
     if parent.connection_name and (
-        _get_session_entry(child.id) is None
-        or child.connection_name != parent.connection_name
-        or child.database != parent.database
+        _get_session_entry(child.id) is None or child.connection_name != parent.connection_name
     ):
         # As the agent: a locked connection refuses here, before any tab opens.
-        r = await open_saved(child.id, parent.connection_name, parent.database, by="agent")
+        # Without a database, open_saved restores the tab's own last one.
+        same = child.connection_name == parent.connection_name
+        r = await open_saved(child.id, parent.connection_name, None if same else parent.database, by="agent")
         if not r["ok"]:
             return None, r["message"]
     if child.workspace != parent.workspace:
@@ -578,9 +580,10 @@ async def _deliver_to(parent: str, tab: str | None, target: str, payload: dict[s
     the parent's tab is told to open one, which arms and collects it."""
     if tab is None or remote.is_armed(target):
         return await push(target, payload)
-    remote.park(target, payload)
-    remote.notify(parent, {"type": "tab", "session": target, "label": tab, "url": f"/?session={target}&armed=1"})
-    return True, "opening a tab"
+    ok, message = remote.park(target, payload)
+    if ok:
+        remote.notify(parent, {"type": "tab", "session": target, "label": tab, "url": f"/?session={target}&armed=1"})
+    return ok, message
 
 
 async def _target_or_error(session_id: str, tab: str | None) -> tuple[str | None, str]:

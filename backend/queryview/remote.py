@@ -71,13 +71,24 @@ def is_armed(session_id: str) -> bool:
     return session_id in _channels
 
 
-def park(session_id: str, payload: dict[str, Any]) -> None:
-    """Hold a push for a session that is not armed yet; the newest wins, and
-    one older than PARK_TTL_SECONDS is dropped (its tab never opened)."""
+def _invalid(payload: dict[str, Any]) -> str | None:
+    return presentation_error(payload.get("order_by"), payload.get("fields")) or cell_view_error(
+        payload.get("cell_view")
+    )
+
+
+def park(session_id: str, payload: dict[str, Any]) -> tuple[bool, str]:
+    """Hold a push for a session that is not armed yet, checked as `push`
+    checks it; the newest wins, and one older than PARK_TTL_SECONDS is dropped
+    (its tab never opened)."""
+    err = _invalid(payload)
+    if err is not None:
+        return False, err
     now = time.monotonic()
     for sid in [sid for sid, (_, at) in _parked.items() if now - at >= PARK_TTL_SECONDS]:
         del _parked[sid]
     _parked[session_id] = (payload, now)
+    return True, "opening a tab"
 
 
 def register(session_id: str) -> str:
@@ -104,9 +115,7 @@ def push(remote_id: str, payload: dict[str, Any]) -> tuple[bool, str]:
     channel = _channels.get(remote_id)
     if channel is None:
         return False, "unknown or inactive session"
-    err = presentation_error(payload.get("order_by"), payload.get("fields")) or cell_view_error(
-        payload.get("cell_view")
-    )
+    err = _invalid(payload)
     if err is not None:
         return False, err
     if _human_holds(channel):

@@ -11,7 +11,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
-from sqlalchemy import column, table
+from sqlalchemy import Index, column, table
 from sqlalchemy.orm import load_only
 from sqlmodel import Field, SQLModel, col, delete, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -45,6 +45,7 @@ def _open() -> AsyncSession:
 
 class Session(SQLModel, table=True):
     __tablename__: ClassVar[str] = "sessions"
+    __table_args__ = (Index("ix_sessions_parent_label", "parent", "label", unique=True),)
 
     id: str = Field(primary_key=True)
     seq: int  # stable ordinal behind the "Session 3" fallback label

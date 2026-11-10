@@ -149,8 +149,10 @@ from and whose `label` is the name, listed as **Agent › orders**. Scratch like
 an unnamed session — swept once its browser tab has been closed for a claim
 TTL, never resumed by a new tab — and not renamable, since the name is how the
 agent addresses it. It shares its parent's agent-added connections, and each
-push puts it on the parent's connection and database. A parent that is deleted
-or swept leaves its tabs behind as plain scratch sessions.
+push puts it on the parent's connection; its database is its own once open
+(`open_explorer` moves it), starting from the parent's when the tab opens or the
+connection changes. A parent that is deleted or swept leaves its tabs behind as
+plain scratch sessions.
 
 A tab starts from a link, `/?session=<id>&armed=1`: the new browser tab takes
 that session as the switcher would (one held elsewhere or gone shows a toast,

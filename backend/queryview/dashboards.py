@@ -151,7 +151,8 @@ async def _push_dashboard(
     if not pushed:
         return False, False, message
     ws = await (workspaces.resolve(workspace) if workspace else workspaces.fallback())
-    if not ws.autosave:
+    # A push parked for a tab still opening ("opening a tab") is not delivered.
+    if not ws.autosave or message != "delivered":
         return True, False, message
     await upsert_dashboard(name, html, queries, params, workspace_id=ws.id)
     return True, True, message

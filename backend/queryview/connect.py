@@ -827,14 +827,19 @@ async def add_session_connection(
 
 
 async def remove_session_connection(sid: str, name: str, by: Literal["agent", "user"] = "user") -> dict[str, Any]:
-    """Drop a session connection, disconnecting the session if it is active."""
-    if _session_conns.get(sid, {}).pop(name, None) is None:
+    """Drop a session connection, disconnecting every session on it: the
+    session's own, and the tabs that share its map (share_session_connections)."""
+    conns = _session_conns.get(sid, {})
+    if conns.pop(name, None) is None:
         return {"ok": False, "message": f'no session connection named "{name}"'}
-    remote.notify(sid, {"type": "connections"})
-    # The row, not the LRU cache: an evicted session must not keep pointing here.
-    rec = await sessions.get_session_rec(sid)
-    if rec is not None and rec.connection_name == name:
-        await disconnect(sid, by)
+    for other, shared in _session_conns.items():
+        if shared is not conns:
+            continue
+        remote.notify(other, {"type": "connections"})
+        # The row, not the LRU cache: an evicted session must not keep pointing here.
+        rec = await sessions.get_session_rec(other)
+        if rec is not None and rec.connection_name == name:
+            await disconnect(other, by)
     return {"ok": True}
 
 

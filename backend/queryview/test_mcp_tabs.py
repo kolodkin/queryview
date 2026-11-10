@@ -79,3 +79,16 @@ def test_a_tab_follows_the_parents_connection_and_sees_its_session_connections()
         assert "tabs-added" in [c["name"] for c in _run(list_connections_for(child))]
     finally:
         remote.unregister(sid)
+
+
+def test_a_parked_push_is_checked_like_a_delivered_one():
+    from queryview.mcp_server import push_query
+
+    sid = _session_on("tabs-check")
+    remote.register(sid)
+    try:
+        r = _run(push_query(sid, "SELECT 1", order_by=[{"bad": 1}], tab="orders"))
+        assert r["ok"] is False and "order_by" in r["message"]
+        assert _run(remote.next_message(sid, 0.1)) is None  # no tab opened for it
+    finally:
+        remote.unregister(sid)
