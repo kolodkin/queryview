@@ -32,9 +32,6 @@ queryview-backend = "queryview.main:run"
 [dependency-groups]
 test = [
     "pytest>=8",
-    "pytest-playwright>=0.7",
-    "pytest-html>=4.1",
-    "pytest-xdist>=3.6",
 ]
 dev = [
     { include-group = "test" },
@@ -42,7 +39,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["e2e"]
+testpaths = ["backend/queryview"]
 
 [tool.ruff]
 line-length = 120

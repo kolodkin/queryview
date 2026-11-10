@@ -2,8 +2,8 @@
 # One-time install for the Claude Code web environment: project deps plus the
 # e2e backing services (ClickHouse, Postgres, git daemon), left running afterwards.
 #
-#   1. npm ci / uv sync        — frontend + backend + test deps
-#   2. Playwright Chromium     — the revision pinned by uv.lock (no-op if present)
+#   1. npm ci / uv sync        — frontend + e2e + backend deps
+#   2. Playwright Chromium     — the revision pinned by package-lock.json
 #   3. setup_clickhouse.sh     — download the standalone binary into .cache/,
 #                                start a server on :8123
 #   4. setup_postgres.sh       — initdb a cluster in .cache/pgdata, start a
@@ -35,18 +35,17 @@ npm ci
 log "installing backend + test deps"
 uv sync --frozen --group test
 
-# The web container ships a Chromium under PLAYWRIGHT_BROWSERS_PATH, but its
-# revision need not match the playwright pinned in uv.lock, and the suite
-# refuses a mismatched one. `playwright install` is a no-op when the pinned
-# revision is already there, so always run it; it installs next to the
-# pre-shipped one. System deps are only pulled in outside the web container,
-# which already has them.
-if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ] && [ "$(id -u)" = "0" ] && command -v apt-get >/dev/null 2>&1; then
+# The web container ships a Chromium that playwright.config.ts launches
+# directly (it can't download the pinned revision), so skip the install there.
+# System deps are pulled in only when running as root with apt.
+if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
+  log "using the web container's pre-installed Chromium"
+elif [ "$(id -u)" = "0" ] && command -v apt-get >/dev/null 2>&1; then
   log "installing Playwright Chromium (+ system deps)"
-  uv run --frozen --group test playwright install --with-deps chromium
+  npx playwright install --with-deps chromium
 else
   log "installing Playwright Chromium (pinned revision)"
-  uv run --frozen --group test playwright install chromium
+  npx playwright install chromium
 fi
 
 "$ROOT/claudeai/setup_clickhouse.sh"

@@ -11,21 +11,18 @@ working on it; [README.md](README.md) covers running it.
 .
 ├── backend/         # Python FastAPI + SQLModel app exposing /api/* (queryview package)
 ├── frontend/        # Vite + React + TS + Tailwind v4 SPA (npm workspace)
-├── e2e/             # Playwright (pytest) browser tests
+├── e2e/             # Playwright (TypeScript) browser tests
 ├── docs/            # Feature and API documentation
-├── pyproject.toml   # Backend deps + console script + e2e `test` group (uv)
-└── package.json     # npm workspace root: dev orchestration + frontend build
+├── pyproject.toml   # Backend deps + console script + `test` group (uv)
+└── package.json     # npm workspace root: dev orchestration, frontend build, e2e
 ```
 
 ## Prerequisites
 
-- [uv](https://docs.astral.sh/uv/) — runs the Python backend and the Playwright
-  (pytest) e2e suite (it manages the Python toolchain and dependencies for you).
-- [Node.js](https://nodejs.org) 20+ (with npm) — runs the root tasks and the
-  Vite frontend.
-
-npm runs the frontend and the root task scripts; uv handles the backend's and
-e2e suite's Python virtualenv and dependencies.
+- [uv](https://docs.astral.sh/uv/) — runs the Python backend and its tests
+  (it manages the Python toolchain and dependencies for you).
+- [Node.js](https://nodejs.org) 20+ (with npm) — runs the root tasks, the Vite
+  frontend and the Playwright e2e suite.
 
 ## Install
 
@@ -36,18 +33,12 @@ the package lives in `backend/queryview`):
 uv sync
 ```
 
-Install the JavaScript dependencies for the frontend workspace:
+Install the JavaScript dependencies (the frontend workspace and Playwright) and
+fetch the Playwright browser:
 
 ```bash
 npm install
-```
-
-Install the e2e tooling (the `test` dependency group) and fetch the Playwright
-browser:
-
-```bash
-uv sync --group test
-uv run --group test playwright install chromium
+npx playwright install chromium
 ```
 
 ## Run dev servers
@@ -95,18 +86,20 @@ and ship in the wheel:
 uv run --group test pytest backend/queryview
 ```
 
-The e2e suite is [pytest-playwright](https://playwright.dev/python/docs/test-runners),
-installed via the `test` dependency group and run through `uv`. With the SPA
-built (`npm run build:e2e`, which shortens the session heartbeat) it starts its own backend on a throwaway `DATA_DIR`,
-one per worker when run in parallel:
+The e2e suite is [Playwright Test](https://playwright.dev/docs/intro) in
+TypeScript (`e2e/*.spec.ts`, config in `playwright.config.ts`). Each worker
+starts its own backend from `.venv` (so `uv sync` first) on a throwaway
+`DATA_DIR`. `npm run e2e` builds the SPA (`build:e2e`, which shortens the
+session heartbeat) and runs the suite; to skip the build, or pick tests:
 
 ```bash
-uv run --group test pytest e2e -n auto
+npm run e2e
+npx playwright test -g workspaces    # reuse the existing build
 ```
 
 To test a server you started yourself (e.g. `npm run dev`, or a built preview),
-point at it with `BASE_URL=http://localhost:5173 uv run --group test pytest e2e`;
-workers then share that one server, so run it serially.
+point at it with `BASE_URL=http://localhost:5173 npx playwright test`; it then
+runs on one worker.
 
 The suite needs a real ClickHouse (`:8123`) and Postgres (`:5432`), the way CI
 has them. The scripts under `claudeai/` install and run both locally (standalone

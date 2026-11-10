@@ -16,9 +16,10 @@
     "build": "npm run build -w frontend",
     "start": "SERVE_STATIC=1 uv run queryview-backend",
     "preview": "npm run build && npm run start",
-    "e2e": "./scripts/e2e.sh"
+    "e2e": "npm run build:e2e -w frontend && playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "concurrently": "^9.2.1"
   }
 }

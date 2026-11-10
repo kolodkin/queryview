@@ -11,9 +11,10 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Playwright (pytest)
+# Playwright
 /test-results/
 /report/
+/blob-report/
 
 # Local e2e backing services (claudeai/*.sh): clickhouse binary + data,
 # postgres cluster, logs.

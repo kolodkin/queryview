@@ -37,14 +37,24 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
 
       - name: Run pre-commit
         uses: pre-commit/action@v3.0.1
 
+      # Restoring node_modules whole beats npm ci re-extracting it every run.
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
+      - name: Install frontend dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
       - name: Run frontend unit tests
-        run: npm ci && npm test -w frontend
+        run: npm test -w frontend
 
   test-backend:
     runs-on: ubuntu-latest
@@ -63,12 +73,14 @@ jobs:
       - name: Run backend unit tests
         run: uv run --frozen pytest backend/queryview
 
-  test-e2e:
+  # The suite runs in two halves on two runners; test-e2e merges their
+  # reports and carries the result.
+  test-e2e-shard:
     runs-on: ubuntu-latest
-    environment: CICD
-    permissions:
-      contents: write
-      checks: write
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     services:
       clickhouse:
         image: clickhouse/clickhouse-server:24
@@ -101,23 +113,30 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: package-lock.json
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
-      - name: Install backend + test dependencies
-        run: uv sync --frozen --group test
+      - name: Install backend
+        run: uv sync --frozen
+
+      # Restoring node_modules whole beats npm ci re-extracting it every run.
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
 
       - name: Install frontend dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Get Playwright version
         id: pw
-        run: echo "version=$(uv run --frozen --group test python -c 'import playwright; print(playwright.__version__)')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(npx playwright --version)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Playwright browser
         id: pw-cache
@@ -128,7 +147,7 @@ jobs:
 
       - name: Install Playwright browser
         if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: uv run --frozen --group test playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Build frontend
         run: npm run build:e2e -w frontend
@@ -137,23 +156,65 @@ jobs:
         uses: ./.github/actions/start-git-daemon
 
       # The suite starts a backend per worker (built SPA, throwaway DATA_DIR);
-      # see e2e/conftest.py.
+      # see e2e/fixtures.ts.
       - name: Run Playwright e2e tests
-        id: e2e
-        run: |
-          uv run --frozen --group test pytest e2e -n 4 \
-            --tracing retain-on-failure \
-            --output test-results \
-            --html=report/index.html --self-contained-html
+        run: npx playwright test --workers 4 --shard ${{ matrix.shard }}/2 --reporter=blob
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 1
 
       - name: Upload trace artifacts
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces
+          name: playwright-traces-${{ matrix.shard }}
           path: test-results/
           retention-days: 1
           if-no-files-found: ignore
+
+  test-e2e:
+    needs: test-e2e-shard
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    environment: CICD
+    permissions:
+      contents: write
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
+      - name: Install frontend dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: blob-report-*
+          path: all-blob-reports
+          merge-multiple: true
+
+      - name: Merge into the HTML report
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: report
+        run: npx playwright merge-reports --reporter html ./all-blob-reports
 
       - name: Check if report exists
         id: check-report
@@ -190,7 +251,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: E2E Report
-          conclusion: ${{ steps.e2e.outcome }}
+          conclusion: ${{ needs.test-e2e-shard.result }}
           details_url: ${{ env.REPORT_URL }}
           output: |
-            {"title":"${{ steps.e2e.outcome == 'success' && 'Tests passed' || 'Tests failed' }}","summary":"**[View Full E2E Report](${{ env.REPORT_URL }})**"}
+            {"title":"${{ needs.test-e2e-shard.result == 'success' && 'Tests passed' || 'Tests failed' }}","summary":"**[View Full E2E Report](${{ env.REPORT_URL }})**"}
+
+      # This job is the e2e check, so it fails when either half did.
+      - name: Fail if a shard failed
+        if: needs.test-e2e-shard.result != 'success'
+        run: exit 1

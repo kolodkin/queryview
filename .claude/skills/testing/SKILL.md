@@ -12,7 +12,7 @@ and start from the nearest existing test file: it shows the call shapes.
 |---|---|---|---|
 | Backend unit | stores, drivers, API routes, MCP tools via `TestClient` | beside the module: `backend/queryview/test_<module>.py`, `backend/queryview/drivers/test_<driver>.py` | `uv run --group test pytest backend/queryview` |
 | Frontend unit | pure TS logic in `frontend/src` (no React rendering) | beside the module: `<module>.test.ts` | `npm test -w frontend` |
-| e2e | user flows through the browser and the real `/mcp/` endpoint | `e2e/test_<feature>.py` | `uv run --group test pytest e2e -n auto` |
+| e2e | user flows through the browser and the real `/mcp/` endpoint | `e2e/<feature>.spec.ts` | `npm run e2e` |
 
 Backend tests ship in the wheel and run from the installed package in the
 release workflow, so a test may import only from `queryview` and its own
@@ -34,19 +34,19 @@ privacy rule: invented names only.
 
 ## e2e
 
-- Needs a real ClickHouse on `:8123` and Postgres on `:5432`, plus a built SPA
-  (`npm run build:e2e`, a 2s session heartbeat). In the Claude Code web container, the `claudeai-run`
-  skill starts the databases.
-- `e2e/conftest.py` holds the navigation helpers and MCP client; extend them
-  before writing a new click sequence.
-- Locate elements by `data-testid` (`page.get_by_test_id(...)`), adding a
+- Needs ClickHouse on `:8123`, Postgres on `:5432` and a built SPA
+  (`npm run build:e2e`, a 2s session heartbeat). In the Claude Code web
+  container, the `claudeai-run` skill starts the databases.
+- `e2e/fixtures.ts` holds the navigation helpers, seeds and MCP client; extend
+  them before writing a new click sequence.
+- Locate elements by `data-testid` (`page.getByTestId(...)`), adding a
   kebab-case attribute in the component when missing (`db-picker`,
-  `ch-connect`). Assert with `expect` (15 s default)
-  rather than sleeps.
-- Every test gets its own backend session via the `context` fixture, and each
-  xdist worker seeds its own ClickHouse database (`CH_DB`); don't hard-code
-  `qvtest`.
-- `BASE_URL=http://localhost:5173 ...` runs the suite against a server you
-  started; then run it serially.
+  `ch-connect`). Assert with `expect` (15 s default), not sleeps.
+- Every test gets its own backend session (the `context` fixture). Seed data
+  with the worker-scoped `seeds` fixture (`await seeds.duckdb()`); each worker
+  has its own ClickHouse/Postgres database, `chDb()` — never hard-code `qvtest`.
+- `shot(label)` saves a screenshot only under `E2E_SHOTS=1`.
+- `BASE_URL=http://localhost:5173 npx playwright test` runs against a server
+  you started, on one worker.
 
 `CONTRIBUTING.md` covers installing the tooling and the full command set.
