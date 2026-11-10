@@ -66,6 +66,8 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          # The supported minimum; test-py-nightly.yml also covers the newest.
+          python-version: "3.11"
 
       - name: Install backend + test dependencies
         run: uv sync --frozen --group test
