@@ -107,10 +107,10 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
       return
     }
     const n = r.imported?.length ?? 0
-    const d = r.deleted?.length ?? 0
     const c = r.conflicts?.length ?? 0
-    const changes = [n ? `imported ${n}` : '', d ? `deleted ${d}` : ''].filter(Boolean).join(' · ')
-    setSyncNote(`Synced: ${changes || 'nothing new'}${c ? ` · ${c} differ (see ⚠)` : ''}.`)
+    setSyncNote(
+      `Synced: ${n ? `imported ${n}` : 'nothing new'}${c ? ` · ${c} differ (see ⚠)` : ''}.`,
+    )
   }
 
   async function saveSettings() {
@@ -158,9 +158,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
 
   async function purge() {
     setOpen(false)
-    const git = current?.configured
-      ? ' Their files are also removed from the git repo (history keeps them).'
-      : ''
+    const git = current?.configured ? ' Their files are also removed from the git repo.' : ''
     if (!window.confirm(`Permanently remove every deleted query in '${workspace}'?${git}`)) return
     const r = await purgeDeleted(workspace).catch(
       () => ({ ok: false, message: 'purge failed' }) as const,

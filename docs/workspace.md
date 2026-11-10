@@ -24,8 +24,8 @@ without a remote is a pure namespace: its git controls are disabled.
 
 Deleting a workspace requires it to be empty (409 otherwise); its
 [deleted queries](./query.md#deleted-queries) don't count and are removed with
-it, locally only: their [`.deleted` markers](./gitsync.md#deleted-queries)
-stay in the git remote, which keeps its history either way.
+it, locally only: their [files](./gitsync.md#deleted-queries) stay in the git
+remote.
 
 ## Autosave
 
@@ -58,10 +58,10 @@ optional `workspace` name, defaulting to the fallback workspace.
 
 ## UI
 
-The header shows a workspace switcher (dropdown + manage panel for
-create/rename/remote/branch/autosave/delete, plus **Purge deleted…**). The active workspace is session state
-(see [session.md](./session.md)); switching reloads the query and dashboard
-lists.
+The header shows a workspace switcher: a dropdown with **Purge deleted…** and
+a manage panel for create/rename/remote/branch/autosave/delete. The active
+workspace is session state (see [session.md](./session.md)); switching reloads
+the query and dashboard lists.
 
 ## MCP
 

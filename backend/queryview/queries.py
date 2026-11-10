@@ -209,21 +209,19 @@ async def update_predefined_query(
     workspace_id: int,
     new_name: str | None = None,
     deleted: bool | None = None,
-    strict: bool = True,
 ) -> None:
     """Rename (`new_name`) and/or delete or undelete (`deleted`) one saved
     query, all or nothing in one transaction. Renaming applies to a live
     query: an undelete happens before it, a delete after. 404 when the query
     doesn't exist in the state the change needs, 409 when `new_name` is taken,
-    by a live or a deleted query. `strict=False` turns "already in the
-    `deleted` state" into a no-op, for a git sync acting on an earlier read."""
+    by a live or a deleted query."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         row = await _find(s, conn_type, query_name, workspace_id)
         was_deleted = row is not None and row.deleted_at is not None
         live_after_undelete = not was_deleted or deleted is False
         already = deleted is not None and was_deleted == deleted
-        if row is None or (already and strict) or (new_name and not live_after_undelete):
+        if row is None or already or (new_name and not live_after_undelete):
             what = "deleted query" if deleted is False else "query"
             raise PredefinedQueryError(f"{what} {query_name!r} not found", status=404)
         if new_name and new_name != query_name:

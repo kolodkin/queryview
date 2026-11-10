@@ -102,8 +102,8 @@ CREATE TABLE predefined_queries (
 - **Rename** and **Delete** (next to **Copy**) act on a saved query. Rename
   refuses a name already taken, even by a deleted query.
 - **Delete** confirms, then marks the query deleted. It stays selected as
-  *(deleted)* with its SQL, ready to [commit](./gitsync.md#deleted-queries);
-  the button becomes **Undelete**.
+  *(deleted)* with its SQL; the button becomes **Undelete**. Deleting is
+  local: the [git repo](./gitsync.md#deleted-queries) is untouched.
 
 ## Deleted queries
 
