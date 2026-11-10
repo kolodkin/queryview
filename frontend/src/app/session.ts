@@ -17,6 +17,8 @@ export type SessionState = {
   workspace: string
   url: string
   ui: Record<string, Record<string, unknown>>
+  // Set on a tab the agent opened: the session it was spawned from.
+  parent: string | null
 }
 
 export type SessionSummary = {
@@ -65,6 +67,25 @@ function tabToken(): string {
   const minted = crypto.randomUUID()
   tabWrite(TAB_KEY, minted)
   return minted
+}
+
+// A link naming a session: `/?session=<id>&armed=1`, how a tab the agent opened
+// starts. This tab forgets the identity `window.open` copied from its opener
+// (it must not reclaim the opener's session) and takes the named one; the
+// parameters leave the URL, so a reload is an ordinary reload. Null without one.
+export function claimFromUrl(): { session: string; armed: boolean } | null {
+  const params = new URLSearchParams(window.location.search)
+  const session = params.get('session')
+  if (!session) return null
+  const armed = params.get('armed') === '1'
+  tabWrite(TAB_KEY, crypto.randomUUID())
+  tabWrite(SESSION_KEY, session)
+  params.delete('session')
+  params.delete('armed')
+  const search = params.toString()
+  const { pathname, hash } = window.location
+  history.replaceState(null, '', `${pathname}${search ? `?${search}` : ''}${hash}`)
+  return { session, armed }
 }
 
 export function currentSession(): SessionState | null {

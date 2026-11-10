@@ -193,6 +193,7 @@ def _session_payload(rec: sessions.SessionRec) -> dict[str, Any]:
         "workspace": rec.workspace,
         "url": rec.url,
         "ui": rec.ui,
+        "parent": rec.parent,
     }
 
 

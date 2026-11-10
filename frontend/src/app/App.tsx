@@ -32,6 +32,7 @@ import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
+import { TabOffer, type TabOpen } from './controls/TabOffer'
 import { PassphrasePrompt } from './controls/PassphrasePrompt'
 import { Loading } from './controls/Spinner'
 import { CopyName } from './controls/CopyName'
@@ -39,6 +40,7 @@ import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
 import SessionSwitcher from './controls/SessionSwitcher'
 import {
   attachSession,
+  claimFromUrl,
   currentSession,
   onSessionRow,
   patchSession,
@@ -217,6 +219,8 @@ function Shell() {
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  // A tab the agent asked for that the browser would not open by itself.
+  const [tabOffer, setTabOffer] = useState<TabOpen | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   // The pill menu's connection list, refetched on open and on a `connections`
   // push; the nonce also refreshes Connect.
@@ -342,6 +346,7 @@ function Shell() {
     setConnections([])
     setWorkspace(next.workspace)
     setSessionLabel(next.label)
+    document.title = pageTitleFor(next)
     setSessionKey(`${next.id}:${++adoptions.current}`)
     navigate(next.url || '/connect')
   }
@@ -354,9 +359,16 @@ function Shell() {
     let stopRows = () => {}
     void (async () => {
       try {
-        const restored = await attachSession()
+        // A link naming a session (a tab the agent opened) takes that one, as
+        // the switcher would; one held elsewhere or gone is reported, and the
+        // tab attaches as any new tab does.
+        const claim = claimFromUrl()
+        const picked = claim ? await selectSession(claim.session) : null
+        if (claim && !picked) setToast('That session is open in another tab or gone')
+        const restored = picked ?? (await attachSession())
         setWorkspace(restored.workspace)
         setSessionLabel(restored.label)
+        document.title = pageTitleFor(restored)
         setSessionKey(restored.id)
         // Only `/` restores the remembered URL. A deep link is what the user
         // asked for, so it wins and is written into the session instead.
@@ -373,6 +385,9 @@ function Shell() {
           onChanged: applySession,
           onTaken: () => setTaken(true),
         })
+        // Armed once the connection is on screen: the push parked for this
+        // tab lands on a page that needs it.
+        if (picked && claim?.armed) setArmed(true)
       } catch {
         /* no session: the app still runs, it just remembers nothing */
       }
@@ -438,6 +453,13 @@ function Shell() {
     on<{ table: string | null }>('explorer', (payload) => {
       setToast('Agent opened the Explorer')
       navigate(explorerUrl(payload))
+    })
+    // The agent wants a tab of its own. Named after the session, so a second
+    // open of the same tab lands in the same window. A browser blocks a window
+    // a page opens without a click, and this is not one: then the offer's
+    // button is the click.
+    on<TabOpen>('tab', (payload) => {
+      if (!window.open(payload.url, payload.session)) setTabOffer(payload)
     })
     return () => {
       es.close()
@@ -756,6 +778,7 @@ function Shell() {
         <Loading label="Restoring session…" testid="session-loading" />
       )}
       <Toast message={toast} onDone={() => setToast(null)} />
+      <TabOffer offer={tabOffer} onDone={() => setTabOffer(null)} />
       {connection?.unlocked === false && (
         <PassphrasePrompt
           title={`${connection.name} is locked`}
@@ -817,6 +840,11 @@ function Shell() {
 const NAV_PANEL = 'glass-popover absolute right-0 top-full mt-2 w-56 flex-col gap-2 p-2'
 const NAV_ROW =
   'md:static md:mt-0 md:flex md:w-auto md:min-w-0 md:flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-filter-none'
+
+// The window title: a tab the agent opened is named after itself.
+function pageTitleFor(session: SessionState): string {
+  return session.parent ? `${session.label} · QueryView` : 'QueryView'
+}
 
 function pageTitle(path: string): string {
   if (path.startsWith('/studio')) return 'Studio'

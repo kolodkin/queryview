@@ -244,3 +244,26 @@ def test_push_query_reads_the_database_from_the_session_row():
         assert out["database"] == "sales_reporting"
     finally:
         remote.unregister(rec.id)
+
+
+def test_a_parked_push_is_delivered_when_the_session_arms():
+    sid = uuid.uuid4().hex
+    remote.park(sid, {"type": "script", "sql": "SELECT 1", "run": False})
+    remote.park(sid, {"type": "script", "sql": "SELECT 2", "run": False})  # the newest wins
+    rid = remote.register(sid)
+    try:
+        assert asyncio.run(remote.next_message(rid, 1.0)) == {"type": "script", "sql": "SELECT 2", "run": False}
+        assert asyncio.run(remote.next_message(rid, 0.1)) is None
+    finally:
+        remote.unregister(rid)
+
+
+def test_a_parked_push_is_dropped_once_its_tab_is_overdue(monkeypatch):
+    sid = uuid.uuid4().hex
+    remote.park(sid, {"type": "script", "sql": "SELECT 1", "run": False})
+    monkeypatch.setattr(remote, "PARK_TTL_SECONDS", 0.0)
+    rid = remote.register(sid)
+    try:
+        assert asyncio.run(remote.next_message(rid, 0.1)) is None
+    finally:
+        remote.unregister(rid)

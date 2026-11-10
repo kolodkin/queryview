@@ -141,6 +141,22 @@ copying an id.
 - Its row remembers its last connection, but an agent-added session
   connection is in-memory and gone after a restart.
 
+## Tabs
+
+A session the agent opened with a push's `tab` name
+([remote.md](./remote.md#tabs)): a row whose `parent` is the session it came
+from and whose `label` is the name, listed as **Agent › orders**. Scratch like
+an unnamed session — swept once its browser tab has been closed for a claim
+TTL, never resumed by a new tab — and not renamable, since the name is how the
+agent addresses it. It shares its parent's agent-added connections, and each
+push puts it on the parent's connection and database. A parent that is deleted
+or swept leaves its tabs behind as plain scratch sessions.
+
+A tab starts from a link, `/?session=<id>&armed=1`: the new browser tab takes
+that session as the switcher would (one held elsewhere or gone shows a toast,
+and the tab attaches as any new tab does), arms itself, and drops the
+parameters from the URL. Any unheld session opens from such a link.
+
 ## How it is stored
 
 One row per session in SQLite (`sessions`), alongside connections and workspaces
@@ -160,6 +176,7 @@ last_visited    TEXT              -- JSON {connection: {database, table}}
 claimed_by      TEXT              -- the tab token holding it
 claim_seen_at   INTEGER           -- unix ms; stale after 90s
 last_active_at  INTEGER           -- unix ms
+parent          TEXT              -- set on a tab: the session it came from
 ```
 
 `ui` is a blob rather than columns for the same reason a connection's config is:

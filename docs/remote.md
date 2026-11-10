@@ -92,6 +92,27 @@ The pushed query runs through the normal `POST /api/db/query`, so all of
 that path's pagination and order-by safety applies; the push layer never talks
 to ClickHouse directly.
 
+## Tabs
+
+Every push tool — `push_query`, `push_script`, `push_dashboard`,
+`open_explorer` — takes a `tab` name. With one, the push lands in a browser
+tab of that name beside the session's own, so several scripts, queries or
+dashboards sit side by side:
+
+- The first push to a name opens the tab on the session's connection,
+  database and workspace. The armed browser tab opens it; a browser that
+  blocks a window opened without a click shows **Agent opened orders** with an
+  **Open** button instead, and allowing pop-ups for QueryView's origin removes
+  the click. The push waits a minute for the tab to open and arm.
+- A later push to the same name lands in that tab. The reply's `tab_session`
+  is the tab's own session id, which every tool accepts.
+- A tab is a [tab session](./session.md#tabs): each push puts it on whatever
+  connection and database the agent's session is on, and it goes away once
+  its browser tab has closed.
+- Arming the session is the consent for its tabs: a push with `tab` to a
+  disarmed session fails like any push, and the tab it opens arms itself. A
+  tab can't have tabs.
+
 ## Default workflow
 
 The server's MCP instructions set how the agent answers "run this query",
@@ -113,6 +134,10 @@ channel; the SSE stream delivers the payload and the panel fills `query` /
 Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](./workspace.md)).
+
+A push with a [`tab`](#tabs) whose tab session is not armed is parked for it in
+memory, and the session's own channel gets a `tab` event `{session, label,
+url}`; when the tab's channel opens, the parked push is first in its queue.
 
 **Locked connections keep the agent out.** A saved connection the user
 [locked](./connect.md#locked-connections) behind a passphrase refuses every

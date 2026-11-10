@@ -28,8 +28,9 @@ always shows live data.
 The FastMCP server at `/mcp` (see [remote.md](./remote.md) for arming and the
 session id) exposes:
 
-- `push_dashboard(session_id, name, html, queries, params?)` — push the
-  dashboard **draft** to the browser identified by `session_id`, which navigates
+- `push_dashboard(session_id, name, html, queries, params?, tab?)` — push the
+  dashboard **draft** to the browser identified by `session_id` (with `tab`, a
+  browser tab of its own: [remote.md](./remote.md#tabs)), which navigates
   to `/dashboard?name=<name>` and renders it. It does **not** persist — only the
   user's **Save** button in the dashboard view writes it to the store (mirrors
   `push_query`) — unless the session's workspace has
@@ -70,11 +71,14 @@ Load any chart library from a CDN inside the HTML. A minimal dashboard:
 <canvas id="c"></canvas>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-  const { month, revenue } = window.queries.sales
-  new Chart(document.getElementById('c'), {
-    type: 'bar',
-    data: { labels: month, datasets: [{ label: 'Revenue', data: revenue.map(Number) }] },
-  })
+  const { month, revenue } = window.queries.sales;
+  new Chart(document.getElementById("c"), {
+    type: "bar",
+    data: {
+      labels: month,
+      datasets: [{ label: "Revenue", data: revenue.map(Number) }],
+    },
+  });
 </script>
 ```
 
@@ -106,11 +110,11 @@ SELECT {field} AS value, {category} AS category, count() AS cnt
 FROM {table} GROUP BY value, category
 ```
 
-| kind | substitutes as | example |
-| --- | --- | --- |
-| `value` (default) | quoted string literal, single quotes doubled | `{region}` → `'eu'` |
-| `identifier` | a quoted table/column, in the connection's own quoting | `{field}` → `"city"` (`` `city` `` on ClickHouse) |
-| `dimension` | a checkbox: its own column when checked, `''` when not | `{category}` → `"category"` / `''` |
+| kind              | substitutes as                                         | example                                           |
+| ----------------- | ------------------------------------------------------ | ------------------------------------------------- |
+| `value` (default) | quoted string literal, single quotes doubled           | `{region}` → `'eu'`                               |
+| `identifier`      | a quoted table/column, in the connection's own quoting | `{field}` → `"city"` (`` `city` `` on ClickHouse) |
+| `dimension`       | a checkbox: its own column when checked, `''` when not | `{category}` → `"category"` / `''`                |
 
 A placeholder can override its param's kind in one spot: **`{table:literal}`**
 gives a string where the SQL wants one while `FROM {table}` still gets the

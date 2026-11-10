@@ -421,6 +421,12 @@ def _session_conn(sid: str, name: str) -> _SessionConn | None:
     return _session_conns.get(sid, {}).get(name)
 
 
+def share_session_connections(sid: str, owner: str) -> None:
+    """Give `sid` the very map `owner` has, so a tab session lists, opens and
+    adds the connections of the session it was spawned from (docs/session.md#tabs)."""
+    _session_conns[sid] = _session_conns.setdefault(owner, {})
+
+
 async def _resolve(sid: str, name: str) -> tuple[str, DriverConfig] | None:
     """A connection's (type, config) by name: this session's own, else saved."""
     sc = _session_conn(sid, name)
