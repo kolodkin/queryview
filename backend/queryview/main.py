@@ -936,9 +936,8 @@ async def workspaces_create(request: Request):
         return JSONResponse({"ok": False, "message": "name is required"}, status_code=400)
     remote_url = _clean_str(b.get("remote")) or None
     branch = _clean_str(b.get("branch")) or "main"
-    autosave = b.get("autosave") is True
     try:
-        await workspaces.create_workspace(name, remote_url, branch, autosave)
+        await workspaces.create_workspace(name, remote_url, branch)
     except workspaces.WorkspaceError as e:
         return _status_error(e)
     return {"ok": True, **(await _sync_attached(name) if remote_url else {})}
@@ -955,8 +954,6 @@ async def workspaces_update(name: str, request: Request):
         kwargs["remote"] = _clean_str(b.get("remote")) or None
     if "branch" in b:
         kwargs["branch"] = _clean_str(b.get("branch")) or None
-    if isinstance(b.get("autosave"), bool):
-        kwargs["autosave"] = b["autosave"]
     try:
         before = await workspaces.resolve(name)
         await workspaces.update_workspace(name, **kwargs)

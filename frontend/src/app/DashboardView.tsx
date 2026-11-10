@@ -15,7 +15,6 @@ import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
-import { onAutosaveEnabled } from './autosave'
 import { activeWorkspace } from './session'
 
 // A dashboard names no connection: it runs on the viewing session's.
@@ -63,7 +62,6 @@ function DashboardView({
   onPushConsumed,
   runOn,
   identQuote = '"',
-  autosave = false,
 }: {
   pushed?: DashboardPush | null
   onPushConsumed?: () => void
@@ -71,8 +69,6 @@ function DashboardView({
   runOn?: string | null
   // The connection's identifier quote, for `identifier` params.
   identQuote?: string
-  // The workspace autosaves: pushes persist server-side, so there's no Save.
-  autosave?: boolean
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const name = searchParams.get('name') ?? ''
@@ -135,14 +131,6 @@ function DashboardView({
       setSaving(false)
     }
   }
-
-  // Turning autosave on keeps an unsaved push draft: its Save button is about
-  // to go. Resubscribed each render so the handler sees the current draft.
-  useEffect(() =>
-    onAutosaveEnabled(() => {
-      if (localPush && active?.name === localPush.name) void save()
-    }),
-  )
 
   // A git sync may have imported dashboards from the repo.
   useEffect(() => onGitSync(() => void loadDashboards()), [])
@@ -292,17 +280,15 @@ function DashboardView({
             </option>
           ))}
         </select>
-        {!autosave && (
-          <button
-            type="button"
-            data-testid="dashboard-save"
-            onClick={() => void save()}
-            disabled={!active || saving}
-            className="glass-btn min-w-[5rem] px-3 py-2 text-center text-sm font-medium"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        )}
+        <button
+          type="button"
+          data-testid="dashboard-save"
+          onClick={() => void save()}
+          disabled={!active || saving}
+          className="glass-btn min-w-[5rem] px-3 py-2 text-center text-sm font-medium"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
         <GitSyncControls
           kind="dashboard"
           name={name}

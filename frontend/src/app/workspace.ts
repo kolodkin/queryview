@@ -5,13 +5,11 @@
 import { apiFetch } from './api'
 
 // `remote` is the URL without any embedded credential; the token never comes back.
-// `autosave`: persist on update instead of an explicit Save (docs/workspace.md#autosave).
 export type Workspace = {
   name: string
   branch: string
   configured: boolean
   remote: string | null
-  autosave: boolean
 }
 
 // `sync_error`: saved, but merging the newly attached repo in failed.
@@ -32,12 +30,11 @@ export async function createWorkspace(
   name: string,
   remote?: string,
   branch?: string,
-  autosave = false,
 ): Promise<WorkspaceResult> {
   const res = await apiFetch('/api/workspaces', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, remote: remote || null, branch: branch || null, autosave }),
+    body: JSON.stringify({ name, remote: remote || null, branch: branch || null }),
   })
   return res.json()
 }
@@ -46,7 +43,6 @@ export type WorkspaceChanges = {
   name?: string
   remote?: string | null
   branch?: string
-  autosave?: boolean
 }
 
 export async function updateWorkspace(

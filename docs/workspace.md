@@ -26,27 +26,11 @@ Deleting a workspace requires it to be empty (409 otherwise); its
 [deleted queries](./query.md#deleted-queries) don't count and are removed with
 it.
 
-## Autosave
-
-Off by default; toggled in *Manage workspaces…*. When on, the query and
-dashboard pages have no **Save** button; with a remote each save is a
-[commit](./gitsync.md#every-change-is-a-commit):
-
-- **Studio** — a named query saves after each *successful* run (SQL, order-by,
-  fields, cell view), so broken edits never overwrite it; unchanged runs write
-  nothing, unnamed SQL is never saved. A named `push_query` saves via its auto-run.
-- **Dashboards** — a delivered `push_dashboard` is persisted (`persisted: true`).
-
-Turning it on saves the open view's unsaved work first (the last named run,
-or an agent's dashboard draft), since its Save button goes away.
-
-Without a remote, each save overwrites the only copy.
-
 ## API
 
-- `GET /api/workspaces` → `{workspaces: [{name, branch, configured, remote, autosave}]}`
-- `POST /api/workspaces` `{name, remote?, branch?, autosave?}`
-- `PATCH /api/workspaces/{name}` `{name?, remote?, branch?, autosave?}` — a null
+- `GET /api/workspaces` → `{workspaces: [{name, branch, configured, remote}]}`
+- `POST /api/workspaces` `{name, remote?, branch?}`
+- `PATCH /api/workspaces/{name}` `{name?, remote?, branch?}` — a null
   `remote` clears it; an absent key leaves it unchanged
 - `DELETE /api/workspaces/{name}`
 - `POST /api/workspaces/{name}/purge-deleted` → `{purged}` — removes every deleted
@@ -58,7 +42,7 @@ optional `workspace` name, defaulting to the fallback workspace.
 ## UI
 
 The header shows a workspace switcher: a dropdown with **Purge deleted…** and
-a manage panel for create/rename/remote/branch/autosave/delete. The active
+a manage panel for create/rename/remote/branch/delete. The active
 workspace is session state (see [session.md](./session.md)); switching reloads
 the query and dashboard lists.
 
