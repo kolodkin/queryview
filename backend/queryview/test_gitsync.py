@@ -671,7 +671,7 @@ def test_purging_a_committed_deletion_drops_its_marker(other_instance):
     _run(purge_predefined_query("clickhouse", "gs purged", workspace_id=_default_ws_id()))
 
     assert "queries/clickhouse/gs purged.deleted" not in _repo_files(other_instance.remote)
-    assert "purge query clickhouse/gs purged" in _remote_log(other_instance.remote)
+    assert "gs purged" not in _remote_log(other_instance.remote)  # its history is gone too
     _run(gitsync.sync(other_instance))  # a fresh instance has nothing to import back
     assert "gs purged" not in _deleted_names(other_instance.id)
 

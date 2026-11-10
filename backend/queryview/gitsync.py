@@ -569,30 +569,13 @@ async def _store_once(
 
 
 async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
-    """Drop a deleted query's `.deleted` marker before its row is purged, so no
-    instance imports it back; a live .yaml (delete never committed) stays."""
+    """Erase one deleted query from the repo and its history (purge_deleted)
+    before its row is purged, so no instance imports it back."""
     _require_remote(ws)
     row = await _load_entity(ws, "query", name, conn_type)
     if row["deleted_at"] is None:
         raise GitSyncError(f"deleted query {name!r} not found", status=404)
-    async with _lock(ws):
-        await _retry_if_rejected(lambda: _purge_once(ws, conn_type, name))
-
-
-async def _purge_once(ws: WorkspaceRec, conn_type: str, name: str) -> None:
-    marker = deleted_relpath(conn_type, name)
-    wd = await _ensure_repo(ws)
-    head = await _origin_head(wd, ws)
-    if head is None:
-        return
-    await _git("reset", "--hard", head, cwd=wd)
-    if not (wd / marker).exists():
-        return
-    # Agreeing on the marker keeps sync from importing an identical one back.
-    await _agree(ws, wd, head, "query", name, conn_type)
-    await _git("rm", "-q", "--", marker, cwd=wd)
-    await _git("commit", "-m", f"purge query {conn_type}/{name}", cwd=wd)
-    await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
+    await purge_deleted(ws, [(conn_type, name)])
 
 
 async def purge_deleted(ws: WorkspaceRec, keys: list[tuple[str, str]]) -> None:
@@ -610,8 +593,18 @@ async def purge_deleted(ws: WorkspaceRec, keys: list[tuple[str, str]]) -> None:
         if head is None:
             return
         old = (await _git("rev-parse", head, cwd=wd)).strip()
+        # Agreeing on the repo's copy keeps sync from importing an identical one
+        # back if another instance commits the same deletion again.
+        for t, n in keys:
+            await _agree(ws, wd, head, "query", n, t)
         await _git("checkout", "-q", "-B", ws.branch, head, cwd=wd)
-        await _git("filter-branch", "-f", "--prune-empty", "--index-filter", rm, "--", ws.branch, cwd=wd)
+        others = [f":(exclude,literal){p}" for p in paths]
+        if (await _git("rev-list", "-1", head, "--", ".", *others, cwd=wd)).strip():
+            await _git("filter-branch", "-f", "--prune-empty", "--index-filter", rm, "--", ws.branch, cwd=wd)
+        else:  # every commit only touched these queries: nothing would remain
+            empty_tree = (await _git("mktree", cwd=wd)).strip()
+            root = (await _git("commit-tree", empty_tree, "-m", "purge deleted queries", cwd=wd)).strip()
+            await _git("reset", "-q", "--hard", root, cwd=wd)
         # The lease refuses the push if another instance pushed since our fetch.
         lease = f"--force-with-lease={ws.branch}:{old}"
         await _git("push", lease, "origin", ws.branch, cwd=wd, credential=_credential(ws))
@@ -619,10 +612,6 @@ async def purge_deleted(ws: WorkspaceRec, keys: list[tuple[str, str]]) -> None:
         await _git("update-ref", "-d", f"refs/original/refs/heads/{ws.branch}", cwd=wd)
         await _git("reflog", "expire", "--expire=now", "--all", cwd=wd)
         await _git("gc", "-q", "--prune=now", cwd=wd)
-        state = _load_state(ws)
-        for t, n in keys:
-            state["agreed"].pop(_key("query", n, t), None)
-        _save_state(ws, state)
 
 
 async def history(
