@@ -1,8 +1,7 @@
 name: test-py-nightly
 
-# Nightly rerun of the whole CI suite at both ends of the supported Python
-# range (https://devguide.python.org/versions/). PR CI runs only the 3.11
-# minimum, so this catches a fix that works on one version but breaks the other.
+# Reruns all of ci.yml at both ends of the supported Python range
+# (https://devguide.python.org/versions/); PR CI runs only the 3.11 minimum.
 on:
   schedule:
     - cron: "0 3 * * *"

@@ -6,7 +6,7 @@ on:
   # Runs on main seed the caches (uv, npm, Playwright) a fresh PR branch inherits.
   push:
     branches: [main]
-  # test-py-nightly.yml reruns the whole suite on other Python versions.
+  # test-py-nightly.yml reruns this suite per Python version.
   workflow_call:
     inputs:
       python-version:
