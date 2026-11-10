@@ -403,9 +403,8 @@ function Shell() {
 
   // The window title: a tab the agent opened is named after itself.
   useEffect(() => {
-    const session = currentSession()
-    document.title = session?.parent ? `${session.label} · QueryView` : 'QueryView'
-  }, [sessionKey])
+    document.title = currentSession()?.parent ? `${sessionLabel} · QueryView` : 'QueryView'
+  }, [sessionKey, sessionLabel])
 
   // The URL is session state: it is what a refresh and a session switch
   // restore. Immediate rather than queued — navigation is a discrete act,

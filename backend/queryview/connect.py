@@ -832,7 +832,8 @@ async def remove_session_connection(sid: str, name: str, by: Literal["agent", "u
     conns = _session_conns.get(sid, {})
     if conns.pop(name, None) is None:
         return {"ok": False, "message": f'no session connection named "{name}"'}
-    for other, shared in _session_conns.items():
+    # A copy: the awaited disconnects let a sweep or a new tab change the map.
+    for other, shared in list(_session_conns.items()):
         if shared is not conns:
             continue
         remote.notify(other, {"type": "connections"})

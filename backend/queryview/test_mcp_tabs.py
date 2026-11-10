@@ -55,7 +55,7 @@ def test_a_push_with_a_tab_opens_it_once_then_reaches_it_directly():
 
 
 def test_a_tab_follows_the_parents_connection_and_sees_its_session_connections():
-    from queryview.mcp_server import push_script
+    from queryview.mcp_server import push_script, remove_connection
 
     sid = _connected_session("tabs-first")
     remote.register(sid)
@@ -69,6 +69,10 @@ def test_a_tab_follows_the_parents_connection_and_sees_its_session_connections()
         rec = _run(sessions.get_session_rec(child))
         assert rec is not None and rec.connection_name == "tabs-added"
         assert "tabs-added" in [c["name"] for c in _run(list_connections_for(child))]
+        # Removing the shared connection disconnects the tab on it too.
+        assert _run(remove_connection(sid, "tabs-added"))["ok"]
+        rec = _run(sessions.get_session_rec(child))
+        assert rec is not None and rec.connection_name is None
     finally:
         remote.unregister(sid)
 

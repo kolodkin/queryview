@@ -28,7 +28,7 @@ Register the client once — see [mcp.md](./mcp.md).
 The backend mounts a FastMCP server (Streamable HTTP) at `/mcp/` exposing these
 tools (among others):
 
-- `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
+- `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?, tab?)` —
   push a query. `order_by` is `[{name, dir}]`; `fields` are the columns to show
   (omit for all); `cell_view` is raw YAML for this push only (not persisted);
   `name` selects a saved query. Returns `{ok, message, database}` (`database` is
@@ -39,7 +39,7 @@ tools (among others):
   `{queries: [{query_name, query, cell_view, order_by, fields}]}`. Pass a
   `query_name` back as `push_query`'s `name`.
 - `session_info(session_id)` — what the session is on: `{ok, connected,
-connection, type, database, databases, workspace, tables: [{name, …}]}`
+  connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
   discovery. The agent may switch to any listed connection (below).
 - Connections ([access rule](./connect.md#session-connections)):
@@ -67,21 +67,21 @@ connection, type, database, databases, workspace, tables: [{name, …}]}`
   too. ClickHouse errors name the `query_id` to look up in `system.query_log`.
 - `run_script(session_id, sql)` — run a script like the [Scripts](./scripts.md)
   page's Run all, **writes included**, returning `{ok, database, results: [{sql,
-ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
+  ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
   agent. Stops at the first failure; `columns`/`types`/`rows` are null for a
   statement without rows.
-- `push_script(session_id, sql, run?=false)` — replace the Scripts editor's
+- `push_script(session_id, sql, run?=false, tab?)` — replace the Scripts editor's
   text; the browser navigates there and, with `run`, runs it all (results stay
   in the browser). Returns
   `{ok, message, database}`; `ok:false` for an unknown id, a held lock
   (`"blocked, user editing"`), or a session whose Scripts page can't open yet
   (`"not connected"`, `"select a database first"`).
-- `open_explorer(session_id, database, table?)` —
+- `open_explorer(session_id, database, table?, tab?)` —
   switch the session to `database` and send the browser to its
   [Explorer](./explorer.md), on `table` when given (refused when the database
   doesn't list it). Returns `{ok, message, database}`; past the switch, a
   failure still leaves the session on `database`.
-- `push_dashboard(session_id, name, html, queries, params?)` — push a dashboard
+- `push_dashboard(session_id, name, html, queries, params?, tab?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
   renders it. Only the user's **Save** persists it, unless the workspace has
   [autosave](./workspace.md#autosave) on. Returns
@@ -110,7 +110,8 @@ dashboards sit side by side:
   connection the agent's session is on (its database is its own once open),
   and it goes away once its browser tab has closed.
 - Arming the session is the consent for its tabs: a push with `tab` to a
-  disarmed session fails like any push, and the tab it opens arms itself. A
+  disarmed session fails like any push, and the tab it opens arms itself.
+  Disarming the session stops new tabs; an open tab keeps its own toggle. A
   tab can't have tabs.
 
 ## Default workflow
