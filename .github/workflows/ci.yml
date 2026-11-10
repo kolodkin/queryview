@@ -73,12 +73,14 @@ jobs:
       - name: Run backend unit tests
         run: uv run --frozen pytest backend/queryview
 
-  test-e2e:
+  # The suite runs in two halves on two runners; test-e2e merges their
+  # reports and carries the result.
+  test-e2e-shard:
     runs-on: ubuntu-latest
-    environment: CICD
-    permissions:
-      contents: write
-      checks: write
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     services:
       clickhouse:
         image: clickhouse/clickhouse-server:24
@@ -156,17 +158,63 @@ jobs:
       # The suite starts a backend per worker (built SPA, throwaway DATA_DIR);
       # see e2e/fixtures.ts.
       - name: Run Playwright e2e tests
-        id: e2e
-        run: npx playwright test --workers 4
+        run: npx playwright test --workers 4 --shard ${{ matrix.shard }}/2 --reporter=blob
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 1
 
       - name: Upload trace artifacts
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces
+          name: playwright-traces-${{ matrix.shard }}
           path: test-results/
           retention-days: 1
           if-no-files-found: ignore
+
+  test-e2e:
+    needs: test-e2e-shard
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    environment: CICD
+    permissions:
+      contents: write
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
+      - name: Install frontend dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: blob-report-*
+          path: all-blob-reports
+          merge-multiple: true
+
+      - name: Merge into the HTML report
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: report
+        run: npx playwright merge-reports --reporter html ./all-blob-reports
 
       - name: Check if report exists
         id: check-report
@@ -203,7 +251,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: E2E Report
-          conclusion: ${{ steps.e2e.outcome }}
+          conclusion: ${{ needs.test-e2e-shard.result }}
           details_url: ${{ env.REPORT_URL }}
           output: |
-            {"title":"${{ steps.e2e.outcome == 'success' && 'Tests passed' || 'Tests failed' }}","summary":"**[View Full E2E Report](${{ env.REPORT_URL }})**"}
+            {"title":"${{ needs.test-e2e-shard.result == 'success' && 'Tests passed' || 'Tests failed' }}","summary":"**[View Full E2E Report](${{ env.REPORT_URL }})**"}
+
+      # This job is the e2e check, so it fails when either half did.
+      - name: Fail if a shard failed
+        if: needs.test-e2e-shard.result != 'success'
+        run: exit 1
