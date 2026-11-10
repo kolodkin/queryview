@@ -588,7 +588,7 @@ async def predefined_queries_delete(request: Request):
             await purge_predefined_query(conn_type, name, workspace_id=ws.id)
         else:
             await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
-            return _saved(await gitsync.mirror(ws, "query", name, conn_type, removed=True))
+            return _saved(await gitsync.mirror(ws, "query", name, conn_type))
     except (PredefinedQueryError, gitsync.GitSyncError) as e:
         return _status_error(e)
     return {"ok": True}
@@ -806,7 +806,11 @@ async def git_status(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    return {"configured": gitsync.configured(ws), "conflicts": gitsync.conflicts(ws)}
+    return {
+        "configured": gitsync.configured(ws),
+        "conflicts": gitsync.conflicts(ws),
+        "unsynced": await gitsync.unsynced(ws),
+    }
 
 
 # The workspace panel's Sync: merge in what was committed elsewhere.

@@ -3,7 +3,7 @@ import ExportImportControls from './ExportImportControls'
 import { useDismiss } from '../../core'
 import {
   announceGitSync,
-  gitConflicts,
+  gitWarnings,
   invalidateGitStatus,
   gitSync,
   onGitSync,
@@ -34,6 +34,8 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [list, setList] = useState<Workspace[]>([])
   const [error, setError] = useState('')
   const [conflicts, setConflicts] = useState<GitConflict[]>([])
+  const [unsynced, setUnsynced] = useState<GitConflict[]>([])
+  const warnings = conflicts.length + unsynced.length
   const [warnOpen, setWarnOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncNote, setSyncNote] = useState('')
@@ -53,10 +55,16 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
     setManage(false)
   })
 
-  // Conflicts are recorded server-side by each sync, so re-read them after any.
+  // Conflicts are recorded by each sync and unsynced items change with each
+  // save, so re-read both after either.
   useEffect(() => {
     let live = true
-    const load = () => void gitConflicts(workspace).then((c) => live && setConflicts(c))
+    const load = () =>
+      void gitWarnings(workspace).then((w) => {
+        if (!live) return
+        setConflicts(w.conflicts)
+        setUnsynced(w.unsynced)
+      })
     load()
     const off = onGitSync(load)
     return () => {
@@ -171,43 +179,53 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
 
   return (
     <div ref={rootRef} className="relative flex min-w-0 items-center gap-1">
-      {conflicts.length > 0 && (
+      {warnings > 0 && (
         <button
           type="button"
           data-testid="workspace-conflicts"
-          aria-label={`${conflicts.length} differ from the git repo`}
-          title="Differs from the git repo"
+          aria-label={`${warnings} out of sync with the git repo`}
+          title="Out of sync with the git repo"
           onClick={() => setWarnOpen((o) => !o)}
           className="shrink-0 rounded-full px-1.5 py-1 text-sm text-amber-300 hover:bg-white/10"
         >
           ⚠
         </button>
       )}
-      {warnOpen && conflicts.length > 0 && (
+      {warnOpen && warnings > 0 && (
         <div
           data-testid="workspace-conflicts-panel"
           className="glass-popover absolute right-0 top-full z-10 mt-2 w-80 space-y-2 p-3 text-sm"
         >
-          <p className="font-medium text-amber-200">
-            {conflicts.length === 1 ? '1 item differs' : `${conflicts.length} items differ`} from
-            the git repo
-          </p>
-          <p className="text-xs text-slate-400">
-            Both here and in the repo, with different content. Sync never overwrites local work, so
-            your version was kept.
-          </p>
-          <ul className="space-y-1 text-slate-200">
-            {conflicts.map((c) => (
-              <li key={`${c.kind}/${c.conn_type}/${c.name}`} className="truncate">
-                <span className="text-xs text-slate-400">{c.kind}</span> {c.name}
-                {c.conn_type && <span className="text-xs text-slate-500"> · {c.conn_type}</span>}
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-slate-400">
-            To settle one, open it and <b className="text-slate-200">Commit</b> to push your
-            version, or <b className="text-slate-200">Restore</b> to take the repo&apos;s.
-          </p>
+          {unsynced.length > 0 && (
+            <div data-testid="workspace-unsynced" className="space-y-2">
+              <p className="font-medium text-amber-200">
+                {unsynced.length === 1 ? '1 item is' : `${unsynced.length} items are`} not in git
+              </p>
+              <WarnList items={unsynced} />
+              <p className="text-xs text-slate-400">
+                Its commit failed or hasn&apos;t happened yet. Open it and{' '}
+                <b className="text-slate-200">Commit</b>, or <b className="text-slate-200">Sync</b>{' '}
+                to check against the repo.
+              </p>
+            </div>
+          )}
+          {conflicts.length > 0 && (
+            <div className="space-y-2">
+              <p className="font-medium text-amber-200">
+                {conflicts.length === 1 ? '1 item differs' : `${conflicts.length} items differ`}{' '}
+                from the git repo
+              </p>
+              <p className="text-xs text-slate-400">
+                Both here and in the repo, with different content. Sync never overwrites local work,
+                so your version was kept.
+              </p>
+              <WarnList items={conflicts} />
+              <p className="text-xs text-slate-400">
+                To settle one, open it and <b className="text-slate-200">Commit</b> to push your
+                version, or <b className="text-slate-200">Restore</b> to take the repo&apos;s.
+              </p>
+            </div>
+          )}
         </div>
       )}
       <button
@@ -354,5 +372,18 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
         </div>
       )}
     </div>
+  )
+}
+
+function WarnList({ items }: { items: GitConflict[] }) {
+  return (
+    <ul className="max-h-48 space-y-1 overflow-y-auto text-slate-200">
+      {items.map((c) => (
+        <li key={`${c.kind}/${c.conn_type}/${c.name}`} className="truncate">
+          <span className="text-xs text-slate-400">{c.kind}</span> {c.name}
+          {c.conn_type && <span className="text-xs text-slate-500"> · {c.conn_type}</span>}
+        </li>
+      ))}
+    </ul>
   )
 }

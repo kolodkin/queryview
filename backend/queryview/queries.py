@@ -33,6 +33,9 @@ class PredefinedQuery(SQLModel, table=True):
     # Unix ms when deleted; NULL = live. Deleted rows keep their content and
     # still hold their name.
     deleted_at: int | None = Field(default=None)
+    # The git commit holding this row as it is; NULL = not in git yet. Every
+    # write clears it, a successful commit sets it (docs/gitsync.md).
+    git_sha: str | None = Field(default=None)
 
 
 def _row_dict(r: PredefinedQuery) -> dict[str, Any]:
@@ -161,6 +164,7 @@ async def save_predefined_queries(rows: list[dict[str, Any]], *, workspace_id: i
             row.fields = r.get("fields")
             # A deleted row saved deleted again keeps its original deletion time.
             row.deleted_at = (row.deleted_at or _now_ms()) if r.get("deleted") else None
+            row.git_sha = None
             s.add(row)
         await s.commit()
 
@@ -192,6 +196,34 @@ async def save_predefined_query(
         ],
         workspace_id=workspace_id,
     )
+
+
+async def set_query_git_sha(
+    conn_type: str, query_name: str, workspace_id: int, sha: str, *, unchanged_from: dict[str, Any] | None = None
+) -> None:
+    """Record the git commit holding this query — unless it is gone, or has
+    changed since `unchanged_from` (its row as committed) was read."""
+    async with AsyncSession(_engine_for_db()) as s:
+        row = await _find(s, conn_type, query_name, workspace_id)
+        if row is None or (unchanged_from is not None and _row_dict(row) != unchanged_from):
+            return
+        row.git_sha = sha
+        s.add(row)
+        await s.commit()
+
+
+async def unsynced_queries(workspace_id: int) -> list[tuple[str, str]]:
+    """(type, name) of every query, live or deleted, not in git as it is."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        rows = (
+            await s.exec(
+                select(PredefinedQuery)
+                .where(PredefinedQuery.workspace_id == workspace_id, col(PredefinedQuery.git_sha).is_(None))
+                .order_by(PredefinedQuery.type, PredefinedQuery.query_name)
+            )
+        ).all()
+    return [(r.type, r.query_name) for r in rows]
 
 
 class PredefinedQueryError(Exception):
@@ -232,6 +264,7 @@ async def update_predefined_query(
             row.query_name = new_name
         if deleted is not None and not already:
             row.deleted_at = _now_ms() if deleted else None
+        row.git_sha = None
         s.add(row)
         await s.commit()
 

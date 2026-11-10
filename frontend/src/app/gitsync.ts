@@ -47,17 +47,19 @@ export function invalidateGitStatus(): void {
   statusCache.clear()
 }
 
-// An entity the last sync kept local although the repo has another version.
+// An entity the last sync kept local although the repo has another version,
+// or (unsynced) one not in git as it is: its commit failed or is pending.
 export type GitConflict = { kind: GitKind; name: string; conn_type: string | null }
+export type GitWarnings = { conflicts: GitConflict[]; unsynced: GitConflict[] }
 
-export async function gitConflicts(workspace: string): Promise<GitConflict[]> {
+export async function gitWarnings(workspace: string): Promise<GitWarnings> {
   try {
     const r = await (
       await apiFetch(`/api/git/status?workspace=${encodeURIComponent(workspace)}`)
     ).json()
-    return (r.conflicts ?? []) as GitConflict[]
+    return { conflicts: r.conflicts ?? [], unsynced: r.unsynced ?? [] }
   } catch {
-    return []
+    return { conflicts: [], unsynced: [] }
   }
 }
 

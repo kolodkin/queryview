@@ -9,7 +9,7 @@ import json
 from typing import Any, ClassVar
 
 from sqlalchemy import UniqueConstraint
-from sqlmodel import Field, SQLModel, select
+from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from . import connect
@@ -27,6 +27,7 @@ class Dashboard(SQLModel, table=True):
     queries: str  # JSON text: {query_name: SQL}
     params: str = Field(default="[]")  # JSON text: selector specs (docs/dashboard.md)
     updated_at: int  # unix ms
+    git_sha: str | None = Field(default=None)  # as on PredefinedQuery
 
 
 async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -> None:
@@ -47,6 +48,7 @@ async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -
             row.queries = json.dumps(d["queries"])
             row.params = json.dumps(d.get("params") or [])
             row.updated_at = _now_ms()
+            row.git_sha = None
             s.add(row)
         await s.commit()
 
@@ -82,6 +84,35 @@ def _loads(text: str, empty: Any) -> Any:
     except (ValueError, TypeError):
         return empty
     return value if isinstance(value, type(empty)) else empty
+
+
+async def set_dashboard_git_sha(
+    name: str, workspace_id: int, sha: str, *, unchanged_from: dict[str, Any] | None = None
+) -> None:
+    """Record the git commit holding this dashboard (see set_query_git_sha)."""
+    async with AsyncSession(_engine_for_db()) as s:
+        row = (
+            await s.exec(select(Dashboard).where(Dashboard.name == name, Dashboard.workspace_id == workspace_id))
+        ).first()
+        if row is None or (unchanged_from is not None and _payload(row) != unchanged_from):
+            return
+        row.git_sha = sha
+        s.add(row)
+        await s.commit()
+
+
+async def unsynced_dashboards(workspace_id: int) -> list[str]:
+    """Names of the dashboards not in git as they are."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        rows = (
+            await s.exec(
+                select(Dashboard)
+                .where(Dashboard.workspace_id == workspace_id, col(Dashboard.git_sha).is_(None))
+                .order_by(Dashboard.name)
+            )
+        ).all()
+    return [r.name for r in rows]
 
 
 async def get_dashboard(name: str, workspace_id: int) -> dict[str, Any] | None:

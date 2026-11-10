@@ -14,7 +14,7 @@ import {
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
-import { onGitSync } from './gitsync'
+import { announceGitSync, onGitSync } from './gitsync'
 import { activeWorkspace } from './session'
 
 // A dashboard names no connection: it runs on the viewing session's.
@@ -124,6 +124,7 @@ function DashboardView({
         return
       }
       if (data.git_error) setError(`Saved, but the git commit failed: ${data.git_error}`)
+      announceGitSync()
       await loadDashboards()
     } catch {
       setError('Failed to save dashboard.')

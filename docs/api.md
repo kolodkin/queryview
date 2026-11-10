@@ -100,7 +100,7 @@ the UI.
 
 | Method | Path              | Body                                            | Description |
 | ------ | ----------------- | ------------------------------------------------ | ----------- |
-| GET    | `/api/git/status`  | `?workspace=`                                    | Whether the workspace has a git remote configured, and the conflicts the last sync recorded. `{configured, conflicts: [{kind, name, conn_type}]}`. |
+| GET    | `/api/git/status`  | `?workspace=`                                    | Whether the workspace has a git remote configured, the conflicts the last sync recorded, and the rows [not in git](./gitsync.md#out-of-sync) as they are. `{configured, conflicts, unsynced}`, each list `[{kind, name, conn_type}]`. |
 | POST   | `/api/git/sync`    | `{workspace?}`                                   | Merge the repo in (see [gitsync.md](./gitsync.md#merge-in)). `{ok, imported, conflicts}`; no remote → `409`. |
 | POST   | `/api/git/store`   | `{kind, name, conn_type?, message?, workspace?}` | Commit the entity's saved DB state and push. `{ok, committed, sha, message}`. |
 | GET    | `/api/git/history` | `?kind=&name=&conn_type=&before=&limit=10&workspace=` | The entity's revisions, newest first. `{ok, revisions: [{sha, date, message}], has_more}`. |

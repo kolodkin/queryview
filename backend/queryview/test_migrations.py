@@ -107,6 +107,17 @@ def test_workspaces_autosave_column_is_dropped():
     assert "autosave" not in cols
 
 
+def test_queries_and_dashboards_have_git_sha_column():
+    _run(_ensure_schema())
+    con = sqlite3.connect(_db_path())
+    try:
+        for table in ("predefined_queries", "dashboards"):
+            cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+            assert "git_sha" in cols, f"{table}: missing column, got {sorted(cols)}"
+    finally:
+        con.close()
+
+
 def test_predefined_queries_has_deleted_at_column():
     _run(_ensure_schema())
     con = sqlite3.connect(_db_path())

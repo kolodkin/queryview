@@ -86,12 +86,27 @@ it touches:
 | Undelete | `store`: the file comes back |
 | Purge, **Purge deleted** | the row only: the file is already gone (`purge …` if not) |
 
-The DB change stands even if git fails (offline, rejected push): the response
-carries `git_error`, the UI shows it, and **Commit** retries. **Commit** on a
-deleted query is refused (409). Deletes reach other instances only as a
-missing file, which sync never acts on: they keep their copy. Git history
-keeps everything; rewriting it is up to you, outside QueryView. YAML
-[import](./export-import.md) doesn't commit: use Commit per entity.
+Deletes reach other instances only as a missing file, which sync never acts
+on: they keep their copy. Git history keeps everything; rewriting it is up to
+you, outside QueryView. YAML [import](./export-import.md) doesn't commit.
+
+### Out of sync
+
+Each saved query and dashboard row carries `git_sha`, the commit holding it as
+it is. Every DB write clears it; a commit (or a **Commit** that finds nothing
+to change) sets it, unless the row changed again meanwhile; a sync sets it on
+rows it imports or finds identical. So:
+
+1. save → DB write, `git_sha` cleared;
+2. commit and push;
+3. success → `git_sha` set.
+
+If git fails (offline, rejected push) the DB change stands, the response
+carries `git_error`, and the row stays without a sha. `GET /api/git/status`
+lists such rows under `unsynced`, and the ⚠ next to the workspace switcher
+shows them as *not in git* until **Commit** (a deleted query: its file's
+removal) or **Sync** settles them. Imports, and rows from before git sync was
+set up, show there until committed or synced.
 
 ## Versioning
 
@@ -112,7 +127,7 @@ configured.
 
 ## API
 
-- `GET /api/git/status?workspace=` → `{configured, conflicts}`
+- `GET /api/git/status?workspace=` → `{configured, conflicts, unsynced}`
 - `POST /api/git/sync` `{workspace?}` → `{ok, imported, conflicts}`
 - `POST /api/git/store` `{kind, name, conn_type?, message?, workspace?}` → `{ok, committed, sha, message, imported, conflicts}`
 - `GET /api/git/history?kind=&name=&conn_type=&before=&limit=10&workspace=` → `{ok, revisions: [{sha, date, message}], has_more}`

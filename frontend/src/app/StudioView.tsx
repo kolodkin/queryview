@@ -26,7 +26,7 @@ import GitSyncControls from './controls/GitSyncControls'
 import { downloadText } from './yamlio'
 import { useEditLock } from './sessionLock'
 import { apiFetch } from './api'
-import { onGitSync } from './gitsync'
+import { announceGitSync, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
@@ -571,6 +571,7 @@ function QueryPanel({
         // Persisted: drop the draft so the freshly-saved view takes over.
         setPushedCellView(null)
         if (data.git_error) setError(`Saved, but the git commit failed: ${data.git_error}`)
+        announceGitSync() // the workspace's "not in git" list changed
         await loadPredefined()
         return true
       }
@@ -615,6 +616,7 @@ function QueryPanel({
         return false
       }
       if (data.git_error) setError(`Saved, but the git commit failed: ${data.git_error}`)
+      announceGitSync()
       await loadPredefined()
       return true
     } catch (err) {

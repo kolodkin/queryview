@@ -628,15 +628,15 @@ def test_an_uncommitted_delete_stays_deleted_through_a_sync(git_env):
     assert "gs gone" in _deleted_names(_default_ws_id())
 
 
-def test_a_deleted_query_is_not_committed(git_env):
+def test_committing_a_deleted_query_removes_its_file(git_env):
     _store_query_versions("gs local trash", ["SELECT 1"])
     _delete("gs local trash", _default_ws_id())
 
-    with pytest.raises(GitSyncError) as e:
-        _run(gitsync.store(_default_ws(), "query", "gs local trash", "clickhouse"))
+    r = _run(gitsync.store(_default_ws(), "query", "gs local trash", "clickhouse"))
 
-    assert e.value.status == 409
-    assert "queries/clickhouse/gs local trash.yaml" in _repo_files(git_env)
+    assert r["committed"] is True
+    assert "queries/clickhouse/gs local trash.yaml" not in _repo_files(git_env)
+    assert "delete query clickhouse/gs local trash" in _remote_log(git_env)
 
 
 def test_sync_leaves_a_query_deleted_here_alone(other_instance):

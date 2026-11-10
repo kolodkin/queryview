@@ -25,12 +25,13 @@ def _default_ws_id() -> int:
 def test_status_reports_unconfigured():
     # Outside git_env the default workspace has no remote configured.
     c = TestClient(app)
-    assert c.get("/api/git/status").json() == {"configured": False, "conflicts": []}
+    assert c.get("/api/git/status").json() == {"configured": False, "conflicts": [], "unsynced": []}
 
 
 def test_status_reports_configured(git_env):
     c = TestClient(app)
-    assert c.get("/api/git/status").json() == {"configured": True, "conflicts": []}
+    r = c.get("/api/git/status").json()
+    assert r["configured"] is True and r["conflicts"] == []
 
 
 def test_store_validation_400():
@@ -141,3 +142,39 @@ def test_a_failed_commit_keeps_the_save(tmp_path, clone_base):
         assert _run(get_predefined_query("clickhouse", "api offline", _default_ws_id())) is not None
     finally:
         _run(update_workspace(DEFAULT_WORKSPACE, remote=None))
+
+
+def test_unsynced_lists_what_git_lacks_until_committed(git_env, monkeypatch):
+    from queryview import gitsync
+
+    c = TestClient(app)
+    body = {"type": "clickhouse", "query_name": "api pending", "query": "SELECT 1"}
+    entry = {"kind": "query", "name": "api pending", "conn_type": "clickhouse"}
+
+    def unsynced() -> list:
+        return c.get("/api/git/status").json()["unsynced"]
+
+    real_git = gitsync._git
+
+    async def offline(*args, **kw):
+        if args[0] == "push":
+            raise gitsync.GitSyncError("git push failed: offline")
+        return await real_git(*args, **kw)
+
+    monkeypatch.setattr(gitsync, "_git", offline)
+    assert "git_error" in c.post("/api/predefined-queries", json=body).json()
+    gitsync.forget(_default_ws_id())  # drop the clone's unpushed commit
+    assert entry in unsynced()
+
+    monkeypatch.setattr(gitsync, "_git", real_git)
+    c.post("/api/git/store", json={"kind": "query", "name": "api pending", "conn_type": "clickhouse"})
+    assert entry not in unsynced()
+
+    # A failed delete is pending too; Commit retries it as the file's removal.
+    monkeypatch.setattr(gitsync, "_git", offline)
+    c.delete("/api/predefined-queries", params={"type": "clickhouse", "query_name": "api pending"})
+    gitsync.forget(_default_ws_id())
+    assert entry in unsynced()
+    monkeypatch.setattr(gitsync, "_git", real_git)
+    r = c.post("/api/git/store", json={"kind": "query", "name": "api pending", "conn_type": "clickhouse"}).json()
+    assert r["committed"] is True and entry not in unsynced()
