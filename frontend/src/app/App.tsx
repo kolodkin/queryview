@@ -346,7 +346,6 @@ function Shell() {
     setConnections([])
     setWorkspace(next.workspace)
     setSessionLabel(next.label)
-    document.title = pageTitleFor(next)
     setSessionKey(`${next.id}:${++adoptions.current}`)
     navigate(next.url || '/connect')
   }
@@ -363,12 +362,11 @@ function Shell() {
         // the switcher would; one held elsewhere or gone is reported, and the
         // tab attaches as any new tab does.
         const claim = claimFromUrl()
-        const picked = claim ? await selectSession(claim.session) : null
+        const picked = claim ? await selectSession(claim) : null
         if (claim && !picked) setToast('That session is open in another tab or gone')
         const restored = picked ?? (await attachSession())
         setWorkspace(restored.workspace)
         setSessionLabel(restored.label)
-        document.title = pageTitleFor(restored)
         setSessionKey(restored.id)
         // Only `/` restores the remembered URL. A deep link is what the user
         // asked for, so it wins and is written into the session instead.
@@ -385,9 +383,10 @@ function Shell() {
           onChanged: applySession,
           onTaken: () => setTaken(true),
         })
-        // Armed once the connection is on screen: the push parked for this
-        // tab lands on a page that needs it.
-        if (picked && claim?.armed) setArmed(true)
+        // A tab the agent opened arms itself (its parent's arming is the
+        // consent), once the connection is on screen: the push queued for it
+        // lands on a page that needs it.
+        if (restored.parent) setArmed(true)
       } catch {
         /* no session: the app still runs, it just remembers nothing */
       }
@@ -401,6 +400,12 @@ function Shell() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The window title: a tab the agent opened is named after itself.
+  useEffect(() => {
+    const session = currentSession()
+    document.title = session?.parent ? `${session.label} · QueryView` : 'QueryView'
+  }, [sessionKey])
 
   // The URL is session state: it is what a refresh and a session switch
   // restore. Immediate rather than queued — navigation is a discrete act,
@@ -459,7 +464,7 @@ function Shell() {
     // a page opens without a click, and this is not one: then the offer's
     // button is the click.
     on<TabOpen>('tab', (payload) => {
-      if (window.open(payload.url, payload.session)) return
+      if (openTab(payload)) return
       setTabOffers((list) => [...list.filter((o) => o.session !== payload.session), payload])
       // Gone with the push parked for it; a newer offer for the tab is another object.
       window.setTimeout(() => setTabOffers((list) => list.filter((o) => o !== payload)), 60_000)
@@ -470,6 +475,12 @@ function Shell() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [armed])
+
+  // Named after the session, so a second open of the same tab lands in the same
+  // window. False when the browser refused: a window opened without a click.
+  function openTab(tab: TabOpen): boolean {
+    return window.open(tab.url, tab.session) !== null
+  }
 
   function toggleArm(e: React.ChangeEvent<HTMLInputElement>) {
     setArmed(e.target.checked)
@@ -783,7 +794,10 @@ function Shell() {
       <Toast message={toast} onDone={() => setToast(null)} />
       <TabOffers
         offers={tabOffers}
-        onDone={(session) => setTabOffers((list) => list.filter((o) => o.session !== session))}
+        onOpen={(offer) => {
+          openTab(offer)
+          setTabOffers((list) => list.filter((o) => o !== offer))
+        }}
       />
       {connection?.unlocked === false && (
         <PassphrasePrompt
@@ -846,11 +860,6 @@ function Shell() {
 const NAV_PANEL = 'glass-popover absolute right-0 top-full mt-2 w-56 flex-col gap-2 p-2'
 const NAV_ROW =
   'md:static md:mt-0 md:flex md:w-auto md:min-w-0 md:flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-filter-none'
-
-// The window title: a tab the agent opened is named after itself.
-function pageTitleFor(session: SessionState): string {
-  return session.parent ? `${session.label} · QueryView` : 'QueryView'
-}
 
 function pageTitle(path: string): string {
   if (path.startsWith('/studio')) return 'Studio'

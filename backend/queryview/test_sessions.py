@@ -393,29 +393,33 @@ def test_deleting_a_connection_forgets_where_sessions_last_were_on_it():
     assert "warehouse" not in _row(sid).last_visited
 
 
-def test_a_tab_is_a_named_scratch_session_under_its_parent():
+def test_a_tab_is_a_scratch_session_named_under_its_parent():
     parent = _run(sessions.create_session())
     _run(sessions.patch_session(parent.id, label="Mine"))
-    tab, _ = _run(sessions.child_session(parent.id, "orders"))
-    assert tab is not None
-    assert (tab.parent, tab.label, tab.workspace) == (parent.id, "orders", parent.workspace)
-    assert sessions.display_label(tab) == "Mine › orders"
-    again, _ = _run(sessions.child_session(parent.id, "orders"))
+    tab, got_parent, _ = _run(sessions.child_session(parent.id, "orders"))
+    assert tab is not None and got_parent is not None and got_parent.id == parent.id
+    assert (tab.parent, tab.tab, tab.label, tab.workspace) == (parent.id, "orders", None, parent.workspace)
+    again, _, _ = _run(sessions.child_session(parent.id, "orders"))
     assert again is not None and again.id == tab.id
-    assert sessions.display_label(_row(tab.id)) == "Mine › orders"
+    # Shown with its parent's label where a tab shows its own, and in the list.
+    shown, _ = _run(sessions.attach("tab-shown", tab.id))
+    assert sessions.display_label(shown) == "Mine › orders"
     listed = next(r for r in _run(sessions.list_sessions()) if r["id"] == tab.id)
-    assert (listed["label"], listed["renamable"]) == ("Mine › orders", False)
-    renamed = _run(sessions.patch_session(tab.id, label="other"))
-    assert renamed is not None and renamed.label == "orders"
-    assert _run(sessions.child_session(tab.id, "deeper")) == (None, "nested")
-    assert _run(sessions.child_session("nope", "x")) == (None, "unknown")
-    assert _run(sessions.child_session(parent.id, " ")) == (None, "name")
+    assert (listed["label"], listed["renamable"]) == ("Mine › orders", True)
+    # A pinned name wins, as on any session; the agent still finds it by name.
+    renamed = _run(sessions.patch_session(tab.id, label="Orders tab"))
+    assert renamed is not None and sessions.display_label(renamed) == "Orders tab"
+    assert _run(sessions.child_session(parent.id, "orders"))[0].id == tab.id  # type: ignore[union-attr]
+    assert _run(sessions.child_session(tab.id, "deeper")) == (None, None, "a tab can't have tabs")
+    assert _run(sessions.child_session("nope", "x")) == (None, None, "unknown session")
+    assert _run(sessions.child_session(parent.id, " ")) == (None, None, "tab name required")
+    _run(sessions.release("tab-shown"))
 
 
 def test_a_tab_is_never_resumed_and_is_swept_once_its_tab_has_gone():
     _free_everything()
     parent = _run(sessions.create_session())
-    tab, _ = _run(sessions.child_session(parent.id, "orders"))
+    tab, _, _ = _run(sessions.child_session(parent.id, "orders"))
     assert tab is not None
     _run(sessions.touch_for_test(tab.id, last_active_at=_now_ms_for_test() + 60_000))
     got, _ = _run(sessions.attach("tab-x", None))

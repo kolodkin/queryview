@@ -92,9 +92,9 @@ async def push_query(
             side by side with the session's own on its first use (see
             push_script). The reply's `tab_session` is that tab's session id.
     """
-    target, deliver, err = await _target(session_id, tab)
+    target, err = await _target(session_id, tab)
     if target is None:
-        return {"ok": False, "message": err, "database": None}
+        return _failed(err)
     payload = {
         "type": "query",
         "query": query,
@@ -105,7 +105,7 @@ async def push_query(
         "cell_view": cell_view,
         "name": name,
     }
-    ok, message = await deliver(target, payload)
+    ok, message = await push(target, payload)
     return {"ok": ok, "message": message, "database": await sessions.database_of(target), **_tab_field(target, tab)}
 
 
@@ -205,15 +205,15 @@ async def push_script(session_id: str, sql: str, run: bool = False, tab: str | N
         tab: Optional tab name, e.g. "orders". The reply's `tab_session` is
             that tab's session id, which every tool accepts too.
     """
-    target, err = await _target_or_error(session_id, tab)
+    target, err = await _target(session_id, tab)
     if target is None:
-        return {"ok": False, "message": err, "database": None}
+        return _failed(err)
     # Otherwise the push would wait in the browser and replay (run included)
     # whenever the user next opens Scripts.
     s, gate = await _gated_session(target)
     if s is None:
-        return {"ok": False, "message": gate["message"], "database": None}  # type: ignore[index]
-    ok, message = await _deliver_to(session_id, tab, target, {"type": "script", "sql": sql, "run": run})
+        return _failed(gate["message"])  # type: ignore[index]
+    ok, message = remote.push(target, {"type": "script", "sql": sql, "run": run})
     return {"ok": ok, "message": message, "database": s.database, **_tab_field(target, tab)}
 
 
@@ -383,7 +383,7 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
     """
     cur = await get_session(session_id)
     if not cur["connected"]:
-        return {"ok": False, "message": "not connected", "database": None}
+        return _failed("not connected")
     r = await connect_select_database(session_id, database)
     if not r["ok"]:
         return {"ok": False, "message": r["message"], "database": cur["database"]}
@@ -410,9 +410,9 @@ async def open_explorer(
         tab: Optional name of a browser tab to open the Explorer in instead
             (see push_script); only that tab's session switches database.
     """
-    target, deliver, err = await _target(session_id, tab)
+    target, err = await _target(session_id, tab)
     if target is None:
-        return {"ok": False, "message": err, "database": None}
+        return _failed(err)
     r = await select_database(target, database)
     if not r["ok"]:
         return r
@@ -423,7 +423,7 @@ async def open_explorer(
         # A truncated list can't prove absence; the Explorer drops an unknown table itself.
         if not listed.get("truncated") and not any(t["name"] == table for t in listed["tables"]):
             return {"ok": False, "message": f'no table "{table}" in {database}', "database": database}
-    ok, message = await deliver(target, {"type": "explorer", "table": table})
+    ok, message = await push(target, {"type": "explorer", "table": table})
     return {"ok": ok, "message": message, "database": database, **_tab_field(target, tab)}
 
 
@@ -518,7 +518,7 @@ async def push_dashboard(
     Returns {ok, pushed, persisted, message, database}; "not connected" if
     the session has no connection.
     """
-    target, deliver, err = await _target(session_id, tab)
+    target, err = await _target(session_id, tab)
     if target is None:
         return _push_failed(err)
     rec = await sessions.get_session_rec(target)
@@ -527,7 +527,7 @@ async def push_dashboard(
     perr = dashboard_params_error(params)
     if perr is not None:
         return _push_failed(perr)
-    pushed, persisted, message = await _push_dashboard(name, html, queries, target, params, rec.workspace, deliver)
+    pushed, persisted, message = await _push_dashboard(name, html, queries, target, params, rec.workspace)
     return {
         "ok": pushed,
         "pushed": pushed,
@@ -538,27 +538,31 @@ async def push_dashboard(
     }
 
 
+def _failed(message: str) -> dict[str, Any]:
+    return {"ok": False, "message": message, "database": None}
+
+
 def _push_failed(message: str) -> dict[str, Any]:
-    return {"ok": False, "pushed": False, "persisted": False, "message": message, "database": None}
+    return {**_failed(message), "pushed": False, "persisted": False}
 
 
 # --- Tabs: a browser tab per push (docs/remote.md#tabs) ---------------------
 
-_TAB_ERRORS = {"unknown": "unknown session", "nested": "a tab can't have tabs", "name": "tab name required"}
 
-
-async def _tab_session(session_id: str, tab: str) -> tuple[str | None, str]:
-    """The tab session named `tab` under `session_id`, on the parent's
-    connection and workspace: the tab is on what the agent is on. Its database
-    is its own once open (open_explorer moves it), starting from the parent's
-    when the tab opens or the connection changes. The parent must be armed —
-    arming it is the consent for its tabs."""
+async def _target(session_id: str, tab: str | None) -> tuple[str | None, str]:
+    """The session a push lands on: `session_id`, or with `tab` the tab session
+    of that name under it, on the parent's connection and workspace — the tab
+    is on what the agent is on. Its database is its own once open (open_explorer
+    moves it), starting from the parent's when the tab opens or the connection
+    changes. The parent must be armed: arming it is the consent for its tabs,
+    and its browser opens the tab when the first push queues for it."""
+    if tab is None:
+        return session_id, ""
     if not remote.is_armed(session_id):
         return None, "unknown or inactive session"
-    parent = await sessions.get_session_rec(session_id)
-    child, reason = await sessions.child_session(session_id, tab)
+    child, parent, err = await sessions.child_session(session_id, tab)
     if child is None or parent is None:
-        return None, _TAB_ERRORS.get(reason, reason)
+        return None, err
     share_session_connections(child.id, session_id)
     if parent.connection_name and (
         _get_session_entry(child.id) is None or child.connection_name != parent.connection_name
@@ -571,37 +575,8 @@ async def _tab_session(session_id: str, tab: str) -> tuple[str | None, str]:
             return None, r["message"]
     if child.workspace != parent.workspace:
         await sessions.patch_session(child.id, workspace=parent.workspace)
+    remote.open_pending(child.id, session_id, tab)
     return child.id, ""
-
-
-async def _deliver_to(parent: str, tab: str | None, target: str, payload: dict[str, Any]) -> tuple[bool, str]:
-    """A push to `target`: straight to its channel, unless it is a tab whose
-    browser tab is not open and armed yet — then the push is parked for it and
-    the parent's tab is told to open one, which arms and collects it."""
-    if tab is None or remote.is_armed(target):
-        return await push(target, payload)
-    ok, message = remote.park(target, payload)
-    if ok:
-        remote.notify(parent, {"type": "tab", "session": target, "label": tab, "url": f"/?session={target}&armed=1"})
-    return ok, message
-
-
-async def _target_or_error(session_id: str, tab: str | None) -> tuple[str | None, str]:
-    """The session a push lands on: `session_id` itself, or its tab's."""
-    if tab is None:
-        return session_id, ""
-    return await _tab_session(session_id, tab)
-
-
-async def _target(session_id: str, tab: str | None) -> tuple[str | None, remote.Deliver, str]:
-    """`_target_or_error` plus the delivery bound to it, for tools that hand
-    the push to another module."""
-    target, err = await _target_or_error(session_id, tab)
-
-    async def deliver(sid: str, payload: dict[str, Any]) -> tuple[bool, str]:
-        return await _deliver_to(session_id, tab, sid, payload)
-
-    return target, deliver, err
 
 
 def _tab_field(target: str, tab: str | None) -> dict[str, Any]:

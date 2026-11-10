@@ -246,24 +246,36 @@ def test_push_query_reads_the_database_from_the_session_row():
         remote.unregister(rec.id)
 
 
-def test_a_parked_push_is_delivered_when_the_session_arms():
+def test_a_pending_channel_queues_pushes_and_tells_the_parent_once():
+    parent = remote.register(uuid.uuid4().hex)
     sid = uuid.uuid4().hex
-    remote.park(sid, {"type": "script", "sql": "SELECT 1", "run": False})
-    remote.park(sid, {"type": "script", "sql": "SELECT 2", "run": False})  # the newest wins
-    rid = remote.register(sid)
     try:
-        assert asyncio.run(remote.next_message(rid, 1.0)) == {"type": "script", "sql": "SELECT 2", "run": False}
-        assert asyncio.run(remote.next_message(rid, 0.1)) is None
+        remote.open_pending(sid, parent, "orders")
+        assert remote.is_armed(sid) is False
+        first = {"type": "script", "sql": "SELECT 1", "run": False}
+        second = {"type": "script", "sql": "SELECT 2", "run": False}
+        assert remote.push(sid, first) == (True, "opening a tab")
+        assert remote.push(sid, second) == (True, "opening a tab")
+        tab = asyncio.run(remote.next_message(parent, 1.0))
+        assert tab == {"type": "tab", "session": sid, "label": "orders", "url": f"/?session={sid}"}
+        assert asyncio.run(remote.next_message(parent, 0.1)) is None
+        # Arming takes the pending channel over, queued pushes first in line.
+        remote.register(sid)
+        assert remote.is_armed(sid)
+        assert asyncio.run(remote.next_message(sid, 1.0)) == first
+        assert asyncio.run(remote.next_message(sid, 1.0)) == second
+        assert remote.push(sid, first) == (True, "delivered")
     finally:
-        remote.unregister(rid)
+        remote.unregister(parent)
+        remote.unregister(sid)
 
 
-def test_a_parked_push_is_dropped_once_its_tab_is_overdue(monkeypatch):
+def test_a_pending_channel_whose_tab_never_came_is_dropped(monkeypatch):
     sid = uuid.uuid4().hex
-    remote.park(sid, {"type": "script", "sql": "SELECT 1", "run": False})
-    monkeypatch.setattr(remote, "PARK_TTL_SECONDS", 0.0)
-    rid = remote.register(sid)
-    try:
-        assert asyncio.run(remote.next_message(rid, 0.1)) is None
-    finally:
-        remote.unregister(rid)
+    remote.open_pending(sid, "parent", "orders")
+    monkeypatch.setattr(remote, "PENDING_TTL_SECONDS", 0.0)
+    assert remote.push(sid, {"type": "script", "sql": "SELECT 1", "run": False}) == (
+        False,
+        "unknown or inactive session",
+    )
+    assert sid not in remote._channels

@@ -136,9 +136,11 @@ Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](./workspace.md)).
 
-A push with a [`tab`](#tabs) whose tab session is not armed is parked for it in
-memory, and the session's own channel gets a `tab` event `{session, label,
-url}`; when the tab's channel opens, the parked push is first in its queue.
+A push with a [`tab`](#tabs) whose browser tab is not armed yet lands in a
+channel opened for it in advance, which answers `opening a tab` and tells the
+session's own channel to open it with a `tab` event `{session, label, url}`;
+arming takes that channel over with its pushes queued. One whose tab never
+comes is dropped after a minute.
 
 **Locked connections keep the agent out.** A saved connection the user
 [locked](./connect.md#locked-connections) behind a passphrase refuses every

@@ -45,7 +45,7 @@ def _open() -> AsyncSession:
 
 class Session(SQLModel, table=True):
     __tablename__: ClassVar[str] = "sessions"
-    __table_args__ = (Index("ix_sessions_parent_label", "parent", "label", unique=True),)
+    __table_args__ = (Index("ix_sessions_parent_tab", "parent", "tab", unique=True),)
 
     id: str = Field(primary_key=True)
     seq: int  # stable ordinal behind the "Session 3" fallback label
@@ -62,9 +62,10 @@ class Session(SQLModel, table=True):
     claimed_by: str | None = Field(default=None, index=True)  # tab token
     claim_seen_at: int | None = Field(default=None)  # unix ms
     last_active_at: int = Field(index=True)  # unix ms
-    # Set on a tab session: the session it was spawned from, whose label is
-    # then the name (docs/session.md#tabs). (parent, label) is unique.
+    # Set on a tab session (docs/session.md#tabs): the session it was spawned
+    # from, and the name the agent addresses it by. (parent, tab) is unique.
     parent: str | None = Field(default=None)
+    tab: str | None = Field(default=None)
 
 
 @dataclass
@@ -82,7 +83,10 @@ class SessionRec:
     last_visited: dict[str, Any]
     last_active_at: int
     parent: str | None = None
-    parent_label: str | None = None  # filled where a tab's own label is shown
+    tab: str | None = None
+    # Only attach, select and patch fill it: their records are what a tab
+    # shows; every other read is on a hot path and never shows a label.
+    parent_label: str | None = None
 
 
 def _is_held(row: Session, now: int) -> bool:
@@ -125,6 +129,7 @@ def _to_rec(row: Session, now: int | None = None) -> SessionRec:
         last_active_at=row.last_active_at,
         last_visited=_json_dict(row.last_visited),
         parent=row.parent,
+        tab=row.tab,
     )
 
 
@@ -138,20 +143,22 @@ async def _with_parent(s: AsyncSession, row: Session, now: int) -> SessionRec:
     return rec
 
 
-def _label(sid: str, label: str | None, seq: int, parent_label: str | None = None) -> str:
-    """A pinned name, else the stable ordinal; the Agent session is always
-    "Agent"; a tab is its parent's label, `›`, its name. Connection and database
+def _label(sid: str, label: str | None, seq: int, parent_label: str | None = None, tab: str | None = None) -> str:
+    """A pinned name, else for a tab its parent's label, `›`, its name, else the
+    stable ordinal; the Agent session is always "Agent". Connection and database
     are shown beside the name rather than folded into it, so a session's name
     does not change under you when you switch databases."""
     if sid == AGENT_SESSION_ID:
         return "Agent"
-    if parent_label is not None:
-        return f"{parent_label} › {label}"
-    return label or f"Session {seq}"
+    if label:
+        return label
+    if tab:
+        return f"{parent_label} › {tab}" if parent_label else tab
+    return f"Session {seq}"
 
 
 def display_label(rec: SessionRec) -> str:
-    return _label(rec.id, rec.label, rec.seq, rec.parent_label)
+    return _label(rec.id, rec.label, rec.seq, rec.parent_label, rec.tab)
 
 
 def _merge_ui(current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
@@ -168,8 +175,7 @@ def _merge_ui(current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any
 
 def _unheld_query(now: int):
     """The session a new tab should resume: the most recently active named one
-    that is not held. An unnamed session, or a tab, lives only in the tab that
-    holds it."""
+    that is not held. An unnamed session lives only in the tab that holds it."""
     stale = now - SESSION_CLAIM_TTL_MS
     return (
         select(Session)
@@ -178,7 +184,7 @@ def _unheld_query(now: int):
             | col(Session.claim_seen_at).is_(None)
             | (col(Session.claim_seen_at) < stale)
         )
-        .where(col(Session.id) != AGENT_SESSION_ID, col(Session.label).is_not(None), col(Session.parent).is_(None))
+        .where(col(Session.id) != AGENT_SESSION_ID, col(Session.label).is_not(None))
         .order_by(col(Session.last_active_at).desc())
         .limit(1)
     )
@@ -210,36 +216,42 @@ async def get_session_rec(sid: str) -> SessionRec | None:
     await _ensure_schema()
     async with _open() as s:
         row = await s.get(Session, sid)
-        return await _with_parent(s, row, _now_ms()) if row else None
+        return _to_rec(row) if row else None
 
 
-async def child_session(parent_id: str, name: str) -> tuple[SessionRec | None, str]:
-    """The tab session named `name` under `parent_id`, created on first use with
-    the parent's workspace and last-visited places (docs/session.md#tabs); its
-    connection is the caller's to open, so a locked one is refused there. The
-    second element is a reason code: "unknown" (no such parent), "nested" (a
-    tab can't have tabs), "name" (blank)."""
+def _tab_query(parent_id: str, name: str):
+    return select(Session).where(Session.parent == parent_id, Session.tab == name)
+
+
+async def child_session(parent_id: str, name: str) -> tuple[SessionRec | None, SessionRec | None, str]:
+    """(tab, parent, error): the tab session named `name` under `parent_id`,
+    created on first use with the parent's workspace and last-visited places
+    (docs/session.md#tabs); its connection is the caller's to open, so a locked
+    one is refused there."""
     name = name.strip()
     if not name:
-        return None, "name"
+        return None, None, "tab name required"
     await _ensure_schema()
     now = _now_ms()
-    async with _writes, _open() as s:
+    async with _open() as s:
         parent = await s.get(Session, parent_id)
         if parent is None:
-            return None, "unknown"
+            return None, None, "unknown session"
         if parent.parent is not None:
-            return None, "nested"
-        row = (await s.exec(select(Session).where(Session.parent == parent_id, Session.label == name))).first()
-        if row is None:
-            row = await _new_row(s, now)
-            row.parent, row.label = parent_id, name
-            row.workspace, row.last_visited = parent.workspace, parent.last_visited
-            s.add(row)
-            await s.commit()
-        rec = _to_rec(row, now)
-        rec.parent_label = _label(parent.id, parent.label, parent.seq)
-        return rec, ""
+            return None, None, "a tab can't have tabs"
+        row = (await s.exec(_tab_query(parent_id, name))).first()
+        parent_rec = _to_rec(parent, now)
+    if row is None:
+        # Under the write lock, re-read: two first pushes to a name make one tab.
+        async with _writes, _open() as s:
+            row = (await s.exec(_tab_query(parent_id, name))).first()
+            if row is None:
+                row = await _new_row(s, now)
+                row.parent, row.tab = parent_id, name
+                row.workspace, row.last_visited = parent.workspace, parent.last_visited
+                s.add(row)
+                await s.commit()
+    return _to_rec(row, now), parent_rec, ""
 
 
 async def list_sessions() -> list[dict[str, Any]]:
@@ -261,6 +273,7 @@ async def list_sessions() -> list[dict[str, Any]]:
                         Session.claimed_by,  # type: ignore[arg-type]
                         Session.claim_seen_at,  # type: ignore[arg-type]
                         Session.parent,  # type: ignore[arg-type]
+                        Session.tab,  # type: ignore[arg-type]
                     )
                 )
                 .order_by(col(Session.last_active_at).desc())
@@ -273,13 +286,12 @@ async def list_sessions() -> list[dict[str, Any]]:
         out.append(
             {
                 "id": r.id,
-                "label": _label(r.id, r.label, r.seq, labels.get(r.parent) if r.parent else None),
+                "label": _label(r.id, r.label, r.seq, labels.get(r.parent or ""), r.tab),
                 "connection": r.connection_name,
                 "database": r.database,
                 "held": held,
                 "deletable": not held and r.id != AGENT_SESSION_ID,
-                # A tab's name is how the agent addresses it.
-                "renamable": r.id != AGENT_SESSION_ID and r.parent is None,
+                "renamable": r.id != AGENT_SESSION_ID,
             }
         )
     return out
@@ -308,7 +320,7 @@ async def patch_session(
             row.url = url
         if workspace is not None:
             row.workspace = workspace
-        if label is not None and sid != AGENT_SESSION_ID and row.parent is None:  # the Agent and tab names are fixed
+        if label is not None and sid != AGENT_SESSION_ID:  # the Agent name is fixed
             # An empty label unpins, falling back to the derived one.
             row.label = label.strip() or None
         if ui is not None:
@@ -354,12 +366,11 @@ def _free(tab: str):
 
 
 async def _sweep(s: AsyncSession, now: int) -> None:
-    """Delete unnamed sessions, and tabs, idle and unclaimed for a claim TTL —
-    scratch, kept only while a tab shows them (docs/session.md) — and forget
-    their in-memory connections. A lapsed claim (a crashed or sleeping tab) is
-    left: it may wake."""
+    """Delete unnamed sessions idle and unclaimed for a claim TTL — scratch, kept
+    only while a tab shows them (docs/session.md) — and forget their in-memory
+    connections. A lapsed claim (a crashed or sleeping tab) is left: it may wake."""
     gone = delete(Session).where(
-        col(Session.label).is_(None) | col(Session.parent).is_not(None),
+        col(Session.label).is_(None),
         col(Session.id) != AGENT_SESSION_ID,
         col(Session.claimed_by).is_(None),
         col(Session.last_active_at) < now - SESSION_CLAIM_TTL_MS,
