@@ -102,8 +102,8 @@ CREATE TABLE predefined_queries (
 - **Rename** and **Delete** (next to **Copy**) act on a saved query. Rename
   refuses a name already taken, even by a deleted query.
 - **Delete** confirms, then marks the query deleted. It stays selected as
-  *(deleted)* with its SQL; the button becomes **Undelete**. Deleting is
-  local: the [git repo](./gitsync.md#deleted-queries) is untouched.
+  *(deleted)* with its SQL; the button becomes **Undelete**. With a git
+  remote, the query's file is [removed](./gitsync.md#every-change-is-a-commit).
 
 ## Deleted queries
 
@@ -113,9 +113,8 @@ and drops out of the selector, MCP `list_queries` and
 
 - **Show deleted (N)** in the selector lists them in a *Deleted* group; picking
   one loads and runs its SQL, **Undelete** makes it live.
-- **Purge** confirms, then removes it for good, its
-  [repo files](./gitsync.md#deleted-queries) included (git history keeps
-  them). **Purge deleted…** in the workspace dropdown purges them all.
+- **Purge** confirms, then removes it for good. **Purge deleted…** in the
+  workspace dropdown purges them all.
 - Saving under a deleted name brings it back with the new content. An
   [autosave](./workspace.md#autosave) run never does.
 - They don't block deleting their workspace and go with it.

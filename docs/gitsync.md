@@ -73,27 +73,30 @@ was imported, committed, restored or found identical, kept with the conflict
 list in `{data dir}/gitsync/{workspace id}.sync.json`.
 Changing a workspace's remote or branch drops its clone and that file.
 
-## Deleted queries
+## Every change is a commit
 
-Deleting is local: the repo keeps the query's file and other instances keep
-their copy.
+In a workspace with a remote, each change commits and pushes the one entity
+it touches:
 
-- **Commit** on a [deleted query](./query.md#deleted-queries) is refused
-  (409): undelete it, or purge it.
-- **Restore** brings a deleted query back live with the repo's content.
-- **Purge** (one query) and **Purge deleted** (workspace dropdown, every
-  deleted query) remove the query's file in one commit (`purge query
-  {type}/{name}`, `purge N deleted queries`) before the rows go, retried once
-  like Commit. Git history keeps them; rewriting it is up to you, outside
-  QueryView. Other instances keep their copy, and committing it puts the file
-  back.
-- Deleting a workspace leaves its deleted queries' files in the repo.
-- Renaming is local: committing the new name adds a file, the old one stays.
+| Change | Commit |
+|---|---|
+| Save (Save button, [autosave](./workspace.md#autosave), dashboard save) | `store {kind} {name}` |
+| Rename | `store` under the new name, then `delete` the old file |
+| [Delete](./query.md#deleted-queries) | `delete query {type}/{name}`: the file is removed |
+| Undelete | `store`: the file comes back |
+| Purge, **Purge deleted** | the row only: the file is already gone (`purge …` if not) |
+
+The DB change stands even if git fails (offline, rejected push): the response
+carries `git_error`, the UI shows it, and **Commit** retries. **Commit** on a
+deleted query is refused (409). Deletes reach other instances only as a
+missing file, which sync never acts on: they keep their copy. Git history
+keeps everything; rewriting it is up to you, outside QueryView. YAML
+[import](./export-import.md) doesn't commit: use Commit per entity.
 
 ## Versioning
 
-Git commits are the versions — each Commit makes exactly one commit touching
-one entity, so an entity's history is `git log -- <its path>`. Restore reads
+Git commits are the versions — each makes exactly one commit touching one
+entity, so an entity's history is `git log -- <its path>`. Restore reads
 files at a chosen commit (`git show`) and overwrites the local DB row; HEAD
 never moves and history is append-only.
 
@@ -102,7 +105,7 @@ never moves and history is append-only.
 Next to each entity's **Save** button (query panel and dashboard page; absent
 in an [autosave](./workspace.md#autosave) workspace, which saves on update):
 **Commit** pushes the saved DB state to the remote (retried once if another
-instance pushed first); **Restore** opens
+instance pushed first) — saves already do, so it is for retrying a failed one; **Restore** opens
 the entity's revision list (newest first, 10 at a time, scroll for more) and
 overwrites the local copy with the picked revision after confirmation. Both
 are disabled when the active workspace has no remote configured.

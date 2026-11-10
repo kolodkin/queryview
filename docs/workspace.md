@@ -24,14 +24,13 @@ without a remote is a pure namespace: its git controls are disabled.
 
 Deleting a workspace requires it to be empty (409 otherwise); its
 [deleted queries](./query.md#deleted-queries) don't count and are removed with
-it, locally only: their [files](./gitsync.md#deleted-queries) stay in the git
-remote.
+it.
 
 ## Autosave
 
 Off by default; toggled in *Manage workspaces…*. When on, the query and
-dashboard pages have no **Save** button, and **Commit** / **Restore**
-([gitsync.md](./gitsync.md)) are the history:
+dashboard pages have no **Save** button; with a remote each save is a
+[commit](./gitsync.md#every-change-is-a-commit):
 
 - **Studio** — a named query saves after each *successful* run (SQL, order-by,
   fields, cell view), so broken edits never overwrite it; unchanged runs write
@@ -51,7 +50,7 @@ Without a remote, each save overwrites the only copy.
   `remote` clears it; an absent key leaves it unchanged
 - `DELETE /api/workspaces/{name}`
 - `POST /api/workspaces/{name}/purge-deleted` → `{purged}` — removes every deleted
-  query for good, its repo files included ([gitsync.md](./gitsync.md#deleted-queries))
+  query for good
 
 Scoped endpoints (predefined queries, dashboards, `/api/git/*`) accept an
 optional `workspace` name, defaulting to the fallback workspace.

@@ -502,7 +502,7 @@ async def _store_once(
     entity = await _load_entity(ws, kind, name, conn_type, include_deleted=True)
     if entity.get("deleted_at") is not None:
         # Deleting is local; only Purge touches the repo.
-        raise GitSyncError(f"query {name!r} is deleted: undelete it to commit, or purge it", status=409)
+        raise GitSyncError(f"query {name!r} is deleted: undelete it to commit it", status=409)
     paths = _entity_paths(kind, name, conn_type)
     if kind == "query":
         (wd / paths[0]).parent.mkdir(parents=True, exist_ok=True)
@@ -533,19 +533,45 @@ async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
     row = await _load_entity(ws, "query", name, conn_type, include_deleted=True)
     if row["deleted_at"] is None:
         raise GitSyncError(f"deleted query {name!r} not found", status=404)
-    await purge_deleted(ws, [(conn_type, name)])
+    await remove(ws, [(conn_type, name)], "purge")
 
 
 async def purge_deleted(ws: WorkspaceRec, keys: list[tuple[str, str]]) -> None:
-    """Drop deleted queries' files, given as (type, name), from the repo in
-    one commit, so no instance imports them back. History keeps them."""
+    await remove(ws, keys, "purge")
+
+
+async def remove(ws: WorkspaceRec, keys: list[tuple[str, str]], verb: str) -> None:
+    """Drop queries' files, given as (type, name), from the repo in one commit
+    (`{verb} query ...`), so no instance imports them back. History keeps
+    them; files already gone are skipped."""
     _require_remote(ws)
     if keys:
         async with _lock(ws):
-            await _retry_if_rejected(lambda: _purge_once(ws, keys))
+            await _retry_if_rejected(lambda: _remove_once(ws, keys, verb))
 
 
-async def _purge_once(ws: WorkspaceRec, keys: list[tuple[str, str]]) -> None:
+async def mirror(
+    ws: WorkspaceRec, kind: str, name: str, conn_type: str | None = None, *, removed: bool = False, old_name: str = ""
+) -> str | None:
+    """Mirror one DB change to the repo when `ws` syncs: commit the entity,
+    or (`removed`) remove its file; a rename (`old_name`) also removes the old
+    file. Returns git's error instead of raising: the DB change stands and
+    Commit retries it."""
+    if not configured(ws):
+        return None
+    try:
+        if removed:
+            await remove(ws, [(conn_type or "", name)], "delete")
+        else:
+            await store(ws, kind, name, conn_type)
+            if old_name:
+                await remove(ws, [(conn_type or "", old_name)], "delete")
+    except GitSyncError as e:
+        return str(e)
+    return None
+
+
+async def _remove_once(ws: WorkspaceRec, keys: list[tuple[str, str]], verb: str) -> None:
     wd = await _ensure_repo(ws)
     head = await _origin_head(wd, ws)
     if head is None:
@@ -559,7 +585,7 @@ async def _purge_once(ws: WorkspaceRec, keys: list[tuple[str, str]]) -> None:
         await _agree(ws, wd, head, "query", n, t)
     await _git("rm", "-q", "--", *(query_relpath(t, n) for t, n in present), cwd=wd)
     t, n = present[0]
-    message = f"purge query {t}/{n}" if len(present) == 1 else f"purge {len(present)} deleted queries"
+    message = f"{verb} query {t}/{n}" if len(present) == 1 else f"{verb} {len(present)} queries"
     await _git("commit", "-m", message, cwd=wd)
     await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
 

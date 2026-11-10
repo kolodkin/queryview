@@ -89,33 +89,55 @@ def test_sync_merges_on_demand_and_needs_a_remote():
     assert r.status_code == 409  # the default workspace has no remote here
 
 
-def test_purge_deleted_removes_rows_and_repo_files(git_env):
+def test_saves_and_deletes_commit_to_the_repo(git_env):
     import subprocess
 
-    from queryview.queries import list_predefined_queries, save_predefined_query, set_predefined_query_deleted
+    from queryview.queries import list_predefined_queries
     from queryview.workspaces import DEFAULT_WORKSPACE
 
     c = TestClient(app)
     ws_id = _default_ws_id()
-    for name in ("api kept", "api gone", "api gone live"):
-        _run(save_predefined_query(name, "clickhouse", "SELECT 1", workspace_id=ws_id))
-        c.post("/api/git/store", json={"kind": "query", "name": name, "conn_type": "clickhouse"})
-    _run(set_predefined_query_deleted("clickhouse", "api gone", True, workspace_id=ws_id))
-    c.post("/api/git/store", json={"kind": "query", "name": "api gone", "conn_type": "clickhouse"})
-    # Deleted but never committed: its live .yaml goes too.
-    _run(set_predefined_query_deleted("clickhouse", "api gone live", True, workspace_id=ws_id))
-
-    r = c.post(f"/api/workspaces/{DEFAULT_WORKSPACE}/purge-deleted").json()
-
-    assert r == {"ok": True, "purged": 2}
-    names = [q["query_name"] for q in _run(list_predefined_queries("clickhouse", ws_id, include_deleted=True))]
-    assert "api kept" in names and "api gone" not in names and "api gone live" not in names
+    base = {"type": "clickhouse"}
 
     def git(*args: str) -> str:
         return subprocess.run(["git", *args], cwd=git_env, capture_output=True, text=True, check=True).stdout
 
-    files = git("ls-tree", "-r", "--name-only", "main")
-    assert "api kept" in files and "api gone" not in files
-    log = git("log", "--format=%s", "main")
-    assert log.startswith("purge 2 deleted queries")
-    assert "store query clickhouse/api gone" in log  # history stays
+    def files() -> str:
+        return git("ls-tree", "-r", "--name-only", "main")
+
+    def last() -> str:
+        return git("log", "-1", "--format=%s", "main").strip()
+
+    assert c.post("/api/predefined-queries", json={**base, "query_name": "api a", "query": "SELECT 1"}).json() == {
+        "ok": True
+    }
+    assert last() == "store query clickhouse/api a"
+    c.patch("/api/predefined-queries", json={**base, "query_name": "api a", "new_name": "api b"})
+    assert "api b.yaml" in files() and "api a.yaml" not in files()
+    c.delete("/api/predefined-queries", params={**base, "query_name": "api b"})
+    assert last() == "delete query clickhouse/api b" and "api b" not in files()
+    c.patch("/api/predefined-queries", json={**base, "query_name": "api b", "deleted": False})
+    assert last() == "store query clickhouse/api b" and "api b.yaml" in files()
+
+    # Purge after a delete: the file is already gone, only the row goes.
+    c.delete("/api/predefined-queries", params={**base, "query_name": "api b"})
+    r = c.post(f"/api/workspaces/{DEFAULT_WORKSPACE}/purge-deleted").json()
+    assert r == {"ok": True, "purged": 1}
+    assert last() == "delete query clickhouse/api b"
+    names = [q["query_name"] for q in _run(list_predefined_queries("clickhouse", ws_id, include_deleted=True))]
+    assert "api b" not in names
+
+
+def test_a_failed_commit_keeps_the_save(tmp_path, clone_base):
+    from queryview.queries import get_predefined_query
+    from queryview.workspaces import DEFAULT_WORKSPACE, update_workspace
+
+    _run(update_workspace(DEFAULT_WORKSPACE, remote=str(tmp_path / "missing.git")))
+    try:
+        c = TestClient(app)
+        body = {"type": "clickhouse", "query_name": "api offline", "query": "SELECT 1"}
+        r = c.post("/api/predefined-queries", json=body).json()
+        assert r["ok"] is True and "git" in r["git_error"]
+        assert _run(get_predefined_query("clickhouse", "api offline", _default_ws_id())) is not None
+    finally:
+        _run(update_workspace(DEFAULT_WORKSPACE, remote=None))

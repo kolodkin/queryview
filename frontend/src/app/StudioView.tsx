@@ -590,6 +590,7 @@ function QueryPanel({
       if (data.ok) {
         // Persisted: drop the draft so the freshly-saved view takes over.
         setPushedCellView(null)
+        if (data.git_error) setError(`Saved, but the git commit failed: ${data.git_error}`)
         await loadPredefined()
         return true
       }
@@ -633,6 +634,7 @@ function QueryPanel({
         setError(data.message ?? 'request failed')
         return false
       }
+      if (data.git_error) setError(`Saved, but the git commit failed: ${data.git_error}`)
       await loadPredefined()
       return true
     } catch (err) {

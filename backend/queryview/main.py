@@ -535,7 +535,12 @@ async def predefined_queries_save(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     await save_predefined_query(name, conn_type, query, cell_view, order_by, fields, workspace_id=ws.id)
-    return {"ok": True}
+    return _saved(await gitsync.mirror(ws, "query", name, conn_type))
+
+
+def _saved(git_error: str | None) -> dict[str, Any]:
+    """A saved DB change; `git_error` when mirroring it to the repo failed."""
+    return {"ok": True, **({"git_error": git_error} if git_error else {})}
 
 
 # Partial update: `new_name` renames, `deleted: false` undeletes (DELETE deletes).
@@ -561,7 +566,8 @@ async def predefined_queries_update(request: Request):
         )
     except PredefinedQueryError as e:
         return _status_error(e)
-    return {"ok": True}
+    renamed = bool(new_name) and new_name != name
+    return _saved(await gitsync.mirror(ws, "query", new_name or name, conn_type, old_name=name if renamed else ""))
 
 
 # Soft-deletes; `purge=1` removes an already deleted query for good.
@@ -582,6 +588,7 @@ async def predefined_queries_delete(request: Request):
             await purge_predefined_query(conn_type, name, workspace_id=ws.id)
         else:
             await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
+            return _saved(await gitsync.mirror(ws, "query", name, conn_type, removed=True))
     except (PredefinedQueryError, gitsync.GitSyncError) as e:
         return _status_error(e)
     return {"ok": True}
@@ -737,7 +744,12 @@ async def dashboards_upsert(request: Request):
     persisted, pushed, message = await _upsert_and_push(
         name, html, queries, session_id or None, params, workspace_id=ws.id
     )
-    return {"ok": persisted, "persisted": persisted, "pushed": pushed, "message": message}
+    return {
+        **_saved(await gitsync.mirror(ws, "dashboard", name)),
+        "persisted": persisted,
+        "pushed": pushed,
+        "message": message,
+    }
 
 
 @app.get("/api/dashboards")

@@ -151,7 +151,10 @@ async def _push_dashboard(
     if not ws.autosave:
         return True, False, message
     await upsert_dashboard(name, html, queries, params, workspace_id=ws.id)
-    return True, True, message
+    from . import gitsync
+
+    git_error = await gitsync.mirror(ws, "dashboard", name)
+    return True, True, f"{message}; git commit failed: {git_error}" if git_error else message
 
 
 async def _upsert_and_push(
