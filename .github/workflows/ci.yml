@@ -6,13 +6,23 @@ on:
   # Runs on main seed the caches (uv, npm, Playwright) a fresh PR branch inherits.
   push:
     branches: [main]
+  # test-py-nightly.yml reruns the whole suite on other Python versions.
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        required: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.python-version }}
   # Only PR runs supersede each other: a cancelled main run saves no caches.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
+  # 3.11 is the supported minimum (https://devguide.python.org/versions/).
+  UV_PYTHON: ${{ inputs.python-version || '3.11' }}
+  # Keeps a nightly leg's artifacts, report and check apart from the other leg's.
+  RUN_SUFFIX: ${{ inputs.python-version && format('-py{0}', inputs.python-version) || '' }}
   FORCE_JAVASCRIPT_ACTIONS_RUNNER_NODE_VERSION: node24
 
 jobs:
@@ -66,8 +76,6 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # The supported minimum; test-py-nightly.yml also covers the newest.
-          python-version: "3.11"
 
       - name: Install backend + test dependencies
         run: uv sync --frozen --group test
@@ -166,7 +174,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: blob-report-${{ matrix.shard }}
+          name: blob-report${{ env.RUN_SUFFIX }}-${{ matrix.shard }}
           path: blob-report/
           retention-days: 1
 
@@ -174,7 +182,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-traces-${{ matrix.shard }}
+          name: playwright-traces${{ env.RUN_SUFFIX }}-${{ matrix.shard }}
           path: test-results/
           retention-days: 1
           if-no-files-found: ignore
@@ -209,7 +217,7 @@ jobs:
       - name: Download blob reports
         uses: actions/download-artifact@v4
         with:
-          pattern: blob-report-*
+          pattern: blob-report${{ env.RUN_SUFFIX }}-*
           path: all-blob-reports
           merge-multiple: true
 
@@ -241,7 +249,7 @@ jobs:
           deploy_key: ${{ secrets.DEPLOY_KEY }}
           external_repository: kolodkin/artifact-view
           publish_dir: ./report
-          destination_dir: queryview-/e2e-report/${{ github.run_number }}
+          destination_dir: queryview-/e2e-report/${{ github.run_number }}${{ env.RUN_SUFFIX }}
           publish_branch: gh-pages
           keep_files: true
 
@@ -249,10 +257,10 @@ jobs:
         if: always()
         uses: LouisBrunner/checks-action@v2.0.0
         env:
-          REPORT_URL: https://${{ github.repository_owner }}.github.io/artifact-view/queryview-/e2e-report/${{ github.run_number }}
+          REPORT_URL: https://${{ github.repository_owner }}.github.io/artifact-view/queryview-/e2e-report/${{ github.run_number }}${{ env.RUN_SUFFIX }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          name: E2E Report
+          name: E2E Report${{ env.RUN_SUFFIX }}
           conclusion: ${{ needs.test-e2e-shard.result }}
           details_url: ${{ env.REPORT_URL }}
           output: |
