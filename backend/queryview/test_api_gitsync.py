@@ -87,3 +87,35 @@ def test_sync_merges_on_demand_and_needs_a_remote():
     c = TestClient(app)
     r = c.post("/api/git/sync", json={})
     assert r.status_code == 409  # the default workspace has no remote here
+
+
+def test_purge_deleted_erases_rows_files_and_history(git_env):
+    import subprocess
+
+    from queryview.queries import list_predefined_queries, save_predefined_query, set_predefined_query_deleted
+    from queryview.workspaces import DEFAULT_WORKSPACE
+
+    c = TestClient(app)
+    ws_id = _default_ws_id()
+    for name in ("api kept", "api gone"):
+        _run(save_predefined_query(name, "clickhouse", "SELECT 1", workspace_id=ws_id))
+        c.post("/api/git/store", json={"kind": "query", "name": name, "conn_type": "clickhouse"})
+    _run(set_predefined_query_deleted("clickhouse", "api gone", True, workspace_id=ws_id))
+    c.post("/api/git/store", json={"kind": "query", "name": "api gone", "conn_type": "clickhouse"})
+
+    r = c.post(f"/api/workspaces/{DEFAULT_WORKSPACE}/purge-deleted").json()
+
+    assert r == {"ok": True, "purged": 1}
+    rows = _run(list_predefined_queries("clickhouse", ws_id, include_deleted=True))
+    names = [q["query_name"] for q in rows]
+    assert "api kept" in names and "api gone" not in names
+    log = subprocess.run(
+        ["git", "log", "--name-only", "--format=%s", "main"], cwd=git_env, capture_output=True, text=True, check=True
+    ).stdout
+    assert "api gone" not in log  # neither its files nor its commits survive
+    assert "store query clickhouse/api kept" in log
+
+    # A deletion the repo never saw leaves the history untouched.
+    _run(save_predefined_query("api local", "clickhouse", "SELECT 1", workspace_id=ws_id))
+    _run(set_predefined_query_deleted("clickhouse", "api local", True, workspace_id=ws_id))
+    assert c.post(f"/api/workspaces/{DEFAULT_WORKSPACE}/purge-deleted").json() == {"ok": True, "purged": 1}

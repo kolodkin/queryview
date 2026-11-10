@@ -13,6 +13,7 @@ import {
   createWorkspace,
   deleteWorkspace,
   listWorkspaces,
+  purgeDeleted,
   updateWorkspace,
   type Workspace,
   type WorkspaceChanges,
@@ -155,6 +156,22 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
     onSwitch(name.trim())
   }
 
+  async function purge() {
+    setOpen(false)
+    const git = current?.configured
+      ? ' It is also erased from the git repo and its history (force-push).'
+      : ''
+    if (!window.confirm(`Permanently remove every deleted query in '${workspace}'?${git}`)) return
+    const r = await purgeDeleted(workspace).catch(
+      () => ({ ok: false, message: 'purge failed' }) as const,
+    )
+    if (!r.ok) {
+      window.alert(`Purge failed: ${r.message ?? 'unknown error'}`)
+      return
+    }
+    announceGitSync()
+  }
+
   async function remove() {
     if (!window.confirm(`Delete workspace '${workspace}'? It must be empty.`)) return
     const r = await deleteWorkspace(workspace)
@@ -249,6 +266,14 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
             className="mt-1 block w-full rounded border-t border-white/10 px-2 py-1.5 text-left text-xs text-slate-400 hover:bg-white/10"
           >
             Manage workspaces…
+          </button>
+          <button
+            type="button"
+            data-testid="workspace-purge-deleted"
+            onClick={() => void purge()}
+            className="block w-full rounded px-2 py-1.5 text-left text-xs text-red-300 hover:bg-white/10"
+          >
+            Purge deleted…
           </button>
         </div>
       )}

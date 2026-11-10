@@ -67,3 +67,11 @@ export async function deleteWorkspace(name: string): Promise<WorkspaceResult> {
   })
   return res.json()
 }
+
+// Removes every deleted query for good, also from the repo and its git history.
+export async function purgeDeleted(name: string): Promise<WorkspaceResult & { purged?: number }> {
+  const res = await apiFetch(`/api/workspaces/${encodeURIComponent(name)}/purge-deleted`, {
+    method: 'POST',
+  })
+  return res.json()
+}

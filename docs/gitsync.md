@@ -85,6 +85,11 @@ Changing a workspace's remote or branch drops its clone and that file.
   so no instance imports it back (retried once, like Commit). Only Purge does:
   deleting a workspace removes its deleted queries locally and leaves their
   markers in the repo.
+- **Purge deleted** (workspace dropdown) purges every deleted query at once
+  and erases its `.yaml` and `.deleted` files from the branch's whole history
+  (`git filter-branch`, empty commits dropped), then force-pushes with a lease.
+  Commit shas change for everything; other clones re-fetch cleanly. Copies the
+  host still keeps (forks, server-side unreachable objects) are out of reach.
 - Other instances delete their copy on sync; one edited locally becomes a
   conflict, where **Restore** takes the deletion.
 - History spans both paths: restoring an older revision brings the query back

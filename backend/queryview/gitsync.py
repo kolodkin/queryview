@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shlex
 import shutil
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -173,6 +174,7 @@ async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] 
     blocked request. A credential, when passed, arrives via the environment."""
     env = dict(os.environ)
     env["GIT_TERMINAL_PROMPT"] = "0"
+    env["FILTER_BRANCH_SQUELCH_WARNING"] = "1"  # else filter-branch sleeps on its deprecation notice
     env["GIT_SSH_COMMAND"] = f"{os.environ.get('GIT_SSH_COMMAND', 'ssh')} -o BatchMode=yes"
     if credential is not None:
         env["QV_GIT_USERNAME"], env["QV_GIT_PASSWORD"] = credential
@@ -591,6 +593,36 @@ async def _purge_once(ws: WorkspaceRec, conn_type: str, name: str) -> None:
     await _git("rm", "-q", "--", marker, cwd=wd)
     await _git("commit", "-m", f"purge query {conn_type}/{name}", cwd=wd)
     await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
+
+
+async def purge_deleted(ws: WorkspaceRec, keys: list[tuple[str, str]]) -> None:
+    """Erase deleted queries, given as (type, name), from the branch and its
+    whole history: rewrites every commit (dropping ones left empty) and
+    force-pushes, so other entities' commit shas change too."""
+    _require_remote(ws)
+    if not keys:
+        return
+    paths = [p for t, n in keys for p in (query_relpath(t, n), deleted_relpath(t, n))]
+    rm = "git rm -q --cached --ignore-unmatch -- " + " ".join(shlex.quote(p) for p in paths)
+    async with _lock(ws):
+        wd = await _ensure_repo(ws)
+        head = await _origin_head(wd, ws)
+        if head is None:
+            return
+        old = (await _git("rev-parse", head, cwd=wd)).strip()
+        await _git("checkout", "-q", "-B", ws.branch, head, cwd=wd)
+        await _git("filter-branch", "-f", "--prune-empty", "--index-filter", rm, "--", ws.branch, cwd=wd)
+        # The lease refuses the push if another instance pushed since our fetch.
+        lease = f"--force-with-lease={ws.branch}:{old}"
+        await _git("push", lease, "origin", ws.branch, cwd=wd, credential=_credential(ws))
+        # Drop the local backup ref and old objects so the clone keeps no copy.
+        await _git("update-ref", "-d", f"refs/original/refs/heads/{ws.branch}", cwd=wd)
+        await _git("reflog", "expire", "--expire=now", "--all", cwd=wd)
+        await _git("gc", "-q", "--prune=now", cwd=wd)
+        state = _load_state(ws)
+        for t, n in keys:
+            state["agreed"].pop(_key("query", n, t), None)
+        _save_state(ws, state)
 
 
 async def history(

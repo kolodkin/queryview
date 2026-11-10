@@ -86,6 +86,20 @@ async def list_all_predefined_queries(workspace_id: int) -> list[dict[str, Any]]
     return [{"type": r.type, **_row_dict(r)} for r in rows]
 
 
+async def deleted_predefined_queries(workspace_id: int) -> list[tuple[str, str]]:
+    """(type, name) of every deleted query in one workspace."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        rows = (
+            await s.exec(
+                select(PredefinedQuery).where(
+                    PredefinedQuery.workspace_id == workspace_id, col(PredefinedQuery.deleted_at).is_not(None)
+                )
+            )
+        ).all()
+    return [(r.type, r.query_name) for r in rows]
+
+
 async def _find(s: AsyncSession, conn_type: str, query_name: str, workspace_id: int) -> PredefinedQuery | None:
     """The row holding (workspace, type, name), live or deleted."""
     return (

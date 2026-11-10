@@ -50,6 +50,7 @@ from .drivers import DRIVERS
 from .mcp_server import mcp
 from .queries import (
     PredefinedQueryError,
+    deleted_predefined_queries,
     list_predefined_queries_view,
     purge_predefined_query,
     save_predefined_query,
@@ -959,6 +960,21 @@ async def workspaces_update(name: str, request: Request):
     if after.remote and (changed or kwargs.get("remote")):
         return {"ok": True, **(await _sync_attached(current))}
     return {"ok": True}
+
+
+# Removes every deleted query for good: DB rows, repo files and git history.
+@app.post("/api/workspaces/{name}/purge-deleted")
+async def workspaces_purge_deleted(name: str):
+    try:
+        ws = await workspaces.resolve(name)
+        keys = await deleted_predefined_queries(ws.id)
+        if gitsync.configured(ws):  # repo first: a failed push leaves the rows to retry
+            await gitsync.purge_deleted(ws, keys)
+        for conn_type, query_name in keys:
+            await purge_predefined_query(conn_type, query_name, workspace_id=ws.id)
+    except (workspaces.WorkspaceError, gitsync.GitSyncError, PredefinedQueryError) as e:
+        return _status_error(e)
+    return {"ok": True, "purged": len(keys)}
 
 
 @app.delete("/api/workspaces/{name}")

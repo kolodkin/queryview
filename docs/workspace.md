@@ -50,6 +50,8 @@ Without a remote, each save overwrites the only copy.
 - `PATCH /api/workspaces/{name}` `{name?, remote?, branch?, autosave?}` — a null
   `remote` clears it; an absent key leaves it unchanged
 - `DELETE /api/workspaces/{name}`
+- `POST /api/workspaces/{name}/purge-deleted` → `{purged}` — removes every deleted
+  query for good, also from the repo's history ([gitsync.md](./gitsync.md#deleted-queries))
 
 Scoped endpoints (predefined queries, dashboards, `/api/git/*`) accept an
 optional `workspace` name, defaulting to the fallback workspace.
@@ -57,7 +59,7 @@ optional `workspace` name, defaulting to the fallback workspace.
 ## UI
 
 The header shows a workspace switcher (dropdown + manage panel for
-create/rename/remote/branch/autosave/delete). The active workspace is session state
+create/rename/remote/branch/autosave/delete, plus **Purge deleted…**). The active workspace is session state
 (see [session.md](./session.md)); switching reloads the query and dashboard
 lists.
 
