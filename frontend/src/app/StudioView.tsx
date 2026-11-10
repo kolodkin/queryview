@@ -656,9 +656,7 @@ function QueryPanel({
 
   async function purgeSelected() {
     if (
-      !window.confirm(
-        `Permanently remove deleted query '${selectedName}', from git history too? This can't be undone.`,
-      )
+      !window.confirm(`Permanently remove deleted query '${selectedName}'? This can't be undone.`)
     )
       return
     if (await mutateSelected(null, true)) {

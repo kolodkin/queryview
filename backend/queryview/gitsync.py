@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shlex
 import shutil
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -174,7 +173,6 @@ async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] 
     blocked request. A credential, when passed, arrives via the environment."""
     env = dict(os.environ)
     env["GIT_TERMINAL_PROMPT"] = "0"
-    env["FILTER_BRANCH_SQUELCH_WARNING"] = "1"  # else filter-branch sleeps on its deprecation notice
     env["GIT_SSH_COMMAND"] = f"{os.environ.get('GIT_SSH_COMMAND', 'ssh')} -o BatchMode=yes"
     if credential is not None:
         env["QV_GIT_USERNAME"], env["QV_GIT_PASSWORD"] = credential
@@ -569,8 +567,7 @@ async def _store_once(
 
 
 async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
-    """Erase one deleted query from the repo and its history (purge_deleted)
-    before its row is purged, so no instance imports it back."""
+    """Drop one deleted query's files from the repo before its row is purged."""
     _require_remote(ws)
     row = await _load_entity(ws, "query", name, conn_type)
     if row["deleted_at"] is None:
@@ -579,39 +576,32 @@ async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
 
 
 async def purge_deleted(ws: WorkspaceRec, keys: list[tuple[str, str]]) -> None:
-    """Erase deleted queries, given as (type, name), from the branch and its
-    whole history: rewrites every commit (dropping ones left empty) and
-    force-pushes, so other entities' commit shas change too."""
+    """Drop deleted queries' files, given as (type, name), from the repo in
+    one commit, so no instance imports them back. History keeps them."""
     _require_remote(ws)
-    if not keys:
+    if keys:
+        async with _lock(ws):
+            await _retry_if_rejected(lambda: _purge_once(ws, keys))
+
+
+async def _purge_once(ws: WorkspaceRec, keys: list[tuple[str, str]]) -> None:
+    wd = await _ensure_repo(ws)
+    head = await _origin_head(wd, ws)
+    if head is None:
         return
-    paths = [p for t, n in keys for p in (query_relpath(t, n), deleted_relpath(t, n))]
-    rm = "git rm -q --cached --ignore-unmatch -- " + " ".join(shlex.quote(p) for p in paths)
-    async with _lock(ws):
-        wd = await _ensure_repo(ws)
-        head = await _origin_head(wd, ws)
-        if head is None:
-            return
-        old = (await _git("rev-parse", head, cwd=wd)).strip()
-        # Agreeing on the repo's copy keeps sync from importing an identical one
-        # back if another instance commits the same deletion again.
-        for t, n in keys:
-            await _agree(ws, wd, head, "query", n, t)
-        await _git("checkout", "-q", "-B", ws.branch, head, cwd=wd)
-        others = [f":(exclude,literal){p}" for p in paths]
-        if (await _git("rev-list", "-1", head, "--", ".", *others, cwd=wd)).strip():
-            await _git("filter-branch", "-f", "--prune-empty", "--index-filter", rm, "--", ws.branch, cwd=wd)
-        else:  # every commit only touched these queries: nothing would remain
-            empty_tree = (await _git("mktree", cwd=wd)).strip()
-            root = (await _git("commit-tree", empty_tree, "-m", "purge deleted queries", cwd=wd)).strip()
-            await _git("reset", "-q", "--hard", root, cwd=wd)
-        # The lease refuses the push if another instance pushed since our fetch.
-        lease = f"--force-with-lease={ws.branch}:{old}"
-        await _git("push", lease, "origin", ws.branch, cwd=wd, credential=_credential(ws))
-        # Drop the local backup ref and old objects so the clone keeps no copy.
-        await _git("update-ref", "-d", f"refs/original/refs/heads/{ws.branch}", cwd=wd)
-        await _git("reflog", "expire", "--expire=now", "--all", cwd=wd)
-        await _git("gc", "-q", "--prune=now", cwd=wd)
+    await _git("reset", "--hard", head, cwd=wd)
+    present = [(t, n) for t, n in keys if (wd / query_relpath(t, n)).exists() or (wd / deleted_relpath(t, n)).exists()]
+    if not present:
+        return
+    for t, n in present:
+        # Agreeing on the repo's copy keeps sync from importing an identical one back.
+        await _agree(ws, wd, head, "query", n, t)
+    paths = [p for t, n in present for p in (query_relpath(t, n), deleted_relpath(t, n)) if (wd / p).exists()]
+    await _git("rm", "-q", "--", *paths, cwd=wd)
+    t, n = present[0]
+    message = f"purge query {t}/{n}" if len(present) == 1 else f"purge {len(present)} deleted queries"
+    await _git("commit", "-m", message, cwd=wd)
+    await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
 
 
 async def history(

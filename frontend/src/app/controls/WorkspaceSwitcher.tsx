@@ -159,7 +159,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
   async function purge() {
     setOpen(false)
     const git = current?.configured
-      ? ' It is also erased from the git repo and its history (force-push).'
+      ? ' Their files are also removed from the git repo (history keeps them).'
       : ''
     if (!window.confirm(`Permanently remove every deleted query in '${workspace}'?${git}`)) return
     const r = await purgeDeleted(workspace).catch(

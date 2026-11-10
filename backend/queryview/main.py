@@ -962,7 +962,7 @@ async def workspaces_update(name: str, request: Request):
     return {"ok": True}
 
 
-# Removes every deleted query for good: DB rows, repo files and git history.
+# Removes every deleted query for good: DB rows and their files in the repo.
 @app.post("/api/workspaces/{name}/purge-deleted")
 async def workspaces_purge_deleted(name: str):
     try:

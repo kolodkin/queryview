@@ -51,7 +51,7 @@ Without a remote, each save overwrites the only copy.
   `remote` clears it; an absent key leaves it unchanged
 - `DELETE /api/workspaces/{name}`
 - `POST /api/workspaces/{name}/purge-deleted` → `{purged}` — removes every deleted
-  query for good, also from the repo's history ([gitsync.md](./gitsync.md#deleted-queries))
+  query for good, its repo files included ([gitsync.md](./gitsync.md#deleted-queries))
 
 Scoped endpoints (predefined queries, dashboards, `/api/git/*`) accept an
 optional `workspace` name, defaulting to the fallback workspace.

@@ -82,12 +82,11 @@ Changing a workspace's remote or branch drops its clone and that file.
   for a `.deleted` marker with the same content (`delete query {type}/{name}`);
   once undeleted, Commit swaps it back.
 - **Purge** (one query) and **Purge deleted** (workspace dropdown, every
-  deleted query) erase the query's `.yaml` and `.deleted` files from the
-  branch's whole history before the row goes (`git filter-branch`, empty
-  commits dropped), then force-push with a lease. Commit shas change for
-  everything; other clones re-fetch cleanly. Copies the host keeps (forks,
-  unreachable objects) are out of reach. Deleting a workspace leaves its
-  deleted queries in the repo.
+  deleted query) remove the query's `.yaml` and `.deleted` files in one commit
+  (`purge query {type}/{name}`, `purge N deleted queries`) before the rows go,
+  so no instance imports them back (retried once, like Commit). Git history
+  keeps them; rewriting it is up to you, outside QueryView. Deleting a
+  workspace leaves its deleted queries in the repo.
 - Other instances delete their copy on sync; one edited locally becomes a
   conflict, where **Restore** takes the deletion.
 - History spans both paths: restoring an older revision brings the query back
