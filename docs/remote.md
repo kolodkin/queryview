@@ -39,7 +39,7 @@ tools (among others):
   `{queries: [{query_name, query, cell_view, order_by, fields}]}`. Pass a
   `query_name` back as `push_query`'s `name`.
 - `session_info(session_id)` — what the session is on: `{ok, connected,
-  connection, type, database, databases, workspace, tables: [{name, …}]}`
+connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
   discovery. The agent may switch to any listed connection (below).
 - Connections ([access rule](./connect.md#session-connections)):
@@ -67,7 +67,7 @@ tools (among others):
   too. ClickHouse errors name the `query_id` to look up in `system.query_log`.
 - `run_script(session_id, sql)` — run a script like the [Scripts](./scripts.md)
   page's Run all, **writes included**, returning `{ok, database, results: [{sql,
-  ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
+ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
   agent. Stops at the first failure; `columns`/`types`/`rows` are null for a
   statement without rows.
 - `push_script(session_id, sql, run?=false)` — replace the Scripts editor's
@@ -117,10 +117,11 @@ dashboards sit side by side:
 
 The server's MCP instructions set how the agent answers "run this query",
 without asking which tool: iterate read-only with `run_sql`, apply writes once
-with `run_script`, then `push_script` the final SQL without `run`, replacing
-the [Scripts](./scripts.md) editor's text (the browser never re-applies the
-writes). If the push fails, the agent replies with the SQL. Naming a tool
-(e.g. `push_query`) overrides the default.
+with `run_script`, then `push_script` the final SQL without `run` (the browser
+never re-applies the writes). Every push names a [tab](#tabs) for the task,
+reused when the work is revised, so the Agent session's own tab only opens
+them. If the push fails, the agent replies with the SQL. Naming a tool (e.g.
+`push_query`) overrides the default.
 
 ## How it works
 

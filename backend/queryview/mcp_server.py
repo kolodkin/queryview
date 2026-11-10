@@ -37,11 +37,12 @@ mcp = FastMCP(
     stateless_http=True,
     instructions=(
         f"Without a session id from the user, use the standing Agent session {sessions.AGENT_SESSION_ID}: "
-        "use_connection any ClickHouse/Postgres connection list_connections shows, or add_connection your own. "
-        "Pushes to it work once the user arms it in the QueryView UI. "
-        "Asked to run a query, don't ask which tool: iterate read-only with run_sql, apply "
-        "writes once with run_script, then push_script the final SQL with run=False (never "
-        "re-run writes); if the push fails, reply with the SQL. A user-named tool wins."
+        "use_connection any ClickHouse/Postgres connection list_connections shows, or add_connection your own; "
+        "pushes work once the user arms it. "
+        "Asked to run a query: iterate read-only with run_sql, apply writes once with run_script, then "
+        "push_script the final SQL with run=False (never re-run writes). "
+        "Every push names a `tab` — a short name for the task, reused when revising it — so each piece "
+        "opens in its own browser tab. If a push fails, reply with the SQL. A user-named tool wins."
     ),
 )
 mcp.settings.streamable_http_path = "/"
