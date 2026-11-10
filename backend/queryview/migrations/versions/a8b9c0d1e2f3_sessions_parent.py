@@ -1,5 +1,5 @@
-"""sessions: parent and tab, set on the agent's tab sessions
-(docs/session.md#tabs); (parent, tab) names a tab
+"""sessions: a `tab` column, set on the sessions an agent opens for itself,
+and no standing Agent session (docs/session.md#tabs)
 
 Revision ID: a8b9c0d1e2f3
 Revises: b7c8d9e0f1a2
@@ -22,14 +22,11 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     with op.batch_alter_table("sessions", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("parent", sa.String(), nullable=True))
         batch_op.add_column(sa.Column("tab", sa.String(), nullable=True))
-        # NULLs are distinct to SQLite, so ordinary sessions are unaffected.
-        batch_op.create_index("ix_sessions_parent_tab", ["parent", "tab"], unique=True)
+    # The row c5d6e7f8a9b0 seeded: an agent now opens a tab session of its own.
+    op.execute(sa.text("DELETE FROM sessions WHERE id = 'agent'"))
 
 
 def downgrade() -> None:
     with op.batch_alter_table("sessions", schema=None) as batch_op:
-        batch_op.drop_index("ix_sessions_parent_tab")
         batch_op.drop_column("tab")
-        batch_op.drop_column("parent")

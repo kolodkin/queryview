@@ -1,14 +1,15 @@
-"""A push with `tab` lands in a tab session under the session pushed to: queued
-for it while the parent's browser opens the tab, straight to the tab's own
-channel after (docs/remote.md#tabs)."""
+"""new_tab gives the agent a session of its own and its link; pushes to it
+queue until the browser tab arms (docs/remote.md#tabs)."""
 
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
+
+from starlette.datastructures import URL
 
 from queryview import remote, sessions
-from queryview.connect import add_session_connection, list_connections_for, open_saved
-from queryview.drivers.duckdb import DuckConfig
+from queryview.connect import open_saved
 from queryview.test_mcp_connections import _connected_session
 
 
@@ -16,75 +17,29 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def test_a_push_with_a_tab_opens_it_once_then_reaches_it_directly():
-    from queryview.mcp_server import push_query, push_script
+def _ctx(url: str):
+    """What the tool reads off the MCP request: where the client reached us."""
+    return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(url=URL(url))))
 
-    sid = _connected_session("tabs-duck")
-    # Arming the parent is the consent for its tabs.
-    assert _run(push_script(sid, "SELECT 1", tab="orders"))["message"] == "unknown or inactive session"
-    remote.register(sid)
-    child = ""
+
+def test_new_tab_links_a_session_that_collects_pushes_once_it_arms():
+    from queryview.mcp_server import new_tab, push_script
+
+    assert _run(new_tab(" ", _ctx("http://localhost:5555/mcp/"))) == {"ok": False, "message": "name required"}
+    r = _run(new_tab("orders", _ctx("http://localhost:5555/mcp/")))
+    sid = r["session_id"]
+    assert r == {"ok": True, "session_id": sid, "url": f"http://localhost:5555/?session={sid}"}
+    rec = _run(sessions.get_session_rec(sid))
+    assert rec is not None and sessions.display_label(rec) == "Agent › orders"
     try:
-        r = _run(push_script(sid, "SELECT 1", run=True, tab="orders"))
-        assert (r["ok"], r["message"]) == (True, "opening a tab")
-        child = r["tab_session"]
-        rec = _run(sessions.get_session_rec(child))
-        assert rec is not None
-        assert (rec.parent, rec.tab, rec.connection_name, rec.connection_by) == (sid, "orders", "tabs-duck", "agent")
-        # The parent's browser is told to open the tab...
-        assert _run(remote.next_message(sid, 1.0)) == {
-            "type": "tab",
-            "session": child,
-            "label": "orders",
-            "url": f"/?session={child}",
-        }
-        # ...which arms and finds the script queued.
-        remote.register(child)
-        assert _run(remote.next_message(child, 1.0)) == {"type": "script", "sql": "SELECT 1", "run": True}
-        # A later push to the name reaches the open tab; the parent hears nothing.
-        r2 = _run(push_query(sid, "SELECT 2", tab="orders"))
-        assert (r2["ok"], r2["message"], r2["tab_session"]) == (True, "delivered", child)
-        pushed = _run(remote.next_message(child, 1.0))
-        assert pushed is not None and pushed["query"] == "SELECT 2"
-        assert _run(remote.next_message(sid, 0.1)) is None
-        # A tab can't have tabs.
-        assert _run(push_script(child, "SELECT 3", tab="deeper"))["message"] == "a tab can't have tabs"
-    finally:
-        remote.unregister(sid)
-        remote.unregister(child)
-
-
-def test_a_tab_follows_the_parents_connection_and_sees_its_session_connections():
-    from queryview.mcp_server import push_script, remove_connection
-
-    sid = _connected_session("tabs-first")
-    remote.register(sid)
-    try:
-        child = _run(push_script(sid, "SELECT 1", tab="orders"))["tab_session"]
-        # The agent adds a connection to the parent and moves it there: the tab follows.
-        state, _ = _run(add_session_connection(sid, "tabs-added", DuckConfig(":memory:"), "duckdb", "agent"))
-        assert state is not None
-        assert _run(open_saved(sid, "tabs-added", by="agent"))["ok"]
-        assert _run(push_script(sid, "SELECT 2", tab="orders"))["tab_session"] == child
-        rec = _run(sessions.get_session_rec(child))
-        assert rec is not None and rec.connection_name == "tabs-added"
-        assert "tabs-added" in [c["name"] for c in _run(list_connections_for(child))]
-        # Removing the shared connection disconnects the tab on it too.
-        assert _run(remove_connection(sid, "tabs-added"))["ok"]
-        rec = _run(sessions.get_session_rec(child))
-        assert rec is not None and rec.connection_name is None
-    finally:
-        remote.unregister(sid)
-
-
-def test_an_invalid_push_opens_no_tab():
-    from queryview.mcp_server import push_query
-
-    sid = _connected_session("tabs-check")
-    remote.register(sid)
-    try:
-        r = _run(push_query(sid, "SELECT 1", order_by=[{"bad": 1}], tab="orders"))
-        assert r["ok"] is False and "order_by" in r["message"]
-        assert _run(remote.next_message(sid, 0.1)) is None
+        # The agent connects the tab and pushes before the browser tab has loaded.
+        _connected_session("tabs-duck")  # saves the connection
+        assert _run(open_saved(sid, "tabs-duck", by="agent"))["ok"]
+        pushed = _run(push_script(sid, "SELECT 1", run=True))
+        assert (pushed["ok"], pushed["message"], pushed["url"]) == (True, "queued for the tab", r["url"])
+        # The browser tab arms and finds the script queued.
+        remote.register(sid)
+        assert _run(remote.next_message(sid, 1.0)) == {"type": "script", "sql": "SELECT 1", "run": True}
+        assert _run(push_script(sid, "SELECT 2"))["message"] == "delivered"
     finally:
         remote.unregister(sid)

@@ -118,32 +118,37 @@ test("mcp open_explorer browses the table", async ({ page, seeds, baseURL }) => 
   expect(missing).toEqual({ ok: false, message: `no table "nope" in ${chDb()}`, database: chDb() });
 });
 
-test("mcp push with a tab opens a side-by-side browser tab and reuses it", async ({ page, context, seeds, baseURL }) => {
-  await connect(page, DUCK, await seeds.duckdb());
-  const sid = await armRemote(page);
+test("mcp new_tab opens a session of the agent's own at its link", async ({ page, context, seeds, baseURL }) => {
+  await seeds.testDb();
+  await connect(page, CH, chDb()); // the user's own tab, untouched below
+  const mine = await sessionId(page);
 
-  // The first push to a name opens a tab on this session's connection.
-  const [tab, first] = await Promise.all([
-    context.waitForEvent("page"),
-    mcpCall(baseURL!, "push_script", { session_id: sid, sql: "SELECT 42 AS answer", run: true, tab: "orders" }),
-  ]);
-  expect(first).toMatchObject({ ok: true, message: "opening a tab" });
+  const made = await mcpCall(baseURL!, "new_tab", { name: "orders" });
+  expect(made).toMatchObject({ ok: true, url: `${baseURL}/?session=${made.session_id}` });
+  const sid = made.session_id as string;
+  expect(sid).not.toBe(mine);
+  // The agent connects the tab and pushes before anyone has opened the link.
+  const name = `tab-ch-${crypto.randomUUID().slice(0, 6)}`;
+  const config = { host: CH_HOST, port: Number(CH_PORT), username: CH_USER, password: CH_PASSWORD };
+  expect((await mcpCall(baseURL!, "add_connection", { session_id: sid, name, type: "clickhouse", config })).ok).toBeTruthy();
+  expect((await mcpCall(baseURL!, "use_connection", { session_id: sid, name, database: chDb() })).ok).toBeTruthy();
+  const queued = await mcpCall(baseURL!, "push_script", { session_id: sid, sql: "SELECT 42 AS answer", run: true });
+  expect(queued).toMatchObject({ ok: true, message: "queued for the tab", url: made.url });
+
+  // Opening the link shows the tab, armed, with the script run.
+  const tab = await context.newPage();
+  await tab.goto(made.url as string);
   await expect(tab.getByTestId("scripts-input")).toHaveValue("SELECT 42 AS answer");
   await expect(tab.getByTestId("scripts-output")).toContainText("42");
-  await expect(tab).toHaveURL(/\/scripts$/); // the link's parameters are gone
-  expect(await sessionId(tab)).toBe(first.tab_session);
-  expect(first.tab_session).not.toBe(sid);
-  await expect(tab.getByTestId("session-switcher")).toContainText("› orders");
-  await expect(tab).toHaveTitle(/› orders/);
-  await expect(tab.getByTestId("connection-status")).toContainText("duckdb");
+  await expect(tab).toHaveURL(/\/scripts$/); // the link's parameter is gone
+  expect(await sessionId(tab)).toBe(sid);
+  await expect(tab.getByTestId("session-switcher")).toContainText("Agent › orders");
+  await expect(tab).toHaveTitle(/Agent › orders/);
 
-  // A later push to the same name lands in that tab; no new one opens.
-  const again = await mcpCall(baseURL!, "push_script", { session_id: sid, sql: "SELECT 7 AS answer", tab: "orders" });
-  expect(again).toMatchObject({ ok: true, message: "delivered", tab_session: first.tab_session });
+  // A later push lands in the open tab; the user's own editor was never touched.
+  const again = await mcpCall(baseURL!, "push_script", { session_id: sid, sql: "SELECT 7 AS answer" });
+  expect(again).toMatchObject({ ok: true, message: "delivered" });
   await expect(tab.getByTestId("scripts-input")).toHaveValue("SELECT 7 AS answer");
-  expect(context.pages()).toHaveLength(2);
-
-  // The parent's own editor was never touched.
   await page.getByTestId("nav-scripts").click();
   await expect(page.getByTestId("scripts-input")).toHaveValue("");
 });

@@ -421,12 +421,6 @@ def _session_conn(sid: str, name: str) -> _SessionConn | None:
     return _session_conns.get(sid, {}).get(name)
 
 
-def share_session_connections(sid: str, owner: str) -> None:
-    """Give `sid` the very map `owner` has, so a tab session lists, opens and
-    adds the connections of the session it was spawned from (docs/session.md#tabs)."""
-    _session_conns[sid] = _session_conns.setdefault(owner, {})
-
-
 async def _resolve(sid: str, name: str) -> tuple[str, DriverConfig] | None:
     """A connection's (type, config) by name: this session's own, else saved."""
     sc = _session_conn(sid, name)
@@ -827,20 +821,14 @@ async def add_session_connection(
 
 
 async def remove_session_connection(sid: str, name: str, by: Literal["agent", "user"] = "user") -> dict[str, Any]:
-    """Drop a session connection, disconnecting every session on it: the
-    session's own, and the tabs that share its map (share_session_connections)."""
-    conns = _session_conns.get(sid, {})
-    if conns.pop(name, None) is None:
+    """Drop a session connection, disconnecting the session if it is active."""
+    if _session_conns.get(sid, {}).pop(name, None) is None:
         return {"ok": False, "message": f'no session connection named "{name}"'}
-    # A copy: the awaited disconnects let a sweep or a new tab change the map.
-    for other, shared in list(_session_conns.items()):
-        if shared is not conns:
-            continue
-        remote.notify(other, {"type": "connections"})
-        # The row, not the LRU cache: an evicted session must not keep pointing here.
-        rec = await sessions.get_session_rec(other)
-        if rec is not None and rec.connection_name == name:
-            await disconnect(other, by)
+    remote.notify(sid, {"type": "connections"})
+    # The row, not the LRU cache: an evicted session must not keep pointing here.
+    rec = await sessions.get_session_rec(sid)
+    if rec is not None and rec.connection_name == name:
+        await disconnect(sid, by)
     return {"ok": True}
 
 

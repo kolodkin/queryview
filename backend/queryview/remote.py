@@ -25,10 +25,9 @@ class _Channel:
     lock_owner: str | None = None
     lock_touched: float = 0.0
     # A tab's channel opened before its browser tab armed (docs/remote.md#tabs):
-    # pushes queue up and answer "opening a tab" until `register` takes it over.
-    # The first push tells `opener` (parent session id, tab name) to open it.
+    # pushes queue up and answer "queued for the tab" until `register` takes
+    # it over.
     pending_since: float | None = None
-    opener: tuple[str, str] | None = None
 
 
 # session id -> channel. Module-level, like connect.py's _sessions.
@@ -84,12 +83,11 @@ def is_armed(session_id: str) -> bool:
     return channel is not None and channel.pending_since is None
 
 
-def open_pending(session_id: str, parent: str, label: str) -> None:
+def open_pending(session_id: str) -> None:
     """A channel for a tab whose browser tab is not open yet, unless one is
-    already open or pending: pushes queue for it, and the first one tells
-    `parent`'s browser to open the tab."""
+    already open or pending: pushes queue for it meanwhile."""
     if _live(session_id) is None:
-        _channels[session_id] = _Channel(pending_since=time.monotonic(), opener=(parent, label))
+        _channels[session_id] = _Channel(pending_since=time.monotonic())
 
 
 def register(session_id: str) -> str:
@@ -99,7 +97,7 @@ def register(session_id: str) -> str:
     grants nothing once the session is disarmed."""
     channel = _live(session_id)
     if channel is not None and channel.pending_since is not None:
-        channel.pending_since = channel.opener = None
+        channel.pending_since = None
     else:
         _channels[session_id] = _Channel()
     return session_id
@@ -124,11 +122,7 @@ def push(remote_id: str, payload: dict[str, Any]) -> tuple[bool, str]:
     if _human_holds(channel):
         return False, "blocked, user editing"
     channel.queue.put_nowait(payload)
-    if channel.opener is not None:
-        parent, label = channel.opener
-        channel.opener = None
-        notify(parent, {"type": "tab", "session": remote_id, "label": label, "url": f"/?session={remote_id}"})
-    return True, "delivered" if channel.pending_since is None else "opening a tab"
+    return True, "delivered" if channel.pending_since is None else "queued for the tab"
 
 
 def notify(remote_id: str, payload: dict[str, Any]) -> None:

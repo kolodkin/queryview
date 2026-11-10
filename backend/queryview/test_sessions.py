@@ -114,8 +114,7 @@ def test_list_returns_display_label_and_held_flag():
 
 
 def _free_everything():
-    """Delete every session but the migration-seeded Agent one, so a test starts
-    from a known, unheld world."""
+    """Delete every session, so a test starts from a known, unheld world."""
 
     async def go():
         from sqlmodel import select as _select
@@ -125,9 +124,7 @@ def _free_everything():
 
         await _ensure_schema()
         async with _S(_engine_for_db()) as s:
-            for row in (
-                await s.exec(_select(sessions.Session).where(sessions.Session.id != sessions.AGENT_SESSION_ID))
-            ).all():
+            for row in (await s.exec(_select(sessions.Session))).all():
                 await s.delete(row)
             await s.commit()
 
@@ -323,26 +320,6 @@ def test_select_with_force_takes_a_held_session_over():
         _run(sessions.attach("tab-a", held.id, keep=True))
 
 
-def test_agent_session_is_standing_and_never_resumed():
-    """The migration seeds the Agent session; a new tab never lands on it."""
-    _free_everything()
-    agent = _run(sessions.get_session_rec(sessions.AGENT_SESSION_ID))
-    assert agent is not None
-    assert sessions.display_label(agent) == "Agent"
-    _run(sessions.touch_for_test(sessions.AGENT_SESSION_ID, last_active_at=_now_ms_for_test() + 60_000))
-    got, _ = _run(sessions.attach("tab-a", None))
-    assert got.id != sessions.AGENT_SESSION_ID
-    assert got.seq == 1  # the Agent row's seq 0 keeps the first user session "Session 1"
-
-
-def test_agent_session_refuses_deletion_and_rename():
-    assert _run(sessions.delete_session(sessions.AGENT_SESSION_ID)) == (False, "agent")
-    rec = _run(sessions.patch_session(sessions.AGENT_SESSION_ID, label="Mine"))
-    assert rec is not None and sessions.display_label(rec) == "Agent"
-    row = next(r for r in _run(sessions.list_sessions()) if r["id"] == sessions.AGENT_SESSION_ID)
-    assert (row["label"], row["deletable"], row["renamable"]) == ("Agent", False, False)
-
-
 def test_last_visited_keeps_database_and_table_per_connection():
     sid = _run(sessions.create_session()).id
     _run(sessions.set_connection(sid, "warehouse"))
@@ -393,34 +370,20 @@ def test_deleting_a_connection_forgets_where_sessions_last_were_on_it():
     assert "warehouse" not in _row(sid).last_visited
 
 
-def test_a_tab_is_a_scratch_session_named_under_its_parent():
-    parent = _run(sessions.create_session())
-    _run(sessions.patch_session(parent.id, label="Mine"))
-    tab, got_parent, _ = _run(sessions.child_session(parent.id, "orders"))
-    assert tab is not None and got_parent is not None and got_parent.id == parent.id
-    assert (tab.parent, tab.tab, tab.label, tab.workspace) == (parent.id, "orders", None, parent.workspace)
-    again, _, _ = _run(sessions.child_session(parent.id, "orders"))
-    assert again is not None and again.id == tab.id
-    # Shown with its parent's label where a tab shows its own, and in the list.
-    shown, _ = _run(sessions.attach("tab-shown", tab.id))
-    assert sessions.display_label(shown) == "Mine › orders"
+def test_a_tab_is_an_unnamed_session_named_for_its_work():
+    tab = _run(sessions.create_tab("orders"))
+    assert (tab.tab, tab.label) == ("orders", None)
+    assert sessions.display_label(tab) == "Agent › orders"
     listed = next(r for r in _run(sessions.list_sessions()) if r["id"] == tab.id)
-    assert (listed["label"], listed["renamable"]) == ("Mine › orders", True)
-    # A pinned name wins, as on any session; the agent still finds it by name.
+    assert listed["label"] == "Agent › orders"
+    # A pinned name wins, as on any session.
     renamed = _run(sessions.patch_session(tab.id, label="Orders tab"))
     assert renamed is not None and sessions.display_label(renamed) == "Orders tab"
-    assert _run(sessions.child_session(parent.id, "orders"))[0].id == tab.id  # type: ignore[union-attr]
-    assert _run(sessions.child_session(tab.id, "deeper")) == (None, None, "a tab can't have tabs")
-    assert _run(sessions.child_session("nope", "x")) == (None, None, "unknown session")
-    assert _run(sessions.child_session(parent.id, " ")) == (None, None, "tab name required")
-    _run(sessions.release("tab-shown"))
 
 
 def test_a_tab_is_never_resumed_and_is_swept_once_its_tab_has_gone():
     _free_everything()
-    parent = _run(sessions.create_session())
-    tab, _, _ = _run(sessions.child_session(parent.id, "orders"))
-    assert tab is not None
+    tab = _run(sessions.create_tab("orders"))
     _run(sessions.touch_for_test(tab.id, last_active_at=_now_ms_for_test() + 60_000))
     got, _ = _run(sessions.attach("tab-x", None))
     assert got.id != tab.id

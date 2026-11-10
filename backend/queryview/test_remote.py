@@ -246,19 +246,15 @@ def test_push_query_reads_the_database_from_the_session_row():
         remote.unregister(rec.id)
 
 
-def test_a_pending_channel_queues_pushes_and_tells_the_parent_once():
-    parent = remote.register(uuid.uuid4().hex)
+def test_a_pending_channel_queues_pushes_until_the_tab_arms():
     sid = uuid.uuid4().hex
     try:
-        remote.open_pending(sid, parent, "orders")
+        remote.open_pending(sid)
         assert remote.is_armed(sid) is False
         first = {"type": "script", "sql": "SELECT 1", "run": False}
         second = {"type": "script", "sql": "SELECT 2", "run": False}
-        assert remote.push(sid, first) == (True, "opening a tab")
-        assert remote.push(sid, second) == (True, "opening a tab")
-        tab = asyncio.run(remote.next_message(parent, 1.0))
-        assert tab == {"type": "tab", "session": sid, "label": "orders", "url": f"/?session={sid}"}
-        assert asyncio.run(remote.next_message(parent, 0.1)) is None
+        assert remote.push(sid, first) == (True, "queued for the tab")
+        assert remote.push(sid, second) == (True, "queued for the tab")
         # Arming takes the pending channel over, queued pushes first in line.
         remote.register(sid)
         assert remote.is_armed(sid)
@@ -266,13 +262,12 @@ def test_a_pending_channel_queues_pushes_and_tells_the_parent_once():
         assert asyncio.run(remote.next_message(sid, 1.0)) == second
         assert remote.push(sid, first) == (True, "delivered")
     finally:
-        remote.unregister(parent)
         remote.unregister(sid)
 
 
 def test_a_pending_channel_whose_tab_never_came_is_dropped(monkeypatch):
     sid = uuid.uuid4().hex
-    remote.open_pending(sid, "parent", "orders")
+    remote.open_pending(sid)
     monkeypatch.setattr(remote, "PENDING_TTL_SECONDS", 0.0)
     assert remote.push(sid, {"type": "script", "sql": "SELECT 1", "run": False}) == (
         False,

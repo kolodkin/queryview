@@ -16,8 +16,7 @@ session's **id** and a copyable command, e.g.:
 Turning the toggle off (or closing the tab) disarms the session immediately —
 pushes to its id are then reported as not delivered.
 
-Without a copied id the agent uses the standing
-[Agent session](./session.md#the-agent-session); arm it the same way.
+Without a copied id the agent works in a [tab](#tabs) of its own.
 
 ## Connecting a client
 
@@ -28,7 +27,7 @@ Register the client once — see [mcp.md](./mcp.md).
 The backend mounts a FastMCP server (Streamable HTTP) at `/mcp/` exposing these
 tools (among others):
 
-- `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?, tab?)` —
+- `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
   push a query. `order_by` is `[{name, dir}]`; `fields` are the columns to show
   (omit for all); `cell_view` is raw YAML for this push only (not persisted);
   `name` selects a saved query. Returns `{ok, message, database}` (`database` is
@@ -70,18 +69,18 @@ tools (among others):
   ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
   agent. Stops at the first failure; `columns`/`types`/`rows` are null for a
   statement without rows.
-- `push_script(session_id, sql, run?=false, tab?)` — replace the Scripts editor's
+- `push_script(session_id, sql, run?=false)` — replace the Scripts editor's
   text; the browser navigates there and, with `run`, runs it all (results stay
   in the browser). Returns
   `{ok, message, database}`; `ok:false` for an unknown id, a held lock
   (`"blocked, user editing"`), or a session whose Scripts page can't open yet
   (`"not connected"`, `"select a database first"`).
-- `open_explorer(session_id, database, table?, tab?)` —
+- `open_explorer(session_id, database, table?)` —
   switch the session to `database` and send the browser to its
   [Explorer](./explorer.md), on `table` when given (refused when the database
   doesn't list it). Returns `{ok, message, database}`; past the switch, a
   failure still leaves the session on `database`.
-- `push_dashboard(session_id, name, html, queries, params?, tab?)` — push a dashboard
+- `push_dashboard(session_id, name, html, queries, params?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
   renders it. Only the user's **Save** persists it, unless the workspace has
   [autosave](./workspace.md#autosave) on. Returns
@@ -94,34 +93,24 @@ to ClickHouse directly.
 
 ## Tabs
 
-Every push tool — `push_query`, `push_script`, `push_dashboard`,
-`open_explorer` — takes a `tab` name. With one, the push lands in a browser
-tab of that name beside the session's own, so several scripts, queries or
-dashboards sit side by side:
-
-- The first push to a name opens the tab on the session's connection,
-  database and workspace. The armed browser tab opens it; a browser that
-  blocks a window opened without a click shows **Agent opened orders** with an
-  **Open** button instead, and allowing pop-ups for QueryView's origin removes
-  the click. The push waits a minute for the tab to open and arm.
-- A later push to the same name lands in that tab. The reply's `tab_session`
-  is the tab's own session id, which every tool accepts.
-- A tab is a [tab session](./session.md#tabs), gone once its browser tab
-  has closed.
-- Arming the session is the consent for its tabs: a push with `tab` to a
-  disarmed session fails like any push, and the tab it opens arms itself.
-  Disarming the session stops new tabs; an open tab keeps its own toggle. A
-  tab can't have tabs.
+An agent works in browser tabs of its own, one per task, and leaves your
+sessions alone unless you hand it an id. `new_tab(name)` creates a
+[tab session](./session.md#tabs) and returns its `session_id` and `url`,
+`<origin>/?session=<id>`. The agent opens the link in your browser (`open` on
+macOS, `xdg-open` on Linux) or gives it to you; the tab lists as
+**Agent › orders**, arms itself on load, and is gone once closed. The agent
+connects it with `use_connection` or `add_connection`, then pushes into it as
+into any session; a push made before the link is opened waits for it, a minute
+at most, and every reply about a tab carries its `url`.
 
 ## Default workflow
 
 The server's MCP instructions set how the agent answers "run this query",
-without asking which tool: iterate read-only with `run_sql`, apply writes once
-with `run_script`, then `push_script` the final SQL without `run` (the browser
-never re-applies the writes). Every push names a [tab](#tabs) for the task,
-reused when the work is revised, so the Agent session's own tab only opens
-them. If the push fails, the agent replies with the SQL. Naming a tool (e.g.
-`push_query`) overrides the default.
+without asking which tool: open a [tab](#tabs) for the task (reused when the
+work is revised), connect it, iterate read-only with `run_sql`, apply writes
+once with `run_script`, then `push_script` the final SQL without `run` (the
+browser never re-applies the writes). If the push fails, the agent replies
+with the SQL. Naming a tool (e.g. `push_query`) overrides the default.
 
 ## How it works
 
@@ -136,11 +125,10 @@ Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](./workspace.md)).
 
-A push with a [`tab`](#tabs) whose browser tab is not armed yet lands in a
-channel opened for it in advance, which answers `opening a tab` and tells the
-session's own channel to open it with a `tab` event `{session, label, url}`;
-arming takes that channel over with its pushes queued. One whose tab never
-comes is dropped after a minute.
+A push to a [tab](#tabs) nobody has opened yet lands in a channel `new_tab`
+opened in advance, which answers `queued for the tab`; arming takes that
+channel over with its pushes queued. One whose tab never comes is dropped
+after a minute.
 
 **Locked connections keep the agent out.** A saved connection the user
 [locked](./connect.md#locked-connections) behind a passphrase refuses every

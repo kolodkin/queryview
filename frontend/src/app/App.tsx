@@ -32,7 +32,6 @@ import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
 import ExplorerView from './ExplorerView'
 import { Toast } from './controls/Toast'
-import { TabOffers, type TabOpen } from './controls/TabOffer'
 import { PassphrasePrompt } from './controls/PassphrasePrompt'
 import { Loading } from './controls/Spinner'
 import { CopyName } from './controls/CopyName'
@@ -219,8 +218,6 @@ function Shell() {
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  // Tabs the agent asked for that the browser would not open by itself.
-  const [tabOffers, setTabOffers] = useState<TabOpen[]>([])
   const [dbOpen, setDbOpen] = useState(false)
   // The pill menu's connection list, refetched on open and on a `connections`
   // push; the nonce also refreshes Connect.
@@ -383,10 +380,9 @@ function Shell() {
           onChanged: applySession,
           onTaken: () => setTaken(true),
         })
-        // A tab the agent opened arms itself (its parent's arming is the
-        // consent), once the connection is on screen: the push queued for it
-        // lands on a page that needs it.
-        if (restored.parent) setArmed(true)
+        // A tab the agent opened arms itself, once the connection is on
+        // screen: the push queued for it lands on a page that needs it.
+        if (restored.tab) setArmed(true)
       } catch {
         /* no session: the app still runs, it just remembers nothing */
       }
@@ -403,7 +399,7 @@ function Shell() {
 
   // The window title: a tab the agent opened is named after itself.
   useEffect(() => {
-    document.title = currentSession()?.parent ? `${sessionLabel} · QueryView` : 'QueryView'
+    document.title = currentSession()?.tab ? `${sessionLabel} · QueryView` : 'QueryView'
   }, [sessionKey, sessionLabel])
 
   // The URL is session state: it is what a refresh and a session switch
@@ -458,28 +454,12 @@ function Shell() {
       setToast('Agent opened the Explorer')
       navigate(explorerUrl(payload))
     })
-    // The agent wants a tab of its own. Named after the session, so a second
-    // open of the same tab lands in the same window. A browser blocks a window
-    // a page opens without a click, and this is not one: then the offer's
-    // button is the click.
-    on<TabOpen>('tab', (payload) => {
-      if (openTab(payload)) return
-      setTabOffers((list) => [...list.filter((o) => o.session !== payload.session), payload])
-      // Gone with the push parked for it; a newer offer for the tab is another object.
-      window.setTimeout(() => setTabOffers((list) => list.filter((o) => o !== payload)), 60_000)
-    })
     return () => {
       es.close()
       setChannelOpen(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [armed])
-
-  // Named after the session, so a second open of the same tab lands in the same
-  // window. False when the browser refused: a window opened without a click.
-  function openTab(tab: TabOpen): boolean {
-    return window.open(tab.url, tab.session) !== null
-  }
 
   function toggleArm(e: React.ChangeEvent<HTMLInputElement>) {
     setArmed(e.target.checked)
@@ -791,13 +771,6 @@ function Shell() {
         <Loading label="Restoring session…" testid="session-loading" />
       )}
       <Toast message={toast} onDone={() => setToast(null)} />
-      <TabOffers
-        offers={tabOffers}
-        onOpen={(offer) => {
-          openTab(offer)
-          setTabOffers((list) => list.filter((o) => o !== offer))
-        }}
-      />
       {connection?.unlocked === false && (
         <PassphrasePrompt
           title={`${connection.name} is locked`}

@@ -28,9 +28,8 @@ always shows live data.
 The FastMCP server at `/mcp` (see [remote.md](./remote.md) for arming and the
 session id) exposes:
 
-- `push_dashboard(session_id, name, html, queries, params?, tab?)` — push the
-  dashboard **draft** to the browser identified by `session_id` (with `tab`, a
-  browser tab of its own: [remote.md](./remote.md#tabs)), which navigates
+- `push_dashboard(session_id, name, html, queries, params?)` — push the
+  dashboard **draft** to the browser identified by `session_id`, which navigates
   to `/dashboard?name=<name>` and renders it. It does **not** persist — only the
   user's **Save** button in the dashboard view writes it to the store (mirrors
   `push_query`) — unless the session's workspace has

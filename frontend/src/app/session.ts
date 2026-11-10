@@ -17,8 +17,8 @@ export type SessionState = {
   workspace: string
   url: string
   ui: Record<string, Record<string, unknown>>
-  // Set on a tab the agent opened: the session it was spawned from.
-  parent: string | null
+  // Set on a tab the agent opened: what it opened it for.
+  tab: string | null
 }
 
 export type SessionSummary = {
@@ -27,8 +27,7 @@ export type SessionSummary = {
   connection: string | null
   database: string | null
   held: boolean
-  deletable: boolean // false while held, and always for the Agent session
-  renamable: boolean // false for the Agent session
+  deletable: boolean // false while held
 }
 
 // `table` is the Explorer's selection, remembered per connection server-side.
