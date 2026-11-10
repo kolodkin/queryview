@@ -64,7 +64,7 @@ test("dashboard export import round trip", async ({ page, baseURL, shot }, testI
 
 // Git sync: in CI a loopback git daemon (start-git-daemon action) serves a
 // remote the backend fixture points the default workspace at, so the full UI
-// commit/restore round trip runs; on an unconfigured stack that test skips and
+// save-commits/restore round trip runs; on an unconfigured stack that test skips and
 // the controls render disabled.
 const gitConfigured = async (baseURL: string) => Boolean((await api(`${baseURL}/api/git/status`)).body.configured);
 
@@ -77,7 +77,7 @@ test("git controls disabled when unconfigured", async ({ page, baseURL }) => {
   }
 });
 
-test("git commit and restore dashboard round trip", async ({ page, baseURL }) => {
+test("saves commit and restore dashboard round trip", async ({ page, baseURL }) => {
   test.skip(!(await gitConfigured(baseURL!)), "git sync is not configured for this stack");
   // Unique per attempt: a CI retry shares the remote, which keeps the first
   // attempt's commit.
@@ -87,20 +87,20 @@ test("git commit and restore dashboard round trip", async ({ page, baseURL }) =>
       json: { name, html: `<html><body>v${v}</body></html>`, queries: { q: `SELECT ${v}` } },
     });
 
-  // Seed v1 via the API, then commit it from the UI.
+  // Each save commits: v1, then v2. Commit has nothing left to push.
   await save(1);
+  await save(2);
   await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
   await expect(page.getByTestId("git-commit")).toBeEnabled();
   await page.getByTestId("git-commit").click();
-  await expect(page.getByTestId("git-commit")).toHaveText("Committed");
+  await expect(page.getByTestId("git-commit")).toHaveText("No changes");
 
-  // Drift the local copy to v2, then restore v1 from the revision list.
-  await save(2);
+  // Restore v1, the older revision.
   page.on("dialog", (d) => d.accept());
   await page.getByTestId("git-restore-toggle").click();
   const rows = page.getByTestId("git-revision-row");
-  await expect(rows).toHaveCount(1);
-  await rows.first().getByTestId("git-revision-restore").click();
+  await expect(rows).toHaveCount(2);
+  await rows.last().getByTestId("git-revision-restore").click();
   // The picker closes on a successful restore; only then check the store.
   await expect(page.getByTestId("git-revisions")).toBeHidden();
   const { body } = await api(`${baseURL}/api/dashboards/${encodeURIComponent(name)}`);
