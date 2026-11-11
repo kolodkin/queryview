@@ -3,11 +3,12 @@ import ExportImportControls from './ExportImportControls'
 import { useDismiss } from '../../core'
 import {
   announceGitSync,
-  gitConflicts,
+  gitWarnings,
   invalidateGitStatus,
   gitSync,
   onGitSync,
   type GitConflict,
+  type GitWarnings,
 } from '../gitsync'
 import {
   createWorkspace,
@@ -17,25 +18,26 @@ import {
   type Workspace,
   type WorkspaceChanges,
 } from '../workspace'
-import { announceAutosaveEnabled } from '../autosave'
 
 type Props = {
   workspace: string
   onSwitch: (name: string) => void
-  // Settings saved (e.g. autosave toggled), so the shell re-reads them.
-  onSaved?: () => void
 }
 
 // Header dropdown for the active workspace plus a small manage panel
 // (create / rename / set-clear remote / delete), and a warning when the last
 // git sync kept local copies the repo disagrees with. Workspace settings are
 // admin config; a remote's token is write-only — the server never returns it.
-export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Props) {
+export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [open, setOpen] = useState(false)
   const [manage, setManage] = useState(false)
   const [list, setList] = useState<Workspace[]>([])
   const [error, setError] = useState('')
-  const [conflicts, setConflicts] = useState<GitConflict[]>([])
+  const [{ conflicts, unsynced }, setGitWarnings] = useState<GitWarnings>({
+    conflicts: [],
+    unsynced: [],
+  })
+  const warnings = conflicts.length + unsynced.length
   const [warnOpen, setWarnOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncNote, setSyncNote] = useState('')
@@ -43,27 +45,23 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
   const [name, setName] = useState('')
   const [remote, setRemote] = useState('')
   const [branch, setBranch] = useState('')
-  const [autosave, setAutosave] = useState(false)
   const current = list.find((w) => w.name === workspace)
-  const savedAutosave = current?.autosave ?? false
   // The manage panel light-dismisses only while untouched: once it holds
   // unsaved input (a new remote URL above all), it closes through its buttons.
   const dirty =
     manage &&
-    (name.trim() !== workspace ||
-      remote.trim() !== '' ||
-      branch.trim() !== (current?.branch ?? '') ||
-      autosave !== savedAutosave)
+    (name.trim() !== workspace || remote.trim() !== '' || branch.trim() !== (current?.branch ?? ''))
   const rootRef = useDismiss<HTMLDivElement>(open || warnOpen || (manage && !dirty), () => {
     setOpen(false)
     setWarnOpen(false)
     setManage(false)
   })
 
-  // Conflicts are recorded server-side by each sync, so re-read them after any.
+  // Conflicts are recorded by each sync and unsynced items change with each
+  // save, so re-read both after either.
   useEffect(() => {
     let live = true
-    const load = () => void gitConflicts(workspace).then((c) => live && setConflicts(c))
+    const load = () => void gitWarnings(workspace).then((w) => live && setGitWarnings(w))
     load()
     const off = onGitSync(load)
     return () => {
@@ -91,7 +89,6 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
     setName(workspace)
     setRemote('')
     setBranch(current?.branch ?? '')
-    setAutosave(savedAutosave)
     setError('')
     setSyncNote('')
   }
@@ -106,10 +103,10 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
       return
     }
     const n = r.imported?.length ?? 0
-    const d = r.deleted?.length ?? 0
     const c = r.conflicts?.length ?? 0
-    const changes = [n ? `imported ${n}` : '', d ? `deleted ${d}` : ''].filter(Boolean).join(' · ')
-    setSyncNote(`Synced: ${changes || 'nothing new'}${c ? ` · ${c} differ (see ⚠)` : ''}.`)
+    setSyncNote(
+      `Synced: ${n ? `imported ${n}` : 'nothing new'}${c ? ` · ${c} differ (see ⚠)` : ''}.`,
+    )
   }
 
   async function saveSettings() {
@@ -117,7 +114,6 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
     if (name.trim() && name.trim() !== workspace) changes.name = name.trim()
     if (remote.trim()) changes.remote = remote.trim()
     if (branch.trim()) changes.branch = branch.trim()
-    if (autosave !== savedAutosave) changes.autosave = autosave
     const r = await updateWorkspace(workspace, changes)
     if (!r.ok) {
       setError(r.message ?? 'update failed')
@@ -125,8 +121,6 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
     }
     invalidateGitStatus()
     announceGitSync()
-    onSaved?.()
-    if (changes.autosave) announceAutosaveEnabled()
     if (r.sync_error) {
       setError(`Saved, but syncing with the repo failed: ${r.sync_error}`)
       return
@@ -142,7 +136,6 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
       name.trim(),
       remote.trim() || undefined,
       branch.trim() || undefined,
-      autosave,
     )
     if (!r.ok) {
       setError(r.message ?? 'create failed')
@@ -169,43 +162,51 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
 
   return (
     <div ref={rootRef} className="relative flex min-w-0 items-center gap-1">
-      {conflicts.length > 0 && (
+      {warnings > 0 && (
         <button
           type="button"
           data-testid="workspace-conflicts"
-          aria-label={`${conflicts.length} differ from the git repo`}
-          title="Differs from the git repo"
+          aria-label={`${warnings} out of sync with the git repo`}
+          title="Out of sync with the git repo"
           onClick={() => setWarnOpen((o) => !o)}
           className="shrink-0 rounded-full px-1.5 py-1 text-sm text-amber-300 hover:bg-white/10"
         >
           ⚠
         </button>
       )}
-      {warnOpen && conflicts.length > 0 && (
+      {warnOpen && warnings > 0 && (
         <div
           data-testid="workspace-conflicts-panel"
           className="glass-popover absolute right-0 top-full z-10 mt-2 w-80 space-y-2 p-3 text-sm"
         >
-          <p className="font-medium text-amber-200">
-            {conflicts.length === 1 ? '1 item differs' : `${conflicts.length} items differ`} from
-            the git repo
-          </p>
-          <p className="text-xs text-slate-400">
-            Both here and in the repo, with different content. Sync never overwrites local work, so
-            your version was kept.
-          </p>
-          <ul className="space-y-1 text-slate-200">
-            {conflicts.map((c) => (
-              <li key={`${c.kind}/${c.conn_type}/${c.name}`} className="truncate">
-                <span className="text-xs text-slate-400">{c.kind}</span> {c.name}
-                {c.conn_type && <span className="text-xs text-slate-500"> · {c.conn_type}</span>}
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-slate-400">
-            To settle one, open it and <b className="text-slate-200">Commit</b> to push your
-            version, or <b className="text-slate-200">Restore</b> to take the repo&apos;s.
-          </p>
+          {unsynced.length > 0 && (
+            <div data-testid="workspace-unsynced" className="space-y-2">
+              <p className="font-medium text-amber-200">No git sync ({unsynced.length})</p>
+              <WarnList items={unsynced} />
+              <p className="text-xs text-slate-400">
+                Not committed yet (an import, or saved before git sync). Open it and{' '}
+                <b className="text-slate-200">Save</b>, or <b className="text-slate-200">Sync</b> to
+                check against the repo.
+              </p>
+            </div>
+          )}
+          {conflicts.length > 0 && (
+            <div className="space-y-2">
+              <p className="font-medium text-amber-200">
+                {conflicts.length === 1 ? '1 item differs' : `${conflicts.length} items differ`}{' '}
+                from the git repo
+              </p>
+              <p className="text-xs text-slate-400">
+                Both here and in the repo, with different content. Sync never overwrites local work,
+                so your version was kept.
+              </p>
+              <WarnList items={conflicts} />
+              <p className="text-xs text-slate-400">
+                To settle one, open it and <b className="text-slate-200">Save</b> to push your
+                version, or <b className="text-slate-200">Restore</b> to take the repo&apos;s.
+              </p>
+            </div>
+          )}
         </div>
       )}
       <button
@@ -280,19 +281,6 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
             placeholder="main"
             className="glass-input w-full px-2 py-1 text-slate-100"
           />
-          <label className="flex items-start gap-2 text-xs text-slate-300">
-            <input
-              type="checkbox"
-              data-testid="workspace-autosave-input"
-              checked={autosave}
-              onChange={(e) => setAutosave(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              Autosave — save queries after each successful run and agent pushes as they arrive; no
-              Save button. Commit / Restore keep the history.
-            </span>
-          </label>
           {current?.configured && (
             <div className="flex items-center gap-2">
               <button
@@ -357,5 +345,18 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
         </div>
       )}
     </div>
+  )
+}
+
+function WarnList({ items }: { items: GitConflict[] }) {
+  return (
+    <ul className="max-h-48 space-y-1 overflow-y-auto text-slate-200">
+      {items.map((c) => (
+        <li key={`${c.kind}/${c.conn_type}/${c.name}`} className="truncate">
+          <span className="text-xs text-slate-400">{c.kind}</span> {c.name}
+          {c.conn_type && <span className="text-xs text-slate-500"> · {c.conn_type}</span>}
+        </li>
+      ))}
+    </ul>
   )
 }

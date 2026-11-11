@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from sqlalchemy import and_, column, delete, exists, func, table, update
+from sqlalchemy import column, delete, exists, func, table, update
 from sqlalchemy import select as sa_select
 from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -38,8 +38,6 @@ class Workspace(SQLModel, table=True):
     name: str = Field(unique=True, index=True)
     remote: str | None = Field(default=None)  # base64(AES-GCM(url)) — never plaintext
     branch: str = Field(default="main")
-    # Save on update instead of an explicit Save; docs/workspace.md#autosave.
-    autosave: bool = Field(default=False)
 
 
 @dataclass
@@ -50,7 +48,6 @@ class WorkspaceRec:
     name: str
     remote: str | None
     branch: str
-    autosave: bool = False
 
 
 def _to_rec(row: Workspace) -> WorkspaceRec:
@@ -59,7 +56,6 @@ def _to_rec(row: Workspace) -> WorkspaceRec:
         name=row.name,
         remote=_decrypt_str(row.remote) if row.remote else None,
         branch=row.branch,
-        autosave=row.autosave,
     )
 
 
@@ -76,8 +72,7 @@ def _valid_name(name: str) -> str:
 # Sessions name their workspace. This module can't import sessions (sessions ->
 # connect -> here), so it reaches the table through a bare table clause.
 _sessions_table = table("sessions", column("workspace"))
-# Deleted queries (docs/query.md) don't keep a workspace alive; they go with it.
-_queries_table = table("predefined_queries", column("workspace_id"), column("deleted_at"))
+_queries_table = table("predefined_queries", column("workspace_id"))
 _dashboards_table = table("dashboards", column("workspace_id"))
 
 
@@ -130,13 +125,12 @@ async def list_workspaces() -> list[dict[str, Any]]:
             "branch": r.branch,
             "configured": bool(r.remote),
             "remote": _public_remote(r.remote),
-            "autosave": r.autosave,
         }
         for r in rows
     ]
 
 
-async def create_workspace(name: str, remote: str | None = None, branch: str = "main", autosave: bool = False) -> None:
+async def create_workspace(name: str, remote: str | None = None, branch: str = "main") -> None:
     name = _valid_name(name)
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
@@ -148,7 +142,6 @@ async def create_workspace(name: str, remote: str | None = None, branch: str = "
                 name=name,
                 remote=_encrypt_str(remote) if remote else None,
                 branch=branch.strip() or "main",
-                autosave=autosave,
             )
         )
         await s.commit()
@@ -164,7 +157,6 @@ async def update_workspace(
     new_name: str | None = None,
     remote: Any = _UNSET,
     branch: str | None = None,
-    autosave: bool | None = None,
 ) -> None:
     """Rename and/or reconfigure a workspace. Renaming is a one-row update:
     entities and clone dirs are keyed by workspace id, so nothing else moves."""
@@ -184,17 +176,14 @@ async def update_workspace(
             row.remote = _encrypt_str(remote) if remote else None
         if branch is not None and branch.strip():
             row.branch = branch.strip()
-        if autosave is not None:
-            row.autosave = autosave
         s.add(row)
         await s.commit()
 
 
 def _owned(workspace_id: int):
-    """What keeps a workspace alive: a WHERE clause each for its live queries
-    and its dashboards. Bare table clauses, so no entity-module imports."""
-    q, d = _queries_table.c, _dashboards_table.c
-    return and_(q.workspace_id == workspace_id, q.deleted_at.is_(None)), d.workspace_id == workspace_id
+    """What keeps a workspace alive: a WHERE clause each for its queries and
+    its dashboards. Bare table clauses, so no entity-module imports."""
+    return _queries_table.c.workspace_id == workspace_id, _dashboards_table.c.workspace_id == workspace_id
 
 
 async def _entity_count(s: AsyncSession, workspace_id: int) -> int:
@@ -225,17 +214,11 @@ async def delete_workspace(name: str) -> str:
         if others is None:
             raise WorkspaceError("can't delete the last workspace", status=409)
         moved_to = others.name  # read before the commit expires it
-        # Purge deleted queries, then delete the row only if still empty, in one
-        # transaction: the count above ran before the first write, so an entity
-        # saved since keeps the workspace. Live queries are never purged.
-        await s.exec(
-            delete(_queries_table).where(
-                _queries_table.c.workspace_id == row.id, _queries_table.c.deleted_at.is_not(None)
-            )
-        )
+        # Delete the row only if still empty: the count above ran first, so an
+        # entity saved since keeps the workspace.
         still_empty = [~exists().where(c) for c in _owned(row.id)]  # type: ignore[arg-type]
         gone = await s.exec(delete(Workspace).where(col(Workspace.id) == row.id, *still_empty))
-        if gone.rowcount != 1:  # the purge rolls back with the session
+        if gone.rowcount != 1:
             raise WorkspaceError(f"workspace {name!r} is no longer empty; delete its entities first", status=409)
         await s.exec(_move_sessions(name, moved_to))
         await s.commit()

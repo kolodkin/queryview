@@ -9,11 +9,12 @@ import json
 from typing import Any, ClassVar
 
 from sqlalchemy import UniqueConstraint
-from sqlmodel import Field, SQLModel, select
+from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from . import connect, workspaces
+from . import connect
 from .connect import _engine_for_db, _ensure_schema, _now_ms
+from .workspaces import WorkspaceRec
 
 
 class Dashboard(SQLModel, table=True):
@@ -27,6 +28,14 @@ class Dashboard(SQLModel, table=True):
     queries: str  # JSON text: {query_name: SQL}
     params: str = Field(default="[]")  # JSON text: selector specs (docs/dashboard.md)
     updated_at: int  # unix ms
+    git_sha: str | None = Field(default=None)  # as on PredefinedQuery
+
+
+async def _find(s: AsyncSession, name: str, workspace_id: int) -> Dashboard | None:
+    """The row holding (workspace, name)."""
+    return (
+        await s.exec(select(Dashboard).where(Dashboard.name == name, Dashboard.workspace_id == workspace_id))
+    ).first()
 
 
 async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -> None:
@@ -36,17 +45,14 @@ async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         for d in items:
-            row = (
-                await s.exec(
-                    select(Dashboard).where(Dashboard.name == d["name"], Dashboard.workspace_id == workspace_id)
-                )
-            ).first()
+            row = await _find(s, d["name"], workspace_id)
             if row is None:
                 row = Dashboard(name=d["name"], workspace_id=workspace_id, html="", queries="", updated_at=0)
             row.html = d["html"]
             row.queries = json.dumps(d["queries"])
             row.params = json.dumps(d.get("params") or [])
             row.updated_at = _now_ms()
+            row.git_sha = None
             s.add(row)
         await s.commit()
 
@@ -84,13 +90,25 @@ def _loads(text: str, empty: Any) -> Any:
     return value if isinstance(value, type(empty)) else empty
 
 
+async def unsynced_dashboards(workspace_id: int) -> list[str]:
+    """Names of the dashboards not in git as they are."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        names = (
+            await s.exec(
+                select(Dashboard.name)
+                .where(Dashboard.workspace_id == workspace_id, col(Dashboard.git_sha).is_(None))
+                .order_by(Dashboard.name)
+            )
+        ).all()
+    return list(names)
+
+
 async def get_dashboard(name: str, workspace_id: int) -> dict[str, Any] | None:
     """A single dashboard with its `queries` parsed back to a dict, or None."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
-        row = (
-            await s.exec(select(Dashboard).where(Dashboard.name == name, Dashboard.workspace_id == workspace_id))
-        ).first()
+        row = await _find(s, name, workspace_id)
     return _payload(row) if row is not None else None
 
 
@@ -135,23 +153,13 @@ async def _push_dashboard(
     queries: dict[str, str],
     session_id: str | None,
     params: list[dict[str, Any]] | None = None,
-    workspace: str | None = None,
-) -> tuple[bool, bool, str]:
-    """Push a dashboard to a live session. A DRAFT unless `workspace` (the
-    session's) has autosave on: then a delivered push is also persisted — only
-    once delivered, since a disarmed session grants nothing. Otherwise only the
-    user's Save (POST /api/dashboards) writes it. Returns (pushed, persisted,
-    message); no session_id -> (False, False, "no session")."""
+) -> tuple[bool, str]:
+    """Push a dashboard to a live session as a DRAFT: only the user's Save
+    (POST /api/dashboards) writes it. Returns (pushed, message); no
+    session_id -> (False, "no session")."""
     if not session_id:
-        return False, False, "no session"
-    pushed, message = await connect.push(session_id, _dashboard_event(name, html, queries, params))
-    if not pushed:
-        return False, False, message
-    ws = await (workspaces.resolve(workspace) if workspace else workspaces.fallback())
-    if not ws.autosave:
-        return True, False, message
-    await upsert_dashboard(name, html, queries, params, workspace_id=ws.id)
-    return True, True, message
+        return False, "no session"
+    return await connect.push(session_id, _dashboard_event(name, html, queries, params))
 
 
 async def _upsert_and_push(
@@ -161,13 +169,19 @@ async def _upsert_and_push(
     session_id: str | None,
     params: list[dict[str, Any]] | None = None,
     *,
-    workspace_id: int,
+    ws: WorkspaceRec,
 ) -> tuple[bool, bool, str]:
-    """Persist a dashboard, then (if `session_id` given) push it to that live
-    browser session. Returns (persisted, pushed, message). Push is best-effort:
-    an unknown/inactive session leaves it saved with pushed=False, per
-    remote.push's contract. Used by the REST endpoint (the user-Save path)."""
-    await upsert_dashboard(name, html, queries, params, workspace_id=workspace_id)
+    """Persist a dashboard (committed with it when `ws` syncs: a git failure
+    undoes the save and raises GitSyncError), then (if `session_id` given)
+    push it to that live browser session. Returns (persisted, pushed,
+    message). Push is best-effort: an unknown/inactive session leaves it saved
+    with pushed=False, per remote.push's contract. Used by the REST endpoint
+    (the user-Save path)."""
+    from . import gitsync
+
+    await gitsync.commit_change(
+        ws, "dashboard", name, None, lambda: upsert_dashboard(name, html, queries, params, workspace_id=ws.id)
+    )
     if session_id:
         ok, message = await connect.push(session_id, _dashboard_event(name, html, queries, params))
         return True, ok, message

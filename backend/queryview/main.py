@@ -50,11 +50,10 @@ from .drivers import DRIVERS
 from .mcp_server import mcp
 from .queries import (
     PredefinedQueryError,
+    delete_predefined_query,
     list_predefined_queries_view,
-    purge_predefined_query,
+    rename_predefined_query,
     save_predefined_query,
-    set_predefined_query_deleted,
-    update_predefined_query,
 )
 from .validation import cell_view_error, dashboard_params_error, presentation_error
 
@@ -496,8 +495,7 @@ async def predefined_queries_list(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    include_deleted = request.query_params.get("include_deleted") in ("1", "true")
-    return {"queries": await list_predefined_queries_view(conn_type, ws.id, include_deleted=include_deleted)}
+    return {"queries": await list_predefined_queries_view(conn_type, ws.id)}
 
 
 @app.post("/api/predefined-queries")
@@ -533,11 +531,20 @@ async def predefined_queries_save(request: Request):
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    await save_predefined_query(name, conn_type, query, cell_view, order_by, fields, workspace_id=ws.id)
+    try:
+        await gitsync.commit_change(
+            ws,
+            "query",
+            name,
+            conn_type,
+            lambda: save_predefined_query(name, conn_type, query, cell_view, order_by, fields, workspace_id=ws.id),
+        )
+    except gitsync.GitSyncError as e:
+        return _status_error(e)
     return {"ok": True}
 
 
-# Partial update: `new_name` renames, `deleted: false` undeletes (DELETE deletes).
+# Rename: `new_name`.
 @app.patch("/api/predefined-queries")
 async def predefined_queries_update(request: Request):
     b = await _read_json(request)
@@ -545,25 +552,26 @@ async def predefined_queries_update(request: Request):
     name = _clean_str(b.get("query_name"))
     conn_type = _clean_str(b.get("type"))
     new_name = _clean_str(b.get("new_name"))
-    undelete = b.get("deleted") is False
-    if not name or not conn_type or (not new_name and not undelete) or b.get("deleted") is True:
-        return JSONResponse(
-            {"ok": False, "message": "query_name, type and new_name or deleted: false are required"},
-            status_code=400,
-        )
+    if not name or not conn_type or not new_name:
+        return JSONResponse({"ok": False, "message": "query_name, type and new_name are required"}, status_code=400)
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
     try:
-        await update_predefined_query(
-            conn_type, name, workspace_id=ws.id, new_name=new_name or None, deleted=False if undelete else None
+        await gitsync.commit_change(
+            ws,
+            "query",
+            new_name,
+            conn_type,
+            lambda: rename_predefined_query(conn_type, name, new_name, workspace_id=ws.id),
+            old_name=name if new_name != name else "",
         )
-    except PredefinedQueryError as e:
+    except (PredefinedQueryError, gitsync.GitSyncError) as e:
         return _status_error(e)
     return {"ok": True}
 
 
-# Soft-deletes; `purge=1` removes an already deleted query for good.
+# Deletes for good, its git file too.
 @app.delete("/api/predefined-queries")
 async def predefined_queries_delete(request: Request):
     q = request.query_params
@@ -575,12 +583,14 @@ async def predefined_queries_delete(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     try:
-        if q.get("purge") in ("1", "true"):
-            if gitsync.configured(ws):  # repo first: a failed push leaves the query to retry
-                await gitsync.purge(ws, conn_type, name)
-            await purge_predefined_query(conn_type, name, workspace_id=ws.id)
-        else:
-            await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
+        await gitsync.commit_change(
+            ws,
+            "query",
+            name,
+            conn_type,
+            lambda: delete_predefined_query(conn_type, name, workspace_id=ws.id),
+            deleted=True,
+        )
     except (PredefinedQueryError, gitsync.GitSyncError) as e:
         return _status_error(e)
     return {"ok": True}
@@ -733,9 +743,10 @@ async def dashboards_upsert(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     session_id = _clean_str(b.get("session_id"))
-    persisted, pushed, message = await _upsert_and_push(
-        name, html, queries, session_id or None, params, workspace_id=ws.id
-    )
+    try:
+        persisted, pushed, message = await _upsert_and_push(name, html, queries, session_id or None, params, ws=ws)
+    except gitsync.GitSyncError as e:
+        return _status_error(e)
     return {"ok": persisted, "persisted": persisted, "pushed": pushed, "message": message}
 
 
@@ -793,7 +804,11 @@ async def git_status(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    return {"configured": gitsync.configured(ws), "conflicts": gitsync.conflicts(ws)}
+    return {
+        "configured": gitsync.configured(ws),
+        "conflicts": gitsync.conflicts(ws),
+        "unsynced": await gitsync.unsynced(ws),
+    }
 
 
 # The workspace panel's Sync: merge in what was committed elsewhere.
@@ -923,9 +938,8 @@ async def workspaces_create(request: Request):
         return JSONResponse({"ok": False, "message": "name is required"}, status_code=400)
     remote_url = _clean_str(b.get("remote")) or None
     branch = _clean_str(b.get("branch")) or "main"
-    autosave = b.get("autosave") is True
     try:
-        await workspaces.create_workspace(name, remote_url, branch, autosave)
+        await workspaces.create_workspace(name, remote_url, branch)
     except workspaces.WorkspaceError as e:
         return _status_error(e)
     return {"ok": True, **(await _sync_attached(name) if remote_url else {})}
@@ -942,8 +956,6 @@ async def workspaces_update(name: str, request: Request):
         kwargs["remote"] = _clean_str(b.get("remote")) or None
     if "branch" in b:
         kwargs["branch"] = _clean_str(b.get("branch")) or None
-    if isinstance(b.get("autosave"), bool):
-        kwargs["autosave"] = b["autosave"]
     try:
         before = await workspaces.resolve(name)
         await workspaces.update_workspace(name, **kwargs)

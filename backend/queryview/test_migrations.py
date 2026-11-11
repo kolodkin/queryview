@@ -97,26 +97,35 @@ def test_predefined_queries_has_presentation_columns():
     assert {"order_by", "fields"} <= cols, f"missing columns, got {sorted(cols)}"
 
 
-def test_workspaces_has_autosave_column():
+def test_workspaces_autosave_column_is_dropped():
     _run(_ensure_schema())
     con = sqlite3.connect(_db_path())
     try:
-        cols = {r[1]: r for r in con.execute("PRAGMA table_info(workspaces)")}
-        seeded = con.execute("SELECT autosave FROM workspaces ORDER BY id LIMIT 1").fetchone()[0]
+        cols = {r[1] for r in con.execute("PRAGMA table_info(workspaces)")}
     finally:
         con.close()
-    assert "autosave" in cols, f"missing column, got {sorted(cols)}"
-    assert seeded == 0  # existing workspaces keep today's explicit Save
+    assert "autosave" not in cols
 
 
-def test_predefined_queries_has_deleted_at_column():
+def test_queries_and_dashboards_have_git_sha_column():
+    _run(_ensure_schema())
+    con = sqlite3.connect(_db_path())
+    try:
+        for table in ("predefined_queries", "dashboards"):
+            cols = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+            assert "git_sha" in cols, f"{table}: missing column, got {sorted(cols)}"
+    finally:
+        con.close()
+
+
+def test_predefined_queries_soft_delete_is_dropped():
     _run(_ensure_schema())
     con = sqlite3.connect(_db_path())
     try:
         cols = {r[1] for r in con.execute("PRAGMA table_info(predefined_queries)")}
     finally:
         con.close()
-    assert "deleted_at" in cols, f"missing column, got {sorted(cols)}"
+    assert "deleted_at" not in cols
 
 
 def test_sessions_queries_to_scripts_migration(tmp_path, monkeypatch):

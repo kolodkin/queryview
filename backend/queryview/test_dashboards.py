@@ -58,8 +58,14 @@ def test_list_dashboards_orders_by_name_and_omits_payload(default_ws_id):
     assert set(row) == {"name", "updated_at"}
 
 
+def _default_ws():
+    from queryview.workspaces import DEFAULT_WORKSPACE, resolve
+
+    return _run(resolve(DEFAULT_WORKSPACE))
+
+
 def test_upsert_and_push_persists_without_session(default_ws_id):
-    persisted, pushed, _ = _run(_upsert_and_push("np", "<p></p>", {"q": "SELECT 1"}, None, workspace_id=default_ws_id))
+    persisted, pushed, _ = _run(_upsert_and_push("np", "<p></p>", {"q": "SELECT 1"}, None, ws=_default_ws()))
     assert persisted is True and pushed is False
     assert _run(get_dashboard("np", default_ws_id)) is not None
 
@@ -67,9 +73,7 @@ def test_upsert_and_push_persists_without_session(default_ws_id):
 def test_upsert_and_push_delivers_to_registered_session(default_ws_id):
     rid = remote.register(uuid.uuid4().hex)
     try:
-        persisted, pushed, _ = _run(
-            _upsert_and_push("pushed", "<p>x</p>", {"q": "SELECT 1"}, rid, workspace_id=default_ws_id)
-        )
+        persisted, pushed, _ = _run(_upsert_and_push("pushed", "<p>x</p>", {"q": "SELECT 1"}, rid, ws=_default_ws()))
         assert persisted is True and pushed is True
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None
@@ -164,36 +168,12 @@ def test_mcp_upsert_dashboard_pushes_draft_without_persisting(default_ws_id):
     rid = remote.register(rec.id)
     try:
         out = _run(mcp_push(rid, "draftdash", "<p>d</p>", {"q": "SELECT 1"}))
-        assert out["pushed"] is True and out["persisted"] is False
+        assert out["pushed"] is True
         # Draft: the agent push must NOT persist — only the user's Save does.
         assert _run(get_dashboard("draftdash", default_ws_id)) is None
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None
         assert msg["type"] == "dashboard" and msg["name"] == "draftdash"
-    finally:
-        remote.unregister(rid)
-
-
-def test_mcp_push_persists_when_the_session_workspace_autosaves():
-    from queryview.connect import _save_active_connection
-    from queryview.drivers.clickhouse import ChConfig
-    from queryview.mcp_server import push_dashboard as mcp_push
-    from queryview.workspaces import create_workspace, resolve
-
-    _run(create_workspace("t4-autosave", autosave=True))
-    ws_id = _run(resolve("t4-autosave")).id
-    _run(_save_active_connection("c", ChConfig("h", 8123, "u", "p"), "clickhouse"))
-    rec = _run(sessions.create_session())
-    _run(sessions.set_connection(rec.id, "c"))
-    _run(sessions.patch_session(rec.id, workspace="t4-autosave"))
-    rid = remote.register(rec.id)
-    try:
-        out = _run(mcp_push(rid, "autodash", "<p>a</p>", {"q": "SELECT 1"}))
-        assert out["pushed"] is True and out["persisted"] is True
-        saved = _run(get_dashboard("autodash", ws_id))
-        assert saved is not None and saved["html"] == "<p>a</p>"
-        msg = _run(remote.next_message(rid, 1.0))
-        assert msg is not None and msg["name"] == "autodash"
     finally:
         remote.unregister(rid)
 

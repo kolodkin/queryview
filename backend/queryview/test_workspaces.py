@@ -70,7 +70,6 @@ def test_create_list_and_encrypted_remote_round_trip():
         "configured": True,
         # Shown without the credential, which never leaves the server.
         "remote": "https://example.test/r.git",
-        "autosave": False,
     }
     assert "tok" not in str(listed["t2-crt"])  # the credential never leaves the store
 
@@ -106,19 +105,6 @@ def test_update_rename_set_and_clear_remote():
     with pytest.raises(WorkspaceError) as e:
         _run(update_workspace("t2-upd2", new_name=DEFAULT_WORKSPACE))
     assert e.value.status == 409
-
-
-def test_autosave_defaults_off_and_is_set_on_create_or_update():
-    _run(create_workspace("t2-auto"))
-    assert _run(resolve("t2-auto")).autosave is False
-    _run(update_workspace("t2-auto", autosave=True))
-    assert _run(resolve("t2-auto")).autosave is True
-    # Omitted leaves it as-is.
-    _run(update_workspace("t2-auto", branch="dev"))
-    assert _run(resolve("t2-auto")).autosave is True
-    _run(create_workspace("t2-auto2", autosave=True))
-    listed = {w["name"]: w for w in _run(list_workspaces())}
-    assert listed["t2-auto"]["autosave"] is True and listed["t2-auto2"]["autosave"] is True
 
 
 def test_delete_refuses_non_empty_then_deletes_empty():
@@ -169,7 +155,7 @@ def test_the_fallback_survives_renaming_the_seeded_workspace():
 
 def test_delete_refuses_a_query_saved_after_the_emptiness_check(monkeypatch):
     """A live query saved between the emptiness check and the deletes must
-    keep the workspace (409), not be purged along with it."""
+    keep the workspace (409), not be deleted along with it."""
     from queryview import workspaces
 
     _run(create_workspace("t2-race"))

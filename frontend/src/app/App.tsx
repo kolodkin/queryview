@@ -49,7 +49,6 @@ import {
   type SessionState,
 } from './session'
 import { apiFetch } from './api'
-import { listWorkspaces } from './workspace'
 import { fetchConnections, type SavedConnection } from './savedConnections'
 import { AgentBadge } from './controls/AgentBadge'
 
@@ -224,10 +223,6 @@ function Shell() {
   const [connectionsNonce, setConnectionsNonce] = useState(0)
   // Seeded from the session once it attaches.
   const [workspace, setWorkspace] = useState('')
-  // The active workspace's autosave flag (docs/workspace.md#autosave), bumped
-  // by settingsNonce when the manage panel saves.
-  const [autosave, setAutosave] = useState(false)
-  const [settingsNonce, setSettingsNonce] = useState(0)
   const [sessionLabel, setSessionLabel] = useState('Session')
   // Panels hydrate from the session at mount, so they must remount when the
   // session changes — not only when the workspace does. Every adoption bumps
@@ -249,19 +244,6 @@ function Shell() {
   const agentRef = useDismiss<HTMLDivElement>(agentOpen, () => setAgentOpen(false))
   const [navOpen, setNavOpen] = useState(false)
   const navRef = useDismiss<HTMLDivElement>(navOpen, () => setNavOpen(false))
-
-  useEffect(() => {
-    if (!workspace) return
-    let live = true
-    listWorkspaces()
-      .then(
-        (list) => live && setAutosave(list.find((w) => w.name === workspace)?.autosave ?? false),
-      )
-      .catch(() => {})
-    return () => {
-      live = false
-    }
-  }, [workspace, settingsNonce])
 
   useEffect(() => {
     if (!dbOpen) return
@@ -669,11 +651,7 @@ function Shell() {
             >
               Connect
             </Link>
-            <WorkspaceSwitcher
-              workspace={workspace}
-              onSwitch={switchWorkspace}
-              onSaved={() => setSettingsNonce((n) => n + 1)}
-            />
+            <WorkspaceSwitcher workspace={workspace} onSwitch={switchWorkspace} />
           </div>
         </nav>
       </header>
@@ -693,7 +671,6 @@ function Shell() {
                   pushed={queryPush}
                   onPushConsumed={() => setQueryPush(null)}
                   remoteId={remoteId}
-                  autosave={autosave}
                 />
               ),
             )}
@@ -743,7 +720,6 @@ function Shell() {
                 onPushConsumed={() => setDashboardPush(null)}
                 runOn={connectionKey(connection)}
                 identQuote={connection?.identQuote}
-                autosave={autosave}
               />
             }
           />

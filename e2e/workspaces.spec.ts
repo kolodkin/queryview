@@ -64,22 +64,20 @@ test("dashboard export import round trip", async ({ page, baseURL, shot }, testI
 
 // Git sync: in CI a loopback git daemon (start-git-daemon action) serves a
 // remote the backend fixture points the default workspace at, so the full UI
-// commit/restore round trip runs; on an unconfigured stack that test skips and
+// save-commits/restore round trip runs; on an unconfigured stack that test skips and
 // the controls render disabled.
 const gitConfigured = async (baseURL: string) => Boolean((await api(`${baseURL}/api/git/status`)).body.configured);
 
 test("git controls disabled when unconfigured", async ({ page, baseURL }) => {
   test.skip(await gitConfigured(baseURL!), "git sync is configured; disabled-state not applicable");
   await page.goto("/dashboard");
-  for (const id of ["git-commit", "git-restore-toggle"]) {
-    await expect(page.getByTestId(id)).toBeVisible();
-    await expect(page.getByTestId(id)).toBeDisabled();
-  }
+  await expect(page.getByTestId("git-restore-toggle")).toBeDisabled();
+  await expect(page.getByTestId("git-sync-badge")).toHaveCount(0);
 });
 
-test("git commit and restore dashboard round trip", async ({ page, baseURL }) => {
+test("saves commit and restore dashboard round trip", async ({ page, baseURL }) => {
   test.skip(!(await gitConfigured(baseURL!)), "git sync is not configured for this stack");
-  // Unique per attempt: a CI retry shares the remote, which keeps the first
+  // Unique per attempt, in case a retry lands on a worker whose repo keeps the first
   // attempt's commit.
   const name = `gs e2e ${crypto.randomUUID().slice(0, 6)}`;
   const save = (v: number) =>
@@ -87,20 +85,18 @@ test("git commit and restore dashboard round trip", async ({ page, baseURL }) =>
       json: { name, html: `<html><body>v${v}</body></html>`, queries: { q: `SELECT ${v}` } },
     });
 
-  // Seed v1 via the API, then commit it from the UI.
+  // Each save commits: v1, then v2. The heading's badge says so.
   await save(1);
-  await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
-  await expect(page.getByTestId("git-commit")).toBeEnabled();
-  await page.getByTestId("git-commit").click();
-  await expect(page.getByTestId("git-commit")).toHaveText("Committed");
-
-  // Drift the local copy to v2, then restore v1 from the revision list.
   await save(2);
+  await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
+  await expect(page.getByTestId("git-sync-badge")).toBeVisible();
+
+  // Restore v1, the older revision.
   page.on("dialog", (d) => d.accept());
   await page.getByTestId("git-restore-toggle").click();
   const rows = page.getByTestId("git-revision-row");
-  await expect(rows).toHaveCount(1);
-  await rows.first().getByTestId("git-revision-restore").click();
+  await expect(rows).toHaveCount(2);
+  await rows.last().getByTestId("git-revision-restore").click();
   // The picker closes on a successful restore; only then check the store.
   await expect(page.getByTestId("git-revisions")).toBeHidden();
   const { body } = await api(`${baseURL}/api/dashboards/${encodeURIComponent(name)}`);
