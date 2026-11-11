@@ -155,47 +155,6 @@ async def save_predefined_query(
     )
 
 
-async def set_query_git_sha(
-    conn_type: str, query_name: str, workspace_id: int, sha: str, *, unchanged_from: dict[str, Any] | None = None
-) -> None:
-    """Record the git commit holding this query — unless it is gone, or has
-    changed since `unchanged_from` (its row as committed) was read."""
-    async with AsyncSession(_engine_for_db()) as s:
-        row = await _find(s, conn_type, query_name, workspace_id)
-        if row is None or (unchanged_from is not None and _row_dict(row) != unchanged_from):
-            return
-        if row.git_sha is not None and unchanged_from is not None:
-            return  # already marked: a sync finding it identical needn't rewrite every row
-        row.git_sha = sha
-        s.add(row)
-        await s.commit()
-
-
-async def snapshot_queries(conn_type: str, names: list[str], workspace_id: int) -> dict[str, dict[str, Any] | None]:
-    """Each named row's full columns (None: no such row), for restore_queries."""
-    await _ensure_schema()
-    snap: dict[str, dict[str, Any] | None] = {}
-    async with AsyncSession(_engine_for_db()) as s:
-        for n in names:
-            row = await _find(s, conn_type, n, workspace_id)
-            snap[n] = row.model_dump(exclude={"id"}) if row is not None else None
-    return snap
-
-
-async def restore_queries(conn_type: str, snap: dict[str, dict[str, Any] | None], workspace_id: int) -> None:
-    """Put the snapshot's rows back exactly, dropping rows it had as None."""
-    async with AsyncSession(_engine_for_db()) as s:
-        for n in snap:
-            row = await _find(s, conn_type, n, workspace_id)
-            if row is not None:
-                await s.delete(row)
-        await s.flush()  # free the (workspace, type, name) keys first
-        for data in snap.values():
-            if data is not None:
-                s.add(PredefinedQuery(**data))
-        await s.commit()
-
-
 async def unsynced_queries(workspace_id: int) -> list[tuple[str, str]]:
     """(type, name) of every query not in git as it is."""
     await _ensure_schema()

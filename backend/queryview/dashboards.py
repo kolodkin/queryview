@@ -90,46 +90,6 @@ def _loads(text: str, empty: Any) -> Any:
     return value if isinstance(value, type(empty)) else empty
 
 
-async def set_dashboard_git_sha(
-    name: str, workspace_id: int, sha: str, *, unchanged_from: dict[str, Any] | None = None
-) -> None:
-    """Record the git commit holding this dashboard (see set_query_git_sha)."""
-    async with AsyncSession(_engine_for_db()) as s:
-        row = await _find(s, name, workspace_id)
-        if row is None or (unchanged_from is not None and _payload(row) != unchanged_from):
-            return
-        if row.git_sha is not None and unchanged_from is not None:
-            return  # already marked: a sync finding it identical needn't rewrite every row
-        row.git_sha = sha
-        s.add(row)
-        await s.commit()
-
-
-async def snapshot_dashboards(names: list[str], workspace_id: int) -> dict[str, dict[str, Any] | None]:
-    """Each named row's full columns (None: no such row), for restore_dashboards."""
-    await _ensure_schema()
-    snap: dict[str, dict[str, Any] | None] = {}
-    async with AsyncSession(_engine_for_db()) as s:
-        for n in names:
-            row = await _find(s, n, workspace_id)
-            snap[n] = row.model_dump(exclude={"id"}) if row is not None else None
-    return snap
-
-
-async def restore_dashboards(snap: dict[str, dict[str, Any] | None], workspace_id: int) -> None:
-    """Put the snapshot's rows back exactly, dropping rows it had as None."""
-    async with AsyncSession(_engine_for_db()) as s:
-        for n in snap:
-            row = await _find(s, n, workspace_id)
-            if row is not None:
-                await s.delete(row)
-        await s.flush()
-        for data in snap.values():
-            if data is not None:
-                s.add(Dashboard(**data))
-        await s.commit()
-
-
 async def unsynced_dashboards(workspace_id: int) -> list[str]:
     """Names of the dashboards not in git as they are."""
     await _ensure_schema()

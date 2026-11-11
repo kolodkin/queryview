@@ -284,6 +284,13 @@ def test_restore_default_ref_is_remote_head(git_env):
     rows = _run(list_predefined_queries("clickhouse", _default_ws_id()))
     row = next(x for x in rows if x["query_name"] == "gs latest")
     assert row["query"] == "SELECT 2"
+    # The head's own content is in git as is; an older revision isn't.
+    unsynced = lambda: _run(gitsync.unsynced(_default_ws()))  # noqa: E731
+    entry = {"kind": "query", "name": "gs latest", "conn_type": "clickhouse"}
+    assert entry not in unsynced()
+    first = _run(gitsync.history(_default_ws(), "query", "gs latest", "clickhouse"))["revisions"][-1]["sha"]
+    _run(gitsync.restore(_default_ws(), "query", "gs latest", "clickhouse", first))
+    assert entry in unsynced()
 
 
 def test_restore_dashboard_round_trip(git_env):

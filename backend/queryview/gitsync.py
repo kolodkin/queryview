@@ -16,8 +16,9 @@ from typing import Any
 from urllib.parse import unquote
 
 import yaml
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from .connect import _data_dir
+from .connect import _data_dir, _engine_for_db
 from .workspaces import WorkspaceRec, split_credential
 from .yamlio import YamlIOError, dashboard_from_data, dump_yaml, query_from_data, query_to_data, slug
 
@@ -476,16 +477,18 @@ async def store(
     conn_type: str | None = None,
     message: str | None = None,
     old_name: str = "",
+    deleted: bool = False,
 ) -> dict[str, Any]:
     """Export one entity's saved DB state into the clone, commit, push; a
-    query renamed from `old_name` drops the old file in the same commit.
+    query renamed from `old_name` drops the old file in the same commit, and a
+    `deleted` query's file is removed.
     The workdir is reset to the remote head first — exports are deterministic
     from the DB and each commit touches one entity, so this is always safe; a
     push rejected by another instance's concurrent push is retried."""
     _check_kind(kind, conn_type)
     _require_remote(ws)  # unconfigured -> 409 before any DB/entity lookup
     async with _lock(ws):
-        return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message, old_name))
+        return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message, old_name, deleted))
 
 
 # Every save pushes, so busy remotes see races; each retry starts from the new head.
@@ -511,6 +514,7 @@ async def _store_once(
     conn_type: str | None,
     message: str | None,
     old_name: str = "",
+    deleted: bool = False,
 ) -> dict[str, Any]:
     """One store attempt; a retry reports only its own merge."""
     wd = await _ensure_repo(ws)
@@ -518,34 +522,39 @@ async def _store_once(
     merged = _empty_merge()
     if head:
         await _git("reset", "--hard", head, cwd=wd)
-        merged = await _merge(ws, wd, head)
-    entity = await _load_entity(ws, kind, name, conn_type)
+        if not deleted:  # a merge now could import the very file being deleted
+            merged = await _merge(ws, wd, head)
     paths = _entity_paths(kind, name, conn_type)
+    entity = None if deleted else await _load_entity(ws, kind, name, conn_type)
     old = query_relpath(conn_type or "", old_name) if old_name else ""
     old = old if old and (wd / old).exists() else ""
-    if old:
-        await _agree(ws, wd, "HEAD", kind, old_name, conn_type)  # keeps sync from importing it back
-        # git mv, not write-then-rm: a case-only rename is one file on a case-insensitive disk.
-        await _git("mv", "-f", old, paths[0], cwd=wd)
-    if kind == "query":
-        (wd / paths[0]).parent.mkdir(parents=True, exist_ok=True)
-        (wd / paths[0]).write_text(query_to_yaml(entity), encoding="utf-8")
+    if entity is None:
+        if (wd / paths[0]).exists():
+            await _agree(ws, wd, "HEAD", kind, name, conn_type)  # keeps sync from importing it back
+            await _git("rm", "-r", "-q", "--", paths[0], cwd=wd)
     else:
-        relpath = paths[0]
-        ddir = wd / relpath
-        if ddir.exists():
-            shutil.rmtree(ddir)
-        ddir.mkdir(parents=True, exist_ok=True)
-        for fname, content in dashboard_to_files(entity).items():
-            (ddir / fname).write_text(content, encoding="utf-8")
-    await _git("add", "-A", "--", *paths, cwd=wd)
+        if old:
+            await _agree(ws, wd, "HEAD", kind, old_name, conn_type)  # keeps sync from importing it back
+            # git mv, not write-then-rm: a case-only rename is one file on a case-insensitive disk.
+            await _git("mv", "-f", old, paths[0], cwd=wd)
+        if kind == "query":
+            (wd / paths[0]).parent.mkdir(parents=True, exist_ok=True)
+            (wd / paths[0]).write_text(query_to_yaml(entity), encoding="utf-8")
+        else:
+            ddir = wd / paths[0]
+            if ddir.exists():
+                shutil.rmtree(ddir)
+            ddir.mkdir(parents=True, exist_ok=True)
+            for fname, content in dashboard_to_files(entity).items():
+                (ddir / fname).write_text(content, encoding="utf-8")
+        await _git("add", "-A", "--", *paths, cwd=wd)
     if not (await _git("status", "--porcelain", "--", *paths, *([old] if old else []), cwd=wd)).strip():
         # Already in git as it is.
         if head:
             await _mark(ws, kind, name, conn_type, (await _git("rev-parse", head, cwd=wd)).strip(), entity)
         return {"committed": False, "sha": None, "message": "no changes", **merged, "conflicts": conflicts(ws)}
     label = f"{conn_type}/{name}" if kind == "query" else name
-    verb = "rename" if old else "store"
+    verb = "delete" if entity is None else "rename" if old else "store"
     await _git("commit", "-m", message or f"{verb} {kind} {label}", cwd=wd)
     await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
     # Pushed: bookkeeping failing now must not undo the save; the row just stays
@@ -563,24 +572,29 @@ async def _store_once(
 async def _mark(
     ws: WorkspaceRec, kind: str, name: str, conn_type: str | None, sha: str, entity: dict[str, Any] | None
 ) -> None:
-    """Record `sha` as the commit holding the entity, unless its row changed
-    since `entity` was read (None: just written by us)."""
+    """Record `sha` as the commit holding the entity — unless its row is gone,
+    or (`entity`: its row as committed) changed since or is already marked,
+    so a sync finding rows identical doesn't rewrite them all. None: just
+    written by us, mark it."""
+    _, find, shape = _table(kind, conn_type, ws.id)
+    async with AsyncSession(_engine_for_db()) as s:
+        row = await find(s, name)
+        if row is None or (entity is not None and (row.git_sha is not None or shape(row) != entity)):
+            return
+        row.git_sha = sha
+        s.add(row)
+        await s.commit()
+
+
+def _table(kind: str, conn_type: str | None, workspace_id: int) -> tuple[Any, Any, Callable[[Any], dict[str, Any]]]:
+    """The entity's model, its row lookup by name, and its row shape."""
     if kind == "query":
-        from .queries import set_query_git_sha
+        from .queries import PredefinedQuery, _find, _row_dict
 
-        await set_query_git_sha(conn_type or "", name, ws.id, sha, unchanged_from=entity)
-    else:
-        from .dashboards import set_dashboard_git_sha
+        return PredefinedQuery, lambda s, n: _find(s, conn_type or "", n, workspace_id), _row_dict
+    from .dashboards import Dashboard, _find, _payload
 
-        await set_dashboard_git_sha(name, ws.id, sha, unchanged_from=entity)
-
-
-async def remove(ws: WorkspaceRec, conn_type: str, name: str) -> None:
-    """Drop a deleted query's file from the repo (`delete query …`), so no
-    instance imports it back; history keeps it. No file, no commit."""
-    _require_remote(ws)
-    async with _lock(ws):
-        await _retry_if_rejected(lambda: _remove_once(ws, conn_type, name))
+    return Dashboard, lambda s, n: _find(s, n, workspace_id), _payload
 
 
 async def commit_change(
@@ -594,46 +608,36 @@ async def commit_change(
     deleted: bool = False,
 ) -> Any:
     """Apply a DB change (`apply`, returning its result) and commit it as one
-    unit when `ws` syncs — the entity stored, or (`deleted`) a query's file
-    removed: if git fails, the touched rows (`name`, and a rename's
+    unit when `ws` syncs — the entity stored, or (`deleted`) its file removed:
+    if git fails, the touched rows (`name`, and a rename's
     `old_name`) are put back as they were and GitSyncError raised."""
     if not configured(ws):
         return await apply()
-    from .dashboards import restore_dashboards, snapshot_dashboards
-    from .queries import restore_queries, snapshot_queries
-
+    model, find, _ = _table(kind, conn_type, ws.id)
     names = [name, old_name] if old_name else [name]
-    is_query = kind == "query"
     # shortcut: another write to these rows while git runs is undone too; fine for one user per workspace.
-    snap = await (snapshot_queries(conn_type or "", names, ws.id) if is_query else snapshot_dashboards(names, ws.id))
+    snap: dict[str, dict[str, Any] | None] = {}
+    async with AsyncSession(_engine_for_db()) as s:
+        for n in names:
+            row = await find(s, n)
+            snap[n] = row.model_dump(exclude={"id"}) if row is not None else None
     result = await apply()
     try:
-        if deleted:
-            await remove(ws, conn_type or "", name)
-        else:
-            await store(ws, kind, name, conn_type, old_name=old_name)
+        await store(ws, kind, name, conn_type, old_name=old_name, deleted=deleted)
     except Exception as e:  # any failure (git, disk, DB): undo, so DB and repo never part
-        await (restore_queries(conn_type or "", snap, ws.id) if is_query else restore_dashboards(snap, ws.id))
+        async with AsyncSession(_engine_for_db()) as s:
+            for n in names:
+                if (row := await find(s, n)) is not None:
+                    await s.delete(row)
+            await s.flush()  # free the unique keys before re-inserting
+            for data in snap.values():
+                if data is not None:
+                    s.add(model(**data))
+            await s.commit()
         if isinstance(e, GitSyncError):
             raise GitSyncError(f"not saved: {e}", status=e.status) from e
         raise
     return result
-
-
-async def _remove_once(ws: WorkspaceRec, conn_type: str, name: str) -> None:
-    wd = await _ensure_repo(ws)
-    head = await _origin_head(wd, ws)
-    path = query_relpath(conn_type, name)
-    if head is None:
-        return
-    await _git("reset", "--hard", head, cwd=wd)
-    if not (wd / path).exists():
-        return
-    # Agreeing on the repo's copy keeps sync from importing an identical one back.
-    await _agree(ws, wd, head, "query", name, conn_type)
-    await _git("rm", "-q", "--", path, cwd=wd)
-    await _git("commit", "-m", f"delete query {conn_type}/{name}", cwd=wd)
-    await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
 
 
 async def history(
@@ -705,6 +709,12 @@ async def restore(
         if resolved is None:
             raise GitSyncError(f"{kind} {name!r} not found in git", status=404)
         merged = await _merge(ws, wd, head) if head else _empty_merge()
+        # Taking the repo's head leaves the row exactly as git holds it.
+        head_sha = (await _git("rev-parse", head, cwd=wd)).strip() if head else None
+        try:
+            at_head = head_sha is not None and (await _git("rev-parse", resolved, cwd=wd)).strip() == head_sha
+        except GitSyncError:
+            at_head = False  # an unknown ref fails just below, with a 404 naming it
 
         async def _show(path: str) -> str:
             return await _git("show", f"{resolved}:{path}", cwd=wd)
@@ -751,6 +761,8 @@ async def restore(
             data["params"],
             workspace_id=ws.id,
         )
+    if at_head and head_sha:
+        await _mark(ws, kind, name, conn_type, head_sha, None)
     # Taking a revision on purpose settles any conflict with the repo's head.
     if head:
         async with _lock(ws):
