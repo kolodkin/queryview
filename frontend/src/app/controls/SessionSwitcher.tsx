@@ -173,7 +173,18 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
                         onClick={startRename}
                         className="rounded px-2 py-1.5 text-slate-300 hover:bg-white/10"
                       >
-                        ✎
+                        <svg
+                          viewBox="0 0 24 24"
+                          className="h-3.5 w-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
                       </button>
                     )}
                   </>
