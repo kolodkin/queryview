@@ -343,7 +343,6 @@ function Shell() {
     setTaken(false)
     setConnections([])
     setWorkspace(next.workspace)
-    setSessionLabel(next.label)
     setSessionKey(`${next.id}:${++adoptions.current}`)
     navigate(next.url || '/connect')
   }
