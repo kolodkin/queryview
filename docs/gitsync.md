@@ -23,13 +23,11 @@ A workspace is in git sync mode while it has a remote. Then:
 - **Badge.** A **git sync** badge sits next to the Studio and Dashboard
   headings. Without a remote the badge is absent and saves stay local.
 - **Save commits.** **Save** (query or dashboard) writes the row, then commits
-  and pushes that one entity: `store {kind} {name}`. There is no separate
-  Commit button.
+  and pushes that one entity: `store {kind} {name}`.
 - **Rename commits.** One commit, `rename query {type}/{new}`, adds the new
   file and removes the old one.
-- **Delete commits.** **Delete** removes the query for good — there is no
-  trash or undelete — and commits its file's removal,
-  `delete query {type}/{name}`. To bring one back, pick **+ New name…** with
+- **Delete commits.** **Delete** removes the query for good and commits its
+  file's removal, `delete query {type}/{name}`. To bring one back, pick **+ New name…** with
   its name, **Restore** a revision from before the delete, then **Save**.
 - **All or nothing.** A change and its commit are one unit: the touched rows
   are snapshotted, changed, committed and pushed. If git fails (offline,

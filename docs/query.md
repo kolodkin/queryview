@@ -306,7 +306,7 @@ session (owner: none / human / agent, held in memory).
   `invalid …` and nothing is delivered. `cell_view` stays lenient.
 - When an agent push lands, the browser shows a brief **"Agent updated the
   query"** toast so the human notices the panel changed.
-- **Save persists presentation:** the human's Save now stores `order_by` and the
+- **Save persists presentation:** the human's Save stores `order_by` and the
   selected `fields` alongside `cell_view`, so reloading a predefined query
   restores its full presentation. Pushes never persist — only the human's Save
   writes to the DB.
