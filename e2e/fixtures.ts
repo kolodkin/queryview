@@ -321,13 +321,20 @@ export const test = base.extend<
    * port and a throwaway DATA_DIR, so workers never see each other's
    * connections, workspaces or sessions; only the database servers are shared. */
   backendURL: [
-    async ({}, use) => {
+    async ({}, use, workerInfo) => {
       const backend = process.env.BASE_URL ? { url: process.env.BASE_URL, stop: async () => {} } : await startBackend();
       try {
-        // Point the default workspace at the remote CI stood up, through the
-        // same API a user would. Unset locally: git sync stays disabled.
-        const remote = process.env.E2E_GIT_REMOTE;
-        if (remote) await api(`${backend.url}/api/workspaces/default`, { method: "PATCH", json: { remote } });
+        // Point the default workspace at a fresh repo of this worker's own on
+        // the git daemon CI stood up, through the same API a user would, so
+        // workers never push to each other's branch. Unset locally: git sync
+        // stays disabled.
+        const { E2E_GIT_BASE: gitBase, E2E_GIT_URL: gitUrl } = process.env;
+        if (gitBase && gitUrl) {
+          const repo = `queryview-w${workerInfo.workerIndex}.git`;
+          await promisify(execFile)("git", ["init", "--bare", "-b", "main", join(gitBase, repo)]);
+          const remote = `${gitUrl}/${repo}`;
+          await api(`${backend.url}/api/workspaces/default`, { method: "PATCH", json: { remote } });
+        }
         await use(backend.url);
       } finally {
         await backend.stop();

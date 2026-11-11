@@ -79,7 +79,7 @@ test("git controls disabled when unconfigured", async ({ page, baseURL }) => {
 
 test("saves commit and restore dashboard round trip", async ({ page, baseURL }) => {
   test.skip(!(await gitConfigured(baseURL!)), "git sync is not configured for this stack");
-  // Unique per attempt: a CI retry shares the remote, which keeps the first
+  // Unique per attempt, in case a retry lands on a worker whose repo keeps the first
   // attempt's commit.
   const name = `gs e2e ${crypto.randomUUID().slice(0, 6)}`;
   const save = (v: number) =>
