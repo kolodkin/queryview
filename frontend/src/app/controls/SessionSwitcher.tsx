@@ -14,14 +14,12 @@ import {
 type Props = {
   label: string
   onSwitch: (session: SessionState) => void
-  // The shell owns the displayed label, so a rename has to tell it.
-  onRenamed: (label: string) => void
 }
 
 // Header dropdown listing every session. A session held by another live tab is
 // shown but not selectable: two tabs on one session would overwrite each
 // other's state, which is the whole point of the per-tab claim.
-export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
+export default function SessionSwitcher({ label, onSwitch }: Props) {
   const current = sessionId()
   const [open, setOpen] = useState(false)
   const [list, setList] = useState<SessionSummary[]>([])
@@ -30,7 +28,7 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
   // Enter and Escape both unmount the input, which can fire a trailing blur.
   const editing = useRef(false)
   const [error, setError] = useState('')
-  // Only the menu light-dismisses: the rename row holds unsaved input.
+  // Off while renaming: the input's focus-out save must run before the menu unmounts.
   const rootRef = useDismiss<HTMLDivElement>(open && !renaming, () => setOpen(false))
 
   async function reload() {
@@ -87,15 +85,15 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
     editing.current = false
     setRenaming(false)
     if (close) setOpen(false)
+    const name = draft.trim()
     // An unchanged name would pin the automatic "Session <n>" label.
-    if (draft.trim() === label) return
-    const id = current
+    if (name === label) return
     // renameSession answers with the label the server settled on, so clearing
     // the name (which unpins) needs no read-back.
-    const next = await renameSession(draft.trim())
-    // A switch made meanwhile owns the header label now.
-    if (sessionId() === id) onRenamed(next)
-    await reload()
+    const next = await renameSession(name)
+    // After a switch made meanwhile, `next` is the new session's label.
+    if (sessionId() !== current) return
+    setList((l) => l.map((s) => (s.id === current ? { ...s, label: next } : s)))
   }
 
   return (
@@ -153,7 +151,7 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
                         type="button"
                         role="option"
                         aria-selected={isCurrent}
-                        disabled={s.held && s.id !== current}
+                        disabled={s.held && !isCurrent}
                         data-testid={`session-row-${s.id}`}
                         onClick={() => void switchTo(s.id)}
                         className={`flex-1 truncate rounded px-2 py-1.5 text-left hover:bg-white/10 disabled:text-slate-500 disabled:hover:bg-transparent ${
@@ -174,7 +172,7 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
                             {s.database ? `${s.connection} · ${s.database}` : s.connection}
                           </span>
                         )}
-                        {s.held && s.id !== current && (
+                        {s.held && !isCurrent && (
                           <span className="ml-2 text-xs text-slate-400">in another tab</span>
                         )}
                       </button>

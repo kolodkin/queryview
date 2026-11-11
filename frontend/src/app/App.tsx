@@ -321,6 +321,8 @@ function Shell() {
   function followRow(row: SessionState) {
     const prev = lastRow.current
     lastRow.current = row
+    // A rename from any source (this menu, the agent) lands on the header here.
+    setSessionLabel(row.label)
     if (
       row.connection_by === 'agent' &&
       prev?.id === row.id &&
@@ -622,11 +624,7 @@ function Shell() {
           {/* One set of controls: an inline row from `md` up, a dropdown panel
               below it, so nothing renders twice. */}
           <div className={`${navOpen ? 'flex' : 'hidden'} ${NAV_PANEL} ${NAV_ROW}`}>
-            <SessionSwitcher
-              label={sessionLabel}
-              onRenamed={setSessionLabel}
-              onSwitch={applySession}
-            />
+            <SessionSwitcher label={sessionLabel} onSwitch={applySession} />
             <Link
               to="/dashboard"
               data-testid="nav-dashboard"
