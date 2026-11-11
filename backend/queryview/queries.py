@@ -1,7 +1,6 @@
 """Predefined query store: reusable SQL keyed by connection type within a
-workspace (names are unique per workspace). Deleting is soft: the row stays,
-marked with `deleted_at`, until it is saved again, undeleted or purged. Reuses the
-SQLite engine owned by connect.py."""
+workspace (names are unique per workspace). Reuses the SQLite engine owned by
+connect.py."""
 
 from __future__ import annotations
 
@@ -11,7 +10,7 @@ from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from .connect import _engine_for_db, _ensure_schema, _now_ms
+from .connect import _engine_for_db, _ensure_schema
 
 
 class PredefinedQuery(SQLModel, table=True):
@@ -30,9 +29,6 @@ class PredefinedQuery(SQLModel, table=True):
     # cell_view: order_by is [{"name","dir"}], fields is ["col", ...].
     order_by: str | None = Field(default=None)
     fields: str | None = Field(default=None)
-    # Unix ms when deleted; NULL = live. Deleted rows keep their content and
-    # still hold their name.
-    deleted_at: int | None = Field(default=None)
     # The git commit holding this row as it is; NULL = not in git yet. Every
     # write clears it, a successful commit sets it (docs/gitsync.md).
     git_sha: str | None = Field(default=None)
@@ -40,35 +36,24 @@ class PredefinedQuery(SQLModel, table=True):
 
 def _row_dict(r: PredefinedQuery) -> dict[str, Any]:
     """The row shape every accessor here returns (order_by/fields stay the
-    stored JSON text; deleted_at is None for a live query)."""
+    stored JSON text)."""
     return {
         "query_name": r.query_name,
         "query": r.query,
         "cell_view": r.cell_view,
         "order_by": r.order_by,
         "fields": r.fields,
-        "deleted_at": r.deleted_at,
     }
 
 
-def _live():
-    """The WHERE clause for live (not deleted) rows."""
-    return col(PredefinedQuery.deleted_at).is_(None)
-
-
-async def list_predefined_queries(
-    conn_type: str, workspace_id: int, *, include_deleted: bool = False
-) -> list[dict[str, Any]]:
-    """Saved queries for a connection type within one workspace, ordered by
-    name: the live ones, plus the deleted ones with `include_deleted`."""
+async def list_predefined_queries(conn_type: str, workspace_id: int) -> list[dict[str, Any]]:
+    """Saved queries for a connection type within one workspace, ordered by name."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         q = select(PredefinedQuery).where(
             PredefinedQuery.type == conn_type,
             PredefinedQuery.workspace_id == workspace_id,
         )
-        if not include_deleted:
-            q = q.where(_live())
         rows = (await s.exec(q.order_by(PredefinedQuery.query_name))).all()
     return [_row_dict(r) for r in rows]
 
@@ -82,29 +67,15 @@ async def list_all_predefined_queries(workspace_id: int) -> list[dict[str, Any]]
         rows = (
             await s.exec(
                 select(PredefinedQuery)
-                .where(PredefinedQuery.workspace_id == workspace_id, _live())
+                .where(PredefinedQuery.workspace_id == workspace_id)
                 .order_by(PredefinedQuery.type, PredefinedQuery.query_name)
             )
         ).all()
     return [{"type": r.type, **_row_dict(r)} for r in rows]
 
 
-async def deleted_predefined_queries(workspace_id: int) -> list[tuple[str, str]]:
-    """(type, name) of every deleted query in one workspace."""
-    await _ensure_schema()
-    async with AsyncSession(_engine_for_db()) as s:
-        rows = (
-            await s.exec(
-                select(PredefinedQuery).where(
-                    PredefinedQuery.workspace_id == workspace_id, col(PredefinedQuery.deleted_at).is_not(None)
-                )
-            )
-        ).all()
-    return [(r.type, r.query_name) for r in rows]
-
-
 async def _find(s: AsyncSession, conn_type: str, query_name: str, workspace_id: int) -> PredefinedQuery | None:
-    """The row holding (workspace, type, name), live or deleted."""
+    """The row holding (workspace, type, name)."""
     return (
         await s.exec(
             select(PredefinedQuery).where(
@@ -116,29 +87,22 @@ async def _find(s: AsyncSession, conn_type: str, query_name: str, workspace_id: 
     ).first()
 
 
-async def get_predefined_query(
-    conn_type: str, query_name: str, workspace_id: int, *, include_deleted: bool = False
-) -> dict[str, Any] | None:
-    """One live saved query by (workspace, type, name) — the unique key — in
-    the same row shape as list_predefined_queries items, or None. With
-    `include_deleted` a deleted row counts too."""
+async def get_predefined_query(conn_type: str, query_name: str, workspace_id: int) -> dict[str, Any] | None:
+    """One saved query by (workspace, type, name) — the unique key — in the
+    same row shape as list_predefined_queries items, or None."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         row = await _find(s, conn_type, query_name, workspace_id)
-    if row is None or (row.deleted_at is not None and not include_deleted):
-        return None
-    return _row_dict(row)
+    return _row_dict(row) if row is not None else None
 
 
-async def list_predefined_queries_view(
-    conn_type: str, workspace_id: int, *, include_deleted: bool = False
-) -> list[dict]:
+async def list_predefined_queries_view(conn_type: str, workspace_id: int) -> list[dict]:
     """Like list_predefined_queries but with order_by/fields parsed from their
     stored JSON text into values (cell_view stays raw YAML). Shared by the HTTP
     list endpoint and the MCP list_queries tool so both present the same shape."""
     import json
 
-    rows = await list_predefined_queries(conn_type, workspace_id, include_deleted=include_deleted)
+    rows = await list_predefined_queries(conn_type, workspace_id)
     for r in rows:
         ob, fl = r.get("order_by"), r.get("fields")
         r["order_by"] = json.loads(ob) if ob else None
@@ -149,9 +113,7 @@ async def list_predefined_queries_view(
 async def save_predefined_queries(rows: list[dict[str, Any]], *, workspace_id: int) -> None:
     """Upsert many predefined queries — each a dict with string `type`,
     `query_name`, `query` and optional `cell_view`/`order_by`/`fields` (JSON
-    text or None) and `deleted` — in one transaction, keyed by (workspace,
-    type, query_name). Saving over a deleted query brings it back unless
-    `deleted` is set."""
+    text or None) — in one transaction, keyed by (workspace, type, query_name)."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         for r in rows:
@@ -162,8 +124,6 @@ async def save_predefined_queries(rows: list[dict[str, Any]], *, workspace_id: i
             row.cell_view = r.get("cell_view")
             row.order_by = r.get("order_by")
             row.fields = r.get("fields")
-            # A deleted row saved deleted again keeps its original deletion time.
-            row.deleted_at = (row.deleted_at or _now_ms()) if r.get("deleted") else None
             row.git_sha = None
             s.add(row)
         await s.commit()
@@ -178,10 +138,8 @@ async def save_predefined_query(
     fields: str | None = None,
     *,
     workspace_id: int,
-    deleted: bool = False,
 ) -> None:
-    """Upsert a predefined query by (workspace, type, query_name), live or
-    (`deleted`) deleted."""
+    """Upsert a predefined query by (workspace, type, query_name)."""
     await save_predefined_queries(
         [
             {
@@ -191,7 +149,6 @@ async def save_predefined_query(
                 "cell_view": cell_view,
                 "order_by": order_by,
                 "fields": fields,
-                "deleted": deleted,
             }
         ],
         workspace_id=workspace_id,
@@ -238,7 +195,7 @@ async def restore_queries(conn_type: str, snap: dict[str, dict[str, Any] | None]
 
 
 async def unsynced_queries(workspace_id: int) -> list[tuple[str, str]]:
-    """(type, name) of every query, live or deleted, not in git as it is."""
+    """(type, name) of every query not in git as it is."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         rows = (
@@ -252,65 +209,35 @@ async def unsynced_queries(workspace_id: int) -> list[tuple[str, str]]:
 
 
 class PredefinedQueryError(Exception):
-    """A rename/delete/undelete that can't apply; `status` is the HTTP code."""
+    """A rename or delete that can't apply; `status` is the HTTP code."""
 
     def __init__(self, message: str, status: int) -> None:
         super().__init__(message)
         self.status = status
 
 
-async def update_predefined_query(
-    conn_type: str,
-    query_name: str,
-    *,
-    workspace_id: int,
-    new_name: str | None = None,
-    deleted: bool | None = None,
-) -> None:
-    """Rename (`new_name`) and/or delete or undelete (`deleted`) one saved
-    query, all or nothing in one transaction. Renaming applies to a live
-    query: an undelete happens before it, a delete after. 404 when the query
-    doesn't exist in the state the change needs, 409 when `new_name` is taken,
-    by a live or a deleted query."""
+async def rename_predefined_query(conn_type: str, query_name: str, new_name: str, *, workspace_id: int) -> None:
+    """Rename one saved query: 404 if it doesn't exist, 409 if `new_name` is taken."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         row = await _find(s, conn_type, query_name, workspace_id)
-        was_deleted = row is not None and row.deleted_at is not None
-        live_after_undelete = not was_deleted or deleted is False
-        already = deleted is not None and was_deleted == deleted
-        if row is None or already or (new_name and not live_after_undelete):
-            what = "deleted query" if deleted is False else "query"
-            raise PredefinedQueryError(f"{what} {query_name!r} not found", status=404)
-        if new_name and new_name != query_name:
-            taken = await _find(s, conn_type, new_name, workspace_id)
-            if taken is not None:
-                what = "a deleted query" if taken.deleted_at is not None else "a query"
-                raise PredefinedQueryError(f"{what} named {new_name!r} already exists", status=409)
+        if row is None:
+            raise PredefinedQueryError(f"query {query_name!r} not found", status=404)
+        if new_name != query_name:
+            if await _find(s, conn_type, new_name, workspace_id) is not None:
+                raise PredefinedQueryError(f"a query named {new_name!r} already exists", status=409)
             row.query_name = new_name
-        if deleted is not None and not already:
-            row.deleted_at = _now_ms() if deleted else None
         row.git_sha = None
         s.add(row)
         await s.commit()
 
 
-async def rename_predefined_query(conn_type: str, query_name: str, new_name: str, *, workspace_id: int) -> None:
-    """Rename one live saved query (see update_predefined_query)."""
-    await update_predefined_query(conn_type, query_name, workspace_id=workspace_id, new_name=new_name)
-
-
-async def set_predefined_query_deleted(conn_type: str, query_name: str, deleted: bool, *, workspace_id: int) -> None:
-    """Delete (soft) or undelete one saved query. 404 unless it exists in the
-    other state."""
-    await update_predefined_query(conn_type, query_name, workspace_id=workspace_id, deleted=deleted)
-
-
-async def purge_predefined_query(conn_type: str, query_name: str, *, workspace_id: int) -> None:
-    """Remove one deleted query for good; 404 unless it is deleted."""
+async def delete_predefined_query(conn_type: str, query_name: str, *, workspace_id: int) -> None:
+    """Delete one saved query for good; 404 if it doesn't exist."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         row = await _find(s, conn_type, query_name, workspace_id)
-        if row is None or row.deleted_at is None:
-            raise PredefinedQueryError(f"deleted query {query_name!r} not found", status=404)
+        if row is None:
+            raise PredefinedQueryError(f"query {query_name!r} not found", status=404)
         await s.delete(row)
         await s.commit()

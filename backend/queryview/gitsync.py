@@ -277,13 +277,11 @@ def _entity_paths(kind: str, name: str, conn_type: str | None) -> list[str]:
     return [query_relpath(conn_type or "", name) if kind == "query" else dashboard_reldir(name)]
 
 
-async def _load_entity(
-    ws: WorkspaceRec, kind: str, name: str, conn_type: str | None, *, include_deleted: bool = False
-) -> dict[str, Any]:
+async def _load_entity(ws: WorkspaceRec, kind: str, name: str, conn_type: str | None) -> dict[str, Any]:
     if kind == "query":
         from .queries import get_predefined_query
 
-        row = await get_predefined_query(conn_type or "", name, ws.id, include_deleted=include_deleted)
+        row = await get_predefined_query(conn_type or "", name, ws.id)
         if row is None:
             raise GitSyncError(f"query {name!r} not found", status=404)
         return row
@@ -298,9 +296,8 @@ async def _load_entity(
 # --- Merge-in --------------------------------------------------------------
 # Every sync (attaching a remote, Commit, Restore, opening history) first
 # merges the repo head into the DB: entities missing locally are imported
-# (unless deleted, purged or renamed here after we last agreed on the repo's
-# copy), nothing local is ever overwritten and a query deleted here is left
-# alone: deleting is local, only Purge touches the repo. An entity is a *conflict* when the repo's
+# (unless deleted or renamed here after we last agreed on the repo's copy), and
+# nothing local is ever overwritten. An entity is a *conflict* when the repo's
 # copy changed since this workspace last agreed with it and differs from the
 # local one; a local edit on top of an unchanged repo copy is not.
 #
@@ -406,9 +403,7 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
             continue  # unreadable in the repo: nothing to import or compare
         name = repo["query_name"] if kind == "query" else repo["name"]
         if kind == "query":
-            local = await get_predefined_query(conn_type, name, ws.id, include_deleted=True)
-            if local is not None and local["deleted_at"] is not None:
-                continue  # deleted here: local trash, until undeleted or purged
+            local = await get_predefined_query(conn_type, name, ws.id)
             same = local is not None and query_to_yaml(local) == query_to_yaml(repo)
         else:
             local = await get_dashboard(name, ws.id)
@@ -416,7 +411,7 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
         key = _key(kind, name, conn_type)
         entry = {"kind": kind, "name": name, "conn_type": conn_type}
         if local is None and agreed.get(key) == e["oid"]:
-            continue  # purged or renamed here since we last agreed: a local change
+            continue  # deleted or renamed here since we last agreed: a local change
         if local is None:
             if kind == "query":
                 await save_predefined_query(
@@ -524,16 +519,9 @@ async def _store_once(
     if head:
         await _git("reset", "--hard", head, cwd=wd)
         merged = await _merge(ws, wd, head)
-    entity = await _load_entity(ws, kind, name, conn_type, include_deleted=True)
+    entity = await _load_entity(ws, kind, name, conn_type)
     paths = _entity_paths(kind, name, conn_type)
-    # A deleted query is committed as its file's removal.
-    is_deleted = kind == "query" and entity["deleted_at"] is not None
-    if is_deleted:
-        if (wd / paths[0]).exists():
-            # Agreeing on the repo's copy keeps sync from importing an identical one back.
-            await _agree(ws, wd, "HEAD", kind, name, conn_type)
-            await _git("rm", "-q", "--", paths[0], cwd=wd)
-    elif kind == "query":
+    if kind == "query":
         (wd / paths[0]).parent.mkdir(parents=True, exist_ok=True)
         (wd / paths[0]).write_text(query_to_yaml(entity), encoding="utf-8")
     else:
@@ -544,8 +532,7 @@ async def _store_once(
         ddir.mkdir(parents=True, exist_ok=True)
         for fname, content in dashboard_to_files(entity).items():
             (ddir / fname).write_text(content, encoding="utf-8")
-    if not is_deleted:
-        await _git("add", "-A", "--", *paths, cwd=wd)
+    await _git("add", "-A", "--", *paths, cwd=wd)
     old = query_relpath(conn_type or "", old_name) if old_name else ""
     if old and (wd / old).exists():
         await _agree(ws, wd, "HEAD", kind, old_name, conn_type)  # keeps sync from importing it back
@@ -557,13 +544,12 @@ async def _store_once(
             await _mark(ws, kind, name, conn_type, (await _git("rev-parse", head, cwd=wd)).strip(), entity)
         return {"committed": False, "sha": None, "message": "no changes", **merged, "conflicts": conflicts(ws)}
     label = f"{conn_type}/{name}" if kind == "query" else name
-    verb = "delete" if is_deleted else "rename" if old else "store"
+    verb = "rename" if old else "store"
     await _git("commit", "-m", message or f"{verb} {kind} {label}", cwd=wd)
     await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
     sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
     # The repo now holds exactly the local copy.
-    if not is_deleted:
-        await _agree(ws, wd, "HEAD", kind, name, conn_type)
+    await _agree(ws, wd, "HEAD", kind, name, conn_type)
     await _mark(ws, kind, name, conn_type, sha, entity)
     return {"committed": True, "sha": sha, "message": "stored", **merged, "conflicts": conflicts(ws)}
 
@@ -583,27 +569,12 @@ async def _mark(
         await set_dashboard_git_sha(name, ws.id, sha, unchanged_from=entity)
 
 
-async def purge(ws: WorkspaceRec, conn_type: str, name: str) -> None:
-    """Drop one deleted query's file from the repo before its row is purged."""
+async def remove(ws: WorkspaceRec, conn_type: str, name: str) -> None:
+    """Drop a deleted query's file from the repo (`delete query …`), so no
+    instance imports it back; history keeps it. No file, no commit."""
     _require_remote(ws)
-    row = await _load_entity(ws, "query", name, conn_type, include_deleted=True)
-    if row["deleted_at"] is None:
-        raise GitSyncError(f"deleted query {name!r} not found", status=404)
-    await remove(ws, [(conn_type, name)], "purge")
-
-
-async def purge_deleted(ws: WorkspaceRec, keys: list[tuple[str, str]]) -> None:
-    await remove(ws, keys, "purge")
-
-
-async def remove(ws: WorkspaceRec, keys: list[tuple[str, str]], verb: str) -> None:
-    """Drop queries' files, given as (type, name), from the repo in one commit
-    (`{verb} query ...`), so no instance imports them back. History keeps
-    them; files already gone are skipped."""
-    _require_remote(ws)
-    if keys:
-        async with _lock(ws):
-            await _retry_if_rejected(lambda: _remove_once(ws, keys, verb))
+    async with _lock(ws):
+        await _retry_if_rejected(lambda: _remove_once(ws, conn_type, name))
 
 
 async def commit_change(
@@ -614,10 +585,12 @@ async def commit_change(
     apply: Callable[[], Awaitable[Any]],
     *,
     old_name: str = "",
+    deleted: bool = False,
 ) -> Any:
     """Apply a DB change (`apply`, returning its result) and commit it as one
-    unit when `ws` syncs: if git fails, the touched rows (`name`, and a
-    rename's `old_name`) are put back as they were and GitSyncError raised."""
+    unit when `ws` syncs — the entity stored, or (`deleted`) a query's file
+    removed: if git fails, the touched rows (`name`, and a rename's
+    `old_name`) are put back as they were and GitSyncError raised."""
     if not configured(ws):
         return await apply()
     from .dashboards import restore_dashboards, snapshot_dashboards
@@ -629,29 +602,29 @@ async def commit_change(
     snap = await (snapshot_queries(conn_type or "", names, ws.id) if is_query else snapshot_dashboards(names, ws.id))
     result = await apply()
     try:
-        await store(ws, kind, name, conn_type, old_name=old_name)
+        if deleted:
+            await remove(ws, conn_type or "", name)
+        else:
+            await store(ws, kind, name, conn_type, old_name=old_name)
     except GitSyncError as e:
         await (restore_queries(conn_type or "", snap, ws.id) if is_query else restore_dashboards(snap, ws.id))
         raise GitSyncError(f"not saved: {e}", status=e.status) from e
     return result
 
 
-async def _remove_once(ws: WorkspaceRec, keys: list[tuple[str, str]], verb: str) -> None:
+async def _remove_once(ws: WorkspaceRec, conn_type: str, name: str) -> None:
     wd = await _ensure_repo(ws)
     head = await _origin_head(wd, ws)
+    path = query_relpath(conn_type, name)
     if head is None:
         return
     await _git("reset", "--hard", head, cwd=wd)
-    present = [(t, n) for t, n in keys if (wd / query_relpath(t, n)).exists()]
-    if not present:
+    if not (wd / path).exists():
         return
-    for t, n in present:
-        # Agreeing on the repo's copy keeps sync from importing an identical one back.
-        await _agree(ws, wd, head, "query", n, t)
-    await _git("rm", "-q", "--", *(query_relpath(t, n) for t, n in present), cwd=wd)
-    t, n = present[0]
-    message = f"{verb} query {t}/{n}" if len(present) == 1 else f"{verb} {len(present)} queries"
-    await _git("commit", "-m", message, cwd=wd)
+    # Agreeing on the repo's copy keeps sync from importing an identical one back.
+    await _agree(ws, wd, head, "query", name, conn_type)
+    await _git("rm", "-q", "--", path, cwd=wd)
+    await _git("commit", "-m", f"delete query {conn_type}/{name}", cwd=wd)
     await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
 
 
@@ -711,7 +684,7 @@ async def restore(
     ref: str | None = None,
 ) -> dict[str, Any]:
     """Overwrite the local DB row with the entity's content at `ref` (default:
-    the remote branch head); restoring a deleted query undeletes it. Reads via
+    the remote branch head), recreating it if it was deleted. Reads via
     `git show` — HEAD never moves, history is never rewritten. Parses fully
     before writing, so the DB row is either untouched or fully replaced."""
     _check_kind(kind, conn_type)

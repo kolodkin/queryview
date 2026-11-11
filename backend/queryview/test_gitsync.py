@@ -601,89 +601,32 @@ def _repo_files(remote) -> list[str]:
     ).stdout.splitlines()
 
 
-def _delete(name: str, ws_id: int) -> None:
-    from queryview.queries import set_predefined_query_deleted
+def test_deleting_removes_the_file_and_sync_never_brings_it_back(other_instance):
+    from queryview.queries import delete_predefined_query, get_predefined_query, save_predefined_query
 
-    _run(set_predefined_query_deleted("clickhouse", name, True, workspace_id=ws_id))
+    _store_query_versions("gs gone", ["SELECT 1"])
+    here = _default_ws_id()
+    _run(
+        gitsync.commit_change(
+            _default_ws(),
+            "query",
+            "gs gone",
+            "clickhouse",
+            lambda: delete_predefined_query("clickhouse", "gs gone", workspace_id=here),
+            deleted=True,
+        )
+    )
 
-
-def _deleted_names(ws_id: int) -> list[str]:
-    from queryview.queries import list_predefined_queries
-
-    rows = _run(list_predefined_queries("clickhouse", ws_id, include_deleted=True))
-    return [r["query_name"] for r in rows if r["deleted_at"] is not None]
-
-
-def test_an_uncommitted_delete_stays_deleted_through_a_sync(git_env):
-    from queryview.queries import get_predefined_query, save_predefined_query
-
-    _run(save_predefined_query("gs gone", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
-    _run(gitsync.store(_default_ws(), "query", "gs gone", "clickhouse"))
-    _delete("gs gone", _default_ws_id())
-
-    r = _run(gitsync.sync(_default_ws()))
-
-    assert all(e["name"] != "gs gone" for e in r["imported"] + r["conflicts"])
-    assert _run(get_predefined_query("clickhouse", "gs gone", _default_ws_id())) is None
-    assert "gs gone" in _deleted_names(_default_ws_id())
-
-
-def test_committing_a_deleted_query_removes_its_file(git_env):
-    _store_query_versions("gs local trash", ["SELECT 1"])
-    _delete("gs local trash", _default_ws_id())
-
-    r = _run(gitsync.store(_default_ws(), "query", "gs local trash", "clickhouse"))
-
-    assert r["committed"] is True
-    assert "queries/clickhouse/gs local trash.yaml" not in _repo_files(git_env)
-    assert "delete query clickhouse/gs local trash" in _remote_log(git_env)
-
-
-def test_sync_leaves_a_query_deleted_here_alone(other_instance):
-    from queryview.queries import save_predefined_query
-
-    _run(save_predefined_query("gs binned", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
-    _run(gitsync.store(other_instance, "query", "gs binned", "clickhouse"))
-    _run(gitsync.sync(_default_ws()))
-    _delete("gs binned", _default_ws_id())
-    # Changed elsewhere after the delete here: still no conflict, still deleted.
-    _run(save_predefined_query("gs binned", "clickhouse", "SELECT 2", workspace_id=other_instance.id))
-    _run(gitsync.store(other_instance, "query", "gs binned", "clickhouse"))
-
-    r = _run(gitsync.sync(_default_ws()))
-
-    assert all(e["name"] != "gs binned" for e in r["imported"] + r["conflicts"])
-    assert "gs binned" in _deleted_names(_default_ws_id())
-    # Restore takes the repo's copy and undeletes it.
-    _run(gitsync.restore(_default_ws(), "query", "gs binned", "clickhouse"))
-    assert "gs binned" not in _deleted_names(_default_ws_id())
-
-
-def test_purging_drops_the_file_from_the_repo(other_instance):
-    from queryview.queries import purge_predefined_query, save_predefined_query
-
-    _run(save_predefined_query("gs purged", "clickhouse", "SELECT 1", workspace_id=_default_ws_id()))
-    _run(gitsync.store(_default_ws(), "query", "gs purged", "clickhouse"))
-    with pytest.raises(GitSyncError) as e:  # only a deleted query purges
-        _run(gitsync.purge(_default_ws(), "clickhouse", "gs purged"))
-    assert e.value.status == 404
-    _delete("gs purged", _default_ws_id())
-
-    _run(gitsync.purge(_default_ws(), "clickhouse", "gs purged"))
-    _run(purge_predefined_query("clickhouse", "gs purged", workspace_id=_default_ws_id()))
-
-    assert "queries/clickhouse/gs purged.yaml" not in _repo_files(other_instance.remote)
-    assert "purge query clickhouse/gs purged" in _remote_log(other_instance.remote)
-    r = _run(gitsync.sync(other_instance))  # a fresh instance has nothing to import
-    assert all(e["name"] != "gs purged" for e in r["imported"])
+    assert "queries/clickhouse/gs gone.yaml" not in _repo_files(other_instance.remote)
+    assert "delete query clickhouse/gs gone" in _remote_log(other_instance.remote)
+    r = _run(gitsync.sync(other_instance))  # nothing left to import
+    assert all(e["name"] != "gs gone" for e in r["imported"])
 
     # Another instance committing the same copy again doesn't bring it back here.
-    _run(save_predefined_query("gs purged", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
-    _run(gitsync.store(other_instance, "query", "gs purged", "clickhouse"))
+    _run(save_predefined_query("gs gone", "clickhouse", "SELECT 1", workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "query", "gs gone", "clickhouse"))
     _run(gitsync.sync(_default_ws()))
-    from queryview.queries import get_predefined_query
-
-    assert _run(get_predefined_query("clickhouse", "gs purged", _default_ws_id(), include_deleted=True)) is None
+    assert _run(get_predefined_query("clickhouse", "gs gone", here)) is None
 
 
 def test_a_renamed_query_leaves_no_copy_under_its_old_name(git_env):

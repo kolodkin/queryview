@@ -50,12 +50,10 @@ from .drivers import DRIVERS
 from .mcp_server import mcp
 from .queries import (
     PredefinedQueryError,
-    deleted_predefined_queries,
+    delete_predefined_query,
     list_predefined_queries_view,
-    purge_predefined_query,
+    rename_predefined_query,
     save_predefined_query,
-    set_predefined_query_deleted,
-    update_predefined_query,
 )
 from .validation import cell_view_error, dashboard_params_error, presentation_error
 
@@ -497,8 +495,7 @@ async def predefined_queries_list(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    include_deleted = request.query_params.get("include_deleted") in ("1", "true")
-    return {"queries": await list_predefined_queries_view(conn_type, ws.id, include_deleted=include_deleted)}
+    return {"queries": await list_predefined_queries_view(conn_type, ws.id)}
 
 
 @app.post("/api/predefined-queries")
@@ -547,7 +544,7 @@ async def predefined_queries_save(request: Request):
     return {"ok": True}
 
 
-# Partial update: `new_name` renames, `deleted: false` undeletes (DELETE deletes).
+# Rename: `new_name`.
 @app.patch("/api/predefined-queries")
 async def predefined_queries_update(request: Request):
     b = await _read_json(request)
@@ -555,33 +552,26 @@ async def predefined_queries_update(request: Request):
     name = _clean_str(b.get("query_name"))
     conn_type = _clean_str(b.get("type"))
     new_name = _clean_str(b.get("new_name"))
-    undelete = b.get("deleted") is False
-    if not name or not conn_type or (not new_name and not undelete) or b.get("deleted") is True:
-        return JSONResponse(
-            {"ok": False, "message": "query_name, type and new_name or deleted: false are required"},
-            status_code=400,
-        )
+    if not name or not conn_type or not new_name:
+        return JSONResponse({"ok": False, "message": "query_name, type and new_name are required"}, status_code=400)
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    renamed = bool(new_name) and new_name != name
     try:
         await gitsync.commit_change(
             ws,
             "query",
-            new_name or name,
+            new_name,
             conn_type,
-            lambda: update_predefined_query(
-                conn_type, name, workspace_id=ws.id, new_name=new_name or None, deleted=False if undelete else None
-            ),
-            old_name=name if renamed else "",
+            lambda: rename_predefined_query(conn_type, name, new_name, workspace_id=ws.id),
+            old_name=name if new_name != name else "",
         )
     except (PredefinedQueryError, gitsync.GitSyncError) as e:
         return _status_error(e)
     return {"ok": True}
 
 
-# Soft-deletes; `purge=1` removes an already deleted query for good.
+# Deletes for good, its git file too.
 @app.delete("/api/predefined-queries")
 async def predefined_queries_delete(request: Request):
     q = request.query_params
@@ -593,18 +583,14 @@ async def predefined_queries_delete(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     try:
-        if q.get("purge") in ("1", "true"):
-            if gitsync.configured(ws):  # repo first: a failed push leaves the query to retry
-                await gitsync.purge(ws, conn_type, name)
-            await purge_predefined_query(conn_type, name, workspace_id=ws.id)
-        else:
-            await gitsync.commit_change(
-                ws,
-                "query",
-                name,
-                conn_type,
-                lambda: set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id),
-            )
+        await gitsync.commit_change(
+            ws,
+            "query",
+            name,
+            conn_type,
+            lambda: delete_predefined_query(conn_type, name, workspace_id=ws.id),
+            deleted=True,
+        )
     except (PredefinedQueryError, gitsync.GitSyncError) as e:
         return _status_error(e)
     return {"ok": True}
@@ -985,21 +971,6 @@ async def workspaces_update(name: str, request: Request):
     if after.remote and (changed or kwargs.get("remote")):
         return {"ok": True, **(await _sync_attached(current))}
     return {"ok": True}
-
-
-# Removes every deleted query for good: DB rows and their files in the repo.
-@app.post("/api/workspaces/{name}/purge-deleted")
-async def workspaces_purge_deleted(name: str):
-    try:
-        ws = await workspaces.resolve(name)
-        keys = await deleted_predefined_queries(ws.id)
-        if gitsync.configured(ws):  # repo first: a failed push leaves the rows to retry
-            await gitsync.purge_deleted(ws, keys)
-        for conn_type, query_name in keys:
-            await purge_predefined_query(conn_type, query_name, workspace_id=ws.id)
-    except (workspaces.WorkspaceError, gitsync.GitSyncError, PredefinedQueryError) as e:
-        return _status_error(e)
-    return {"ok": True, "purged": len(keys)}
 
 
 @app.delete("/api/workspaces/{name}")

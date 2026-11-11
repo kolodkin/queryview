@@ -71,10 +71,8 @@ const gitConfigured = async (baseURL: string) => Boolean((await api(`${baseURL}/
 test("git controls disabled when unconfigured", async ({ page, baseURL }) => {
   test.skip(await gitConfigured(baseURL!), "git sync is configured; disabled-state not applicable");
   await page.goto("/dashboard");
-  for (const id of ["git-commit", "git-restore-toggle"]) {
-    await expect(page.getByTestId(id)).toBeVisible();
-    await expect(page.getByTestId(id)).toBeDisabled();
-  }
+  await expect(page.getByTestId("git-restore-toggle")).toBeDisabled();
+  await expect(page.getByTestId("dashboard-save")).toHaveText("Save");
 });
 
 test("saves commit and restore dashboard round trip", async ({ page, baseURL }) => {
@@ -87,13 +85,11 @@ test("saves commit and restore dashboard round trip", async ({ page, baseURL }) 
       json: { name, html: `<html><body>v${v}</body></html>`, queries: { q: `SELECT ${v}` } },
     });
 
-  // Each save commits: v1, then v2. Commit has nothing left to push.
+  // Each save commits: v1, then v2. With a remote, Save reads "Commit".
   await save(1);
   await save(2);
   await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
-  await expect(page.getByTestId("git-commit")).toBeEnabled();
-  await page.getByTestId("git-commit").click();
-  await expect(page.getByTestId("git-commit")).toHaveText("No changes");
+  await expect(page.getByTestId("dashboard-save")).toHaveText("Commit");
 
   // Restore v1, the older revision.
   page.on("dialog", (d) => d.accept());

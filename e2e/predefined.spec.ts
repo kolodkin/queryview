@@ -1,14 +1,11 @@
-// Renaming, deleting, undeleting and purging a saved (predefined) query from
-// the query panel. Uses DuckDB and a uniquely-named workspace per run.
+// Renaming and deleting a saved (predefined) query from the query panel. Uses DuckDB and a uniquely-named workspace per run.
 import type { Page } from "@playwright/test";
 import { DUCK, api, connect, expect, openQueryPanel, switchWorkspace, test } from "./fixtures";
 
-async function names(baseURL: string, ws: string, deleted = false): Promise<string[]> {
-  const q = new URLSearchParams({ type: "duckdb", workspace: ws, include_deleted: "1" });
+async function names(baseURL: string, ws: string): Promise<string[]> {
+  const q = new URLSearchParams({ type: "duckdb", workspace: ws });
   const { body } = await api(`${baseURL}/api/predefined-queries?${q}`);
-  return body.queries
-    .filter((x: { deleted_at: string | null }) => (x.deleted_at !== null) === deleted)
-    .map((x: { query_name: string }) => x.query_name);
+  return body.queries.map((x: { query_name: string }) => x.query_name);
 }
 
 /** Create a uniquely-named workspace saving `queries` (name -> saved fields),
@@ -30,10 +27,9 @@ async function openNewWorkspace(
   return ws;
 }
 
-test("rename, delete, undelete and purge a saved query", async ({ page, seeds, baseURL, shot }) => {
+test("rename and delete a saved query", async ({ page, seeds, baseURL, shot }) => {
   const ws = await openNewWorkspace(page, baseURL!, await seeds.duckdb());
   const live = () => names(baseURL!, ws);
-  const deleted = () => names(baseURL!, ws, true);
 
   const select = page.getByTestId("query-predefined-select");
   const rename = page.getByTestId("query-rename");
@@ -65,42 +61,12 @@ test("rename, delete, undelete and purge a saved query", async ({ page, seeds, b
 
   page.once("dialog", (d) => d.accept());
   await del.click();
-  // Deleted, it stays selected (for Commit or Undelete) and keeps its SQL.
-  await expect(select).toHaveValue("pq renamed");
-  await expect(select.locator("option:checked")).toHaveText("pq renamed (deleted)");
-  await expect(page.getByTestId("query-input")).toHaveValue("SELECT id FROM items ORDER BY id");
-  await expect(page.getByTestId("query-undelete")).toBeVisible();
-  await expect(rename).toBeDisabled();
-  expect(await live()).toEqual([]);
-  expect(await deleted()).toEqual(["pq renamed"]);
-  await shot("deleted: still selected, Undelete offered");
-
-  // Show deleted lists it in its own group; picking it loads its SQL.
-  await select.selectOption("");
-  await page.getByTestId("query-input").fill("");
-  await select.selectOption("::deleted::");
-  const group = page.getByTestId("query-deleted-group");
-  await expect(group.locator("option")).toHaveText(["pq renamed"]);
-  await select.selectOption("pq renamed");
-  await expect(page.getByTestId("query-input")).toHaveValue("SELECT id FROM items ORDER BY id");
-  await shot("show deleted: deleted group");
-
-  await page.getByTestId("query-undelete").click();
-  await expect(del).toBeEnabled();
-  await expect(group).toHaveCount(0);
-  expect(await live()).toEqual(["pq renamed"]);
-  expect(await deleted()).toEqual([]);
-  await shot("undeleted");
-
-  // Purge clears the selection too.
-  page.once("dialog", (d) => d.accept());
-  await del.click();
-  page.once("dialog", (d) => d.accept());
-  await page.getByTestId("query-purge").click();
+  // Deleted for good: the selection clears, the editor keeps its SQL.
   await expect(select).toHaveValue("");
+  await expect(select.locator('option[value="pq renamed"]')).toHaveCount(0);
+  await expect(page.getByTestId("query-input")).toHaveValue("SELECT id FROM items ORDER BY id");
   expect(await live()).toEqual([]);
-  expect(await deleted()).toEqual([]);
-  await shot("purged");
+  await shot("deleted");
 });
 
 test("picking a saved query runs it", async ({ page, seeds, baseURL, shot }) => {

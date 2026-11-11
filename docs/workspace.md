@@ -22,9 +22,7 @@ configs). The API returns it only with the credential stripped
 write-only. A workspace
 without a remote is a pure namespace: its git controls are disabled.
 
-Deleting a workspace requires it to be empty (409 otherwise); its
-[deleted queries](./query.md#deleted-queries) don't count and are removed with
-it.
+Deleting a workspace requires it to be empty (409 otherwise).
 
 ## API
 
@@ -33,16 +31,14 @@ it.
 - `PATCH /api/workspaces/{name}` `{name?, remote?, branch?}` — a null
   `remote` clears it; an absent key leaves it unchanged
 - `DELETE /api/workspaces/{name}`
-- `POST /api/workspaces/{name}/purge-deleted` → `{purged}` — removes every deleted
-  query for good
 
 Scoped endpoints (predefined queries, dashboards, `/api/git/*`) accept an
 optional `workspace` name, defaulting to the fallback workspace.
 
 ## UI
 
-The header shows a workspace switcher: a dropdown with **Purge deleted…** and
-a manage panel for create/rename/remote/branch/delete. The active
+The header shows a workspace switcher: a dropdown and a manage panel for
+create/rename/remote/branch/delete. The active
 workspace is session state (see [session.md](./session.md)); switching reloads
 the query and dashboard lists.
 

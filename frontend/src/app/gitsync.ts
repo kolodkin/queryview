@@ -1,18 +1,12 @@
 // Client for the /api/git backup/restore endpoints (see docs/gitsync.md).
 // Every operation is scoped to a workspace (see docs/workspace.md).
 
+import { useEffect, useState } from 'react'
 import { apiFetch } from './api'
 
 export type GitKind = 'query' | 'dashboard'
 
 export type GitRevision = { sha: string; date: number; message: string }
-
-export type GitStoreResult = {
-  ok: boolean
-  committed?: boolean
-  sha?: string | null
-  message?: string
-}
 
 export type GitHistoryResult = {
   ok: boolean
@@ -41,6 +35,24 @@ export function gitStatus(workspace: string): Promise<boolean> {
     statusCache.set(workspace, cached)
   }
   return cached
+}
+
+// Whether `workspace` has a git remote: its Save buttons then read "Commit",
+// since every save commits (docs/gitsync.md).
+export function useGitConfigured(workspace: string): boolean {
+  const [on, setOn] = useState(false)
+  // Re-read after a sync too: saving the workspace's remote announces one.
+  useEffect(() => {
+    let live = true
+    const load = () => void gitStatus(workspace).then((v) => live && setOn(v))
+    load()
+    const off = onGitSync(load)
+    return () => {
+      live = false
+      off()
+    }
+  }, [workspace])
+  return on
 }
 
 export function invalidateGitStatus(): void {
@@ -94,22 +106,6 @@ export function announceGitSync(): void {
 export function onGitSync(f: () => void): () => void {
   window.addEventListener(GIT_SYNCED, f)
   return () => window.removeEventListener(GIT_SYNCED, f)
-}
-
-export async function gitStore(
-  kind: GitKind,
-  name: string,
-  connType?: string,
-  workspace?: string,
-): Promise<GitStoreResult> {
-  const res = await apiFetch('/api/git/store', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind, name, conn_type: connType, workspace }),
-  })
-  const data = await res.json()
-  announceGitSync()
-  return data
 }
 
 export async function gitHistory(

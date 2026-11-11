@@ -26,7 +26,7 @@ import GitSyncControls from './controls/GitSyncControls'
 import { downloadText } from './yamlio'
 import { useEditLock } from './sessionLock'
 import { apiFetch } from './api'
-import { announceGitSync, onGitSync } from './gitsync'
+import { announceGitSync, onGitSync, useGitConfigured } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
@@ -36,7 +36,6 @@ type PredefinedQuery = {
   cell_view: string | null
   order_by: OrderCol[] | null
   fields: string[] | null
-  deleted_at: number | null // unix ms when deleted (docs/query.md); null = live
 }
 
 export type QueryPush = {
@@ -55,8 +54,6 @@ export type QueryPush = {
 
 // Sentinel value for the predefined dropdown's "new name" item.
 const NEW_NAME_OPTION = '::new::'
-// Sentinel for the dropdown item that shows or hides deleted queries.
-const TOGGLE_DELETED_OPTION = '::deleted::'
 
 // The query page (`/studio`), mounted by the App shell only for a ready
 // connection; picking one happens on the Connect page (ConnectView).
@@ -132,12 +129,8 @@ function QueryPanel({
   const [offset, setOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  // Every saved query, live and deleted; the dropdown lists the deleted ones
-  // (docs/query.md) only on request.
-  const [allQueries, setAllQueries] = useState<PredefinedQuery[]>([])
-  const predefined = useMemo(() => allQueries.filter((q) => q.deleted_at == null), [allQueries])
-  const deletedQueries = useMemo(() => allQueries.filter((q) => q.deleted_at != null), [allQueries])
-  const [showDeleted, setShowDeleted] = useState(false)
+  const [predefined, setPredefined] = useState<PredefinedQuery[]>([])
+  const gitOn = useGitConfigured(activeWorkspace())
   const [selectedName, setSelectedName] = useState('')
   // A saved query picked from the dropdown, waiting to run.
   const [picked, setPicked] = useState<PredefinedQuery | null>(null)
@@ -180,13 +173,11 @@ function QueryPanel({
   // query is picked from the dropdown. null when no push draft is active.
   const [pushedCellView, setPushedCellView] = useState<string | null>(null)
 
-  // A saved query by name, live or deleted (names are unique across both).
   const findQuery = useCallback(
-    (name: string) => allQueries.find((p) => p.query_name === name),
-    [allQueries],
+    (name: string) => predefined.find((p) => p.query_name === name),
+    [predefined],
   )
   const savedSelected = predefined.some((p) => p.query_name === selectedName)
-  const deletedSelected = deletedQueries.some((p) => p.query_name === selectedName)
 
   // Saved cell_view of the selected query, or '' when none.
   const savedCellView = useMemo(
@@ -307,11 +298,11 @@ function QueryPanel({
   const loadPredefined = useCallback(async (): Promise<PredefinedQuery[]> => {
     try {
       const res = await fetch(
-        `/api/predefined-queries?type=${encodeURIComponent(connectionType)}&workspace=${encodeURIComponent(activeWorkspace())}&include_deleted=1`,
+        `/api/predefined-queries?type=${encodeURIComponent(connectionType)}&workspace=${encodeURIComponent(activeWorkspace())}`,
       )
       const data = await res.json()
       const list = (data.queries ?? []) as PredefinedQuery[]
-      setAllQueries(list)
+      setPredefined(list)
       return list
     } catch {
       // missing list is non-fatal; leave the selector empty
@@ -320,12 +311,12 @@ function QueryPanel({
   }, [connectionType])
 
   useEffect(() => {
-    // setAllQueries runs after the fetch await, so it doesn't cascade renders.
+    // setPredefined runs after the fetch await, so it doesn't cascade renders.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPredefined()
   }, [loadPredefined])
 
-  // A git sync may have imported (or deleted) queries from the repo.
+  // A git sync may have imported queries from the repo.
   useEffect(() => onGitSync(() => void loadPredefined()), [loadPredefined])
 
   // Apply a pushed query: reflect it in the controls and run it with the pushed
@@ -504,10 +495,6 @@ function QueryPanel({
   // Dropdown selection: a saved query loads and runs; "new name" prompts for a
   // fresh name and runs nothing. The chosen name is what Save writes under.
   function onSelectName(value: string) {
-    if (value === TOGGLE_DELETED_OPTION) {
-      setShowDeleted((v) => !v)
-      return
-    }
     if (value === NEW_NAME_OPTION) {
       const name = window.prompt('Save query as (name):', selectedName || '')?.trim()
       if (name) {
@@ -584,13 +571,9 @@ function QueryPanel({
     }
   }
 
-  // Rename, delete or undelete the selected saved query; the editor keeps its
-  // SQL. A deleted query stays selected, so it can be committed, undeleted or
-  // purged. `change` PATCHes (rename, undelete); null DELETEs, for good with `purge`.
-  async function mutateSelected(
-    change: { new_name: string } | { deleted: false } | null,
-    purge = false,
-  ): Promise<boolean> {
+  // Rename (`change`, a PATCH) or delete (null) the selected saved query; the
+  // editor keeps its SQL.
+  async function mutateSelected(change: { new_name: string } | null): Promise<boolean> {
     setBusy(true)
     setError(null)
     try {
@@ -598,7 +581,6 @@ function QueryPanel({
         query_name: selectedName,
         type: connectionType,
         workspace: activeWorkspace(),
-        ...(purge && { purge: '1' }),
       }
       const res = change
         ? await apiFetch('/api/predefined-queries', {
@@ -632,16 +614,8 @@ function QueryPanel({
   }
 
   async function deleteSelected() {
-    if (!window.confirm(`Delete query '${selectedName}'?`)) return
-    if (await mutateSelected(null)) setPushedCellView(null)
-  }
-
-  async function purgeSelected() {
-    if (
-      !window.confirm(`Permanently remove deleted query '${selectedName}'? This can't be undone.`)
-    )
-      return
-    if (await mutateSelected(null, true)) {
+    if (!window.confirm(`Delete query '${selectedName}'? This can't be undone.`)) return
+    if (await mutateSelected(null)) {
       setSelectedName('')
       setPushedCellView(null)
     }
@@ -675,30 +649,14 @@ function QueryPanel({
         >
           <option value="">Predefined queries…</option>
           <option value={NEW_NAME_OPTION}>+ New name…</option>
-          {(showDeleted || deletedQueries.length > 0) && (
-            <option value={TOGGLE_DELETED_OPTION}>
-              {showDeleted ? 'Hide deleted' : `Show deleted (${deletedQueries.length})`}
-            </option>
-          )}
-          {selectedName !== '' && !savedSelected && !(showDeleted && deletedSelected) && (
-            <option value={selectedName}>
-              {deletedSelected ? `${selectedName} (deleted)` : selectedName}
-            </option>
+          {selectedName !== '' && !savedSelected && (
+            <option value={selectedName}>{selectedName}</option>
           )}
           {predefined.map((p) => (
             <option key={p.query_name} value={p.query_name}>
               {p.query_name}
             </option>
           ))}
-          {showDeleted && deletedQueries.length > 0 && (
-            <optgroup label="Deleted" data-testid="query-deleted-group">
-              {deletedQueries.map((p) => (
-                <option key={p.query_name} value={p.query_name}>
-                  {p.query_name}
-                </option>
-              ))}
-            </optgroup>
-          )}
         </select>
         <button
           type="button"
@@ -721,41 +679,16 @@ function QueryPanel({
         >
           Rename
         </button>
-        {deletedSelected ? (
-          <>
-            <button
-              type="button"
-              onClick={() => void mutateSelected({ deleted: false })}
-              disabled={busy}
-              data-testid="query-undelete"
-              title="Restore this deleted query"
-              className="glass-btn px-3 py-2 font-medium"
-            >
-              Undelete
-            </button>
-            <button
-              type="button"
-              onClick={() => void purgeSelected()}
-              disabled={busy}
-              data-testid="query-purge"
-              title="Permanently remove this deleted query"
-              className="glass-btn px-3 py-2 font-medium"
-            >
-              Purge
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            onClick={() => void deleteSelected()}
-            disabled={busy || !savedSelected}
-            data-testid="query-delete"
-            title="Delete saved query"
-            className="glass-btn px-3 py-2 font-medium"
-          >
-            Delete
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => void deleteSelected()}
+          disabled={busy || !savedSelected}
+          data-testid="query-delete"
+          title="Delete saved query"
+          className="glass-btn px-3 py-2 font-medium"
+        >
+          Delete
+        </button>
         <button
           type="button"
           onClick={() => void save()}
@@ -763,7 +696,7 @@ function QueryPanel({
           data-testid="query-save"
           className="glass-btn px-3 py-2 font-medium"
         >
-          Save
+          {gitOn ? 'Commit' : 'Save'}
         </button>
         <GitSyncControls
           kind="query"

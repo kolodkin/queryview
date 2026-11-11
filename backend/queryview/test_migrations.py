@@ -118,14 +118,14 @@ def test_queries_and_dashboards_have_git_sha_column():
         con.close()
 
 
-def test_predefined_queries_has_deleted_at_column():
+def test_predefined_queries_soft_delete_is_dropped():
     _run(_ensure_schema())
     con = sqlite3.connect(_db_path())
     try:
         cols = {r[1] for r in con.execute("PRAGMA table_info(predefined_queries)")}
     finally:
         con.close()
-    assert "deleted_at" in cols, f"missing column, got {sorted(cols)}"
+    assert "deleted_at" not in cols
 
 
 def test_sessions_queries_to_scripts_migration(tmp_path, monkeypatch):

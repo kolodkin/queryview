@@ -93,11 +93,9 @@ def test_sync_merges_on_demand_and_needs_a_remote():
 def test_saves_and_deletes_commit_to_the_repo(git_env):
     import subprocess
 
-    from queryview.queries import list_predefined_queries
-    from queryview.workspaces import DEFAULT_WORKSPACE
+    from queryview.queries import get_predefined_query
 
     c = TestClient(app)
-    ws_id = _default_ws_id()
     base = {"type": "clickhouse"}
 
     def git(*args: str) -> str:
@@ -117,16 +115,7 @@ def test_saves_and_deletes_commit_to_the_repo(git_env):
     assert "api b.yaml" in files() and "api a.yaml" not in files()
     c.delete("/api/predefined-queries", params={**base, "query_name": "api b"})
     assert last() == "delete query clickhouse/api b" and "api b" not in files()
-    c.patch("/api/predefined-queries", json={**base, "query_name": "api b", "deleted": False})
-    assert last() == "store query clickhouse/api b" and "api b.yaml" in files()
-
-    # Purge after a delete: the file is already gone, only the row goes.
-    c.delete("/api/predefined-queries", params={**base, "query_name": "api b"})
-    r = c.post(f"/api/workspaces/{DEFAULT_WORKSPACE}/purge-deleted").json()
-    assert r == {"ok": True, "purged": 1}
-    assert last() == "delete query clickhouse/api b"
-    names = [q["query_name"] for q in _run(list_predefined_queries("clickhouse", ws_id, include_deleted=True))]
-    assert "api b" not in names
+    assert _run(get_predefined_query("clickhouse", "api b", _default_ws_id())) is None
 
 
 def test_a_failed_commit_undoes_the_change(git_env, monkeypatch):
@@ -146,7 +135,7 @@ def test_a_failed_commit_undoes_the_change(git_env, monkeypatch):
     monkeypatch.setattr(gitsync, "_git", offline)
 
     def row(name: str):
-        return _run(get_predefined_query("clickhouse", name, _default_ws_id(), include_deleted=True))
+        return _run(get_predefined_query("clickhouse", name, _default_ws_id()))
 
     # New, edited, renamed, deleted: each fails with 502 and leaves the DB as it was.
     r = c.post("/api/predefined-queries", json={**base, "query_name": "api tx new", "query": "SELECT 1"})
@@ -157,7 +146,7 @@ def test_a_failed_commit_undoes_the_change(git_env, monkeypatch):
     c.patch("/api/predefined-queries", json={**base, "query_name": "api tx", "new_name": "api tx2"})
     assert row("api tx") is not None and row("api tx2") is None
     c.delete("/api/predefined-queries", params={**base, "query_name": "api tx"})
-    assert (row("api tx") or {"deleted_at": 0})["deleted_at"] is None
+    assert row("api tx") is not None
     # Nothing left half-done: the row is still in git.
     assert {"kind": "query", "name": "api tx", "conn_type": "clickhouse"} not in c.get("/api/git/status").json()[
         "unsynced"

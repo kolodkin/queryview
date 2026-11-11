@@ -48,7 +48,7 @@ the file and a sync skips it.
 A sync fetches the repo and merges its head into the workspace. It runs:
 
 - when a remote is saved (re-entering the same URL counts);
-- on **Commit**, **Restore**, and opening an entity's revision list;
+- on every save (**Commit**), **Restore**, and opening an entity's revision list;
 - on **Sync** in the workspace panel (header dropdown → *Manage workspaces…*),
   to pick up what was committed elsewhere.
 
@@ -56,10 +56,8 @@ Opening or refreshing the app never syncs.
 
 The merge only adds, never overwrites:
 
-- in the repo, not here → **imported**, unless it was renamed or purged here
+- in the repo, not here → **imported**, unless it was renamed or deleted here
   since the last agreement and the repo's copy hasn't changed since;
-- [deleted](./query.md#deleted-queries) here → left alone, whatever the repo
-  holds;
 - the same on both sides → nothing to do;
 - different, and the repo's copy changed since this workspace last agreed with
   it → a **conflict**: the local copy is kept and the entity is listed under a
@@ -68,23 +66,21 @@ The merge only adds, never overwrites:
 - different, but only because you edited it locally → just an uncommitted
   change, not a conflict.
 
-A sync never removes or deletes a row. "Last agreed" is the repo object id each entity had when it
-was imported, committed, restored or found identical, kept with the conflict
+A sync never removes a row. "Last agreed" is the repo object id each entity
+had when it was imported, committed, restored or found identical, kept with the conflict
 list in `{data dir}/gitsync/{workspace id}.sync.json`.
 Changing a workspace's remote or branch drops its clone and that file.
 
 ## Every change is a commit
 
-In a workspace with a remote, each change commits and pushes the one entity
-it touches:
+In a workspace with a remote, the query and dashboard **Save** buttons read
+**Commit**: each change commits and pushes the one entity it touches.
 
 | Change | Commit |
 |---|---|
 | Save (query or dashboard) | `store {kind} {name}` |
 | Rename | `rename query {type}/{new}`: the new file in, the old one out |
-| [Delete](./query.md#deleted-queries) | `delete query {type}/{name}`: the file is removed |
-| Undelete | `store`: the file comes back |
-| Purge, **Purge deleted** | the row only: the file is already gone (`purge …` if not) |
+| Delete | `delete query {type}/{name}`: the row and the file are removed |
 
 Deletes reach other instances only as a missing file, which sync never acts
 on: they keep their copy. Git history keeps everything; rewriting it is up to
@@ -97,12 +93,11 @@ are put back as they were and the request fails with `502` (`not saved: …`).
 ### Out of sync
 
 Each saved query and dashboard row carries `git_sha`, the commit holding it as
-it is: set by a commit (or a **Commit** that finds nothing to change) and by a
-sync that imports the row or finds it identical; cleared by any DB write. Rows
-without one — from a YAML import, or from before git sync was set up — are
-listed under `unsynced` by `GET /api/git/status` and shown under the ⚠ next to
-the workspace switcher as *No git sync*, until **Commit** (a deleted query: its
-file's removal) or **Sync** settles them.
+it is: set by a commit (or one that finds nothing to change) and by a sync that
+imports the row or finds it identical; cleared by any DB write. Rows without
+one — from a YAML import, or from before git sync was set up — are listed under
+`unsynced` by `GET /api/git/status` and shown under the ⚠ next to the
+workspace switcher as *No git sync*, until **Commit** or **Sync** settles them.
 
 ## Versioning
 
@@ -113,10 +108,8 @@ never moves and history is append-only.
 
 ## UI
 
-Next to each entity's **Save** button (query panel and dashboard page):
-**Commit** pushes the saved DB state to the remote (retried if another
-instance pushed first) — saves already do, so it retries a failed one;
-**Restore** opens the entity's revision list (newest first, 10 at a time,
+Next to each entity's **Save** / **Commit** button (query panel and dashboard
+page), **Restore** opens the entity's revision list (newest first, 10 at a time,
 scroll for more) and overwrites the local copy with the picked revision after
 confirmation. Both are disabled when the active workspace has no remote
 configured.
