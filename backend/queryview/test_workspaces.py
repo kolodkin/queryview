@@ -155,7 +155,7 @@ def test_the_fallback_survives_renaming_the_seeded_workspace():
 
 def test_delete_refuses_a_query_saved_after_the_emptiness_check(monkeypatch):
     """A live query saved between the emptiness check and the deletes must
-    keep the workspace (409), not be purged along with it."""
+    keep the workspace (409), not be deleted along with it."""
     from queryview import workspaces
 
     _run(create_workspace("t2-race"))

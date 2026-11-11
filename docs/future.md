@@ -18,7 +18,7 @@ no picker and lists only what `SHOW TABLES` returns.
 
 - [api.md](./api.md) — backend JSON API.
 - [connect.md](./connect.md) — connecting, storage.
-- [gitsync.md](./gitsync.md) — git backup & restore, whose follow-ups live here.
+- [gitsync.md](./gitsync.md) — git backup & restore.
 - [workspace.md](./workspace.md) — workspaces and their git remotes.
 - [session.md](./session.md) — sessions and what they remember.
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.

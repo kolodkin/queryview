@@ -1,8 +1,10 @@
 # Git sync — backup & restore
 
-Predefined queries and dashboards can be backed up to a git repository (e.g.
-GitHub) and restored from any past revision, per entity. Connections are never
-written to the repo (their config is encrypted credentials).
+A workspace with a git remote (e.g. GitHub) keeps its predefined queries
+(`/studio`) and dashboards (`/dashboard`) in the repo: every save is a commit,
+and any past revision can be restored, per entity. Connections are never
+written to the repo (their config is encrypted credentials). For one-off
+copies without git, see [export-import.md](./export-import.md).
 
 ## Configuration
 
@@ -13,6 +15,46 @@ workspaces start on branch `main`.
 
 Clones live at `{data dir}/gitsync/{workspace id}/`; the layout inside each
 clone is unchanged by workspaces.
+
+## Git sync mode
+
+A workspace is in git sync mode while it has a remote. Then:
+
+- **Badge.** A **git sync** badge sits next to the Studio and Dashboard
+  headings. Without a remote the badge is absent and saves stay local.
+- **Save commits.** **Save** (query or dashboard) writes the row, then commits
+  and pushes that one entity: `store {kind} {name}`. There is no separate
+  Commit button.
+- **Rename commits.** One commit, `rename query {type}/{new}`, adds the new
+  file and removes the old one.
+- **Delete commits.** **Delete** removes the query for good — there is no
+  trash or undelete — and commits its file's removal,
+  `delete query {type}/{name}`. To bring one back, pick **+ New name…** with
+  its name, **Restore** a revision from before the delete, then **Save**.
+- **All or nothing.** A change and its commit are one unit: the touched rows
+  are snapshotted, changed, committed and pushed. If git fails (offline,
+  rejected push) the rows are put back as they were and the request fails
+  with `502` (`not saved: …`), shown as the page's error.
+- **Push races.** A push rejected because another instance pushed first is
+  retried from the new remote head, up to 5 attempts in all.
+- **Agent pushes stay drafts.** A `push_query` or `push_dashboard` from an
+  agent renders in the browser but commits nothing until the user saves it.
+- **Not committed:** YAML [import](./export-import.md) writes rows without a
+  commit; they show as *No git sync* (below) until saved.
+- **History is kept.** Deleted files stay in git history; rewriting it is up
+  to you, outside QueryView. Other instances learn of a delete only as a
+  missing file, which sync never acts on: they keep their copy.
+
+## No git sync
+
+Each saved query and dashboard row carries `git_sha`, the commit holding it as
+it is: set by a commit (or a save that finds nothing to change) and by a sync
+that imports the row or finds it identical; cleared by any DB write. Rows
+without one — from a YAML import, or saved before the workspace had a remote —
+are listed under `unsynced` by `GET /api/git/status` and shown under the ⚠
+next to the workspace switcher as **No git sync**, until a **Save** or
+**Sync** settles them. After adding a remote, one **Sync** clears every row the
+repo already holds as is.
 
 ## Credentials
 
@@ -71,37 +113,9 @@ had when it was imported, committed, restored or found identical, kept with the 
 list in `{data dir}/gitsync/{workspace id}.sync.json`.
 Changing a workspace's remote or branch drops its clone and that file.
 
-## Every change is a commit
-
-In a workspace with a remote, a **git sync** badge sits next to the Studio and
-Dashboard headings: each change commits and pushes the one entity it touches.
-
-| Change | Commit |
-|---|---|
-| Save (query or dashboard) | `store {kind} {name}` |
-| Rename | `rename query {type}/{new}`: the new file in, the old one out |
-| Delete | `delete query {type}/{name}`: the row and the file are removed |
-
-Deletes reach other instances only as a missing file, which sync never acts
-on: they keep their copy. Git history keeps everything; rewriting it is up to
-you, outside QueryView. YAML [import](./export-import.md) doesn't commit.
-
-Each change and its commit are one unit: the touched rows are snapshotted,
-changed, committed and pushed; if git fails (offline, rejected push) the rows
-are put back as they were and the request fails with `502` (`not saved: …`).
-
-### Out of sync
-
-Each saved query and dashboard row carries `git_sha`, the commit holding it as
-it is: set by a commit (or one that finds nothing to change) and by a sync that
-imports the row or finds it identical; cleared by any DB write. Rows without
-one — from a YAML import, or from before git sync was set up — are listed under
-`unsynced` by `GET /api/git/status` and shown under the ⚠ next to the
-workspace switcher as *No git sync*, until a **Save** or **Sync** settles them.
-
 ## Versioning
 
-Git commits are the versions — each makes exactly one commit touching one
+Git commits are the versions — each change makes exactly one commit touching one
 entity, so an entity's history is `git log -- <its path>`. Restore reads
 files at a chosen commit (`git show`) and overwrites the local DB row; HEAD
 never moves and history is append-only.
@@ -111,8 +125,7 @@ never moves and history is append-only.
 Next to each entity's **Save** button (query panel and dashboard page),
 **Restore** opens the entity's revision list (newest first, 10 at a time,
 scroll for more) and overwrites the local copy with the picked revision after
-confirmation. Both are disabled when the active workspace has no remote
-configured.
+confirmation. It is disabled when the active workspace has no remote.
 
 ## API
 
@@ -134,5 +147,5 @@ optional `session_id` (see [workspace.md](./workspace.md)).
 - [export-import.md](./export-import.md) — one-shot YAML export/import of the same entities, no git needed.
 - [query.md](./query.md) — predefined queries.
 - [dashboard.md](./dashboard.md) — dashboards.
+- [docker.md](./docker.md) — git credentials in a container.
 - [api.md](./api.md) — backend JSON API.
-- [future.md](./future.md) — planned follow-ups to git sync.
