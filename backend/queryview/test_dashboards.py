@@ -58,8 +58,14 @@ def test_list_dashboards_orders_by_name_and_omits_payload(default_ws_id):
     assert set(row) == {"name", "updated_at"}
 
 
+def _default_ws():
+    from queryview.workspaces import DEFAULT_WORKSPACE, resolve
+
+    return _run(resolve(DEFAULT_WORKSPACE))
+
+
 def test_upsert_and_push_persists_without_session(default_ws_id):
-    persisted, pushed, _ = _run(_upsert_and_push("np", "<p></p>", {"q": "SELECT 1"}, None, workspace_id=default_ws_id))
+    persisted, pushed, _ = _run(_upsert_and_push("np", "<p></p>", {"q": "SELECT 1"}, None, ws=_default_ws()))
     assert persisted is True and pushed is False
     assert _run(get_dashboard("np", default_ws_id)) is not None
 
@@ -67,9 +73,7 @@ def test_upsert_and_push_persists_without_session(default_ws_id):
 def test_upsert_and_push_delivers_to_registered_session(default_ws_id):
     rid = remote.register(uuid.uuid4().hex)
     try:
-        persisted, pushed, _ = _run(
-            _upsert_and_push("pushed", "<p>x</p>", {"q": "SELECT 1"}, rid, workspace_id=default_ws_id)
-        )
+        persisted, pushed, _ = _run(_upsert_and_push("pushed", "<p>x</p>", {"q": "SELECT 1"}, rid, ws=_default_ws()))
         assert persisted is True and pushed is True
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None

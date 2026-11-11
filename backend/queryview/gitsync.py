@@ -479,15 +479,17 @@ async def store(
     name: str,
     conn_type: str | None = None,
     message: str | None = None,
+    old_name: str = "",
 ) -> dict[str, Any]:
-    """Export one entity's saved DB state into the clone, commit, push.
+    """Export one entity's saved DB state into the clone, commit, push; a
+    query renamed from `old_name` drops the old file in the same commit.
     The workdir is reset to the remote head first — exports are deterministic
     from the DB and each commit touches one entity, so this is always safe; a
     push rejected by another instance's concurrent push is retried once."""
     _check_kind(kind, conn_type)
     _require_remote(ws)  # unconfigured -> 409 before any DB/entity lookup
     async with _lock(ws):
-        return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message))
+        return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message, old_name))
 
 
 async def _retry_if_rejected(op: Callable[[], Awaitable[Any]]) -> Any:
@@ -507,6 +509,7 @@ async def _store_once(
     name: str,
     conn_type: str | None,
     message: str | None,
+    old_name: str = "",
 ) -> dict[str, Any]:
     """One store attempt; a retry reports only its own merge."""
     wd = await _ensure_repo(ws)
@@ -537,13 +540,18 @@ async def _store_once(
             (ddir / fname).write_text(content, encoding="utf-8")
     if not is_deleted:
         await _git("add", "-A", "--", *paths, cwd=wd)
+    old = query_relpath(conn_type or "", old_name) if old_name else ""
+    if old and (wd / old).exists():
+        await _agree(ws, wd, "HEAD", kind, old_name, conn_type)  # keeps sync from importing it back
+        await _git("rm", "-q", "--", old, cwd=wd)
+        paths.append(old)
     if not (await _git("status", "--porcelain", "--", *paths, cwd=wd)).strip():
         # Already in git as it is.
         if head:
             await _mark(ws, kind, name, conn_type, (await _git("rev-parse", head, cwd=wd)).strip(), entity)
         return {"committed": False, "sha": None, "message": "no changes", **merged, "conflicts": conflicts(ws)}
     label = f"{conn_type}/{name}" if kind == "query" else name
-    verb = "delete" if is_deleted else "store"
+    verb = "delete" if is_deleted else "rename" if old else "store"
     await _git("commit", "-m", message or f"{verb} {kind} {label}", cwd=wd)
     await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
     sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
@@ -592,22 +600,34 @@ async def remove(ws: WorkspaceRec, keys: list[tuple[str, str]], verb: str) -> No
             await _retry_if_rejected(lambda: _remove_once(ws, keys, verb))
 
 
-async def mirror(
-    ws: WorkspaceRec, kind: str, name: str, conn_type: str | None = None, *, old_name: str = ""
-) -> str | None:
-    """Mirror one DB change to the repo when `ws` syncs: commit the entity (a
-    deleted query as its file's removal); a rename (`old_name`) also removes
-    the old file. Returns git's error instead of raising: the DB change stands,
-    unmarked (no git_sha), and Commit retries it."""
+async def commit_change(
+    ws: WorkspaceRec,
+    kind: str,
+    name: str,
+    conn_type: str | None,
+    apply: Callable[[], Awaitable[Any]],
+    *,
+    old_name: str = "",
+) -> Any:
+    """Apply a DB change (`apply`, returning its result) and commit it as one
+    unit when `ws` syncs: if git fails, the touched rows (`name`, and a
+    rename's `old_name`) are put back as they were and GitSyncError raised."""
     if not configured(ws):
-        return None
+        return await apply()
+    from .dashboards import restore_dashboards, snapshot_dashboards
+    from .queries import restore_queries, snapshot_queries
+
+    names = [name, old_name] if old_name else [name]
+    is_query = kind == "query"
+    # shortcut: another write to these rows while git runs is undone too; fine for one user per workspace.
+    snap = await (snapshot_queries(conn_type or "", names, ws.id) if is_query else snapshot_dashboards(names, ws.id))
+    result = await apply()
     try:
-        await store(ws, kind, name, conn_type)
-        if old_name:
-            await remove(ws, [(conn_type or "", old_name)], "delete")
+        await store(ws, kind, name, conn_type, old_name=old_name)
     except GitSyncError as e:
-        return str(e)
-    return None
+        await (restore_queries(conn_type or "", snap, ws.id) if is_query else restore_dashboards(snap, ws.id))
+        raise GitSyncError(f"not saved: {e}", status=e.status) from e
+    return result
 
 
 async def _remove_once(ws: WorkspaceRec, keys: list[tuple[str, str]], verb: str) -> None:

@@ -14,6 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from . import connect
 from .connect import _engine_for_db, _ensure_schema, _now_ms
+from .workspaces import WorkspaceRec
 
 
 class Dashboard(SQLModel, table=True):
@@ -101,6 +102,35 @@ async def set_dashboard_git_sha(
         await s.commit()
 
 
+async def snapshot_dashboards(names: list[str], workspace_id: int) -> dict[str, dict[str, Any] | None]:
+    """Each named row's full columns (None: no such row), for restore_dashboards."""
+    await _ensure_schema()
+    snap: dict[str, dict[str, Any] | None] = {}
+    async with AsyncSession(_engine_for_db()) as s:
+        for n in names:
+            row = (
+                await s.exec(select(Dashboard).where(Dashboard.name == n, Dashboard.workspace_id == workspace_id))
+            ).first()
+            snap[n] = row.model_dump(exclude={"id"}) if row is not None else None
+    return snap
+
+
+async def restore_dashboards(snap: dict[str, dict[str, Any] | None], workspace_id: int) -> None:
+    """Put the snapshot's rows back exactly, dropping rows it had as None."""
+    async with AsyncSession(_engine_for_db()) as s:
+        for n in snap:
+            row = (
+                await s.exec(select(Dashboard).where(Dashboard.name == n, Dashboard.workspace_id == workspace_id))
+            ).first()
+            if row is not None:
+                await s.delete(row)
+        await s.flush()
+        for data in snap.values():
+            if data is not None:
+                s.add(Dashboard(**data))
+        await s.commit()
+
+
 async def unsynced_dashboards(workspace_id: int) -> list[str]:
     """Names of the dashboards not in git as they are."""
     await _ensure_schema()
@@ -182,13 +212,19 @@ async def _upsert_and_push(
     session_id: str | None,
     params: list[dict[str, Any]] | None = None,
     *,
-    workspace_id: int,
+    ws: WorkspaceRec,
 ) -> tuple[bool, bool, str]:
-    """Persist a dashboard, then (if `session_id` given) push it to that live
-    browser session. Returns (persisted, pushed, message). Push is best-effort:
-    an unknown/inactive session leaves it saved with pushed=False, per
-    remote.push's contract. Used by the REST endpoint (the user-Save path)."""
-    await upsert_dashboard(name, html, queries, params, workspace_id=workspace_id)
+    """Persist a dashboard (committed with it when `ws` syncs: a git failure
+    undoes the save and raises GitSyncError), then (if `session_id` given)
+    push it to that live browser session. Returns (persisted, pushed,
+    message). Push is best-effort: an unknown/inactive session leaves it saved
+    with pushed=False, per remote.push's contract. Used by the REST endpoint
+    (the user-Save path)."""
+    from . import gitsync
+
+    await gitsync.commit_change(
+        ws, "dashboard", name, None, lambda: upsert_dashboard(name, html, queries, params, workspace_id=ws.id)
+    )
     if session_id:
         ok, message = await connect.push(session_id, _dashboard_event(name, html, queries, params))
         return True, ok, message

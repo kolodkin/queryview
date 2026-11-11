@@ -81,7 +81,7 @@ it touches:
 | Change | Commit |
 |---|---|
 | Save (query or dashboard) | `store {kind} {name}` |
-| Rename | `store` under the new name, then `delete` the old file |
+| Rename | `rename query {type}/{new}`: the new file in, the old one out |
 | [Delete](./query.md#deleted-queries) | `delete query {type}/{name}`: the file is removed |
 | Undelete | `store`: the file comes back |
 | Purge, **Purge deleted** | the row only: the file is already gone (`purge …` if not) |
@@ -90,23 +90,19 @@ Deletes reach other instances only as a missing file, which sync never acts
 on: they keep their copy. Git history keeps everything; rewriting it is up to
 you, outside QueryView. YAML [import](./export-import.md) doesn't commit.
 
+Each change and its commit are one unit: the touched rows are snapshotted,
+changed, committed and pushed; if git fails (offline, rejected push) the rows
+are put back as they were and the request fails with `502` (`not saved: …`).
+
 ### Out of sync
 
 Each saved query and dashboard row carries `git_sha`, the commit holding it as
-it is. Every DB write clears it; a commit (or a **Commit** that finds nothing
-to change) sets it, unless the row changed again meanwhile; a sync sets it on
-rows it imports or finds identical. So:
-
-1. save → DB write, `git_sha` cleared;
-2. commit and push;
-3. success → `git_sha` set.
-
-If git fails (offline, rejected push) the DB change stands, the response
-carries `git_error`, and the row stays without a sha. `GET /api/git/status`
-lists such rows under `unsynced`, and the ⚠ next to the workspace switcher
-shows them as *No git sync* until **Commit** (a deleted query: its file's
-removal) or **Sync** settles them. Imports, and rows from before git sync was
-set up, show there until committed or synced.
+it is: set by a commit (or a **Commit** that finds nothing to change) and by a
+sync that imports the row or finds it identical; cleared by any DB write. Rows
+without one — from a YAML import, or from before git sync was set up — are
+listed under `unsynced` by `GET /api/git/status` and shown under the ⚠ next to
+the workspace switcher as *No git sync*, until **Commit** (a deleted query: its
+file's removal) or **Sync** settles them.
 
 ## Versioning
 

@@ -123,7 +123,6 @@ function DashboardView({
         setError(data.message ?? 'Failed to save dashboard.')
         return
       }
-      if (data.git_error) setError(`Saved, but the git commit failed: ${data.git_error}`)
       announceGitSync()
       await loadDashboards()
     } catch {

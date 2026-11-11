@@ -212,6 +212,31 @@ async def set_query_git_sha(
         await s.commit()
 
 
+async def snapshot_queries(conn_type: str, names: list[str], workspace_id: int) -> dict[str, dict[str, Any] | None]:
+    """Each named row's full columns (None: no such row), for restore_queries."""
+    await _ensure_schema()
+    snap: dict[str, dict[str, Any] | None] = {}
+    async with AsyncSession(_engine_for_db()) as s:
+        for n in names:
+            row = await _find(s, conn_type, n, workspace_id)
+            snap[n] = row.model_dump(exclude={"id"}) if row is not None else None
+    return snap
+
+
+async def restore_queries(conn_type: str, snap: dict[str, dict[str, Any] | None], workspace_id: int) -> None:
+    """Put the snapshot's rows back exactly, dropping rows it had as None."""
+    async with AsyncSession(_engine_for_db()) as s:
+        for n in snap:
+            row = await _find(s, conn_type, n, workspace_id)
+            if row is not None:
+                await s.delete(row)
+        await s.flush()  # free the (workspace, type, name) keys first
+        for data in snap.values():
+            if data is not None:
+                s.add(PredefinedQuery(**data))
+        await s.commit()
+
+
 async def unsynced_queries(workspace_id: int) -> list[tuple[str, str]]:
     """(type, name) of every query, live or deleted, not in git as it is."""
     await _ensure_schema()
