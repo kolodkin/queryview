@@ -33,6 +33,7 @@ from .validation import dashboard_params_error
 
 mcp = MCPServer(
     "queryview",
+    description="Local, agent-controlled SQL workbench for ClickHouse, Postgres, DuckDB and SQLite.",
     instructions=(
         "Before using these tools, read the queryview skill (skill://queryview/SKILL.md): it covers tabs, "
         "connections, running SQL safely and dashboards."
