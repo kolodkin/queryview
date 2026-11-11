@@ -24,7 +24,7 @@ Register the client once — see [mcp.md](./mcp.md).
 
 ## MCP tools
 
-The backend mounts a FastMCP server (Streamable HTTP) at `/mcp/` exposing these
+The backend mounts an MCP server (Streamable HTTP) at `/mcp/` exposing these
 tools (among others):
 
 - `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —

@@ -129,7 +129,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="queryview-backend", lifespan=lifespan)
-app.mount("/mcp", mcp.streamable_http_app())
+app.mount("/mcp", mcp.streamable_http_app(streamable_http_path="/", stateless_http=True))
 
 
 # The GET-only catch-all below suppresses Starlette's own /mcp -> /mcp/ redirect

@@ -1,6 +1,6 @@
 """The MCP mount's slashless path.
 
-The FastMCP app is mounted at `/mcp` with its own path set to `/`, so the
+The MCP app is mounted at `/mcp` with its own path set to `/`, so the
 canonical endpoint is `/mcp/`. Starlette would normally redirect `/mcp` there,
 but the SPA catch-all (`@app.get("/{full_path:path}")`) matches the slashless
 path on GET only, which Starlette scores as a partial match — that suppresses

@@ -1,4 +1,4 @@
-"""The MCP layer: a FastMCP server (mounted by main.py at /mcp) whose tools push
+"""The MCP layer: an MCPServer (mounted by main.py at /mcp) whose tools push
 queries/scripts/dashboards to a live QueryView browser session, delegating to the
 in-process remote.py hub."""
 
@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 
 from . import gitsync, remote, sessions
 from .connect import (
@@ -30,9 +30,8 @@ from .dashboards import _push_dashboard
 from .queries import list_predefined_queries_view
 from .validation import dashboard_params_error
 
-mcp = FastMCP(
+mcp = MCPServer(
     "queryview",
-    stateless_http=True,
     instructions=(
         "Work in a tab of your own unless the user gives you a session id: new_tab(name) returns a "
         "session_id and a url; open the url in the user's browser yourself (`open <url>` on macOS, "
@@ -43,7 +42,6 @@ mcp = FastMCP(
         "writes). If a push fails, reply with the SQL. A user-named tool wins."
     ),
 )
-mcp.settings.streamable_http_path = "/"
 
 
 @mcp.tool()

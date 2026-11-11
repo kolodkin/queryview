@@ -53,7 +53,7 @@ shared (SQLite). See [session.md](./session.md).
 | GET    | `/api/dashboards`           | `?workspace=`                          | List a workspace's dashboards (no payload): `{dashboards:[{name, updated_at}]}`, ordered by name. |
 | GET    | `/api/dashboards/{name}`    | `?workspace=`                          | A saved dashboard `{name, html, queries}` (`queries` parsed to a dict), or `404 {error:"not found"}`. |
 
-**MCP:** a FastMCP server is mounted at `/mcp/` (Streamable HTTP) exposing
+**MCP:** an MCP server is mounted at `/mcp/` (Streamable HTTP) exposing
 `push_query` (push SQL to a session's query panel), `push_script` (push a script
 to a session's Scripts editor), `push_dashboard` (push a dashboard draft to a
 session), `session_info`, `run_sql`, `run_script`, `list_queries` / `list_dashboards`
