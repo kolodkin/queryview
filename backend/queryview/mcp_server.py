@@ -35,9 +35,8 @@ mcp = MCPServer(
     "queryview",
     description="Local, agent-controlled SQL workbench for ClickHouse, Postgres, DuckDB and SQLite.",
     instructions=(
-        "This server publishes an MCP skill, queryview (skill://queryview/SKILL.md; fetch it with skills/get "
-        "or resources/read). Read it before using these tools: it covers tabs, connections, running SQL "
-        "safely and dashboards."
+        "This server publishes an MCP skill, queryview (skill://queryview/SKILL.md). Read it before using "
+        "these tools: it covers tabs, connections, running SQL safely and dashboards."
     ),
     extensions=[SkillsExtension()],
 )
