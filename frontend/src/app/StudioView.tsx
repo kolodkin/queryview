@@ -22,11 +22,12 @@ import {
   type QueryRows,
 } from '../core'
 import ExportImportControls from './controls/ExportImportControls'
+import GitSyncBadge from './controls/GitSyncBadge'
 import GitSyncControls from './controls/GitSyncControls'
 import { downloadText } from './yamlio'
 import { useEditLock } from './sessionLock'
 import { apiFetch } from './api'
-import { announceGitSync, onGitSync, useGitConfigured } from './gitsync'
+import { announceGitSync, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
@@ -73,10 +74,11 @@ function StudioView({
 }) {
   return (
     <div className="viewport-page flex w-full flex-col">
-      <div className="mb-6 flex items-center justify-center">
+      <div className="mb-6 flex items-center justify-center gap-3">
         <h1 className="text-3xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           Studio
         </h1>
+        <GitSyncBadge />
       </div>
       <QueryPanel
         connectionType={connectionType}
@@ -130,7 +132,6 @@ function QueryPanel({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [predefined, setPredefined] = useState<PredefinedQuery[]>([])
-  const gitOn = useGitConfigured(activeWorkspace())
   const [selectedName, setSelectedName] = useState('')
   // A saved query picked from the dropdown, waiting to run.
   const [picked, setPicked] = useState<PredefinedQuery | null>(null)
@@ -696,7 +697,7 @@ function QueryPanel({
           data-testid="query-save"
           className="glass-btn px-3 py-2 font-medium"
         >
-          {gitOn ? 'Commit' : 'Save'}
+          Save
         </button>
         <GitSyncControls
           kind="query"

@@ -48,7 +48,7 @@ the file and a sync skips it.
 A sync fetches the repo and merges its head into the workspace. It runs:
 
 - when a remote is saved (re-entering the same URL counts);
-- on every save (**Commit**), **Restore**, and opening an entity's revision list;
+- on every save, **Restore**, and opening an entity's revision list;
 - on **Sync** in the workspace panel (header dropdown → *Manage workspaces…*),
   to pick up what was committed elsewhere.
 
@@ -61,7 +61,7 @@ The merge only adds, never overwrites:
 - the same on both sides → nothing to do;
 - different, and the repo's copy changed since this workspace last agreed with
   it → a **conflict**: the local copy is kept and the entity is listed under a
-  ⚠ next to the workspace switcher until you **Commit** (push yours) or
+  ⚠ next to the workspace switcher until you **Save** (push yours) or
   **Restore** (take the repo's);
 - different, but only because you edited it locally → just an uncommitted
   change, not a conflict.
@@ -73,8 +73,8 @@ Changing a workspace's remote or branch drops its clone and that file.
 
 ## Every change is a commit
 
-In a workspace with a remote, the query and dashboard **Save** buttons read
-**Commit**: each change commits and pushes the one entity it touches.
+In a workspace with a remote, a **git sync** badge sits next to the Studio and
+Dashboard headings: each change commits and pushes the one entity it touches.
 
 | Change | Commit |
 |---|---|
@@ -97,7 +97,7 @@ it is: set by a commit (or one that finds nothing to change) and by a sync that
 imports the row or finds it identical; cleared by any DB write. Rows without
 one — from a YAML import, or from before git sync was set up — are listed under
 `unsynced` by `GET /api/git/status` and shown under the ⚠ next to the
-workspace switcher as *No git sync*, until **Commit** or **Sync** settles them.
+workspace switcher as *No git sync*, until a **Save** or **Sync** settles them.
 
 ## Versioning
 
@@ -108,8 +108,8 @@ never moves and history is append-only.
 
 ## UI
 
-Next to each entity's **Save** / **Commit** button (query panel and dashboard
-page), **Restore** opens the entity's revision list (newest first, 10 at a time,
+Next to each entity's **Save** button (query panel and dashboard page),
+**Restore** opens the entity's revision list (newest first, 10 at a time,
 scroll for more) and overwrites the local copy with the picked revision after
 confirmation. Both are disabled when the active workspace has no remote
 configured.

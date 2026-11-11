@@ -12,9 +12,10 @@ import {
   type ResolvedParam,
 } from '../core'
 import ExportImportControls from './controls/ExportImportControls'
+import GitSyncBadge from './controls/GitSyncBadge'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
-import { announceGitSync, onGitSync, useGitConfigured } from './gitsync'
+import { announceGitSync, onGitSync } from './gitsync'
 import { activeWorkspace } from './session'
 
 // A dashboard names no connection: it runs on the viewing session's.
@@ -84,7 +85,6 @@ function DashboardView({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const gitOn = useGitConfigured(activeWorkspace())
   // Bumped after a git restore to re-trigger the load effect below without
   // otherwise changing its dependencies.
   const [reloadNonce, setReloadNonce] = useState(0)
@@ -260,6 +260,7 @@ function DashboardView({
         <h1 className="text-2xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
           Dashboard
         </h1>
+        <GitSyncBadge />
         <select
           data-testid="dashboard-select"
           aria-label="Dashboards"
@@ -288,7 +289,7 @@ function DashboardView({
           disabled={!active || saving}
           className="glass-btn min-w-[5rem] px-3 py-2 text-center text-sm font-medium"
         >
-          {saving ? (gitOn ? 'Committing…' : 'Saving…') : gitOn ? 'Commit' : 'Save'}
+          {saving ? 'Saving…' : 'Save'}
         </button>
         <GitSyncControls
           kind="dashboard"

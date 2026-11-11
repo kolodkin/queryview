@@ -186,9 +186,9 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
               <p className="font-medium text-amber-200">No git sync ({unsynced.length})</p>
               <WarnList items={unsynced} />
               <p className="text-xs text-slate-400">
-                Its commit failed or hasn&apos;t happened yet. Open it and{' '}
-                <b className="text-slate-200">Commit</b>, or <b className="text-slate-200">Sync</b>{' '}
-                to check against the repo.
+                Not committed yet (an import, or saved before git sync). Open it and{' '}
+                <b className="text-slate-200">Save</b>, or <b className="text-slate-200">Sync</b> to
+                check against the repo.
               </p>
             </div>
           )}
@@ -204,7 +204,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
               </p>
               <WarnList items={conflicts} />
               <p className="text-xs text-slate-400">
-                To settle one, open it and <b className="text-slate-200">Commit</b> to push your
+                To settle one, open it and <b className="text-slate-200">Save</b> to push your
                 version, or <b className="text-slate-200">Restore</b> to take the repo&apos;s.
               </p>
             </div>

@@ -102,7 +102,7 @@ CREATE TABLE predefined_queries (
 - **Delete** confirms, then removes the query for good; the editor keeps its
   SQL. With a git remote, the query's file is
   [removed](./gitsync.md#every-change-is-a-commit) too.
-- With a git remote, **Save** reads **Commit**: every save is a commit.
+- With a git remote (a **git sync** badge by the heading) every save is a commit.
 
 ## Cell views
 

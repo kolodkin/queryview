@@ -37,8 +37,7 @@ export function gitStatus(workspace: string): Promise<boolean> {
   return cached
 }
 
-// Whether `workspace` has a git remote: its Save buttons then read "Commit",
-// since every save commits (docs/gitsync.md).
+// Whether `workspace` has a git remote, so every save commits (docs/gitsync.md).
 export function useGitConfigured(workspace: string): boolean {
   const [on, setOn] = useState(false)
   // Re-read after a sync too: saving the workspace's remote announces one.
