@@ -53,8 +53,8 @@ that imports the row or finds it identical; cleared by any DB write. Rows
 without one — from a YAML import, or saved before the workspace had a remote —
 are listed under `unsynced` by `GET /api/git/status` and shown under the ⚠
 next to the workspace switcher as **No git sync**, until a **Save** or
-**Sync** settles them. After adding a remote, one **Sync** clears every row the
-repo already holds as is.
+**Sync** settles them. Adding a remote runs a sync, which clears every row the
+repo already holds as is; the rest need a **Save**.
 
 ## Credentials
 
