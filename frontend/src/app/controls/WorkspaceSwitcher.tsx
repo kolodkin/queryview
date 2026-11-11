@@ -198,9 +198,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
         >
           {unsynced.length > 0 && (
             <div data-testid="workspace-unsynced" className="space-y-2">
-              <p className="font-medium text-amber-200">
-                {unsynced.length === 1 ? '1 item is' : `${unsynced.length} items are`} not in git
-              </p>
+              <p className="font-medium text-amber-200">No git sync ({unsynced.length})</p>
               <WarnList items={unsynced} />
               <p className="text-xs text-slate-400">
                 Its commit failed or hasn&apos;t happened yet. Open it and{' '}

@@ -104,7 +104,7 @@ rows it imports or finds identical. So:
 If git fails (offline, rejected push) the DB change stands, the response
 carries `git_error`, and the row stays without a sha. `GET /api/git/status`
 lists such rows under `unsynced`, and the ⚠ next to the workspace switcher
-shows them as *not in git* until **Commit** (a deleted query: its file's
+shows them as *No git sync* until **Commit** (a deleted query: its file's
 removal) or **Sync** settles them. Imports, and rows from before git sync was
 set up, show there until committed or synced.
 
