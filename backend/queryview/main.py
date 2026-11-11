@@ -164,7 +164,6 @@ _SESSION_ERRORS = {
     "unknown": (404, "unknown session"),
     "held": (409, "session is open in another tab"),
     "taken": (409, "session was taken by another tab"),
-    "agent": (409, "the Agent session can't be deleted"),
 }
 
 
@@ -193,6 +192,7 @@ def _session_payload(rec: sessions.SessionRec) -> dict[str, Any]:
         "workspace": rec.workspace,
         "url": rec.url,
         "ui": rec.ui,
+        "tab": rec.tab,
     }
 
 

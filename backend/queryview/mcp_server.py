@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from . import gitsync, remote, sessions
 from .connect import (
@@ -34,12 +34,13 @@ mcp = FastMCP(
     "queryview",
     stateless_http=True,
     instructions=(
-        f"Without a session id from the user, use the standing Agent session {sessions.AGENT_SESSION_ID}: "
-        "use_connection any ClickHouse/Postgres connection list_connections shows, or add_connection your own. "
-        "Pushes to it work once the user arms it in the QueryView UI. "
-        "Asked to run a query, don't ask which tool: iterate read-only with run_sql, apply "
-        "writes once with run_script, then push_script the final SQL with run=False (never "
-        "re-run writes); if the push fails, reply with the SQL. A user-named tool wins."
+        "Work in a tab of your own unless the user gives you a session id: new_tab(name) returns a "
+        "session_id and a url; open the url in the user's browser yourself (`open <url>` on macOS, "
+        "`xdg-open <url>` on Linux; otherwise give the user the link), then use_connection any "
+        "ClickHouse/Postgres connection list_connections shows, or add_connection your own. One tab per "
+        "task, reused when revising it. Asked to run a query: iterate read-only with run_sql, apply "
+        "writes once with run_script, then push_script the final SQL with run=False (never re-run "
+        "writes). If a push fails, reply with the SQL. A user-named tool wins."
     ),
 )
 mcp.settings.streamable_http_path = "/"
@@ -61,7 +62,7 @@ async def push_query(
     The targeted browser fills its query panel and auto-runs the query against
     the session's own connection. Get the `session_id` from the QueryView UI:
     the agent icon next to the connection status pill, after enabling "Allow
-    remote control"; without one, use the standing Agent session "agent".
+    remote control"; without one, open a tab of your own with new_tab.
     To explore data first, use run_sql with the same id.
     A session on a locked connection (see session_info) refuses every push and
     query with "connection is locked"; use_connection another one.
@@ -96,7 +97,7 @@ async def push_query(
         "name": name,
     }
     ok, message = await push(session_id, payload)
-    return {"ok": ok, "message": message, "database": await sessions.database_of(session_id)}
+    return _with_url(session_id, {"ok": ok, "message": message, "database": await sessions.database_of(session_id)})
 
 
 @mcp.tool()
@@ -184,7 +185,7 @@ async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str,
     connected" / "select a database first" when the Scripts page can't open.
 
     Args:
-        session_id: The session id shown in the QueryView popover.
+        session_id: The session id shown in the QueryView popover, or new_tab's.
         sql: The script; separate statements with `;`.
         run: Also run it (default False: load only).
     """
@@ -192,9 +193,9 @@ async def push_script(session_id: str, sql: str, run: bool = False) -> dict[str,
     # whenever the user next opens Scripts.
     s, err = await _gated_session(session_id)
     if s is None:
-        return {"ok": False, "message": err["message"], "database": None}  # type: ignore[index]
+        return _failed(err["message"])  # type: ignore[index]
     ok, message = remote.push(session_id, {"type": "script", "sql": sql, "run": run})
-    return {"ok": ok, "message": message, "database": s.database}
+    return _with_url(session_id, {"ok": ok, "message": message, "database": s.database})
 
 
 @mcp.tool()
@@ -227,7 +228,7 @@ async def session_info(session_id: str) -> dict[str, Any]:
         tables: list[dict[str, Any]] = listed.get("tables") or []
         # The browse SELECT is for the Explorer UI; the agent writes its own SQL.
         info["tables"] = [{k: v for k, v in t.items() if k != "query"} for t in tables]
-    return info
+    return _with_url(session_id, info)
 
 
 @mcp.tool()
@@ -363,7 +364,7 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
     """
     cur = await get_session(session_id)
     if not cur["connected"]:
-        return {"ok": False, "message": "not connected", "database": None}
+        return _failed("not connected")
     r = await connect_select_database(session_id, database)
     if not r["ok"]:
         return {"ok": False, "message": r["message"], "database": cur["database"]}
@@ -397,7 +398,7 @@ async def open_explorer(session_id: str, database: str, table: str | None = None
         if not listed.get("truncated") and not any(t["name"] == table for t in listed["tables"]):
             return {"ok": False, "message": f'no table "{table}" in {database}', "database": database}
     ok, message = await push(session_id, {"type": "explorer", "table": table})
-    return {"ok": ok, "message": message, "database": database}
+    return _with_url(session_id, {"ok": ok, "message": message, "database": database})
 
 
 async def _session_workspace_rec(session_id: str | None):
@@ -495,17 +496,65 @@ async def push_dashboard(
     if perr is not None:
         return _push_failed(perr)
     pushed, persisted, message = await _push_dashboard(name, html, queries, session_id, params, rec.workspace)
-    return {
-        "ok": pushed,
-        "pushed": pushed,
-        "persisted": persisted,
-        "message": message,
-        "database": await sessions.database_of(session_id),
-    }
+    return _with_url(
+        session_id,
+        {
+            "ok": pushed,
+            "pushed": pushed,
+            "persisted": persisted,
+            "message": message,
+            "database": await sessions.database_of(session_id),
+        },
+    )
+
+
+def _failed(message: str) -> dict[str, Any]:
+    return {"ok": False, "message": message, "database": None}
 
 
 def _push_failed(message: str) -> dict[str, Any]:
-    return {"ok": False, "pushed": False, "persisted": False, "message": message, "database": None}
+    return {**_failed(message), "pushed": False, "persisted": False}
+
+
+@mcp.tool()
+async def new_tab(name: str, ctx: Context) -> dict[str, Any]:
+    """A fresh QueryView session for your work and the link that shows it (see
+    docs/remote.md, "Tabs"). Open `url` in the user's browser yourself: `open
+    <url>` on macOS, `xdg-open <url>` on Linux; otherwise give the user the
+    link. The tab lists as "Agent › <name>", arms itself on load and is gone
+    once closed. Connect it with use_connection or add_connection, then push
+    into its `session_id`; a push made before the tab loads waits for it (a
+    minute at most).
+
+    Args:
+        name: What the tab is for, e.g. "orders cleanup".
+
+    Returns {"ok": True, "session_id", "url"} or {"ok": False, "message"}.
+    """
+    name = name.strip()
+    if not name:
+        return {"ok": False, "message": "name required"}
+    rec = await sessions.create_tab(name)
+    remote.open_pending(rec.id)
+    _tab_urls[rec.id] = f"{_origin(ctx)}/?session={rec.id}"
+    return {"ok": True, "session_id": rec.id, "url": _tab_urls[rec.id]}
+
+
+# The link of each tab this process opened, so every reply about it can carry
+# it: the agent can re-open or hand over a tab without keeping the link itself.
+_tab_urls: dict[str, str] = {}
+
+
+def _with_url(session_id: str, reply: dict[str, Any]) -> dict[str, Any]:
+    url = _tab_urls.get(session_id)
+    return {**reply, "url": url} if url else reply
+
+
+def _origin(ctx: Context) -> str:
+    """The scheme and host the MCP client reached us on, so the link it gets
+    works from where it is."""
+    request = ctx.request_context.request
+    return f"{request.url.scheme}://{request.url.netloc}" if request is not None else ""
 
 
 async def _git_tool(coro) -> dict[str, Any]:

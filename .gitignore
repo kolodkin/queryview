@@ -12,7 +12,7 @@ __pycache__/
 .ruff_cache/
 
 # Playwright
-/test-results/
+test-results/
 /report/
 /blob-report/
 

@@ -534,3 +534,40 @@ describe('startHeartbeat', () => {
     stop()
   })
 })
+
+describe('claimFromUrl', () => {
+  function stubLocation(search: string) {
+    vi.stubGlobal('window', { location: { pathname: '/', search, hash: '' } })
+    const replaceState = vi.fn()
+    vi.stubGlobal('history', { replaceState })
+    return replaceState
+  }
+
+  it('is null without a session in the link', async () => {
+    stubTabStorage({ [TAB_KEY]: 't1' })
+    stubLocation('')
+    const { claimFromUrl } = await import('./session')
+    expect(claimFromUrl()).toBeNull()
+    expect(tabRead(TAB_KEY)).toBe('t1')
+  })
+
+  it('takes the named session with a tab token of its own, dropping the parameter', async () => {
+    // A window opened by another tab starts with a copy of its storage; keeping
+    // that token would make the new tab take over the opener's session.
+    stubTabStorage({ [TAB_KEY]: 't1', [SESSION_KEY]: 'parent' })
+    const replaceState = stubLocation('?session=child&x=1')
+    const { claimFromUrl } = await import('./session')
+    expect(claimFromUrl()).toBe('child')
+    expect(tabRead(SESSION_KEY)).toBe('child')
+    expect(tabRead(TAB_KEY)).not.toBe('t1')
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/?x=1')
+  })
+
+  it('keeps the token of a tab re-opened onto its own session', async () => {
+    stubTabStorage({ [TAB_KEY]: 't1', [SESSION_KEY]: 'child' })
+    stubLocation('?session=child')
+    const { claimFromUrl } = await import('./session')
+    expect(claimFromUrl()).toBe('child')
+    expect(tabRead(TAB_KEY)).toBe('t1')
+  })
+})
