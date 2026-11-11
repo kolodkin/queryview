@@ -198,7 +198,8 @@ async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] 
         raise GitSyncError(f"git {args[0]} timed out after {_GIT_TIMEOUT_S}s") from e
     if proc.returncode != 0:
         tail = err.decode("utf-8", "replace").strip()[-500:]
-        rejected = args[0] == "push" and b"! [rejected]" in err
+        # Lost a race with another push: "[rejected]" (behind), or a server-side ref-lock race.
+        rejected = args[0] == "push" and (b"! [rejected]" in err or b"cannot lock ref" in err)
         raise GitSyncError(f"git {args[0]} failed: {tail}", rejected=rejected)
     return out.decode("utf-8", "replace")
 
