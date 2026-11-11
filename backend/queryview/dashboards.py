@@ -31,6 +31,13 @@ class Dashboard(SQLModel, table=True):
     git_sha: str | None = Field(default=None)  # as on PredefinedQuery
 
 
+async def _find(s: AsyncSession, name: str, workspace_id: int) -> Dashboard | None:
+    """The row holding (workspace, name)."""
+    return (
+        await s.exec(select(Dashboard).where(Dashboard.name == name, Dashboard.workspace_id == workspace_id))
+    ).first()
+
+
 async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -> None:
     """Upsert many dashboards — each a dict with `name`, `html`, a `queries`
     dict and an optional `params` list — in one transaction, keyed by
@@ -38,11 +45,7 @@ async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         for d in items:
-            row = (
-                await s.exec(
-                    select(Dashboard).where(Dashboard.name == d["name"], Dashboard.workspace_id == workspace_id)
-                )
-            ).first()
+            row = await _find(s, d["name"], workspace_id)
             if row is None:
                 row = Dashboard(name=d["name"], workspace_id=workspace_id, html="", queries="", updated_at=0)
             row.html = d["html"]
@@ -92,9 +95,7 @@ async def set_dashboard_git_sha(
 ) -> None:
     """Record the git commit holding this dashboard (see set_query_git_sha)."""
     async with AsyncSession(_engine_for_db()) as s:
-        row = (
-            await s.exec(select(Dashboard).where(Dashboard.name == name, Dashboard.workspace_id == workspace_id))
-        ).first()
+        row = await _find(s, name, workspace_id)
         if row is None or (unchanged_from is not None and _payload(row) != unchanged_from):
             return
         if row.git_sha is not None and unchanged_from is not None:
@@ -110,9 +111,7 @@ async def snapshot_dashboards(names: list[str], workspace_id: int) -> dict[str, 
     snap: dict[str, dict[str, Any] | None] = {}
     async with AsyncSession(_engine_for_db()) as s:
         for n in names:
-            row = (
-                await s.exec(select(Dashboard).where(Dashboard.name == n, Dashboard.workspace_id == workspace_id))
-            ).first()
+            row = await _find(s, n, workspace_id)
             snap[n] = row.model_dump(exclude={"id"}) if row is not None else None
     return snap
 
@@ -121,9 +120,7 @@ async def restore_dashboards(snap: dict[str, dict[str, Any] | None], workspace_i
     """Put the snapshot's rows back exactly, dropping rows it had as None."""
     async with AsyncSession(_engine_for_db()) as s:
         for n in snap:
-            row = (
-                await s.exec(select(Dashboard).where(Dashboard.name == n, Dashboard.workspace_id == workspace_id))
-            ).first()
+            row = await _find(s, n, workspace_id)
             if row is not None:
                 await s.delete(row)
         await s.flush()
@@ -137,23 +134,21 @@ async def unsynced_dashboards(workspace_id: int) -> list[str]:
     """Names of the dashboards not in git as they are."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
-        rows = (
+        names = (
             await s.exec(
-                select(Dashboard)
+                select(Dashboard.name)
                 .where(Dashboard.workspace_id == workspace_id, col(Dashboard.git_sha).is_(None))
                 .order_by(Dashboard.name)
             )
         ).all()
-    return [r.name for r in rows]
+    return list(names)
 
 
 async def get_dashboard(name: str, workspace_id: int) -> dict[str, Any] | None:
     """A single dashboard with its `queries` parsed back to a dict, or None."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
-        row = (
-            await s.exec(select(Dashboard).where(Dashboard.name == name, Dashboard.workspace_id == workspace_id))
-        ).first()
+        row = await _find(s, name, workspace_id)
     return _payload(row) if row is not None else None
 
 

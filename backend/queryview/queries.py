@@ -200,14 +200,14 @@ async def unsynced_queries(workspace_id: int) -> list[tuple[str, str]]:
     """(type, name) of every query not in git as it is."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
-        rows = (
+        keys = (
             await s.exec(
-                select(PredefinedQuery)
+                select(PredefinedQuery.type, PredefinedQuery.query_name)
                 .where(PredefinedQuery.workspace_id == workspace_id, col(PredefinedQuery.git_sha).is_(None))
                 .order_by(PredefinedQuery.type, PredefinedQuery.query_name)
             )
         ).all()
-    return [(r.type, r.query_name) for r in rows]
+    return [(t, n) for t, n in keys]
 
 
 class PredefinedQueryError(Exception):

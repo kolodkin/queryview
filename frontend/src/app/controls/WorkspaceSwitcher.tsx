@@ -8,6 +8,7 @@ import {
   gitSync,
   onGitSync,
   type GitConflict,
+  type GitWarnings,
 } from '../gitsync'
 import {
   createWorkspace,
@@ -32,8 +33,10 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [manage, setManage] = useState(false)
   const [list, setList] = useState<Workspace[]>([])
   const [error, setError] = useState('')
-  const [conflicts, setConflicts] = useState<GitConflict[]>([])
-  const [unsynced, setUnsynced] = useState<GitConflict[]>([])
+  const [{ conflicts, unsynced }, setGitWarnings] = useState<GitWarnings>({
+    conflicts: [],
+    unsynced: [],
+  })
   const warnings = conflicts.length + unsynced.length
   const [warnOpen, setWarnOpen] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -58,12 +61,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   // save, so re-read both after either.
   useEffect(() => {
     let live = true
-    const load = () =>
-      void gitWarnings(workspace).then((w) => {
-        if (!live) return
-        setConflicts(w.conflicts)
-        setUnsynced(w.unsynced)
-      })
+    const load = () => void gitWarnings(workspace).then((w) => live && setGitWarnings(w))
     load()
     const off = onGitSync(load)
     return () => {

@@ -522,12 +522,11 @@ async def _store_once(
     entity = await _load_entity(ws, kind, name, conn_type)
     paths = _entity_paths(kind, name, conn_type)
     old = query_relpath(conn_type or "", old_name) if old_name else ""
-    if old and (wd / old).exists():
+    old = old if old and (wd / old).exists() else ""
+    if old:
         await _agree(ws, wd, "HEAD", kind, old_name, conn_type)  # keeps sync from importing it back
         # git mv, not write-then-rm: a case-only rename is one file on a case-insensitive disk.
         await _git("mv", "-f", old, paths[0], cwd=wd)
-    else:
-        old = ""
     if kind == "query":
         (wd / paths[0]).parent.mkdir(parents=True, exist_ok=True)
         (wd / paths[0]).write_text(query_to_yaml(entity), encoding="utf-8")
