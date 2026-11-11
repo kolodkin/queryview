@@ -27,20 +27,17 @@ from .connect import (
 from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
 from .dashboards import _push_dashboard
+from .mcp_skills import SkillsExtension
 from .queries import list_predefined_queries_view
 from .validation import dashboard_params_error
 
 mcp = MCPServer(
     "queryview",
     instructions=(
-        "Work in a tab of your own unless the user gives you a session id: new_tab(name) returns a "
-        "session_id and a url; open the url in the user's browser yourself (`open <url>` on macOS, "
-        "`xdg-open <url>` on Linux; otherwise give the user the link), then use_connection any "
-        "ClickHouse/Postgres connection list_connections shows, or add_connection your own. One tab per "
-        "task, reused when revising it. Asked to run a query: iterate read-only with run_sql, apply "
-        "writes once with run_script, then push_script the final SQL with run=False (never re-run "
-        "writes). If a push fails, reply with the SQL. A user-named tool wins."
+        "Before using these tools, read the queryview skill (skill://queryview/SKILL.md): it covers tabs, "
+        "connections, running SQL safely and dashboards."
     ),
+    extensions=[SkillsExtension()],
 )
 
 

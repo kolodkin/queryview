@@ -22,6 +22,13 @@ Without a copied id the agent works in a [tab](#tabs) of its own.
 
 Register the client once — see [mcp.md](./mcp.md).
 
+## Agent skill
+
+The server also implements the MCP Skills extension (`io.modelcontextprotocol/skills`)
+and publishes one skill, `skill://queryview/SKILL.md`
+([source](../backend/queryview/skills/queryview/SKILL.md)). It covers tabs, connections, safe SQL and
+dashboards; the server's `instructions` point agents at it.
+
 ## MCP tools
 
 The backend mounts an MCP server (Streamable HTTP) at `/mcp/` exposing these
