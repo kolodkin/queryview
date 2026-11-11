@@ -102,6 +102,24 @@ test("a renamed session keeps its name", async ({ page, seeds }) => {
   await expect(page.getByTestId("session-switcher")).toContainText("nightly audit");
 });
 
+test("inline rename: Escape cancels, focus-out saves", async ({ page, seeds }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const switcher = page.getByTestId("session-switcher");
+  const before = await switcher.textContent();
+  await switcher.click();
+  await page.getByTestId("session-rename").click();
+  await page.getByTestId("session-rename-input").fill("discarded");
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("session-rename-input")).toHaveCount(0);
+  await expect(switcher).toHaveText(before!);
+
+  await page.getByTestId("session-rename").click();
+  await page.getByTestId("session-rename-input").fill("blurred name");
+  await page.getByTestId("session-rename-input").blur();
+
+  await expect(switcher).toContainText("blurred name");
+});
+
 test("a restored panel does not page a new query into nothing", async ({ page, seeds }) => {
   // The page you were on is not restored: an offset is a cursor into a result
   // set, and results are not restored either (docs/session.md).

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { useDismiss } from '../../core'
 import {
@@ -27,6 +27,8 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
   const [list, setList] = useState<SessionSummary[]>([])
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState('')
+  // Enter and Escape both unmount the input, which can fire a trailing blur.
+  const editing = useRef(false)
   const [error, setError] = useState('')
   // Only the menu light-dismisses: the rename row holds unsaved input.
   const rootRef = useDismiss<HTMLDivElement>(open && !renaming, () => setOpen(false))
@@ -67,7 +69,20 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
     await reload()
   }
 
+  function startRename() {
+    setDraft(label)
+    editing.current = true
+    setRenaming(true)
+  }
+
+  function cancelRename() {
+    editing.current = false
+    setRenaming(false)
+  }
+
   async function saveName() {
+    if (!editing.current) return
+    editing.current = false
     // renameSession answers with the label the server settled on, so clearing
     // the name (which unpins) needs no read-back.
     onRenamed(await renameSession(draft.trim()))
@@ -98,26 +113,71 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
         >
           <div className="overflow-auto">
             {list.map((s) => (
-              <div key={s.id} className="flex items-center gap-1">
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={s.id === current}
-                  disabled={s.held && s.id !== current}
-                  data-testid={`session-row-${s.id}`}
-                  onClick={() => void switchTo(s.id)}
-                  className="flex-1 truncate rounded px-2 py-1.5 text-left text-slate-200 hover:bg-white/10 disabled:text-slate-500 disabled:hover:bg-transparent"
-                >
-                  {s.label}
-                  {s.connection && (
-                    <span className="ml-2 text-xs text-slate-400">
-                      {s.database ? `${s.connection} · ${s.database}` : s.connection}
-                    </span>
-                  )}
-                  {s.held && s.id !== current && (
-                    <span className="ml-2 text-xs text-slate-400">in another tab</span>
-                  )}
-                </button>
+              <div
+                key={s.id}
+                className={`flex items-center gap-1 rounded border-l-2 ${
+                  s.id === current ? 'border-indigo-400 bg-indigo-500/15' : 'border-transparent'
+                }`}
+              >
+                {s.id === current && renaming ? (
+                  <input
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void saveName()
+                      if (e.key === 'Escape') {
+                        // Cancel the edit only; don't let the menu's dismiss close it too.
+                        e.stopPropagation()
+                        cancelRename()
+                      }
+                    }}
+                    onBlur={() => void saveName()}
+                    aria-label="Session name"
+                    data-testid="session-rename-input"
+                    autoFocus
+                    className="glass-input m-0.5 min-w-0 flex-1 px-2 py-1 text-sm"
+                  />
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={s.id === current}
+                      disabled={s.held && s.id !== current}
+                      data-testid={`session-row-${s.id}`}
+                      onClick={() => void switchTo(s.id)}
+                      className={`flex-1 truncate rounded px-2 py-1.5 text-left hover:bg-white/10 disabled:text-slate-500 disabled:hover:bg-transparent ${
+                        s.id === current ? 'font-medium text-indigo-100' : 'text-slate-200'
+                      }`}
+                    >
+                      {s.id === current && <span className="mr-1.5 text-indigo-300">✓</span>}
+                      {s.label}
+                      {s.id === current && (
+                        <span className="ml-2 text-xs text-indigo-300">this tab</span>
+                      )}
+                      {s.connection && (
+                        <span className="ml-2 text-xs text-slate-400">
+                          {s.database ? `${s.connection} · ${s.database}` : s.connection}
+                        </span>
+                      )}
+                      {s.held && s.id !== current && (
+                        <span className="ml-2 text-xs text-slate-400">in another tab</span>
+                      )}
+                    </button>
+                    {s.id === current && s.renamable !== false && (
+                      <button
+                        type="button"
+                        aria-label="Rename this session"
+                        title="Rename"
+                        data-testid="session-rename"
+                        onClick={startRename}
+                        className="rounded px-2 py-1.5 text-slate-300 hover:bg-white/10"
+                      >
+                        ✎
+                      </button>
+                    )}
+                  </>
+                )}
                 {/* A held session (this tab's or another's) and the Agent session can't be deleted. */}
                 {s.deletable && (
                   <button
@@ -135,51 +195,14 @@ export default function SessionSwitcher({ label, onSwitch, onRenamed }: Props) {
           </div>
           {error && <p className="px-2 py-1.5 text-xs text-amber-300">{error}</p>}
           <div className="mt-1 border-t border-white/10 pt-1">
-            {renaming ? (
-              <form
-                className="flex gap-1 p-1"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void saveName()
-                }}
-              >
-                <input
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  aria-label="Session name"
-                  data-testid="session-rename-input"
-                  autoFocus
-                  className="glass-input w-full px-2 py-1 text-sm"
-                />
-                <button type="submit" className="glass-btn px-2 py-1 text-xs">
-                  Save
-                </button>
-              </form>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  data-testid="session-new"
-                  onClick={() => void switchTo(null)}
-                  className="block w-full rounded px-2 py-1.5 text-left text-indigo-200 hover:bg-white/10"
-                >
-                  New session
-                </button>
-                {list.find((s) => s.id === current)?.renamable !== false && (
-                  <button
-                    type="button"
-                    data-testid="session-rename"
-                    onClick={() => {
-                      setDraft(label)
-                      setRenaming(true)
-                    }}
-                    className="block w-full rounded px-2 py-1.5 text-left text-slate-200 hover:bg-white/10"
-                  >
-                    Rename this session
-                  </button>
-                )}
-              </>
-            )}
+            <button
+              type="button"
+              data-testid="session-new"
+              onClick={() => void switchTo(null)}
+              className="block w-full rounded px-2 py-1.5 text-left text-indigo-200 hover:bg-white/10"
+            >
+              New session
+            </button>
           </div>
         </div>
       )}
