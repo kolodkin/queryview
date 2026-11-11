@@ -167,3 +167,19 @@ def test_unsynced_lists_what_git_lacks_until_committed(git_env):
     assert entry in unsynced()
     c.post("/api/git/store", json={"kind": "query", "name": "api pending", "conn_type": "clickhouse"})
     assert entry not in unsynced()
+
+
+def test_a_non_git_failure_also_undoes_the_change(git_env, monkeypatch):
+    import pytest
+
+    from queryview import gitsync
+    from queryview.queries import get_predefined_query
+
+    async def disk_full(*args, **kw):
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(gitsync, "store", disk_full)
+    c = TestClient(app)
+    with pytest.raises(OSError):
+        c.post("/api/predefined-queries", json={"type": "clickhouse", "query_name": "api disk", "query": "SELECT 1"})
+    assert _run(get_predefined_query("clickhouse", "api disk", _default_ws_id())) is None

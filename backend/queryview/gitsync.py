@@ -521,6 +521,13 @@ async def _store_once(
         merged = await _merge(ws, wd, head)
     entity = await _load_entity(ws, kind, name, conn_type)
     paths = _entity_paths(kind, name, conn_type)
+    old = query_relpath(conn_type or "", old_name) if old_name else ""
+    if old and (wd / old).exists():
+        await _agree(ws, wd, "HEAD", kind, old_name, conn_type)  # keeps sync from importing it back
+        # git mv, not write-then-rm: a case-only rename is one file on a case-insensitive disk.
+        await _git("mv", "-f", old, paths[0], cwd=wd)
+    else:
+        old = ""
     if kind == "query":
         (wd / paths[0]).parent.mkdir(parents=True, exist_ok=True)
         (wd / paths[0]).write_text(query_to_yaml(entity), encoding="utf-8")
@@ -533,12 +540,7 @@ async def _store_once(
         for fname, content in dashboard_to_files(entity).items():
             (ddir / fname).write_text(content, encoding="utf-8")
     await _git("add", "-A", "--", *paths, cwd=wd)
-    old = query_relpath(conn_type or "", old_name) if old_name else ""
-    if old and (wd / old).exists():
-        await _agree(ws, wd, "HEAD", kind, old_name, conn_type)  # keeps sync from importing it back
-        await _git("rm", "-q", "--", old, cwd=wd)
-        paths.append(old)
-    if not (await _git("status", "--porcelain", "--", *paths, cwd=wd)).strip():
+    if not (await _git("status", "--porcelain", "--", *paths, *([old] if old else []), cwd=wd)).strip():
         # Already in git as it is.
         if head:
             await _mark(ws, kind, name, conn_type, (await _git("rev-parse", head, cwd=wd)).strip(), entity)
@@ -547,10 +549,15 @@ async def _store_once(
     verb = "rename" if old else "store"
     await _git("commit", "-m", message or f"{verb} {kind} {label}", cwd=wd)
     await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
-    sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
-    # The repo now holds exactly the local copy.
-    await _agree(ws, wd, "HEAD", kind, name, conn_type)
-    await _mark(ws, kind, name, conn_type, sha, entity)
+    # Pushed: bookkeeping failing now must not undo the save; the row just stays
+    # unmarked (No git sync) until the next save or sync.
+    sha = None
+    try:
+        sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
+        await _agree(ws, wd, "HEAD", kind, name, conn_type)  # the repo now holds exactly the local copy
+        await _mark(ws, kind, name, conn_type, sha, entity)
+    except GitSyncError:
+        pass
     return {"committed": True, "sha": sha, "message": "stored", **merged, "conflicts": conflicts(ws)}
 
 
@@ -606,9 +613,11 @@ async def commit_change(
             await remove(ws, conn_type or "", name)
         else:
             await store(ws, kind, name, conn_type, old_name=old_name)
-    except GitSyncError as e:
+    except Exception as e:  # any failure (git, disk, DB): undo, so DB and repo never part
         await (restore_queries(conn_type or "", snap, ws.id) if is_query else restore_dashboards(snap, ws.id))
-        raise GitSyncError(f"not saved: {e}", status=e.status) from e
+        if isinstance(e, GitSyncError):
+            raise GitSyncError(f"not saved: {e}", status=e.status) from e
+        raise
     return result
 
 

@@ -471,7 +471,7 @@ def other_instance(git_env, wipe_workspace_entities):
     gitsync.forget(ws.id)
 
 
-def test_store_retries_once_when_another_instance_pushes_first(other_instance, monkeypatch, git_env):
+def test_store_retries_when_another_instance_pushes_first(other_instance, monkeypatch, git_env):
     from queryview.queries import save_predefined_query
 
     _run(save_predefined_query("gs racer", "clickhouse", "SELECT 1", workspace_id=other_instance.id))

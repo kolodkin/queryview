@@ -97,6 +97,8 @@ async def set_dashboard_git_sha(
         ).first()
         if row is None or (unchanged_from is not None and _payload(row) != unchanged_from):
             return
+        if row.git_sha is not None and unchanged_from is not None:
+            return  # already marked: a sync finding it identical needn't rewrite every row
         row.git_sha = sha
         s.add(row)
         await s.commit()
