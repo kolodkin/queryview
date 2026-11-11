@@ -114,7 +114,7 @@ never moves and history is append-only.
 ## UI
 
 Next to each entity's **Save** button (query panel and dashboard page):
-**Commit** pushes the saved DB state to the remote (retried once if another
+**Commit** pushes the saved DB state to the remote (retried if another
 instance pushed first) — saves already do, so it retries a failed one;
 **Restore** opens the entity's revision list (newest first, 10 at a time,
 scroll for more) and overwrites the local copy with the picked revision after

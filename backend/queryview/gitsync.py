@@ -485,21 +485,26 @@ async def store(
     query renamed from `old_name` drops the old file in the same commit.
     The workdir is reset to the remote head first — exports are deterministic
     from the DB and each commit touches one entity, so this is always safe; a
-    push rejected by another instance's concurrent push is retried once."""
+    push rejected by another instance's concurrent push is retried."""
     _check_kind(kind, conn_type)
     _require_remote(ws)  # unconfigured -> 409 before any DB/entity lookup
     async with _lock(ws):
         return await _retry_if_rejected(lambda: _store_once(ws, kind, name, conn_type, message, old_name))
 
 
+# Every save pushes, so busy remotes see races; each retry starts from the new head.
+_PUSH_ATTEMPTS = 5
+
+
 async def _retry_if_rejected(op: Callable[[], Awaitable[Any]]) -> Any:
-    """Run `op`; if its push was rejected because another instance pushed
-    between our fetch and push, run it once more from the new head."""
-    try:
-        return await op()
-    except GitSyncError as e:
-        if not e.rejected:
-            raise
+    """Run `op`; while its push is rejected because another instance pushed
+    between our fetch and push, run it again from the new head."""
+    for _ in range(_PUSH_ATTEMPTS - 1):
+        try:
+            return await op()
+        except GitSyncError as e:
+            if not e.rejected:
+                raise
     return await op()
 
 

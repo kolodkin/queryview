@@ -785,3 +785,19 @@ def test_restore_of_a_dashboard_missing_meta_names_the_file(git_env, tmp_path):
     with pytest.raises(GitSyncError) as e:
         _run(gitsync.restore(_default_ws(), "dashboard", "gs nometa", ref="no-such-ref"))
     assert e.value.status == 404 and str(e.value) == "dashboard 'gs nometa' not found at no-such-ref"
+
+
+def test_a_push_rejected_repeatedly_is_retried_then_given_up():
+    calls = []
+
+    async def op(fail_times):
+        calls.append(1)
+        if len(calls) <= fail_times:
+            raise GitSyncError("git push failed: [rejected]", rejected=True)
+        return "ok"
+
+    assert _run(gitsync._retry_if_rejected(lambda: op(3))) == "ok"
+    calls.clear()
+    with pytest.raises(GitSyncError):
+        _run(gitsync._retry_if_rejected(lambda: op(99)))
+    assert len(calls) == gitsync._PUSH_ATTEMPTS
