@@ -27,7 +27,7 @@ Register the client once — see [mcp.md](./mcp.md).
 The server also implements the MCP Skills extension (`io.modelcontextprotocol/skills`)
 and publishes one skill, `skill://queryview/SKILL.md`
 ([source](../backend/queryview/skills/queryview/SKILL.md)). It covers tabs, connections, safe SQL and
-dashboards; the server's `instructions` point agents at it.
+dashboards; the server's `instructions` say it exists and point agents at it.
 
 ## MCP tools
 
@@ -112,7 +112,7 @@ at most, and every reply about a tab carries its `url`.
 
 ## Default workflow
 
-The server's MCP instructions set how the agent answers "run this query",
+The [queryview skill](#agent-skill) sets how the agent answers "run this query",
 without asking which tool: open a [tab](#tabs) for the task (reused when the
 work is revised), connect it, iterate read-only with `run_sql`, apply writes
 once with `run_script`, then `push_script` the final SQL without `run` (the
