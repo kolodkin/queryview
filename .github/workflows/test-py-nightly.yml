@@ -1,0 +1,23 @@
+name: test-py-nightly
+
+# Reruns all of ci.yml at both ends of the supported Python range
+# (https://devguide.python.org/versions/); PR CI runs only the 3.11 minimum.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+jobs:
+  ci:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.14"]
+    uses: ./.github/workflows/ci.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+    # test-e2e publishes the report (DEPLOY_KEY) and creates a check.
+    secrets: inherit
+    permissions:
+      contents: write
+      checks: write
