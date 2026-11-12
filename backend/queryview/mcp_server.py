@@ -83,10 +83,11 @@ async def push_query(
             that isn't saved is refused — omit it to push an unnamed draft; the
             user names and saves it.
     """
-    info = await get_session(session_id) if name else {}
-    if info.get("connected"):  # otherwise the push itself says what's wrong
+    if name:
+        info = await get_session(session_id)
         ws = await _session_workspace_rec(session_id)
-        if await get_predefined_query(info["type"], name, ws.id) is None:
+        # A session that isn't connected lets the push itself say what's wrong.
+        if info.get("connected") and await get_predefined_query(info["type"], name, ws.id) is None:
             return _failed(_NEW_NAME.format(kind="query", name=name))
     payload = {
         "type": "query",
