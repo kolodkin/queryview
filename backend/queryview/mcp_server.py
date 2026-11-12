@@ -1,4 +1,4 @@
-"""The MCP layer: a FastMCP server (mounted by main.py at /mcp) whose tools push
+"""The MCP layer: an MCPServer (mounted by main.py at /mcp) whose tools push
 queries/scripts/dashboards to a live QueryView browser session, delegating to the
 in-process remote.py hub."""
 
@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 
 from . import gitsync, remote, sessions
 from .connect import (
@@ -27,23 +27,20 @@ from .connect import (
 from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
 from .dashboards import _push_dashboard
+from .mcp_skills import SkillsExtension
 from .queries import list_predefined_queries_view
 from .validation import dashboard_params_error
 
-mcp = FastMCP(
+mcp = MCPServer(
     "queryview",
-    stateless_http=True,
+    description="Local, agent-controlled SQL workbench for ClickHouse, Postgres, DuckDB and SQLite.",
     instructions=(
-        "Work in a tab of your own unless the user gives you a session id: new_tab(name) returns a "
-        "session_id and a url; open the url in the user's browser yourself (`open <url>` on macOS, "
-        "`xdg-open <url>` on Linux; otherwise give the user the link), then use_connection any "
-        "ClickHouse/Postgres connection list_connections shows, or add_connection your own. One tab per "
-        "task, reused when revising it. Asked to run a query: iterate read-only with run_sql, apply "
-        "writes once with run_script, then push_script the final SQL with run=False (never re-run "
-        "writes). If a push fails, reply with the SQL. A user-named tool wins."
+        "Open your own tab with new_tab unless given a session id. Run SQL, reads and writes, with run_script "
+        "(apply writes once), then push_script the final SQL with run=False. Use push_query (Studio) or "
+        "push_dashboard only when asked. Full workflow: the queryview skill (skill://queryview/SKILL.md)."
     ),
+    extensions=[SkillsExtension()],
 )
-mcp.settings.streamable_http_path = "/"
 
 
 @mcp.tool()
@@ -63,7 +60,7 @@ async def push_query(
     the session's own connection. Get the `session_id` from the QueryView UI:
     the agent icon next to the connection status pill, after enabling "Allow
     remote control"; without one, open a tab of your own with new_tab.
-    To explore data first, use run_sql with the same id.
+    To explore data first, use run_script with the same id.
     A session on a locked connection (see session_info) refuses every push and
     query with "connection is locked"; use_connection another one.
 
@@ -153,7 +150,8 @@ def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
 async def run_script(session_id: str, sql: str) -> dict[str, Any]:
     """Run a `;`-separated script on the session's connection and selected
     database, like the Scripts page's Run all, returning each statement's result.
-    WRITES ARE ALLOWED (use run_sql to explore read-only). Stops at the first
+    The default way to run SQL, reads and writes alike: WRITES ARE ALLOWED, so
+    apply them once (run_sql is the read-only alternative). Stops at the first
     error; rows per statement are capped and the script has a timeout.
 
     Returns {"ok": True, "database", "results": [{sql, ok, status, message,

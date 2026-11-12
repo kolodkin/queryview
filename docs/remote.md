@@ -22,9 +22,16 @@ Without a copied id the agent works in a [tab](#tabs) of its own.
 
 Register the client once — see [mcp.md](./mcp.md).
 
+## Agent skill
+
+The server publishes one skill over the MCP Skills extension,
+`skill://queryview/SKILL.md` ([source](../backend/queryview/skills/queryview/SKILL.md)):
+the default workflow for tabs, connections, SQL, Studio results and dashboards.
+Naming a tool overrides it.
+
 ## MCP tools
 
-The backend mounts a FastMCP server (Streamable HTTP) at `/mcp/` exposing these
+The backend mounts an MCP server (Streamable HTTP) at `/mcp/` exposing these
 tools (among others):
 
 - `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
@@ -102,15 +109,6 @@ macOS, `xdg-open` on Linux) or gives it to you; the tab lists as
 connects it with `use_connection` or `add_connection`, then pushes into it as
 into any session; a push made before the link is opened waits for it, a minute
 at most, and every reply about a tab carries its `url`.
-
-## Default workflow
-
-The server's MCP instructions set how the agent answers "run this query",
-without asking which tool: open a [tab](#tabs) for the task (reused when the
-work is revised), connect it, iterate read-only with `run_sql`, apply writes
-once with `run_script`, then `push_script` the final SQL without `run` (the
-browser never re-applies the writes). If the push fails, the agent replies
-with the SQL. Naming a tool (e.g. `push_query`) overrides the default.
 
 ## How it works
 

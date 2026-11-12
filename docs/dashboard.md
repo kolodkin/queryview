@@ -25,7 +25,7 @@ always shows live data.
 
 ## The `push_dashboard` MCP tool
 
-The FastMCP server at `/mcp` (see [remote.md](./remote.md) for arming and the
+The MCP server at `/mcp` (see [remote.md](./remote.md) for arming and the
 session id) exposes:
 
 - `push_dashboard(session_id, name, html, queries, params?)` — push the

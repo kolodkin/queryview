@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from typing import Any
 
 from starlette.datastructures import URL
 
@@ -17,7 +18,7 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _ctx(url: str):
+def _ctx(url: str) -> Any:
     """What the tool reads off the MCP request: where the client reached us."""
     return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(url=URL(url))))
 

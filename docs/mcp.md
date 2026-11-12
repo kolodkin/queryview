@@ -23,7 +23,7 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 | `new_tab` | A session of the agent's own and the link that shows it |
 | `session_info` | The session's connection, database, workspace and tables |
 | `run_sql` | Run read-only SQL; rows go to the agent |
-| `run_script` | Run a `;`-separated script, writes allowed; results go to the agent |
+| `run_script` | Default for running SQL: a `;`-separated script, reads and writes; results go to the agent |
 | `push_query` | Open a query in the browser's QueryView |
 | `push_script` | Fill the browser's Scripts editor, optionally run it |
 | `push_dashboard` | Render a dashboard in the browser as a draft |
