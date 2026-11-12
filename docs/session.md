@@ -102,12 +102,14 @@ that read the row before it lands after it with the old database.
 
 ## The session dropdown
 
-The top-right dropdown lists every session, most recently active first. A
-session held by another live tab is shown but not selectable: two tabs on one
-session would overwrite each other's state.
+The top-right dropdown lists every session, most recently active first. This
+tab's session is highlighted with a ✓ and **this tab**. A session held by
+another live tab is shown but not selectable: two tabs on one session would
+overwrite each other's state.
 
 - **New session** starts a fresh one in this tab.
-- **Rename this session** pins a name, so the session survives its tab;
+- The pencil on this tab's row edits its name in place: Enter or focus-out
+  saves, Escape cancels. A name pins the session, so it survives its tab;
   clearing it unpins. `Session <n>` names are refused: they belong to unnamed
   sessions.
 - **×** deletes a session; a session a live tab holds (this one included) has none.
