@@ -623,7 +623,7 @@ async def _event_stream(remote_id: str, request: Request):
                     elapsed = 0.0
                     yield b": ping\n\n"
                 continue
-            yield _sse(msg.get("type", "query"), msg)
+            yield _sse(msg.get("type", "studio"), msg)
     finally:
         remote.unregister(remote_id)
 
@@ -642,9 +642,9 @@ async def remote_events(request: Request):
     )
 
 
-# Push a query to a live session (used by the MCP tool and, in tests, directly).
-@app.post("/api/remote/push")
-async def remote_push(request: Request):
+# Push a query to a live session's Studio (used by the MCP tool and, in tests, directly).
+@app.post("/api/remote/push_studio")
+async def remote_push_studio(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
     raw_sid = b.get("session_id")
@@ -665,7 +665,7 @@ async def remote_push(request: Request):
     # Pass order_by/fields raw so remote.push's validator can reject malformed
     # input (fail-fast) rather than silently coercing it away.
     payload = {
-        "type": "query",
+        "type": "studio",
         "query": query,
         "limit": limit,
         "offset": offset,

@@ -26,7 +26,7 @@ import {
   unlockConnection,
   type Connection,
 } from './connection'
-import StudioView, { type QueryPush } from './StudioView'
+import StudioView, { type StudioPush } from './StudioView'
 import ScriptsView, { type ScriptPush } from './ScriptsView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
@@ -213,7 +213,7 @@ function Shell() {
   const [armed, setArmed] = useState(false)
   const [channelOpen, setChannelOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
-  const [queryPush, setQueryPush] = useState<QueryPush | null>(null)
+  const [studioPush, setStudioPush] = useState<StudioPush | null>(null)
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -418,8 +418,8 @@ function Shell() {
       })
     }
     on('connections', () => setConnectionsNonce((n) => n + 1))
-    on<QueryPush>('query', (payload) => {
-      setQueryPush(payload)
+    on<StudioPush>('studio', (payload) => {
+      setStudioPush(payload)
       setToast('Agent updated the query')
       navigate('/studio')
     })
@@ -681,8 +681,8 @@ function Shell() {
                   key={`${sessionKey}:${workspace}`}
                   connectionType={connection.type}
                   runOn={connectionKey(connection)}
-                  pushed={queryPush}
-                  onPushConsumed={() => setQueryPush(null)}
+                  pushed={studioPush}
+                  onPushConsumed={() => setStudioPush(null)}
                   remoteId={remoteId}
                 />
               ),
