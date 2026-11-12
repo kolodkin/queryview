@@ -25,11 +25,19 @@ class GetParams(RequestParams):
 
 
 def _load(path: Path) -> tuple[str, str, dict[str, Any]]:
-    text = path.read_text()
-    _, front, _ = text.split("---", 2)
-    meta = yaml.safe_load(front)
-    assert meta["name"] == path.parent.name, f"{path}: name must match its directory"
+    text = path.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        raise ValueError(f"{path}: must start with YAML frontmatter")
+    meta = yaml.safe_load(text.split("---", 2)[1])
+    if meta.get("name") != path.parent.name or not meta.get("description"):
+        raise ValueError(f"{path}: needs a description and a name matching its directory")
     return f"skill://{meta['name']}/SKILL.md", text, meta
+
+
+def _entry(uri: str, text: str, meta: dict[str, Any]) -> dict[str, Any]:
+    data = text.encode()
+    digest = f"sha256:{hashlib.sha256(data).hexdigest()}"
+    return {"uri": uri, "frontmatter": meta, "resources": [{"uri": uri, "digest": digest, "size": len(data)}]}
 
 
 class SkillsExtension(Extension):
@@ -37,12 +45,7 @@ class SkillsExtension(Extension):
 
     def __init__(self) -> None:
         self._skills = {uri: (text, meta) for uri, text, meta in map(_load, sorted(SKILLS_DIR.glob("*/SKILL.md")))}
-
-    def _entry(self, uri: str) -> dict[str, Any]:
-        text, meta = self._skills[uri]
-        data = text.encode()
-        digest = f"sha256:{hashlib.sha256(data).hexdigest()}"
-        return {"uri": uri, "frontmatter": meta, "resources": [{"uri": uri, "digest": digest, "size": len(data)}]}
+        self._entries = {uri: _entry(uri, text, meta) for uri, (text, meta) in self._skills.items()}
 
     def resources(self) -> list[ResourceBinding]:
         return [
@@ -56,12 +59,12 @@ class SkillsExtension(Extension):
 
     def methods(self) -> list[MethodBinding]:
         async def list_skills(ctx: Any, params: RequestParams) -> dict[str, Any]:
-            return {"skills": [self._entry(uri) for uri in self._skills], **_CACHE}
+            return {"skills": list(self._entries.values()), **_CACHE}
 
         async def get_skill(ctx: Any, params: GetParams) -> dict[str, Any]:
-            if params.uri not in self._skills:
+            if params.uri not in self._entries:
                 raise MCPError(INVALID_PARAMS, f"unknown skill: {params.uri}")
-            return {"skill": self._entry(params.uri), **_CACHE}
+            return {"skill": self._entries[params.uri], **_CACHE}
 
         return [
             MethodBinding("skills/list", RequestParams, list_skills),
