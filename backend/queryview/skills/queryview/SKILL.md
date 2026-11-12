@@ -1,6 +1,6 @@
 ---
 name: queryview
-description: Drive a live QueryView browser tab over MCP — open a tab, pick a connection, explore with read-only SQL, apply writes once, and push the final query, script or dashboard for the user to see.
+description: Drive a live QueryView browser tab over MCP — open a tab, pick a connection, run SQL with run_script (writes applied once), and push the final script, or a Studio query or dashboard when asked, for the user to see.
 ---
 
 # QueryView
@@ -20,11 +20,15 @@ query with "connection is locked"; use another one.
 
 ## Running SQL
 
-1. Iterate read-only with `run_sql`.
-2. Apply writes once with `run_script`.
-3. `push_script` the final SQL with `run=False` — never re-run writes.
+`run_script` is the default for any SQL, reads and writes alike, and returns each
+statement's result to you (`run_sql` is the read-only alternative).
+
+1. Explore and apply writes with `run_script` — apply each write once.
+2. `push_script` the final SQL with `run=False` — never re-run writes.
 
 If a push fails, reply with the SQL.
+
+Use `push_query` (the Studio) or `push_dashboard` only when the user asks for them.
 
 ## Dashboards
 

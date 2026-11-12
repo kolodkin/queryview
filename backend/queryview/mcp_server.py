@@ -35,9 +35,9 @@ mcp = MCPServer(
     "queryview",
     description="Local, agent-controlled SQL workbench for ClickHouse, Postgres, DuckDB and SQLite.",
     instructions=(
-        "Open your own tab with new_tab unless given a session id. Explore with run_sql, apply writes once "
-        "with run_script, then push_script the final SQL with run=False. Full workflow: the queryview skill "
-        "(skill://queryview/SKILL.md)."
+        "Open your own tab with new_tab unless given a session id. Run SQL, reads and writes, with run_script "
+        "(apply writes once), then push_script the final SQL with run=False. Use push_query (Studio) or "
+        "push_dashboard only when asked. Full workflow: the queryview skill (skill://queryview/SKILL.md)."
     ),
     extensions=[SkillsExtension()],
 )
@@ -150,7 +150,8 @@ def _columns(meta: list[dict[str, Any]] | None) -> dict[str, Any]:
 async def run_script(session_id: str, sql: str) -> dict[str, Any]:
     """Run a `;`-separated script on the session's connection and selected
     database, like the Scripts page's Run all, returning each statement's result.
-    WRITES ARE ALLOWED (use run_sql to explore read-only). Stops at the first
+    The default way to run SQL, reads and writes alike: WRITES ARE ALLOWED, so
+    apply them once (run_sql is the read-only alternative). Stops at the first
     error; rows per statement are capped and the script has a timeout.
 
     Returns {"ok": True, "database", "results": [{sql, ok, status, message,
