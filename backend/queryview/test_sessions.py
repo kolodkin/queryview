@@ -84,7 +84,7 @@ def test_ordinal_label_is_rejected():
     rec = _run(sessions.create_session())
     _run(sessions.patch_session(rec.id, label="nightly audit"))
     for typed in (f"Session {rec.seq}", " session 99 "):
-        with pytest.raises(ValueError, match="reserved"):
+        with pytest.raises(sessions.ReservedLabelError, match="reserved"):
             _run(sessions.patch_session(rec.id, label=typed, url="/elsewhere"))
     kept = _run(sessions.get_session_rec(rec.id))
     assert kept is not None and kept.label == "nightly audit" and kept.url != "/elsewhere"

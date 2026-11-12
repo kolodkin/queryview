@@ -34,6 +34,11 @@ AGENT_SESSION_ID = "agent"
 # A pinned "Session 7" would pass for another session's derived label.
 _ORDINAL_LABEL = re.compile(r"session\s*\d+", re.IGNORECASE)
 
+
+class ReservedLabelError(ValueError):
+    """A label patch_session refuses: it would read as an ordinal one."""
+
+
 # Session writes run one at a time, so a reload's `attach` sees the pagehide
 # beacon's patch committed. See docs/session.md, "How it is stored".
 _writes = asyncio.Lock()
@@ -250,10 +255,10 @@ async def patch_session(
     Explorer's selection, kept in last_visited for the session's connection
     (empty = none). The updated record comes back so callers see
     server-derived values (the label an empty `label` unpins). None if the
-    session is unknown; ValueError, with nothing written, for a `Session <n>`
-    label."""
+    session is unknown; ReservedLabelError, with nothing written, for a
+    `Session <n>` label."""
     if label is not None and _ORDINAL_LABEL.fullmatch(label.strip()):
-        raise ValueError(f'"{label.strip()}" is reserved for unnamed sessions')
+        raise ReservedLabelError(f'"{label.strip()}" is reserved for unnamed sessions')
     await _ensure_schema()
     async with _writes, _open() as s:
         row = await s.get(Session, sid)

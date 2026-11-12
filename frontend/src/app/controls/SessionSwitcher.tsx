@@ -27,6 +27,7 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
   const [draft, setDraft] = useState('')
   // Enter and Escape both unmount the input, which can fire a trailing blur.
   const editing = useRef(false)
+  const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
   // Off while renaming: the input's focus-out save must run before the menu unmounts.
   const rootRef = useDismiss<HTMLDivElement>(open && !renaming, () => setOpen(false))
@@ -86,20 +87,21 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
     if (!editing.current) return
     editing.current = false
     const name = draft.trim()
-    // An unchanged name would pin the automatic "Session <n>" label.
-    if (name !== label) {
+    // Re-sending the automatic "Session <n>" (in any case) would be refused.
+    const squash = (s: string) => s.replace(/\s+/g, '').toLowerCase()
+    if (name !== label && !(/^session\s*\d+$/i.test(name) && squash(name) === squash(label))) {
       let next: string
       try {
         next = await renameSession(name)
       } catch (e) {
-        // Keep the input open so the name can be fixed; the server says why.
         setError(e instanceof Error ? e.message : String(e))
-        editing.current = true
+        // After Enter the input still has focus, so keep it for a fix; after a
+        // focus-out drop the edit, which also re-arms the menu's dismiss.
+        if (document.activeElement === inputRef.current) editing.current = true
+        else setRenaming(false)
         return
       }
-      // After a switch made meanwhile, `next` is the new session's label.
-      if (sessionId() === current)
-        setList((l) => l.map((s) => (s.id === current ? { ...s, label: next } : s)))
+      setList((l) => l.map((s) => (s.id === current ? { ...s, label: next } : s)))
     }
     setError('')
     setRenaming(false)
@@ -152,6 +154,7 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
                       onBlur={(e) => void saveName(!rootRef.current?.contains(e.relatedTarget))}
                       aria-label="Session name"
                       data-testid="session-rename-input"
+                      ref={inputRef}
                       autoFocus
                       className="glass-input m-0.5 min-w-0 flex-1 px-2 py-1 text-sm"
                     />

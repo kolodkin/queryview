@@ -30,7 +30,7 @@ export type SessionSummary = {
 }
 
 // `table` is the Explorer's selection, remembered per connection server-side.
-export type SessionPatch = { url?: string; label?: string; workspace?: string; table?: string }
+export type SessionPatch = { url?: string; workspace?: string; table?: string }
 
 // Well inside the backend's 90s claim TTL, which also covers a hidden tab
 // throttled to about one beat a minute. `npm run build:e2e` shortens it so
@@ -213,6 +213,19 @@ function schedule(): void {
   timer = setTimeout(() => void flushPatches(), IDLE_MS)
 }
 
+// One PATCH of the tab's session; a non-JSON error page reads as its status.
+async function sendPatch(
+  sid: string,
+  body: object,
+): Promise<{ message?: string; session?: SessionState }> {
+  const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return res.json().catch(() => ({ message: `HTTP ${res.status}` }))
+}
+
 // Patches are fire-and-forget and last-write-wins: a failed one loses a
 // remembered preference, never the user's work in the live tab. The response
 // carries the updated session, so server-derived values land back in the mirror.
@@ -224,13 +237,8 @@ export async function flushPatches(): Promise<void> {
   if (!sid || taken || Object.keys(body).length === 0) return
   const gen = localGen
   try {
-    const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const data = await res.json()
-    if (data?.session) adoptIfCurrent(gen, data.session as SessionState, 'patch')
+    const data = await sendPatch(sid, body)
+    if (data.session) adoptIfCurrent(gen, data.session, 'patch')
   } catch {
     /* a lost patch costs a remembered preference, never live work */
   }
@@ -308,14 +316,12 @@ export async function removeSession(id: string): Promise<{ ok: boolean; message?
 export async function renameSession(label: string): Promise<string> {
   await flushPatches()
   const sid = state?.id
-  if (!sid) return label
+  // A taken tab stops writing: the session belongs to another tab now.
+  if (!sid || taken) throw new Error('This session is open in another tab.')
   const gen = ++localGen
-  const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label }),
-  })
-  const data = await res.json()
-  if (!data.ok) throw new Error(data.message ?? 'rename failed')
-  return adoptIfCurrent(gen, data.session as SessionState, 'rename').label
+  const data = await sendPatch(sid, { label })
+  if (!data.session) throw new Error(data.message ?? 'rename failed')
+  adoptIfCurrent(gen, data.session, 'rename')
+  // The reply's label even when a newer local change made the row stale.
+  return data.session.label
 }
