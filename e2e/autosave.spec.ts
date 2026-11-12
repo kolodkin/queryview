@@ -44,12 +44,13 @@ test("autosave saves successful runs and hides save", async ({ page, seeds, base
   await expect(page.getByTestId("query-error")).toBeVisible();
   expect(await storedSql(baseURL!, ws, "auto q")).toBe("SELECT id, name FROM items ORDER BY id");
 
-  // An unnamed agent push runs but never overwrites the selected query; a
-  // named one saves under its name.
+  // An unnamed agent push runs and deselects the open query, so it is never
+  // overwritten; a named one saves under its name.
   const sessionId = await armRemote(page);
   const push = { session_id: sessionId, query: "SELECT name FROM items" };
   await api(`${baseURL}/api/remote/push`, { json: push });
   await expect(page.getByTestId("query-input")).toHaveValue("SELECT name FROM items");
+  await expect(page.getByTestId("query-predefined-select")).toHaveValue("");
   await expect(page.getByTestId("query-output")).toBeVisible();
   await api(`${baseURL}/api/remote/push`, { json: { ...push, name: "pushed q" } });
   await expect.poll(() => storedSql(baseURL!, ws, "pushed q")).toBe("SELECT name FROM items");
@@ -90,21 +91,25 @@ test("turning autosave on saves open drafts", async ({ page, seeds, baseURL }) =
   await expect(page.getByTestId("query-save")).toHaveCount(0);
   await expect.poll(() => storedSql(baseURL!, ws, "draft q")).toBe("SELECT id FROM items");
 
-  // Dashboards: an agent draft is kept when autosave goes on.
+  // Dashboards: an agent draft arrives unnamed, so autosave has nothing to
+  // save it under: Save stays, and the user names it.
   await api(`${baseURL}/api/workspaces/${ws}`, { method: "PATCH", json: { autosave: false } });
   await page.reload();
   const sessionId = await armRemote(page);
   // Through the real MCP endpoint: there's no REST route that drafts without persisting.
-  const args = { session_id: sessionId, name: "draft dash", html: "<p>draft</p>", queries: {} };
+  const args = { session_id: sessionId, html: "<p>draft</p>", queries: {} };
+  expect((await mcpCall(baseURL!, "push_dashboard", { ...args, name: "agent dash" })).ok).toBeFalsy();
   expect((await mcpCall(baseURL!, "push_dashboard", args)).ok).toBeTruthy();
-  await expect(page.getByTestId("dashboard-select")).toHaveValue("draft dash");
-  await expect(page.getByTestId("dashboard-save")).toBeVisible();
+  await expect(page.getByTestId("dashboard-save")).toBeEnabled();
 
   const storedDashboards = async (): Promise<string[]> =>
     (await api(`${baseURL}/api/dashboards?workspace=${ws}`)).body.dashboards.map((d: { name: string }) => d.name);
 
-  expect(await storedDashboards()).not.toContain("draft dash");
   await setAutosave(page, true);
-  await expect(page.getByTestId("dashboard-save")).toHaveCount(0);
+  expect(await storedDashboards()).toEqual([]);
+  page.once("dialog", (d) => d.accept("draft dash"));
+  await page.getByTestId("dashboard-save").click();
   await expect.poll(storedDashboards).toContain("draft dash");
+  await expect(page.getByTestId("dashboard-select")).toHaveValue("draft dash");
+  await expect(page.getByTestId("dashboard-save")).toHaveCount(0);
 });

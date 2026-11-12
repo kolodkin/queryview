@@ -326,7 +326,8 @@ session (owner: none / human / agent, held in memory).
   selected `fields` alongside `cell_view`, so reloading a predefined query
   restores its full presentation. Pushes never persist — only the human's Save
   writes to the DB, except in an [autosave](./workspace.md#autosave) workspace,
-  where a named push saves once its auto-run succeeds.
+  where a push naming a saved query saves once its auto-run succeeds. An agent
+  can't name a new query: it pushes unnamed and the human names it.
 
 The lock and channels live in one process's memory (like the SSE relay), so this
 assumes a single backend process; multi-worker deployments would need a shared

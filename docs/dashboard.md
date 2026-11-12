@@ -4,7 +4,7 @@ A **dashboard** is an HTML layout plus a set of named SQL queries. An AI agent
 authors one and pushes it into a live, armed QueryView browser session over MCP;
 it is also persisted so it can be reopened later by name.
 
-Responsibilities mirror the [remote-control](./remote.md) layer: the agent never
+Responsibilities mirror the [remote-control](./mcp.md) layer: the agent never
 receives query results back. The **browser** (trusted code with a session) runs
 the queries on its session's connection and feeds the results into the
 agent-authored HTML, which renders inside an isolated iframe.
@@ -25,16 +25,18 @@ always shows live data.
 
 ## The `push_dashboard` MCP tool
 
-The MCP server at `/mcp` (see [remote.md](./remote.md) for arming and the
+The MCP server at `/mcp` (see [mcp.md](./mcp.md) for arming and the
 session id) exposes:
 
-- `push_dashboard(session_id, name, html, queries, params?)` — push the
+- `push_dashboard(session_id, html, queries, params?, name?)` — push the
   dashboard **draft** to the browser identified by `session_id`, which navigates
-  to `/dashboard?name=<name>` and renders it. It does **not** persist — only the
-  user's **Save** button in the dashboard view writes it to the store (mirrors
-  `push_query`) — unless the session's workspace has
-  [autosave](./workspace.md#autosave) on, which persists each delivered push and
-  hides Save. Returns `{ok, pushed, persisted, message, database}`; an unknown/disarmed
+  to the dashboard view and renders it. Without `name` the draft is new:
+  **Save** asks the user for its name. `name` must be a saved dashboard, which
+  the push edits; the agent cannot name a new one. Only the user's **Save**
+  writes it to the store (mirrors `push_query`), unless the session's workspace
+  has [autosave](./workspace.md#autosave) on, which persists each delivered
+  named push and hides Save (an unnamed draft keeps it). Returns
+  `{ok, pushed, persisted, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
 
 A dashboard never names a [connection](./connect.md): it runs on the
@@ -176,6 +178,6 @@ the session id.
 ## Related docs
 
 - [queryview.md](./queryview.md) — the pages and the Connect page.
-- [remote.md](./remote.md) — arming a session, the session id, the MCP server.
+- [mcp.md](./mcp.md) — arming a session, the session id, the MCP server.
 - [api.md](./api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
 - [connect.md](./connect.md) — connections and their stored database.

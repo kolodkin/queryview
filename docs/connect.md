@@ -195,7 +195,7 @@ restarts (the session then reads as disconnected).
 - The agent may switch to any unlocked ClickHouse or Postgres connection and
   pick the database of whichever unlocked one it is on; it may add (also
   ClickHouse or Postgres only: DuckDB and SQLite read local files) and remove
-  only its own. See [remote.md](./remote.md#mcp-tools).
+  only its own. See [mcp.md](./mcp.md#tools).
 - This keeps a cooperating agent in its lane; it is not a security boundary.
   For one, lock the connection.
 

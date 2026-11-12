@@ -108,6 +108,13 @@ function DashboardView({
   // currently-active dashboard (draft or loaded) to the store.
   async function save() {
     if (!active) return
+    // An agent's new draft arrives unnamed: naming it is the user's.
+    const saveAs = active.name || window.prompt('Save dashboard as (name):')?.trim()
+    if (!saveAs) return
+    if (!active.name && dashboards.some((d) => d.name === saveAs)) {
+      setError(`A dashboard named “${saveAs}” already exists.`)
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -115,7 +122,7 @@ function DashboardView({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: active.name,
+          name: saveAs,
           html: active.html,
           queries: active.queries,
           params: active.params ?? [],
@@ -128,6 +135,10 @@ function DashboardView({
         return
       }
       await loadDashboards()
+      if (!active.name) {
+        setLocalPush({ ...active, name: saveAs })
+        setSearchParams({ name: saveAs })
+      }
     } catch {
       setError('Failed to save dashboard.')
     } finally {
@@ -139,7 +150,7 @@ function DashboardView({
   // to go. Resubscribed each render so the handler sees the current draft.
   useEffect(() =>
     onAutosaveEnabled(() => {
-      if (localPush && active?.name === localPush.name) void save()
+      if (localPush && active?.name && active.name === localPush.name) void save()
     }),
   )
 
@@ -198,7 +209,7 @@ function DashboardView({
       setError(null)
       setResults(null)
       setActive(null)
-      if (!name) return
+      if (!name && localPush?.name !== '') return
 
       const dash = await loadDashboard()
       if (cancelled || !dash) return
@@ -291,7 +302,7 @@ function DashboardView({
             </option>
           ))}
         </select>
-        {!autosave && (
+        {(!autosave || active?.name === '') && (
           <button
             type="button"
             data-testid="dashboard-save"
@@ -324,7 +335,7 @@ function DashboardView({
         />
       </div>
 
-      {!name && (
+      {!name && !active && (
         <p className="text-center text-sm text-slate-400" data-testid="dashboard-empty">
           {dashboards.length
             ? 'Pick a dashboard to view it.'
@@ -341,7 +352,7 @@ function DashboardView({
         </p>
       )}
 
-      {name && !error && loading && !(active && results) && (
+      {!error && loading && !(active && results) && (
         <p className="text-center text-sm text-slate-400" data-testid="dashboard-loading">
           Running queries…
         </p>

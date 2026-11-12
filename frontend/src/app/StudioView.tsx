@@ -358,10 +358,10 @@ function QueryPanel({
     setPushedCellView(pushed.cell_view ?? null)
     // Load everything into the editor: select the named query so the dropdown,
     // saved view, and Save all target it (selection only — nothing persisted).
-    if (pushed.name != null) setSelectedName(pushed.name)
+    // An unnamed push clears the selection and runs for no name, so neither
+    // Save nor autosave writes it over the query that was open.
+    setSelectedName(pushed.name ?? '')
     /* eslint-enable react-hooks/set-state-in-effect */
-    // An unnamed push runs for no name, so autosave never writes it over the
-    // selected query.
     void runWith(q, lim, off, ord, { selectFields: fld, runFor: pushed.name ?? '' })
     // Consume the push so re-mounting doesn't re-run a stale query.
     onPushConsumed?.()

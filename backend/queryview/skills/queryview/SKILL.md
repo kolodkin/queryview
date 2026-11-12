@@ -58,6 +58,9 @@ inline bars (`width:{row.pct}%`), a `link` to the record in its own system.
 `push_dashboard` renders HTML fed by named queries as an unsaved draft; re-push to revise
 it. See the tool's description for the `window.queries` and `params` contract.
 
+Never name a new query or dashboard: push it unnamed and the user names it on Save.
+`name` only takes one that is already saved, to edit it.
+
 Match QueryView's look — dark liquid glass. The dashboard runs in an iframe, so it paints
 its own backdrop (the app's doesn't show through):
 
