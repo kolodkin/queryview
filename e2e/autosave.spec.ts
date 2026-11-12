@@ -48,11 +48,11 @@ test("autosave saves successful runs and hides save", async ({ page, seeds, base
   // overwritten; a named one saves under its name.
   const sessionId = await armRemote(page);
   const push = { session_id: sessionId, query: "SELECT name FROM items" };
-  await api(`${baseURL}/api/remote/push`, { json: push });
+  await api(`${baseURL}/api/remote/push_studio`, { json: push });
   await expect(page.getByTestId("query-input")).toHaveValue("SELECT name FROM items");
   await expect(page.getByTestId("query-predefined-select")).toHaveValue("");
   await expect(page.getByTestId("query-output")).toBeVisible();
-  await api(`${baseURL}/api/remote/push`, { json: { ...push, name: "pushed q" } });
+  await api(`${baseURL}/api/remote/push_studio`, { json: { ...push, name: "pushed q" } });
   await expect.poll(() => storedSql(baseURL!, ws, "pushed q")).toBe("SELECT name FROM items");
   expect(await storedSql(baseURL!, ws, "auto q")).toBe("SELECT id, name FROM items ORDER BY id");
 

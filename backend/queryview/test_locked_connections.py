@@ -107,7 +107,7 @@ def test_mcp_tools_are_refused_on_a_locked_connection():
     assert _run(mcp_server.select_database(sid, "memory"))["message"] == "connection is locked"
     assert _run(mcp_server.use_connection(sid, "lock-mcp-duck"))["message"] == "connection is locked"
     # The REST push surface, with the session id only.
-    assert c.post("/api/remote/push", json={"session_id": sid, "query": "SELECT 1"}).json() == {
+    assert c.post("/api/remote/push_studio", json={"session_id": sid, "query": "SELECT 1"}).json() == {
         "ok": False,
         "message": "connection is locked",
     }

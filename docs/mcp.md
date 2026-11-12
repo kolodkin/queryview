@@ -144,7 +144,7 @@ The agent drafts and edits; the user names and saves.
 When armed, the browser opens an SSE stream
 (`GET /api/remote/events?session=<id>`); the backend registers an in-memory
 channel **keyed by that session's id** (see [session.md](./session.md)).
-`push_studio` (and the test-only `POST /api/remote/push`) enqueue onto that
+`push_studio` (and the test-only `POST /api/remote/push_studio`) enqueue onto that
 channel; the SSE stream delivers the payload and the panel fills `query` /
 `limit` / `offset` / `order_by` / selected `fields` and runs.
 

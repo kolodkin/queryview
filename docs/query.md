@@ -171,7 +171,7 @@ existed still render, with broken entries falling back to plain text.
 
 ### Pushed cell views (MCP / remote)
 
-A remote push (the `push_studio` MCP tool, or `POST /api/remote/push`) may carry a
+A remote push (the `push_studio` MCP tool, or `POST /api/remote/push_studio`) may carry a
 `cell_view` field — the same raw YAML — that styles **that pushed result only**.
 It's a per-push override, not persisted: it wins over the selected query's saved
 `cell_view` for rendering and is dropped on the next manual **Execute** or when a

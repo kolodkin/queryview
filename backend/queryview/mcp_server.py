@@ -90,7 +90,7 @@ async def push_studio(
         if info.get("connected") and await get_predefined_query(info["type"], name, ws.id) is None:
             return _failed(_NEW_NAME.format(kind="query", name=name))
     payload = {
-        "type": "query",
+        "type": "studio",
         "query": query,
         "limit": limit,
         "offset": offset,

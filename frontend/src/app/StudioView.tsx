@@ -40,7 +40,7 @@ type PredefinedQuery = {
   deleted_at: number | null // unix ms when deleted (docs/query.md); null = live
 }
 
-export type QueryPush = {
+export type StudioPush = {
   query: string
   limit?: number
   offset?: number
@@ -72,7 +72,7 @@ function StudioView({
   connectionType: string
   // The session's connection and database; results follow it (see QueryPanel).
   runOn?: string | null
-  pushed?: QueryPush | null
+  pushed?: StudioPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
   // The workspace autosaves: no Save button; successful runs save instead.
@@ -123,7 +123,7 @@ function QueryPanel({
 }: {
   connectionType: string
   runOn?: string | null
-  pushed?: QueryPush | null
+  pushed?: StudioPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
   // The workspace autosaves: no Save button; successful runs save instead.
