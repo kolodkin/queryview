@@ -226,6 +226,7 @@ async def list_sessions() -> list[dict[str, Any]]:
             {
                 "id": r.id,
                 "label": _label(r.id, r.label, r.seq),
+                "pinned": r.label is not None,
                 "connection": r.connection_name,
                 "database": r.database,
                 "held": held,

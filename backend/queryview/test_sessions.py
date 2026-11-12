@@ -118,6 +118,7 @@ def test_list_returns_display_label_and_held_flag():
     rows = _run(sessions.list_sessions())
     row = next(r for r in rows if r["id"] == rec.id)
     assert row["label"] == f"Session {rec.seq}"
+    assert row["pinned"] is False
     assert row["held"] is False
 
 
