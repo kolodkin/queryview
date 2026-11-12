@@ -54,7 +54,7 @@ Naming a tool overrides it.
 Every tool acts on a browser session: a [tab](#tabs) of the agent's own, or one
 you [armed](#arming-a-session).
 
-- `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
+- `push_studio(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
   push a query. `order_by` is `[{name, dir}]`; `fields` are the columns to show
   (omit for all); `cell_view` is raw YAML for this push only (not persisted);
   `name` selects a saved query to [edit](#naming-and-saving). Returns
@@ -64,7 +64,7 @@ you [armed](#arming-a-session).
   `order_by`/`fields` (`"invalid …"`).
 - `list_queries(conn_type?="clickhouse")` — list saved queries:
   `{queries: [{query_name, query, cell_view, order_by, fields}]}`. Pass a
-  `query_name` back as `push_query`'s `name`.
+  `query_name` back as `push_studio`'s `name`.
 - `session_info(session_id)` — what the session is on: `{ok, connected,
   connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
@@ -127,7 +127,7 @@ to ClickHouse directly.
 
 The agent drafts and edits; the user names and saves.
 
-- **New work is unnamed.** `push_query` and `push_dashboard` without `name`
+- **New work is unnamed.** `push_studio` and `push_dashboard` without `name`
   push a draft. The user names it: **+ New name…** in the Studio, the prompt
   of the dashboard's **Save**, which refuses a name already taken.
 - **`name` only edits.** It must be a saved query (`list_queries`) or dashboard
@@ -144,7 +144,7 @@ The agent drafts and edits; the user names and saves.
 When armed, the browser opens an SSE stream
 (`GET /api/remote/events?session=<id>`); the backend registers an in-memory
 channel **keyed by that session's id** (see [session.md](./session.md)).
-`push_query` (and the test-only `POST /api/remote/push`) enqueue onto that
+`push_studio` (and the test-only `POST /api/remote/push`) enqueue onto that
 channel; the SSE stream delivers the payload and the panel fills `query` /
 `limit` / `offset` / `order_by` / selected `fields` and runs.
 

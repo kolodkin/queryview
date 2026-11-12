@@ -171,7 +171,7 @@ existed still render, with broken entries falling back to plain text.
 
 ### Pushed cell views (MCP / remote)
 
-A remote push (the `push_query` MCP tool, or `POST /api/remote/push`) may carry a
+A remote push (the `push_studio` MCP tool, or `POST /api/remote/push`) may carry a
 `cell_view` field — the same raw YAML — that styles **that pushed result only**.
 It's a per-push override, not persisted: it wins over the selected query's saved
 `cell_view` for rendering and is dropped on the next manual **Execute** or when a
@@ -309,7 +309,7 @@ fields** view.
 
 ## Co-edit & edit lock
 
-An agent (via the `push_query` / `push_script` MCP tools) and a human can share a live session
+An agent (via the `push_studio` / `push_script` MCP tools) and a human can share a live session
 without clobbering each other, arbitrated by a **server-side edit lock** on the
 session (owner: none / human / agent, held in memory).
 

@@ -91,7 +91,7 @@ test("locked connection keeps the agent out", async ({ page, seeds, baseURL }) =
 
   // The agent: MCP tools and the REST surface alike, with the session id only.
   expect(await mcp("run_sql", { sql: "SELECT 1" })).toEqual({ ok: false, message: "connection is locked" });
-  expect(await mcp("push_query", { query: "SELECT 1" })).toMatchObject({ ok: false, message: "connection is locked" });
+  expect(await mcp("push_studio", { query: "SELECT 1" })).toMatchObject({ ok: false, message: "connection is locked" });
   expect(await mcp("session_info", {})).toMatchObject({ locked: true, tables: [] });
   const r = await api(`${baseURL}/api/db/query`, {
     json: { query: "SELECT 1" },

@@ -232,14 +232,14 @@ def test_push_to_an_unarmed_session_is_refused():
 def test_push_query_reads_the_database_from_the_session_row():
     """The browser no longer mirrors its database into the channel; the agent
     reads the session the channel is named after."""
-    from queryview.mcp_server import push_query as mcp_push_query
+    from queryview.mcp_server import push_studio as mcp_push_studio
 
     rec = asyncio.run(sessions.create_session())
     asyncio.run(sessions.set_connection(rec.id, "reporting"))
     asyncio.run(sessions.set_database(rec.id, "sales_reporting"))
     remote.register(rec.id)
     try:
-        out = asyncio.run(mcp_push_query(rec.id, "SELECT 1"))
+        out = asyncio.run(mcp_push_studio(rec.id, "SELECT 1"))
         assert out["ok"] is True
         assert out["database"] == "sales_reporting"
     finally:

@@ -47,14 +47,14 @@ shared (SQLite). See [session.md](./session.md).
 | DELETE | `/api/sessions/{id}`        | —                                      | Delete a session. `{ok}`; held by a live tab → `409`, unknown → `404`. |
 | POST   | `/api/sessions/release`     | `{tab}`                                | Free whatever this tab holds — the `pagehide` beacon. `{ok}`. |
 | GET    | `/api/remote/events`        | `?session=<id>`                        | SSE stream a browser opens when "remote control" is armed; the channel is keyed by that session id (`EventSource` cannot send the header). Emits a `ready` event (`{id}`) then `query`, `script`, `dashboard` and `explorer` events with pushed payloads (each emitted under the SSE event named by the payload's `type`). |
-| POST   | `/api/remote/push`          | `{session_id, query, limit?, offset?, order_by?, fields?}` | Push a query to a live armed session (`session_id` is the session's id) (the surface `push_query` and the e2e suite use). `{ok}` \| `{ok:false, message}` (unknown session). Empty `query`/`session_id` → `400`. |
+| POST   | `/api/remote/push`          | `{session_id, query, limit?, offset?, order_by?, fields?}` | Push a query to a live armed session (`session_id` is the session's id) (the surface `push_studio` and the e2e suite use). `{ok}` \| `{ok:false, message}` (unknown session). Empty `query`/`session_id` → `400`. |
 | POST   | `/api/runqueries`           | `{queries:{name:SQL}}`                 | Run a dashboard's named queries on this session's connection and selected database. Fail-fast: `{ok, results:{name:{col:[…]}}, meta:{name:[{name, type}]}}` (column-oriented, values typed as the driver returns them) on full success; on any failure an HTTP error with `{ok:false, message, reason}` — `409` not connected / no database selected, `400` bad body / a failing query (message prefixed with the panel name). See [dashboard.md](./dashboard.md). |
 | POST   | `/api/dashboards`           | `{name, html, queries, params?, session_id?, workspace?}` | Upsert a dashboard by name within a workspace; with `session_id`, also pushes it to that live session. `{ok, persisted, pushed, message}`. Missing `name`/`html` or malformed `params` → `400`. |
 | GET    | `/api/dashboards`           | `?workspace=`                          | List a workspace's dashboards (no payload): `{dashboards:[{name, updated_at}]}`, ordered by name. |
 | GET    | `/api/dashboards/{name}`    | `?workspace=`                          | A saved dashboard `{name, html, queries}` (`queries` parsed to a dict), or `404 {error:"not found"}`. |
 
 **MCP:** an MCP server is mounted at `/mcp/` (Streamable HTTP) exposing
-`push_query` (push SQL to a session's query panel), `push_script` (push a script
+`push_studio` (push SQL to a session's query panel), `push_script` (push a script
 to a session's Scripts editor), `push_dashboard` (push a dashboard draft to a
 session), `session_info`, `run_sql`, `run_script`, `list_queries` / `list_dashboards`
 and `git_store` / `git_history` / `git_restore`. They delegate to the in-process

@@ -66,20 +66,20 @@ def test_run_query_unknown_session_fails():
 
 def test_push_query_takes_only_a_saved_name(default_ws_id):
     """The agent edits a saved query or pushes an unnamed draft; it can't coin a name."""
-    from queryview.mcp_server import push_query
+    from queryview.mcp_server import push_studio
     from queryview.queries import save_predefined_query
 
     sid = _connected_session("sc-named")
     rid = remote.register(sid)
     try:
-        out = _run(push_query(rid, "SELECT 1", name="agent made"))
+        out = _run(push_studio(rid, "SELECT 1", name="agent made"))
         assert out["ok"] is False and 'no saved query named "agent made"' in out["message"]
         assert _run(remote.next_message(rid, 0.1)) is None
         _run(save_predefined_query("user made", "duckdb", "SELECT 0", workspace_id=default_ws_id))
-        assert _run(push_query(rid, "SELECT 1", name="user made"))["ok"] is True
-        assert _run(push_query(rid, "SELECT 1"))["ok"] is True
+        assert _run(push_studio(rid, "SELECT 1", name="user made"))["ok"] is True
+        assert _run(push_studio(rid, "SELECT 1"))["ok"] is True
         # A session that can't take the push reports that, not the name.
-        gone = _run(push_query("no-such-session", "SELECT 1", name="user made"))
+        gone = _run(push_studio("no-such-session", "SELECT 1", name="user made"))
         assert gone["ok"] is False and "no saved query" not in gone["message"]
     finally:
         remote.unregister(rid)
