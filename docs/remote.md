@@ -24,10 +24,10 @@ Register the client once — see [mcp.md](./mcp.md).
 
 ## Agent skill
 
-The server also implements the MCP Skills extension (`io.modelcontextprotocol/skills`)
-and publishes one skill, `skill://queryview/SKILL.md`
-([source](../backend/queryview/skills/queryview/SKILL.md)). It covers tabs, connections, safe SQL and
-dashboards; the server's `instructions` say it exists and point agents at it.
+The server publishes one skill over the MCP Skills extension,
+`skill://queryview/SKILL.md` ([source](../backend/queryview/skills/queryview/SKILL.md)):
+the default workflow for tabs, connections, SQL, Studio results and dashboards.
+Naming a tool overrides it.
 
 ## MCP tools
 
@@ -109,11 +109,6 @@ macOS, `xdg-open` on Linux) or gives it to you; the tab lists as
 connects it with `use_connection` or `add_connection`, then pushes into it as
 into any session; a push made before the link is opened waits for it, a minute
 at most, and every reply about a tab carries its `url`.
-
-## Default workflow
-
-The [queryview skill](#agent-skill) sets how the agent answers "run this query"
-without asking which tool; naming a tool overrides it.
 
 ## How it works
 
