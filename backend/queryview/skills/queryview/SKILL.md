@@ -47,39 +47,42 @@ Use `custom` for chips on categorical columns (status, severity, environment, ty
 ```yaml
 status:
   type: custom
-  value: <span style="padding:1px 8px;border-radius:999px;font-size:12px;background:#e8f0fe;color:#1a56db">{cell}</span>
+  value: <span style="padding:1px 8px;border-radius:999px;font-size:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#e2e8f0">{cell}</span>
 ```
 
-A chip's color comes from its template, not the value, so give a column one neutral
-chip, or compute the color in SQL as its own column (e.g. `status_color`) and use
-`{row.status_color}` in the style. Other good uses: numbers right-aligned with
-`font-variant-numeric:tabular-nums`, small inline bars (`width:{row.pct}%`), a `link`
-to the record in its own system. Array/Map/Tuple columns already render as lists;
-leave them alone. Keep chips to columns with a handful of values.
+Other good uses: right-aligned numbers with `font-variant-numeric:tabular-nums`, small
+inline bars (`width:{row.pct}%`), a `link` to the record in its own system.
 
 ## Dashboards
 
 `push_dashboard` renders HTML fed by named queries as an unsaved draft; re-push to revise
 it. See the tool's description for the `window.queries` and `params` contract.
 
-Design it in a liquid-glass style:
+Match QueryView's look — dark liquid glass. The dashboard runs in an iframe, so it paints
+its own backdrop (the app's doesn't show through):
 
-- **Backdrop:** a soft full-page gradient (e.g. `linear-gradient(135deg,#dbeafe,#ede9fe,#fce7f3)`)
-  so the glass has something to refract; never a flat white page.
-- **Panels:** translucent cards — `background:rgba(255,255,255,.55)`,
-  `backdrop-filter:blur(20px) saturate(180%)` (plus `-webkit-backdrop-filter`),
-  `border:1px solid rgba(255,255,255,.6)`, `border-radius:20px`,
-  `box-shadow:0 8px 32px rgba(15,23,42,.12)`, and an inner top highlight
-  (`inset 0 1px 0 rgba(255,255,255,.8)`).
-- **Type:** the system stack (`-apple-system, system-ui, sans-serif`); dark slate text
-  (`#0f172a`, muted `#475569`) for contrast on glass; KPIs large with
-  `font-variant-numeric:tabular-nums`.
-- **Layout:** a responsive grid (`repeat(auto-fit,minmax(280px,1fr))`, 16–20px gaps); KPI
-  tiles first, then charts, then detail tables.
-- **Charts:** transparent chart backgrounds, light gridlines, one accent hue per series;
-  rounded bars and smooth lines suit the style.
-- **Controls:** `params` selectors as pill-shaped glass chips.
-- **Restraint:** blur only on panels, not every element, and keep text on solid-enough
-  fills to stay readable.
+```css
+body {
+  color-scheme: dark; color: #e2e8f0; min-height: 100vh;
+  background:
+    radial-gradient(820px 620px at 12% 6%, rgba(99,102,241,.3), transparent 62%),
+    radial-gradient(760px 580px at 88% 14%, rgba(168,85,247,.24), transparent 60%),
+    radial-gradient(900px 720px at 78% 104%, rgba(45,212,191,.16), transparent 60%),
+    linear-gradient(160deg, #070a14, #0c1124 52%, #160f2b);
+}
+.panel {
+  border-radius: 1rem; border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.025);
+  backdrop-filter: blur(22px) saturate(170%); -webkit-backdrop-filter: blur(22px) saturate(170%);
+  box-shadow: 0 16px 40px -16px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.16);
+}
+```
+
+- **Chips and selectors:** pill-shaped, `border:1px solid rgba(255,255,255,.12);`
+  `background:rgba(255,255,255,.06)`; accent indigo (`#818cf8` / `#4f46e5`).
+- **Type and charts:** slate text (`#e2e8f0`, muted `#94a3b8`), tabular numbers for KPIs,
+  transparent chart backgrounds with faint gridlines (`rgba(255,255,255,.08)`).
+- **Layout:** a responsive grid (`repeat(auto-fit,minmax(280px,1fr))`); KPI tiles first,
+  then charts, then detail tables.
 
 A tool the user names wins over this workflow.
