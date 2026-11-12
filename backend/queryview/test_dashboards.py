@@ -167,43 +167,12 @@ def test_mcp_upsert_dashboard_pushes_draft_without_persisting(default_ws_id):
         out = _run(mcp_push(rid, "<p>d</p>", {"q": "SELECT 1"}, name="draftdash"))
         assert out["pushed"] is False and 'no saved dashboard named "draftdash"' in out["message"]
         out = _run(mcp_push(rid, "<p>d</p>", {"q": "SELECT 1"}))
-        assert out["pushed"] is True and out["persisted"] is False
+        assert out["pushed"] is True and "persisted" not in out
         # Draft: the agent push must NOT persist — only the user's Save does.
         assert _run(get_dashboard("draftdash", default_ws_id)) is None
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None
         assert msg["type"] == "dashboard" and msg["name"] == ""
-    finally:
-        remote.unregister(rid)
-
-
-def test_mcp_save_dashboard_persists_in_the_session_workspace():
-    from queryview.connect import _save_active_connection
-    from queryview.drivers.clickhouse import ChConfig
-    from queryview.mcp_server import save_dashboard as mcp_save
-    from queryview.workspaces import create_workspace, resolve
-
-    _run(create_workspace("t4-save"))
-    ws_id = _run(resolve("t4-save")).id
-    _run(_save_active_connection("c", ChConfig("h", 8123, "u", "p"), "clickhouse"))
-    rec = _run(sessions.create_session())
-    _run(sessions.set_connection(rec.id, "c"))
-    _run(sessions.patch_session(rec.id, workspace="t4-save"))
-    # A disarmed session grants nothing: no delivery, no save.
-    out = _run(mcp_save(rec.id, "agent dash", "<p>a</p>", {"q": "SELECT 1"}))
-    assert out["ok"] is False and out["persisted"] is False
-    assert _run(get_dashboard("agent dash", ws_id)) is None
-    rid = remote.register(rec.id)
-    try:
-        assert _run(mcp_save(rid, " ", "<p>a</p>", {}))["message"] == "name is required"
-        # A new name is created, then overwritten by the next save.
-        for html in ("<p>a</p>", "<p>b</p>"):
-            out = _run(mcp_save(rid, "agent dash", html, {"q": "SELECT 1"}))
-            assert out["pushed"] is True and out["persisted"] is True
-            saved = _run(get_dashboard("agent dash", ws_id))
-            assert saved is not None and saved["html"] == html
-            msg = _run(remote.next_message(rid, 1.0))
-            assert msg is not None and msg["name"] == "agent dash"
     finally:
         remote.unregister(rid)
 

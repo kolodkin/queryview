@@ -323,8 +323,8 @@ session (owner: none / human / agent, held in memory).
 - **Save persists presentation:** the human's Save now stores `order_by` and the
   selected `fields` alongside `cell_view`, so reloading a predefined query
   restores its full presentation. Pushes never persist — only the human's Save
-  writes to the DB, or `save_query` when the human
-  [asks the agent to save](./mcp.md#naming-and-saving).
+  writes to the DB. An agent can't name a new query: it pushes unnamed and the
+  human names it.
 
 The lock and channels live in one process's memory (like the SSE relay), so this
 assumes a single backend process; multi-worker deployments would need a shared

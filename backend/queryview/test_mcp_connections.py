@@ -4,7 +4,6 @@ session connections it added itself."""
 from __future__ import annotations
 
 import asyncio
-import json
 
 from queryview import remote, sessions
 from queryview.connect import _save_active_connection, open_saved
@@ -82,32 +81,6 @@ def test_push_query_takes_only_a_saved_name(default_ws_id):
         # A session that can't take the push reports that, not the name.
         gone = _run(push_query("no-such-session", "SELECT 1", name="user made"))
         assert gone["ok"] is False and "no saved query" not in gone["message"]
-    finally:
-        remote.unregister(rid)
-
-
-def test_save_query_creates_and_overwrites_only_when_delivered(default_ws_id):
-    from queryview.mcp_server import save_query
-    from queryview.queries import get_predefined_query
-
-    sid = _connected_session("sc-save")
-    # A disarmed session grants nothing: no delivery, no save.
-    assert _run(save_query(sid, "agent saved", "SELECT 1"))["saved"] is False
-    assert _run(get_predefined_query("duckdb", "agent saved", default_ws_id)) is None
-    rid = remote.register(sid)
-    try:
-        assert _run(save_query(rid, " ", "SELECT 1"))["message"] == "name and query are required"
-        # An invalid presentation is refused by the push, so nothing is saved.
-        assert _run(save_query(rid, "agent saved", "SELECT 1", order_by=[{"name": "id", "dir": "UP"}]))["ok"] is False
-        assert _run(get_predefined_query("duckdb", "agent saved", default_ws_id)) is None
-        assert _run(save_query(rid, "agent saved", "SELECT 1"))["saved"] is True
-        out = _run(save_query(rid, "agent saved", "SELECT 2", order_by=[{"name": "id", "dir": "DESC"}], fields=["id"]))
-        assert out["ok"] is True and out["saved"] is True
-        row = _run(get_predefined_query("duckdb", "agent saved", default_ws_id))
-        assert row is not None and row["query"] == "SELECT 2"
-        assert json.loads(row["order_by"]) == [{"name": "id", "dir": "DESC"}]
-        msg = _run(remote.next_message(rid, 0.1))
-        assert msg is not None and msg["type"] == "query" and msg["name"] == "agent saved"
     finally:
         remote.unregister(rid)
 

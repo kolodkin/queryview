@@ -5,7 +5,6 @@ in-process remote.py hub."""
 from __future__ import annotations
 
 import asyncio
-import json
 from typing import Any
 
 from mcp.server.mcpserver import Context, MCPServer
@@ -29,7 +28,7 @@ from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
 from .dashboards import _push_dashboard, get_dashboard
 from .mcp_skills import SkillsExtension
-from .queries import get_predefined_query, list_predefined_queries_view, save_predefined_query
+from .queries import get_predefined_query, list_predefined_queries_view
 from .validation import dashboard_params_error
 
 mcp = MCPServer(
@@ -38,8 +37,7 @@ mcp = MCPServer(
     instructions=(
         "Open your own tab with new_tab unless given a session id. Run SQL, reads and writes, with run_script "
         "(apply writes once), then push_script the final SQL with run=False. Use push_query (Studio) or "
-        "push_dashboard only when asked, and save_query or save_dashboard only when the user explicitly asks to "
-        "save. Full workflow: the queryview skill (skill://queryview/SKILL.md)."
+        "push_dashboard only when asked. Full workflow: the queryview skill (skill://queryview/SKILL.md)."
     ),
     extensions=[SkillsExtension()],
 )
@@ -80,9 +78,9 @@ async def push_query(
             overrides any selected predefined query's saved cell_view.
         name: Optional name of an existing saved query (see list_queries) to
             edit: it is selected in the dropdown, and with no `cell_view` its
-            saved cell_view applies. Nothing is persisted: the user's Save
-            does that, or save_query when they ask you to. A name that isn't
-            saved is refused — omit it to push an unnamed draft.
+            saved cell_view applies. Nothing is persisted: only the user's
+            Save does that. A name that isn't saved is refused — omit it to
+            push an unnamed draft; the user names and saves it.
     """
     if name:
         info = await get_session(session_id)
@@ -102,68 +100,6 @@ async def push_query(
     }
     ok, message = await push(session_id, payload)
     return _with_url(session_id, {"ok": ok, "message": message, "database": await sessions.database_of(session_id)})
-
-
-@mcp.tool()
-async def save_query(
-    session_id: str,
-    name: str,
-    query: str,
-    order_by: list[dict[str, Any]] | None = None,
-    fields: list[str] | None = None,
-    cell_view: str | None = None,
-) -> dict[str, Any]:
-    """Save a query under `name` in the session's workspace and show it in the
-    browser. ONLY when the user explicitly asks you to save: otherwise
-    push_query a draft and let them save it.
-
-    Creates the saved query, or overwrites the one already named `name` (see
-    list_queries), for the session's connection type. The browser gets it like
-    a push_query of that name. Nothing is saved unless the push is delivered.
-
-    Args:
-        session_id: The session id shown in the QueryView popover.
-        name: The name to save under: one the user gave, or agreed to.
-        query: The SQL to save.
-        order_by: Optional saved sort, e.g. [{"name": "id", "dir": "DESC"}].
-        fields: Optional saved column selection; omit for all columns.
-        cell_view: Optional cell-view YAML saved with the query (docs/query.md).
-
-    Returns {ok, saved, message, database}.
-    """
-    name, query = name.strip(), query.strip()
-    info = await get_session(session_id)
-    if not name or not query:
-        return {**_failed("name and query are required"), "saved": False}
-    if not info.get("connected"):
-        return {**_failed("not connected"), "saved": False}
-    payload = {
-        "type": "query",
-        "query": query,
-        "limit": 100,
-        "offset": 0,
-        "order_by": order_by,
-        "fields": fields,
-        "cell_view": cell_view,
-        "name": name,
-    }
-    # Push first: it validates, and an unarmed or locked session grants nothing.
-    ok, message = await push(session_id, payload)
-    if ok:
-        ws = await _session_workspace_rec(session_id)
-        await save_predefined_query(
-            name,
-            info["type"],
-            query,
-            cell_view if cell_view and cell_view.strip() else None,
-            json.dumps(order_by) if order_by else None,
-            json.dumps(fields) if fields else None,
-            workspace_id=ws.id,
-        )
-    return _with_url(
-        session_id,
-        {"ok": ok, "saved": ok, "message": message, "database": await sessions.database_of(session_id)},
-    )
 
 
 @mcp.tool()
@@ -530,11 +466,10 @@ async def push_dashboard(
     """Push a dashboard to a live QueryView session.
 
     The dashboard renders immediately in the browser as a DRAFT: nothing is
-    written to the store until the user's **Save** in the dashboard view (or
-    save_dashboard, when they ask you to save), mirroring how push_query drafts
-    a query. Omit `name` for a new dashboard: the user names it on Save. With
-    the `name` of a saved dashboard (see list_dashboards) the push edits that
-    one. Re-push to update it. Its queries run on the viewing session's connection
+    written to the store until the user's **Save** in the dashboard view,
+    mirroring how push_query drafts a query. Omit `name` for a new dashboard:
+    the user names it on Save. With the `name` of a saved dashboard (see
+    list_dashboards) the push edits that one. Re-push to update it. Its queries run on the viewing session's connection
     and selected database — a dashboard never names a connection.
 
     The browser consumes the results, not the agent: the HTML reads them from a
@@ -555,78 +490,31 @@ async def push_dashboard(
         name: Optional name of an existing saved dashboard to edit; any other
             name is refused.
 
-    Returns {ok, pushed, persisted, message, database}; "not connected" if
+    Returns {ok, pushed, message, database}; "not connected" if
     the session has no connection.
     """
-    if name and await get_dashboard(name, (await _session_workspace_rec(session_id)).id) is None:
-        return _push_failed(_NEW_NAME.format(kind="dashboard", name=name))
-    return await _dashboard_push(session_id, name or "", html, queries, params, save=False)
-
-
-@mcp.tool()
-async def save_dashboard(
-    session_id: str,
-    name: str,
-    html: str,
-    queries: dict[str, str],
-    params: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Save a dashboard under `name` in the session's workspace and show it in
-    the browser. ONLY when the user explicitly asks you to save: otherwise
-    push_dashboard a draft and let them save it.
-
-    Creates the dashboard, or overwrites the one already named `name` (see
-    list_dashboards). `html`, `queries` and `params` are as in push_dashboard.
-    Nothing is saved unless the push is delivered.
-
-    Args:
-        session_id: The session id shown in the QueryView popover.
-        name: The name to save under: one the user gave, or agreed to.
-        html: The dashboard HTML document.
-        queries: Map of query name to SQL.
-        params: Optional selector specs.
-
-    Returns {ok, pushed, persisted, message, database}.
-    """
-    if not name.strip():
-        return _push_failed("name is required")
-    return await _dashboard_push(session_id, name.strip(), html, queries, params, save=True)
-
-
-async def _dashboard_push(
-    session_id: str,
-    name: str,
-    html: str,
-    queries: dict[str, str],
-    params: list[dict[str, Any]] | None,
-    *,
-    save: bool,
-) -> dict[str, Any]:
     rec = await sessions.get_session_rec(session_id) if session_id else None
     if rec is None or rec.connection_name is None:
         return _push_failed("not connected")
     perr = dashboard_params_error(params)
     if perr is not None:
         return _push_failed(perr)
-    pushed, persisted, message = await _push_dashboard(
-        name, html, queries, session_id, params, rec.workspace, save=save
-    )
+    if name and await get_dashboard(name, (await _session_workspace_rec(session_id)).id) is None:
+        return _push_failed(_NEW_NAME.format(kind="dashboard", name=name))
+    pushed, message = await _push_dashboard(name or "", html, queries, session_id, params)
     return _with_url(
         session_id,
         {
             "ok": pushed,
             "pushed": pushed,
-            "persisted": persisted,
             "message": message,
             "database": await sessions.database_of(session_id),
         },
     )
 
 
-# A push edits a saved entity or is an unnamed draft; naming one is a save.
-_NEW_NAME = (
-    'no saved {kind} named "{name}"; omit `name` to push a draft, or save_{kind} if the user asked you to save it'
-)
+# Agents edit saved entities or push unnamed drafts; only the user names one.
+_NEW_NAME = 'no saved {kind} named "{name}"; omit `name` to push a draft the user names and saves'
 
 
 def _failed(message: str) -> dict[str, Any]:
@@ -634,7 +522,7 @@ def _failed(message: str) -> dict[str, Any]:
 
 
 def _push_failed(message: str) -> dict[str, Any]:
-    return {**_failed(message), "pushed": False, "persisted": False}
+    return {**_failed(message), "pushed": False}
 
 
 @mcp.tool()

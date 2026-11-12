@@ -353,11 +353,7 @@ function QueryPanel({
     // query that was open.
     setSelectedName(pushed.name ?? '')
     /* eslint-enable react-hooks/set-state-in-effect */
-    // A named push may be an agent's save_query of a new name: list it, once
-    // the run has given the server time to store it.
-    void runWith(q, lim, off, ord, { selectFields: fld, runFor: pushed.name ?? '' }).then(() => {
-      if (pushed.name) void loadPredefined()
-    })
+    void runWith(q, lim, off, ord, { selectFields: fld, runFor: pushed.name ?? '' })
     // Consume the push so re-mounting doesn't re-run a stale query.
     onPushConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
