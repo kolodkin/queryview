@@ -11,26 +11,33 @@ import pytest
 from mcp import Client
 from mcp.shared.exceptions import MCPError
 from mcp_types.jsonrpc import INVALID_PARAMS
-from pydantic import TypeAdapter
+from pydantic import BaseModel, ConfigDict
 
 from queryview.mcp_server import mcp
 
 URI = "skill://queryview/SKILL.md"
-_D = TypeAdapter(dict[str, Any])
+
+
+class _Raw(BaseModel):
+    """Any JSON result: extension methods have no typed result model."""
+
+    model_config = ConfigDict(extra="allow")
 
 
 async def _call(c: Client, method: str, **params: Any) -> dict[str, Any]:
-    return await c.session.send_request(types.Request[Any, Any](method=method, params=params), _D)
+    return (await c.session.send_request(types.Request[Any, Any](method=method, params=params), _Raw)).model_dump()
 
 
 def test_skill_is_listed_fetched_and_readable():
     async def go():
         async with Client(mcp) as c:
-            assert "io.modelcontextprotocol/skills" in c.server_capabilities.extensions
-            assert URI in c.instructions
+            assert "io.modelcontextprotocol/skills" in (c.server_capabilities.extensions or {})
+            assert URI in (c.instructions or "")
             listed = (await _call(c, "skills/list"))["skills"]
             got = (await _call(c, "skills/get", uri=URI))["skill"]
-            text = (await c.read_resource(URI)).contents[0].text
+            content = (await c.read_resource(URI)).contents[0]
+            assert isinstance(content, types.TextResourceContents)
+            text = content.text
             with pytest.raises(MCPError) as e:
                 await _call(c, "skills/get", uri="skill://nope/SKILL.md")
         return listed, got, text, e.value.code
