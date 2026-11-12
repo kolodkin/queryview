@@ -109,7 +109,6 @@ test("leaving the rename box unchanged does not pin the automatic name", async (
   await page.getByTestId("session-rename").click();
   await page.getByTestId("session-rename-input").blur();
 
-  // A refused save ("Session <n>" is reserved) would keep the input open.
   await expect(page.getByTestId("session-rename-input")).toHaveCount(0);
   const row = (await api(`${baseURL}/api/sessions`)).body.sessions.find((r: { id: string }) => r.id === sid);
   expect(row.pinned).toBe(false);

@@ -27,7 +27,6 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
   const [draft, setDraft] = useState('')
   // Enter and Escape both unmount the input, which can fire a trailing blur.
   const editing = useRef(false)
-  const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
   // Off while renaming: the input's focus-out save must run before the menu unmounts.
   const rootRef = useDismiss<HTMLDivElement>(open && !renaming, () => setOpen(false))
@@ -83,21 +82,19 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
 
   // close: false when focus moved to another menu control, whose own action
   // (switch, delete, new) decides whether the menu stays.
-  async function saveName(close: boolean) {
+  async function saveName(close: boolean, fromEnter = false) {
     if (!editing.current) return
     editing.current = false
     const name = draft.trim()
-    // Re-sending the automatic "Session <n>" (in any case) would be refused.
-    const squash = (s: string) => s.replace(/\s+/g, '').toLowerCase()
-    if (name !== label && !(/^session\s*\d+$/i.test(name) && squash(name) === squash(label))) {
-      let next: string
-      try {
-        next = await renameSession(name)
-      } catch (e) {
+    if (name !== label) {
+      const next = await renameSession(name).catch((e: unknown) => {
         setError(e instanceof Error ? e.message : String(e))
-        // After Enter the input still has focus, so keep it for a fix; after a
-        // focus-out drop the edit, which also re-arms the menu's dismiss.
-        if (document.activeElement === inputRef.current) editing.current = true
+        return null
+      })
+      if (next === null) {
+        // After Enter keep the input so the name can be fixed; after a focus-out
+        // drop the edit, which also re-arms the menu's dismiss.
+        if (fromEnter) editing.current = true
         else setRenaming(false)
         return
       }
@@ -143,7 +140,8 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) void saveName(true)
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing)
+                          void saveName(true, true)
                         if (e.key === 'Escape') {
                           // cancelRename re-arms the menu's Escape dismiss before this
                           // event reaches document, so keep it from closing the menu.
@@ -154,7 +152,6 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
                       onBlur={(e) => void saveName(!rootRef.current?.contains(e.relatedTarget))}
                       aria-label="Session name"
                       data-testid="session-rename-input"
-                      ref={inputRef}
                       autoFocus
                       className="glass-input m-0.5 min-w-0 flex-1 px-2 py-1 text-sm"
                     />

@@ -90,6 +90,13 @@ def test_ordinal_label_is_rejected():
     assert kept is not None and kept.label == "nightly audit" and kept.url != "/elsewhere"
 
 
+def test_own_ordinal_on_an_unnamed_session_is_a_no_op():
+    """Re-sending the label it already shows, in any case, does not pin it."""
+    rec = _run(sessions.create_session())
+    same = _run(sessions.patch_session(rec.id, label=f"session  {rec.seq}"))
+    assert same is not None and same.label is None
+
+
 def test_delete_removes_the_row_and_its_in_memory_state():
     from queryview import connect
 

@@ -25,6 +25,7 @@ export type SessionSummary = {
   connection: string | null
   database: string | null
   held: boolean
+  pinned: boolean
   deletable: boolean // false while held, and always for the Agent session
   renamable: boolean // false for the Agent session
 }
@@ -52,7 +53,7 @@ let taken = false
 let beating: Promise<void> | null = null
 let holds = 0
 let pending: PendingPatch = {}
-// Bumped by patchSession and selectSession. A reply is adopted only if this
+// Bumped by patchSession, renameSession and selectSession. A reply is adopted only if this
 // hasn't moved since its request, so a late one can't roll back a newer change.
 let localGen = 0
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -271,7 +272,7 @@ export function patchView(view: string, changes: Record<string, unknown>): void 
   schedule()
 }
 
-// Row fields are discrete acts — a navigation, a workspace switch, a rename —
+// Row fields are discrete acts — a navigation, a workspace switch —
 // so they flush at once rather than queueing.
 export function patchSession(changes: SessionPatch): Promise<void> {
   if (!state) return Promise.resolve()
