@@ -60,7 +60,7 @@ async def push_query(
     the session's own connection. Get the `session_id` from the QueryView UI:
     the agent icon next to the connection status pill, after enabling "Allow
     remote control"; without one, open a tab of your own with new_tab.
-    To explore data first, use run_sql with the same id.
+    To explore data first, use run_script with the same id.
     A session on a locked connection (see session_info) refuses every push and
     query with "connection is locked"; use_connection another one.
 
