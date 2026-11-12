@@ -27,7 +27,7 @@ def test_skill_is_listed_fetched_and_readable():
     async def go():
         async with Client(mcp) as c:
             assert "io.modelcontextprotocol/skills" in c.server_capabilities.extensions
-            assert URI in c.session.instructions
+            assert URI in c.instructions
             listed = (await _call(c, "skills/list"))["skills"]
             got = (await _call(c, "skills/get", uri=URI))["skill"]
             text = (await c.read_resource(URI)).contents[0].text

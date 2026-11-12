@@ -17,7 +17,7 @@ from mcp_types.jsonrpc import INVALID_PARAMS
 
 SKILLS_DIR = Path(__file__).parent / "skills"
 # Skills ship inside the package, so they only change with a new release.
-_CACHE = {"resultType": "complete", "ttlMs": 300_000, "cacheScope": "public"}
+_CACHE = {"ttlMs": 300_000, "cacheScope": "public"}  # the SDK adds resultType per protocol version
 
 
 class GetParams(RequestParams):
