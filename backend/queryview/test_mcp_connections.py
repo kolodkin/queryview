@@ -64,7 +64,7 @@ def test_run_query_unknown_session_fails():
     assert out["ok"] is False
 
 
-def test_push_query_takes_only_a_saved_name(default_ws_id):
+def test_push_studio_takes_only_a_saved_name(default_ws_id):
     """The agent edits a saved query or pushes an unnamed draft; it can't coin a name."""
     from queryview.mcp_server import push_studio
     from queryview.queries import save_predefined_query

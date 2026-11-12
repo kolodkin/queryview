@@ -36,7 +36,7 @@ mcp = MCPServer(
     description="Local, agent-controlled SQL workbench for ClickHouse, Postgres, DuckDB and SQLite.",
     instructions=(
         "Open your own tab with new_tab unless given a session id. Run SQL, reads and writes, with run_script "
-        "(apply writes once), then push_script the final SQL with run=False. Use push_studio (Studio) or "
+        "(apply writes once), then push_script the final SQL with run=False. Use push_studio or "
         "push_dashboard only when asked. Full workflow: the queryview skill (skill://queryview/SKILL.md)."
     ),
     extensions=[SkillsExtension()],

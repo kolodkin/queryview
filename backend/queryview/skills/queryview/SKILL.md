@@ -28,7 +28,7 @@ statement's result to you (`run_sql` is the read-only alternative).
 
 If a push fails, reply with the SQL.
 
-Use `push_studio` (the Studio) or `push_dashboard` only when the user asks for them.
+Use `push_studio` or `push_dashboard` only when the user asks for them.
 
 ## Studio results
 

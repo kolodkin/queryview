@@ -642,9 +642,9 @@ async def remote_events(request: Request):
     )
 
 
-# Push a query to a live session (used by the MCP tool and, in tests, directly).
+# Push a query to a live session's Studio (used by the MCP tool and, in tests, directly).
 @app.post("/api/remote/push_studio")
-async def remote_push(request: Request):
+async def remote_push_studio(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
     raw_sid = b.get("session_id")

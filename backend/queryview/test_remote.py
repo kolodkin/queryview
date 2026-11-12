@@ -229,7 +229,7 @@ def test_push_to_an_unarmed_session_is_refused():
     assert message == "unknown or inactive session"
 
 
-def test_push_query_reads_the_database_from_the_session_row():
+def test_push_studio_reads_the_database_from_the_session_row():
     """The browser no longer mirrors its database into the channel; the agent
     reads the session the channel is named after."""
     from queryview.mcp_server import push_studio as mcp_push_studio
