@@ -16,8 +16,7 @@ session's **id** and a copyable command, e.g.:
 Turning the toggle off (or closing the tab) disarms the session immediately —
 pushes to its id are then reported as not delivered.
 
-Without a copied id the agent uses the standing
-[Agent session](./session.md#the-agent-session); arm it the same way.
+Without a copied id the agent works in a [tab](#tabs) of its own.
 
 ## Connecting a client
 
@@ -92,14 +91,26 @@ The pushed query runs through the normal `POST /api/db/query`, so all of
 that path's pagination and order-by safety applies; the push layer never talks
 to ClickHouse directly.
 
+## Tabs
+
+An agent works in browser tabs of its own, one per task, and leaves your
+sessions alone unless you hand it an id. `new_tab(name)` creates a
+[tab session](./session.md#tabs) and returns its `session_id` and `url`,
+`<origin>/?session=<id>`. The agent opens the link in your browser (`open` on
+macOS, `xdg-open` on Linux) or gives it to you; the tab lists as
+**Agent › orders**, arms itself on load, and is gone once closed. The agent
+connects it with `use_connection` or `add_connection`, then pushes into it as
+into any session; a push made before the link is opened waits for it, a minute
+at most, and every reply about a tab carries its `url`.
+
 ## Default workflow
 
 The server's MCP instructions set how the agent answers "run this query",
-without asking which tool: iterate read-only with `run_sql`, apply writes once
-with `run_script`, then `push_script` the final SQL without `run`, replacing
-the [Scripts](./scripts.md) editor's text (the browser never re-applies the
-writes). If the push fails, the agent replies with the SQL. Naming a tool
-(e.g. `push_query`) overrides the default.
+without asking which tool: open a [tab](#tabs) for the task (reused when the
+work is revised), connect it, iterate read-only with `run_sql`, apply writes
+once with `run_script`, then `push_script` the final SQL without `run` (the
+browser never re-applies the writes). If the push fails, the agent replies
+with the SQL. Naming a tool (e.g. `push_query`) overrides the default.
 
 ## How it works
 
@@ -113,6 +124,11 @@ channel; the SSE stream delivers the payload and the panel fills `query` /
 Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](./workspace.md)).
+
+A push to a [tab](#tabs) nobody has opened yet lands in a channel `new_tab`
+opened in advance, which answers `queued for the tab`; arming takes that
+channel over with its pushes queued. One whose tab never comes is dropped
+after a minute.
 
 **Locked connections keep the agent out.** A saved connection the user
 [locked](./connect.md#locked-connections) behind a passphrase refuses every

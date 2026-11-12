@@ -17,6 +17,8 @@ export type SessionState = {
   workspace: string
   url: string
   ui: Record<string, Record<string, unknown>>
+  // Set on a tab the agent opened: what it opened it for.
+  tab: string | null
 }
 
 export type SessionSummary = {
@@ -26,8 +28,7 @@ export type SessionSummary = {
   database: string | null
   held: boolean
   pinned: boolean
-  deletable: boolean // false while held, and always for the Agent session
-  renamable: boolean // false for the Agent session
+  deletable: boolean // false while held
 }
 
 // `table` is the Explorer's selection, remembered per connection server-side.
@@ -60,12 +61,35 @@ let timer: ReturnType<typeof setTimeout> | undefined
 // Subscribers to every row the mirror adopts, whatever brought it.
 const rowListeners = new Set<(row: SessionState) => void>()
 
-function tabToken(): string {
-  const existing = tabRead(TAB_KEY)
-  if (existing) return existing
+function mintTabToken(): string {
   const minted = crypto.randomUUID()
   tabWrite(TAB_KEY, minted)
   return minted
+}
+
+function tabToken(): string {
+  return tabRead(TAB_KEY) ?? mintTabToken()
+}
+
+// The session a link names: `/?session=<id>`, how a tab the agent opened
+// starts. A tab that is not already on that session forgets the identity
+// `window.open` copied from its opener (it must not reclaim the opener's
+// session) and takes the named one; a tab re-opened onto its own session keeps
+// its token, so its claim is simply refreshed. The parameter leaves the URL, so
+// a reload is an ordinary reload. Null without one.
+export function claimFromUrl(): string | null {
+  const params = new URLSearchParams(window.location.search)
+  const session = params.get('session')
+  if (!session) return null
+  if (tabRead(SESSION_KEY) !== session) {
+    mintTabToken()
+    tabWrite(SESSION_KEY, session)
+  }
+  params.delete('session')
+  const search = params.toString()
+  const { pathname, hash } = window.location
+  history.replaceState(null, '', `${pathname}${search ? `?${search}` : ''}${hash}`)
+  return session
 }
 
 export function currentSession(): SessionState | null {

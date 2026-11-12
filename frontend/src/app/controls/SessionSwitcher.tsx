@@ -186,7 +186,7 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
                           <span className="ml-2 text-xs text-slate-400">in another tab</span>
                         )}
                       </button>
-                      {isCurrent && s.renamable !== false && (
+                      {isCurrent && (
                         <button
                           type="button"
                           aria-label="Rename this session"
@@ -211,7 +211,7 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
                       )}
                     </>
                   )}
-                  {/* A held session (this tab's or another's) and the Agent session can't be deleted. */}
+                  {/* A held session (this tab's or another's) can't be deleted. */}
                   {s.deletable && (
                     <button
                       type="button"

@@ -39,6 +39,7 @@ import WorkspaceSwitcher from './controls/WorkspaceSwitcher'
 import SessionSwitcher from './controls/SessionSwitcher'
 import {
   attachSession,
+  claimFromUrl,
   currentSession,
   onSessionRow,
   patchSession,
@@ -355,7 +356,13 @@ function Shell() {
     let stopRows = () => {}
     void (async () => {
       try {
-        const restored = await attachSession()
+        // A link naming a session (a tab the agent opened) takes that one, as
+        // the switcher would; one held elsewhere or gone is reported, and the
+        // tab attaches as any new tab does.
+        const claim = claimFromUrl()
+        const picked = claim ? await selectSession(claim) : null
+        if (claim && !picked) setToast('That session is open in another tab or gone')
+        const restored = picked ?? (await attachSession())
         setWorkspace(restored.workspace)
         setSessionLabel(restored.label)
         setSessionKey(restored.id)
@@ -374,6 +381,9 @@ function Shell() {
           onChanged: applySession,
           onTaken: () => setTaken(true),
         })
+        // A tab the agent opened arms itself, once the connection is on
+        // screen: the push queued for it lands on a page that needs it.
+        if (restored.tab) setArmed(true)
       } catch {
         /* no session: the app still runs, it just remembers nothing */
       }
@@ -387,6 +397,11 @@ function Shell() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The window title: a tab the agent opened is named after itself.
+  useEffect(() => {
+    document.title = currentSession()?.tab ? `${sessionLabel} · QueryView` : 'QueryView'
+  }, [sessionKey, sessionLabel])
 
   // The URL is session state: it is what a refresh and a session switch
   // restore. Immediate rather than queued — navigation is a discrete act,

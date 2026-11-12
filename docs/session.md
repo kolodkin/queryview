@@ -130,19 +130,20 @@ fail with `unknown or inactive session`. Unlike the old per-arm id this one is
 stable, so the command you copy stops changing under you. See
 [remote.md](./remote.md).
 
-## The Agent session
+## Tabs
 
-A standing session, id `agent`, labelled **Agent**, seeded by a migration. The
-MCP server's instructions name it, so an agent can start without the user
-copying an id.
+A session an agent opened for itself with `new_tab`
+([remote.md](./remote.md#tabs)): an unnamed session whose `tab` names the
+work, listed as **Agent › orders** until you pin a name on it. Scratch like
+any unnamed session: swept once its browser tab has been closed for a claim
+TTL, never resumed by a new tab. It has no connection until the agent opens
+one on it.
 
-- A new tab never auto-resumes it, and it can't be deleted or renamed.
-- Otherwise it is an ordinary session: pick it in the session switcher to see
-  what the agent is on, and arm it with **Allow remote control** for pushes.
-- [Locked](./connect.md#locked-connections) connections refuse it like any
-  other session.
-- Its row remembers its last connection, but an agent-added session
-  connection is in-memory and gone after a restart.
+A tab starts from its link, `/?session=<id>`: the browser tab takes that
+session as the switcher would (one held elsewhere or gone shows a toast, and
+the tab attaches as any new tab does) and drops the parameter from the URL. A
+tab session arms itself whenever a browser tab loads it. Any unheld session
+opens from such a link.
 
 ## How it is stored
 
@@ -163,6 +164,7 @@ last_visited    TEXT              -- JSON {connection: {database, table}}
 claimed_by      TEXT              -- the tab token holding it
 claim_seen_at   INTEGER           -- unix ms; stale after 90s
 last_active_at  INTEGER           -- unix ms
+tab             TEXT              -- set on an agent's tab: what it opened it for
 ```
 
 `ui` is a blob rather than columns for the same reason a connection's config is:

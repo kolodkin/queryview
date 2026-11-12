@@ -20,6 +20,7 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 
 | Tool | What it does |
 |---|---|
+| `new_tab` | A session of the agent's own and the link that shows it |
 | `session_info` | The session's connection, database, workspace and tables |
 | `run_sql` | Run read-only SQL; rows go to the agent |
 | `run_script` | Run a `;`-separated script, writes allowed; results go to the agent |
@@ -33,8 +34,9 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 | `use_connection` / `select_database` | Switch the session's connection or database |
 | `git_store` / `git_history` / `git_restore` | Back up, list and restore a query or dashboard via workspace git |
 
-Tools act on a browser session. To target your tab, click the agent icon next
-to the connection pill, enable **Allow remote control**, and give the agent the
+Tools act on a browser session: by default a [tab](./remote.md#tabs) the agent
+opens for itself. To target your own tab instead, click the agent icon next to
+the connection pill, enable **Allow remote control**, and give the agent the
 session id it shows. [remote.md](./remote.md) has each tool's arguments.
 
 ## Related docs
