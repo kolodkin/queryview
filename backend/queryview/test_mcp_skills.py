@@ -10,6 +10,7 @@ import mcp_types as types
 import pytest
 from mcp import Client
 from mcp.shared.exceptions import MCPError
+from mcp_types.jsonrpc import INVALID_PARAMS
 from pydantic import TypeAdapter
 
 from queryview.mcp_server import mcp
@@ -40,4 +41,4 @@ def test_skill_is_listed_fetched_and_readable():
     # The manifest digest must match the bytes resources/read serves.
     data = text.encode()
     assert got["resources"] == [{"uri": URI, "digest": f"sha256:{hashlib.sha256(data).hexdigest()}", "size": len(data)}]
-    assert code == -32602
+    assert code == INVALID_PARAMS

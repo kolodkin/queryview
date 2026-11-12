@@ -112,13 +112,8 @@ at most, and every reply about a tab carries its `url`.
 
 ## Default workflow
 
-The [queryview skill](#agent-skill) sets how the agent answers "run this query",
-without asking which tool: open a [tab](#tabs) for the task (reused when the
-work is revised), connect it, run the SQL — reads and writes, writes applied
-once — with `run_script`, then `push_script` the final SQL without `run` (the
-browser never re-applies the writes). If the push fails, the agent replies
-with the SQL. `push_query` (Studio) and `push_dashboard` are used only when
-asked for; naming a tool overrides the default.
+The [queryview skill](#agent-skill) sets how the agent answers "run this query"
+without asking which tool; naming a tool overrides it.
 
 ## How it works
 
