@@ -37,8 +37,7 @@ tools (among others):
 - `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
   push a query. `order_by` is `[{name, dir}]`; `fields` are the columns to show
   (omit for all); `cell_view` is raw YAML for this push only (not persisted);
-  `name` selects a saved query to edit; any other name is refused, since only
-  the user names a new query. Returns `{ok, message, database}` (`database` is
+  `name` selects a saved query to [edit](#naming-and-saving). Returns `{ok, message, database}` (`database` is
   the session's currently-selected DB, reported by the browser) — `ok:false` for
   an unknown id, a held lock (`"blocked, user editing"`), or malformed
   `order_by`/`fields` (`"invalid …"`).
@@ -90,16 +89,30 @@ tools (among others):
   failure still leaves the session on `database`.
 - `push_dashboard(session_id, html, queries, params?, name?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
-  renders it. Unnamed, it is new: the user names it on **Save**. `name` must be
-  a saved dashboard, which the push then edits. Only the user's **Save**
-  persists it, unless it is named and the workspace has
-  [autosave](./workspace.md#autosave) on. Returns
+  renders it. `name` selects a saved dashboard to
+  [edit](#naming-and-saving). Returns
   `{ok, pushed, persisted, message, database}`; a disconnected session fails with
   `not connected`. See [dashboard.md](./dashboard.md).
 
 The pushed query runs through the normal `POST /api/db/query`, so all of
 that path's pagination and order-by safety applies; the push layer never talks
 to ClickHouse directly.
+
+## Naming and saving
+
+The agent drafts and edits; the user names and saves.
+
+- **New work is unnamed.** `push_query` and `push_dashboard` without `name`
+  push a draft. The user names it: **+ New name…** in the Studio, the prompt
+  of the dashboard's **Save**, which refuses a name already taken.
+- **`name` only edits.** It must be a saved query (`list_queries`) or dashboard
+  (`list_dashboards`); any other is refused with `no saved query named "…"`.
+- **A push persists nothing.** The user's **Save** does. An unnamed query push
+  also deselects the open query, so Save cannot write the draft over it.
+- **Autosave is the exception.** In an [autosave](./workspace.md#autosave)
+  workspace a push naming a saved item saves over it: a dashboard on delivery
+  (`persisted: true`), a query once its auto-run succeeds. An unnamed draft
+  still waits for the user.
 
 ## Tabs
 

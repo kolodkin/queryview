@@ -37,7 +37,8 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 Tools act on a browser session: by default a [tab](./remote.md#tabs) the agent
 opens for itself. To target your own tab instead, click the agent icon next to
 the connection pill, enable **Allow remote control**, and give the agent the
-session id it shows. [remote.md](./remote.md) has each tool's arguments.
+session id it shows. [remote.md](./remote.md) has each tool's arguments, and
+who [names and saves](./remote.md#naming-and-saving) what the agent pushes.
 
 ## Related docs
 
