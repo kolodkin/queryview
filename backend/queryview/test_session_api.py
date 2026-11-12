@@ -33,6 +33,14 @@ def test_patch_and_read_back_through_the_header():
     assert any(row["id"] == sid for row in listed)
 
 
+def test_patch_refuses_an_ordinal_label():
+    client = TestClient(app)
+    sid = client.post("/api/sessions/attach", json={"tab": "tab-http-7"}).json()["session"]["id"]
+    r = client.patch(f"/api/sessions/{sid}", json={"label": "Session 7"})
+    assert r.status_code == 400
+    assert "reserved" in r.json()["message"]
+
+
 def test_delete_refuses_a_held_session():
     client = TestClient(app)
     sid = client.post("/api/sessions/attach", json={"tab": "tab-http-3"}).json()["session"]["id"]

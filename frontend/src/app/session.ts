@@ -215,8 +215,7 @@ function schedule(): void {
 
 // Patches are fire-and-forget and last-write-wins: a failed one loses a
 // remembered preference, never the user's work in the live tab. The response
-// carries the updated session, so server-derived values (a label an empty name
-// unpinned) land back in the mirror.
+// carries the updated session, so server-derived values land back in the mirror.
 export async function flushPatches(): Promise<void> {
   clearTimeout(timer)
   const sid = state?.id
@@ -303,9 +302,20 @@ export async function removeSession(id: string): Promise<{ ok: boolean; message?
   return res.json()
 }
 
-// Returns the label the server settled on: clearing the name unpins, and the
-// derived label comes back on the patch response.
+// Returns the label the server settled on (clearing the name unpins); throws
+// the server's reason when it refuses the name. A PATCH of its own, so a
+// refusal does not take queued changes down with it.
 export async function renameSession(label: string): Promise<string> {
-  await patchSession({ label })
-  return state?.label ?? label
+  await flushPatches()
+  const sid = state?.id
+  if (!sid) return label
+  const gen = ++localGen
+  const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  })
+  const data = await res.json()
+  if (!data.ok) throw new Error(data.message ?? 'rename failed')
+  return adoptIfCurrent(gen, data.session as SessionState, 'rename').label
 }

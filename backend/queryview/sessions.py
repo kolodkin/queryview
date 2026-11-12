@@ -31,7 +31,7 @@ DEFAULT_URL = "/connect"
 # tab. Seeded by migration, never auto-resumed by a new tab, never deleted or
 # renamed.
 AGENT_SESSION_ID = "agent"
-# A typed "Session 7" would pass for an unpinned ordinal label, so it unpins.
+# A pinned "Session 7" would pass for another session's derived label.
 _ORDINAL_LABEL = re.compile(r"session\s*\d+", re.IGNORECASE)
 
 # Session writes run one at a time, so a reload's `attach` sees the pagehide
@@ -249,7 +249,10 @@ async def patch_session(
     Explorer's selection, kept in last_visited for the session's connection
     (empty = none). The updated record comes back so callers see
     server-derived values (the label an empty `label` unpins). None if the
-    session is unknown."""
+    session is unknown; ValueError, with nothing written, for a `Session <n>`
+    label."""
+    if label is not None and _ORDINAL_LABEL.fullmatch(label.strip()):
+        raise ValueError(f'"{label.strip()}" is reserved for unnamed sessions')
     await _ensure_schema()
     async with _writes, _open() as s:
         row = await s.get(Session, sid)
@@ -260,9 +263,8 @@ async def patch_session(
         if workspace is not None:
             row.workspace = workspace
         if label is not None and sid != AGENT_SESSION_ID:  # the Agent name is fixed
-            # An empty or ordinal-looking label unpins, falling back to the derived one.
-            label = label.strip()
-            row.label = None if not label or _ORDINAL_LABEL.fullmatch(label) else label
+            # An empty label unpins, falling back to the derived one.
+            row.label = label.strip() or None
         if ui is not None:
             row.ui = json.dumps(_merge_ui(_to_rec(row).ui, ui))
         if table is not None and row.connection_name:

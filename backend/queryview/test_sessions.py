@@ -78,10 +78,16 @@ def test_patch_returns_the_updated_record():
     assert unpinned.label is None
     assert sessions.display_label(unpinned) == f"Session {rec.seq}"
 
-    # A typed ordinal would pass for another session's derived label.
+
+def test_ordinal_label_is_rejected():
+    """A pinned "Session 7" would pass for another session's derived label."""
+    rec = _run(sessions.create_session())
+    _run(sessions.patch_session(rec.id, label="nightly audit"))
     for typed in (f"Session {rec.seq}", " session 99 "):
-        rec2 = _run(sessions.patch_session(rec.id, label=typed))
-        assert rec2 is not None and rec2.label is None
+        with pytest.raises(ValueError, match="reserved"):
+            _run(sessions.patch_session(rec.id, label=typed, url="/elsewhere"))
+    kept = _run(sessions.get_session_rec(rec.id))
+    assert kept is not None and kept.label == "nightly audit" and kept.url != "/elsewhere"
 
 
 def test_delete_removes_the_row_and_its_in_memory_state():

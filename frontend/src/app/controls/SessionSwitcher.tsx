@@ -68,12 +68,14 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
   }
 
   function startRename() {
+    setError('')
     setDraft(label)
     editing.current = true
     setRenaming(true)
   }
 
   function cancelRename() {
+    setError('')
     editing.current = false
     setRenaming(false)
   }
@@ -83,17 +85,25 @@ export default function SessionSwitcher({ label, onSwitch }: Props) {
   async function saveName(close: boolean) {
     if (!editing.current) return
     editing.current = false
-    setRenaming(false)
-    if (close) setOpen(false)
     const name = draft.trim()
     // An unchanged name would pin the automatic "Session <n>" label.
-    if (name === label) return
-    // renameSession answers with the label the server settled on, so clearing
-    // the name (which unpins) needs no read-back.
-    const next = await renameSession(name)
-    // After a switch made meanwhile, `next` is the new session's label.
-    if (sessionId() !== current) return
-    setList((l) => l.map((s) => (s.id === current ? { ...s, label: next } : s)))
+    if (name !== label) {
+      let next: string
+      try {
+        next = await renameSession(name)
+      } catch (e) {
+        // Keep the input open so the name can be fixed; the server says why.
+        setError(e instanceof Error ? e.message : String(e))
+        editing.current = true
+        return
+      }
+      // After a switch made meanwhile, `next` is the new session's label.
+      if (sessionId() === current)
+        setList((l) => l.map((s) => (s.id === current ? { ...s, label: next } : s)))
+    }
+    setError('')
+    setRenaming(false)
+    if (close) setOpen(false)
   }
 
   return (

@@ -102,7 +102,7 @@ test("a renamed session keeps its name", async ({ page, seeds }) => {
   await expect(page.getByTestId("session-switcher")).toContainText("nightly audit");
 });
 
-test("inline rename: Escape cancels, focus-out saves", async ({ page, seeds }) => {
+test("inline rename: Escape cancels, a reserved name is refused, focus-out saves", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const switcher = page.getByTestId("session-switcher");
   const before = await switcher.textContent();
@@ -114,6 +114,10 @@ test("inline rename: Escape cancels, focus-out saves", async ({ page, seeds }) =
   await expect(switcher).toHaveText(before!);
 
   await page.getByTestId("session-rename").click();
+  await page.getByTestId("session-rename-input").fill("Session 99");
+  await page.keyboard.press("Enter");
+  // Refused by the server: the input stays so the name can be fixed.
+  await expect(page.getByTestId("session-menu")).toContainText("reserved for unnamed sessions");
   await page.getByTestId("session-rename-input").fill("blurred name");
   await page.getByTestId("session-rename-input").blur();
 
