@@ -48,7 +48,7 @@ test("mcp push to live session", async ({ page, seeds, baseURL }) => {
   const sid = await armRemote(page);
 
   // Push a query the way an MCP client would (via the REST surface).
-  const { body } = await api(`${baseURL}/api/remote/push`, {
+  const { body } = await api(`${baseURL}/api/remote/push_studio`, {
     json: {
       session_id: sid,
       query: "SELECT id, name FROM items",
@@ -73,7 +73,7 @@ test("mcp push to live session", async ({ page, seeds, baseURL }) => {
   await expect(page.getByTestId("remote-session-id")).toHaveCount(0);
 
   // ...and a push to an unknown/inactive id is reported as not delivered.
-  const r2 = await api(`${baseURL}/api/remote/push`, {
+  const r2 = await api(`${baseURL}/api/remote/push_studio`, {
     json: { session_id: "deadbeef", query: "SELECT 1" },
     ok: false,
   });

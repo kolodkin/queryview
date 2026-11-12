@@ -36,7 +36,7 @@ mcp = MCPServer(
     description="Local, agent-controlled SQL workbench for ClickHouse, Postgres, DuckDB and SQLite.",
     instructions=(
         "Open your own tab with new_tab unless given a session id. Run SQL, reads and writes, with run_script "
-        "(apply writes once), then push_script the final SQL with run=False. Use push_query (Studio) or "
+        "(apply writes once), then push_script the final SQL with run=False. Use push_studio or "
         "push_dashboard only when asked. Full workflow: the queryview skill (skill://queryview/SKILL.md)."
     ),
     extensions=[SkillsExtension()],
@@ -44,7 +44,7 @@ mcp = MCPServer(
 
 
 @mcp.tool()
-async def push_query(
+async def push_studio(
     session_id: str,
     query: str,
     limit: int = 100,
@@ -90,7 +90,7 @@ async def push_query(
         if info.get("connected") and await get_predefined_query(info["type"], name, ws.id) is None:
             return _failed(_NEW_NAME.format(kind="query", name=name))
     payload = {
-        "type": "query",
+        "type": "studio",
         "query": query,
         "limit": limit,
         "offset": offset,
@@ -106,7 +106,7 @@ async def push_query(
 @mcp.tool()
 async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any]:
     """Run one read-only SQL statement on the session's connection and selected
-    database, returning the rows to the agent (push_query only fills a browser
+    database, returning the rows to the agent (push_studio only fills a browser
     panel). Use it to explore schema and data before a push. Runs as written
     (SELECT, DESCRIBE, SHOW, EXPLAIN...): page with your own LIMIT/OFFSET.
     Stops after a minute.
@@ -379,7 +379,7 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
 async def open_explorer(session_id: str, database: str, table: str | None = None) -> dict[str, Any]:
     """Switch the session to `database` and open the browser's Explorer page
     (the table navigator) on it; with `table`, browse that table's rows (SELECT *
-    with field and order-by pickers). Use push_query instead for custom SQL.
+    with field and order-by pickers). Use push_studio instead for custom SQL.
 
     Returns {"ok", "message", "database"}; not ok when select_database fails,
     the table isn't in the database, or the push fails (unknown session,
@@ -423,7 +423,7 @@ async def list_queries(conn_type: str = "clickhouse", session_id: str | None = N
     (default "clickhouse") within a workspace. Returns
     {"queries": [{query_name, query, cell_view, order_by, fields}]}, where
     order_by is [{"name","dir"}] or null, fields is ["col", ...] or null, and
-    cell_view is raw YAML or null. Pass a query_name back as push_query's `name`
+    cell_view is raw YAML or null. Pass a query_name back as push_studio's `name`
     to edit that query in the browser (its saved presentation then applies).
 
     Args:
@@ -468,7 +468,7 @@ async def push_dashboard(
 
     The dashboard renders immediately in the browser. By default it is a DRAFT:
     nothing is written to the store until the user's **Save** in the dashboard
-    view, mirroring how push_query drafts a query. Omit `name` for a new
+    view, mirroring how push_studio drafts a query. Omit `name` for a new
     dashboard: the user names it on Save. With the `name` of a saved dashboard
     (see list_dashboards) the push edits that one, and when the session's
     workspace has autosave on it is also persisted (`persisted: true`).
