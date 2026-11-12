@@ -26,7 +26,7 @@ from .connect import (
 )
 from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
-from .dashboards import _push_dashboard, get_dashboard
+from .dashboards import _dashboard_event, get_dashboard
 from .mcp_skills import SkillsExtension
 from .queries import get_predefined_query, list_predefined_queries_view
 from .validation import dashboard_params_error
@@ -78,10 +78,9 @@ async def push_studio(
             overrides any selected predefined query's saved cell_view.
         name: Optional name of an existing saved query (see list_queries) to
             edit: it is selected in the dropdown, and with no `cell_view` its
-            saved cell_view applies. Nothing is persisted, unless the workspace
-            has autosave on: then a successful auto-run saves over it. A name
-            that isn't saved is refused — omit it to push an unnamed draft; the
-            user names and saves it.
+            saved cell_view applies. Nothing is persisted: only the user's
+            Save does that. A name that isn't saved is refused — omit it to
+            push an unnamed draft; the user names and saves it.
     """
     if name:
         info = await get_session(session_id)
@@ -466,14 +465,13 @@ async def push_dashboard(
 ) -> dict[str, Any]:
     """Push a dashboard to a live QueryView session.
 
-    The dashboard renders immediately in the browser. By default it is a DRAFT:
-    nothing is written to the store until the user's **Save** in the dashboard
-    view, mirroring how push_studio drafts a query. Omit `name` for a new
-    dashboard: the user names it on Save. With the `name` of a saved dashboard
-    (see list_dashboards) the push edits that one, and when the session's
-    workspace has autosave on it is also persisted (`persisted: true`).
-    Re-push to update it. Its queries run on the viewing session's connection
-    and selected database — a dashboard never names a connection.
+    The dashboard renders immediately in the browser as a DRAFT: nothing is
+    written to the store until the user's **Save** in the dashboard view,
+    mirroring how push_studio drafts a query. Omit `name` for a new dashboard:
+    the user names it on Save. With the `name` of a saved dashboard (see
+    list_dashboards) the push edits that one. Re-push to update it. Its queries
+    run on the viewing session's connection and selected database — a dashboard
+    never names a connection.
 
     The browser consumes the results, not the agent: the HTML reads them from a
     `window.queries` global, a column-oriented map
@@ -493,7 +491,7 @@ async def push_dashboard(
         name: Optional name of an existing saved dashboard to edit; any other
             name is refused.
 
-    Returns {ok, pushed, persisted, message, database}; "not connected" if
+    Returns {ok, pushed, message, database}; "not connected" if
     the session has no connection.
     """
     rec = await sessions.get_session_rec(session_id) if session_id else None
@@ -504,13 +502,12 @@ async def push_dashboard(
         return _push_failed(perr)
     if name and await get_dashboard(name, (await _session_workspace_rec(session_id)).id) is None:
         return _push_failed(_NEW_NAME.format(kind="dashboard", name=name))
-    pushed, persisted, message = await _push_dashboard(name or "", html, queries, session_id, params, rec.workspace)
+    pushed, message = await push(session_id, _dashboard_event(name or "", html, queries, params))
     return _with_url(
         session_id,
         {
             "ok": pushed,
             "pushed": pushed,
-            "persisted": persisted,
             "message": message,
             "database": await sessions.database_of(session_id),
         },
@@ -526,7 +523,7 @@ def _failed(message: str) -> dict[str, Any]:
 
 
 def _push_failed(message: str) -> dict[str, Any]:
-    return {**_failed(message), "pushed": False, "persisted": False}
+    return {**_failed(message), "pushed": False}
 
 
 @mcp.tool()

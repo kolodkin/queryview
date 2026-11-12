@@ -97,8 +97,7 @@ CREATE TABLE predefined_queries (
   separate name field) and runs nothing.
 - **Save** stores the textarea's SQL (and the `cell_view` YAML) under the
   **currently selected name** and refreshes the selector. Saving an existing name
-  **upserts** (overwrites) it. In an [autosave](./workspace.md#autosave)
-  workspace there is no Save button: each successful run saves instead.
+  **upserts** (overwrites) it.
 - **Rename** and **Delete** (next to **Copy**) act on a saved query. Rename
   refuses a name already taken, even by a deleted query.
 - **Delete** confirms, then marks the query deleted. It stays selected as
@@ -116,8 +115,7 @@ and drops out of the selector, MCP `list_queries` and
 - **Purge** confirms, then removes it for good, its
   [`.deleted` marker](./gitsync.md#deleted-queries) included; a committed live
   copy stays, so commit the delete first.
-- Saving under a deleted name brings it back with the new content. An
-  [autosave](./workspace.md#autosave) run never does.
+- Saving under a deleted name brings it back with the new content.
 - They don't block deleting their workspace and go with it.
 
 ## Cell views
@@ -325,9 +323,8 @@ session (owner: none / human / agent, held in memory).
 - **Save persists presentation:** the human's Save now stores `order_by` and the
   selected `fields` alongside `cell_view`, so reloading a predefined query
   restores its full presentation. Pushes never persist — only the human's Save
-  writes to the DB, except in an [autosave](./workspace.md#autosave) workspace,
-  where a push naming a saved query saves once its auto-run succeeds. An agent
-  can't name a new query: it pushes unnamed and the human names it.
+  writes to the DB. An agent can't name a new query: it pushes unnamed and the
+  human names it.
 
 The lock and channels live in one process's memory (like the SSE relay), so this
 assumes a single backend process; multi-worker deployments would need a shared

@@ -100,8 +100,7 @@ never moves and history is append-only.
 
 ## UI
 
-Next to each entity's **Save** button (query panel and dashboard page; absent
-in an [autosave](./workspace.md#autosave) workspace, which saves on update):
+Next to each entity's **Save** button (query panel and dashboard page):
 **Commit** pushes the saved DB state to the remote (retried once if another
 instance pushed first); **Restore** opens
 the entity's revision list (newest first, 10 at a time, scroll for more) and

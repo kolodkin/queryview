@@ -17,20 +17,17 @@ import {
   type Workspace,
   type WorkspaceChanges,
 } from '../workspace'
-import { announceAutosaveEnabled } from '../autosave'
 
 type Props = {
   workspace: string
   onSwitch: (name: string) => void
-  // Settings saved (e.g. autosave toggled), so the shell re-reads them.
-  onSaved?: () => void
 }
 
 // Header dropdown for the active workspace plus a small manage panel
 // (create / rename / set-clear remote / delete), and a warning when the last
 // git sync kept local copies the repo disagrees with. Workspace settings are
 // admin config; a remote's token is write-only — the server never returns it.
-export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Props) {
+export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
   const [open, setOpen] = useState(false)
   const [manage, setManage] = useState(false)
   const [list, setList] = useState<Workspace[]>([])
@@ -43,17 +40,12 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
   const [name, setName] = useState('')
   const [remote, setRemote] = useState('')
   const [branch, setBranch] = useState('')
-  const [autosave, setAutosave] = useState(false)
   const current = list.find((w) => w.name === workspace)
-  const savedAutosave = current?.autosave ?? false
   // The manage panel light-dismisses only while untouched: once it holds
   // unsaved input (a new remote URL above all), it closes through its buttons.
   const dirty =
     manage &&
-    (name.trim() !== workspace ||
-      remote.trim() !== '' ||
-      branch.trim() !== (current?.branch ?? '') ||
-      autosave !== savedAutosave)
+    (name.trim() !== workspace || remote.trim() !== '' || branch.trim() !== (current?.branch ?? ''))
   const rootRef = useDismiss<HTMLDivElement>(open || warnOpen || (manage && !dirty), () => {
     setOpen(false)
     setWarnOpen(false)
@@ -91,7 +83,6 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
     setName(workspace)
     setRemote('')
     setBranch(current?.branch ?? '')
-    setAutosave(savedAutosave)
     setError('')
     setSyncNote('')
   }
@@ -117,7 +108,6 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
     if (name.trim() && name.trim() !== workspace) changes.name = name.trim()
     if (remote.trim()) changes.remote = remote.trim()
     if (branch.trim()) changes.branch = branch.trim()
-    if (autosave !== savedAutosave) changes.autosave = autosave
     const r = await updateWorkspace(workspace, changes)
     if (!r.ok) {
       setError(r.message ?? 'update failed')
@@ -125,8 +115,6 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
     }
     invalidateGitStatus()
     announceGitSync()
-    onSaved?.()
-    if (changes.autosave) announceAutosaveEnabled()
     if (r.sync_error) {
       setError(`Saved, but syncing with the repo failed: ${r.sync_error}`)
       return
@@ -142,7 +130,6 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
       name.trim(),
       remote.trim() || undefined,
       branch.trim() || undefined,
-      autosave,
     )
     if (!r.ok) {
       setError(r.message ?? 'create failed')
@@ -280,19 +267,6 @@ export default function WorkspaceSwitcher({ workspace, onSwitch, onSaved }: Prop
             placeholder="main"
             className="glass-input w-full px-2 py-1 text-slate-100"
           />
-          <label className="flex items-start gap-2 text-xs text-slate-300">
-            <input
-              type="checkbox"
-              data-testid="workspace-autosave-input"
-              checked={autosave}
-              onChange={(e) => setAutosave(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              Autosave — save queries after each successful run and agent pushes as they arrive; no
-              Save button. Commit / Restore keep the history.
-            </span>
-          </label>
           {current?.configured && (
             <div className="flex items-center gap-2">
               <button

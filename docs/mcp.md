@@ -112,7 +112,7 @@ you [armed](#arming-a-session).
   **draft** on the session's connection; the browser navigates to it and
   renders it. `name` selects a saved dashboard to
   [edit](#naming-and-saving). Returns
-  `{ok, pushed, persisted, message, database}`; a disconnected session fails with
+  `{ok, pushed, message, database}`; a disconnected session fails with
   `not connected`. See [dashboard.md](./dashboard.md).
 - `new_tab(name)` — a session of the agent's own; see [Tabs](#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
@@ -125,7 +125,7 @@ to ClickHouse directly.
 
 ## Naming and saving
 
-The agent drafts and edits; the user names and saves.
+The agent drafts and edits; the user names and saves. No tool saves.
 
 - **New work is unnamed.** `push_studio` and `push_dashboard` without `name`
   push a draft. The user names it: **+ New name…** in the Studio, the prompt
@@ -134,10 +134,6 @@ The agent drafts and edits; the user names and saves.
   (`list_dashboards`); any other is refused with `no saved query named "…"`.
 - **A push persists nothing.** The user's **Save** does. An unnamed query push
   also deselects the open query, so Save cannot write the draft over it.
-- **Autosave is the exception.** In an [autosave](./workspace.md#autosave)
-  workspace a push naming a saved item saves over it: a dashboard on delivery
-  (`persisted: true`), a query once its auto-run succeeds. An unnamed draft
-  still waits for the user.
 
 ## How it works
 

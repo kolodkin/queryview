@@ -33,10 +33,8 @@ session id) exposes:
   to the dashboard view and renders it. Without `name` the draft is new:
   **Save** asks the user for its name. `name` must be a saved dashboard, which
   the push edits; the agent cannot name a new one. Only the user's **Save**
-  writes it to the store (mirrors `push_studio`), unless the session's workspace
-  has [autosave](./workspace.md#autosave) on, which persists each delivered
-  named push and hides Save (an unnamed draft keeps it). Returns
-  `{ok, pushed, persisted, message, database}`; an unknown/disarmed
+  writes it to the store (mirrors `push_studio`). Returns
+  `{ok, pushed, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
 
 A dashboard never names a [connection](./connect.md): it runs on the

@@ -60,6 +60,7 @@ it. See the tool's description for the `window.queries` and `params` contract.
 
 Never name a new query or dashboard: push it unnamed and the user names it on Save.
 `name` only takes one that is already saved, to edit it.
+You cannot save: when asked to, push it and tell the user to click **Save**.
 
 Match QueryView's look — dark liquid glass. The dashboard runs in an iframe, so it paints
 its own backdrop (the app's doesn't show through):
