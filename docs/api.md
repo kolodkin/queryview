@@ -58,7 +58,7 @@ shared (SQLite). See [session.md](./session.md).
 to a session's Scripts editor), `push_dashboard` (push a dashboard draft to a
 session), `session_info`, `run_sql`, `run_script`, `list_queries` / `list_dashboards`
 and `git_store` / `git_history` / `git_restore`. They delegate to the in-process
-hubs the matching REST endpoints call. See [remote.md](./remote.md) and
+hubs the matching REST endpoints call. See [mcp.md](./mcp.md) and
 [dashboard.md](./dashboard.md).
 
 ## Persistence
@@ -115,7 +115,7 @@ optional `session_id` (see [workspace.md](./workspace.md)).
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [connect.md](./connect.md) — connecting (new and saved connection cards), storage, sessions.
 - [query.md](./query.md) — running queries: pagination, predefined queries, CSV.
-- [remote.md](./remote.md) — pushing queries to a live session over MCP.
+- [mcp.md](./mcp.md) — pushing queries to a live session over MCP.
 - [dashboard.md](./dashboard.md) — the dashboard page, `upsert_dashboard`, and the `window.queries` contract.
 - [gitsync.md](./gitsync.md) — backing up and restoring queries and dashboards via git.
 - [export-import.md](./export-import.md) — YAML export/import of queries, dashboards and workspaces.

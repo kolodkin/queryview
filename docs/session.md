@@ -128,12 +128,12 @@ acts on that session's connection, database and workspace, read straight from
 the row. Arming is still the gate: disarming closes the channel and later pushes
 fail with `unknown or inactive session`. Unlike the old per-arm id this one is
 stable, so the command you copy stops changing under you. See
-[remote.md](./remote.md).
+[mcp.md](./mcp.md).
 
 ## Tabs
 
 A session an agent opened for itself with `new_tab`
-([remote.md](./remote.md#tabs)): an unnamed session whose `tab` names the
+([mcp.md](./mcp.md#tabs)): an unnamed session whose `tab` names the
 work, listed as **Agent › orders** until you pin a name on it. Scratch like
 any unnamed session: swept once its browser tab has been closed for a claim
 TTL, never resumed by a new tab. It has no connection until the agent opens
@@ -184,7 +184,7 @@ exception is the remote-control SSE stream, which takes `?session=` because
 
 **Nothing is written while you are still typing.** Leaving the query panel is
 what "done editing" means, so that is when its state is written — the same
-focus-out signal the [edit lock](./remote.md) uses, so both agree on when you
+focus-out signal the [edit lock](./mcp.md) uses, so both agree on when you
 have finished. Discrete acts (a navigation, a workspace switch, a rename) write
 at once.
 

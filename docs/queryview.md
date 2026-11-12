@@ -56,7 +56,7 @@ SQL scratchpad, see [scripts.md](./scripts.md); same redirect), `/explorer` (see
   on click, and **Disconnect** at the bottom drops the connection and goes to
   `/connect` (a picker-less driver's menu has just these two).
   Next to it, an **agent icon** opens the remote-control popover (opt-in "Allow
-  remote control"); see [remote.md](./remote.md). Then the
+  remote control"); see [mcp.md](./mcp.md). Then the
   [**Timeout** chip](#query-timeout).
 - **Narrow windows** — below `md` the cards stack in one column, the session,
   workspace and page links collapse into one **☰ &lt;page&gt;** menu, and

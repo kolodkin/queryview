@@ -39,7 +39,7 @@ dashboard pages have no **Save** button, and **Commit** / **Restore**
   saves over it via its auto-run.
 - **Dashboards** — a delivered `push_dashboard` naming a saved dashboard is
   persisted (`persisted: true`); an unnamed draft waits for the user's Save
-  (see [naming and saving](./remote.md#naming-and-saving)).
+  (see [naming and saving](./mcp.md#naming-and-saving)).
 
 Turning it on saves the open view's unsaved work first (the last named run,
 or an agent's edit of a saved dashboard), since its Save button goes away.

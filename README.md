@@ -79,8 +79,7 @@ and let [git sync](docs/gitsync.md) do it.
 - [workspace.md](docs/workspace.md) — workspaces.
 - [gitsync.md](docs/gitsync.md) — git backup, history and restore.
 - [export-import.md](docs/export-import.md) — YAML export and import.
-- [mcp.md](docs/mcp.md) — connecting an agent and what it can do.
-- [remote.md](docs/remote.md) — the remote-control protocol behind the MCP push tools.
+- [mcp.md](docs/mcp.md) — connecting an agent, its tools, and who names and saves.
 - [api.md](docs/api.md) — the full HTTP endpoint reference.
 - [docker.md](docs/docker.md) — running the container image and persisting its state.
 - [creds.md](docs/creds.md) — how connection credentials are stored and protected.

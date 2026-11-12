@@ -4,7 +4,7 @@ A **dashboard** is an HTML layout plus a set of named SQL queries. An AI agent
 authors one and pushes it into a live, armed QueryView browser session over MCP;
 it is also persisted so it can be reopened later by name.
 
-Responsibilities mirror the [remote-control](./remote.md) layer: the agent never
+Responsibilities mirror the [remote-control](./mcp.md) layer: the agent never
 receives query results back. The **browser** (trusted code with a session) runs
 the queries on its session's connection and feeds the results into the
 agent-authored HTML, which renders inside an isolated iframe.
@@ -25,7 +25,7 @@ always shows live data.
 
 ## The `push_dashboard` MCP tool
 
-The MCP server at `/mcp` (see [remote.md](./remote.md) for arming and the
+The MCP server at `/mcp` (see [mcp.md](./mcp.md) for arming and the
 session id) exposes:
 
 - `push_dashboard(session_id, html, queries, params?, name?)` — push the
@@ -178,6 +178,6 @@ the session id.
 ## Related docs
 
 - [queryview.md](./queryview.md) — the pages and the Connect page.
-- [remote.md](./remote.md) — arming a session, the session id, the MCP server.
+- [mcp.md](./mcp.md) — arming a session, the session id, the MCP server.
 - [api.md](./api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
 - [connect.md](./connect.md) — connections and their stored database.

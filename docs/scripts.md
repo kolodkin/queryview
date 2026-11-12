@@ -109,10 +109,10 @@ text.
 
 MCP `run_script` runs a script as Run all does and returns the results to the
 agent; `push_script` replaces the text (saved like an edit) and, with `run`,
-runs it here, usually in a [tab](./remote.md#tabs) of the agent's own. Focus
+runs it here, usually in a [tab](./mcp.md#tabs) of the agent's own. Focus
 in the page holds the
 [edit lock](./query.md#co-edit--edit-lock), so a push is refused with
-`blocked, user editing` while you type. See [remote.md](./remote.md).
+`blocked, user editing` while you type. See [mcp.md](./mcp.md).
 
 ## File writes
 
