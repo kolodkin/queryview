@@ -80,6 +80,24 @@ test("mcp push to live session", async ({ page, seeds, baseURL }) => {
   expect(r2.body.ok).toBe(false);
 });
 
+test("mcp save_query saves under a new name and lists it", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  await openQueryPanel(page);
+  const sid = await armRemote(page);
+
+  const out = await mcpCall(baseURL!, "save_query", {
+    session_id: sid,
+    name: "agent saved",
+    query: "SELECT id, name FROM items",
+  });
+  expect(out.saved).toBe(true);
+
+  // The browser ran it and the new name is the selected, saved query.
+  await expect(page.getByTestId("query-input")).toHaveValue("SELECT id, name FROM items");
+  await expect(page.getByTestId("query-predefined-select")).toHaveValue("agent saved");
+  await expect(page.getByTestId("query-delete")).toBeEnabled();
+});
+
 test("agent switch names the connection and toasts", async ({ page, seeds, baseURL }) => {
   // use_connection reaches an unarmed tab by heartbeat: the pill names the
   // agent's connection, a toast says the agent switched, the menu badges it.

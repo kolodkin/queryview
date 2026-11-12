@@ -136,20 +136,22 @@ async def _push_dashboard(
     session_id: str | None,
     params: list[dict[str, Any]] | None = None,
     workspace: str | None = None,
+    *,
+    save: bool = False,
 ) -> tuple[bool, bool, str]:
-    """Push a dashboard to a live session. A DRAFT unless it is named and
-    `workspace` (the session's) has autosave on: then a delivered push is also
-    persisted — only once delivered, since a disarmed session grants nothing.
-    Otherwise only the user's Save (POST /api/dashboards) writes it. Returns
+    """Push a dashboard to a live session. A DRAFT unless `save` (the agent's
+    save_dashboard): then a delivered push is also persisted in `workspace`
+    (the session's) — only once delivered, since a disarmed session grants
+    nothing. Otherwise only the user's Save (POST /api/dashboards) writes it. Returns
     (pushed, persisted, message); no session_id -> (False, False, "no session")."""
     if not session_id:
         return False, False, "no session"
     pushed, message = await connect.push(session_id, _dashboard_event(name, html, queries, params))
     if not pushed:
         return False, False, message
-    ws = await (workspaces.resolve(workspace) if workspace else workspaces.fallback())
-    if not ws.autosave or not name:
+    if not save:
         return True, False, message
+    ws = await (workspaces.resolve(workspace) if workspace else workspaces.fallback())
     await upsert_dashboard(name, html, queries, params, workspace_id=ws.id)
     return True, True, message
 

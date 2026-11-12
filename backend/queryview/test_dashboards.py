@@ -177,31 +177,33 @@ def test_mcp_upsert_dashboard_pushes_draft_without_persisting(default_ws_id):
         remote.unregister(rid)
 
 
-def test_mcp_push_persists_when_the_session_workspace_autosaves():
+def test_mcp_save_dashboard_persists_in_the_session_workspace():
     from queryview.connect import _save_active_connection
     from queryview.drivers.clickhouse import ChConfig
-    from queryview.mcp_server import push_dashboard as mcp_push
+    from queryview.mcp_server import save_dashboard as mcp_save
     from queryview.workspaces import create_workspace, resolve
 
-    _run(create_workspace("t4-autosave", autosave=True))
-    ws_id = _run(resolve("t4-autosave")).id
+    _run(create_workspace("t4-save"))
+    ws_id = _run(resolve("t4-save")).id
     _run(_save_active_connection("c", ChConfig("h", 8123, "u", "p"), "clickhouse"))
     rec = _run(sessions.create_session())
     _run(sessions.set_connection(rec.id, "c"))
-    _run(sessions.patch_session(rec.id, workspace="t4-autosave"))
+    _run(sessions.patch_session(rec.id, workspace="t4-save"))
+    # A disarmed session grants nothing: no delivery, no save.
+    out = _run(mcp_save(rec.id, "agent dash", "<p>a</p>", {"q": "SELECT 1"}))
+    assert out["ok"] is False and out["persisted"] is False
+    assert _run(get_dashboard("agent dash", ws_id)) is None
     rid = remote.register(rec.id)
     try:
-        # An unnamed push has nothing to save under, even with autosave on.
-        out = _run(mcp_push(rid, "<p>a</p>", {"q": "SELECT 1"}))
-        assert out["pushed"] is True and out["persisted"] is False
-        assert _run(remote.next_message(rid, 1.0)) is not None
-        _run(upsert_dashboard("autodash", "<p>old</p>", {}, workspace_id=ws_id))
-        out = _run(mcp_push(rid, "<p>a</p>", {"q": "SELECT 1"}, name="autodash"))
-        assert out["pushed"] is True and out["persisted"] is True
-        saved = _run(get_dashboard("autodash", ws_id))
-        assert saved is not None and saved["html"] == "<p>a</p>"
-        msg = _run(remote.next_message(rid, 1.0))
-        assert msg is not None and msg["name"] == "autodash"
+        assert _run(mcp_save(rid, " ", "<p>a</p>", {}))["message"] == "name is required"
+        # A new name is created, then overwritten by the next save.
+        for html in ("<p>a</p>", "<p>b</p>"):
+            out = _run(mcp_save(rid, "agent dash", html, {"q": "SELECT 1"}))
+            assert out["pushed"] is True and out["persisted"] is True
+            saved = _run(get_dashboard("agent dash", ws_id))
+            assert saved is not None and saved["html"] == html
+            msg = _run(remote.next_message(rid, 1.0))
+            assert msg is not None and msg["name"] == "agent dash"
     finally:
         remote.unregister(rid)
 

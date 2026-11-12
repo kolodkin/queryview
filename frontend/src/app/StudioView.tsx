@@ -28,7 +28,6 @@ import { useEditLock } from './sessionLock'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
-import { onAutosaveEnabled, queryChanged } from './autosave'
 import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
 type PredefinedQuery = {
@@ -67,7 +66,6 @@ function StudioView({
   pushed,
   onPushConsumed,
   remoteId,
-  autosave = false,
 }: {
   connectionType: string
   // The session's connection and database; results follow it (see QueryPanel).
@@ -75,8 +73,6 @@ function StudioView({
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
-  // The workspace autosaves: no Save button; successful runs save instead.
-  autosave?: boolean
 }) {
   return (
     <div className="viewport-page flex w-full flex-col">
@@ -91,7 +87,6 @@ function StudioView({
         pushed={pushed}
         onPushConsumed={onPushConsumed}
         remoteId={remoteId}
-        autosave={autosave}
       />
     </div>
   )
@@ -119,15 +114,12 @@ function QueryPanel({
   pushed,
   onPushConsumed,
   remoteId,
-  autosave = false,
 }: {
   connectionType: string
   runOn?: string | null
   pushed?: QueryPush | null
   onPushConsumed?: () => void
   remoteId?: string | null
-  // The workspace autosaves: no Save button; successful runs save instead.
-  autosave?: boolean
 }) {
   // Restored from the session, inputs only: results are deliberately not, so a
   // reload can never re-fire an expensive query.
@@ -150,8 +142,7 @@ function QueryPanel({
   // A saved query picked from the dropdown, waiting to run.
   const [picked, setPicked] = useState<PredefinedQuery | null>(null)
   // The last successful run — its SQL and the name it runs for, taken at start;
-  // a fresh object per run. Autosave reacts to it once the run's state (a
-  // push's name and presentation) has committed.
+  // a fresh object per run.
   const [lastOk, setLastOk] = useState<{ query: string; name: string } | null>(null)
   const runSeq = useRef(0)
   const [fields, setFields] = useState<Field[]>([])
@@ -358,11 +349,15 @@ function QueryPanel({
     setPushedCellView(pushed.cell_view ?? null)
     // Load everything into the editor: select the named query so the dropdown,
     // saved view, and Save all target it (selection only — nothing persisted).
-    // An unnamed push clears the selection and runs for no name, so neither
-    // Save nor autosave writes it over the query that was open.
+    // An unnamed push clears the selection, so Save can't write it over the
+    // query that was open.
     setSelectedName(pushed.name ?? '')
     /* eslint-enable react-hooks/set-state-in-effect */
-    void runWith(q, lim, off, ord, { selectFields: fld, runFor: pushed.name ?? '' })
+    // A named push may be an agent's save_query of a new name: list it, once
+    // the run has given the server time to store it.
+    void runWith(q, lim, off, ord, { selectFields: fld, runFor: pushed.name ?? '' }).then(() => {
+      if (pushed.name) void loadPredefined()
+    })
     // Consume the push so re-mounting doesn't re-run a stale query.
     onPushConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -402,7 +397,7 @@ function QueryPanel({
     {
       selectFields,
       paramOverride,
-      // The query name this run saves under (autosave); defaults to the selection.
+      // The query name this run is for; defaults to the selection.
       runFor = selectedName,
     }: { selectFields?: string[]; paramOverride?: Record<string, string>; runFor?: string } = {},
   ) {
@@ -563,12 +558,8 @@ function QueryPanel({
   }
 
   // SQL-only saves (top button) re-persist the existing cell_view; the modal
-  // passes its draft, autosave the SQL it ran. Returns success so the modal
-  // closes only on a clean persist.
-  async function save(
-    cellViewValue: string = effectiveCellView,
-    query: string = sql,
-  ): Promise<boolean> {
+  // passes its draft. Returns success so the modal closes only on a clean persist.
+  async function save(cellViewValue: string = effectiveCellView): Promise<boolean> {
     const name = selectedName.trim()
     if (!name) return false
     setBusy(true)
@@ -580,7 +571,7 @@ function QueryPanel({
         body: JSON.stringify({
           query_name: name,
           type: connectionType,
-          query,
+          query: sql,
           cell_view: cellViewValue,
           workspace: activeWorkspace(),
           ...presentationForSave(orderBy, visibleCols),
@@ -664,39 +655,6 @@ function QueryPanel({
       setPushedCellView(null)
     }
   }
-
-  // Autosave: persist a named query's last successful run — the SQL that ran,
-  // never a half-typed edit — unless nothing differs from its stored row.
-  function saveLastRun() {
-    // Skip when the selection moved on mid-run: its presentation isn't this run's.
-    const name = lastOk?.name
-    if (!lastOk || !name || name !== selectedName.trim()) return
-    // Running a deleted query never brings it back; Undelete does.
-    if (deletedSelected) return
-    const next = {
-      query: lastOk.query,
-      cell_view: effectiveCellView,
-      ...presentationForSave(orderBy, visibleCols),
-    }
-    if (
-      queryChanged(
-        predefined.find((p) => p.query_name === name),
-        next,
-      )
-    ) {
-      void save(effectiveCellView, lastOk.query)
-    }
-  }
-
-  useEffect(() => {
-    if (autosave) saveLastRun() // eslint-disable-line react-hooks/set-state-in-effect
-    // Only a new successful run triggers it; the rest is read as of that run.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastOk])
-
-  // Turning autosave on saves the last run right away: its Save button is
-  // about to go. Resubscribed each render so the handler sees current state.
-  useEffect(() => onAutosaveEnabled(saveLastRun))
 
   // Modal owns its draft state (seeded from effectiveCellView, so a pushed
   // draft is editable); we just toggle visibility and forward the saved value.
@@ -807,17 +765,15 @@ function QueryPanel({
             Delete
           </button>
         )}
-        {!autosave && (
-          <button
-            type="button"
-            onClick={() => void save()}
-            disabled={busy || !selectedName.trim()}
-            data-testid="query-save"
-            className="glass-btn px-3 py-2 font-medium"
-          >
-            Save
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={busy || !selectedName.trim()}
+          data-testid="query-save"
+          className="glass-btn px-3 py-2 font-medium"
+        >
+          Save
+        </button>
         <GitSyncControls
           kind="query"
           name={selectedName}

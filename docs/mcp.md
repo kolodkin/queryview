@@ -103,6 +103,9 @@ you [armed](#arming-a-session).
   `{ok, message, database}`; `ok:false` for an unknown id, a held lock
   (`"blocked, user editing"`), or a session whose Scripts page can't open yet
   (`"not connected"`, `"select a database first"`).
+- `save_query(session_id, name, query, order_by?, fields?, cell_view?)` —
+  [save](#naming-and-saving) a query under `name` and push it. Returns
+  `{ok, saved, message, database}`.
 - `open_explorer(session_id, database, table?)` —
   switch the session to `database` and send the browser to its
   [Explorer](./explorer.md), on `table` when given (refused when the database
@@ -114,6 +117,9 @@ you [armed](#arming-a-session).
   [edit](#naming-and-saving). Returns
   `{ok, pushed, persisted, message, database}`; a disconnected session fails with
   `not connected`. See [dashboard.md](./dashboard.md).
+- `save_dashboard(session_id, name, html, queries, params?)` —
+  [save](#naming-and-saving) a dashboard under `name` and push it. Returns
+  what `push_dashboard` does, with `persisted: true`.
 - `new_tab(name)` — a session of the agent's own; see [Tabs](#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
 - `git_store` / `git_history` / `git_restore` — back up, list and restore a
@@ -125,7 +131,7 @@ to ClickHouse directly.
 
 ## Naming and saving
 
-The agent drafts and edits; the user names and saves.
+The agent drafts and edits; the user names and saves, or asks the agent to.
 
 - **New work is unnamed.** `push_query` and `push_dashboard` without `name`
   push a draft. The user names it: **+ New name…** in the Studio, the prompt
@@ -134,10 +140,10 @@ The agent drafts and edits; the user names and saves.
   (`list_dashboards`); any other is refused with `no saved query named "…"`.
 - **A push persists nothing.** The user's **Save** does. An unnamed query push
   also deselects the open query, so Save cannot write the draft over it.
-- **Autosave is the exception.** In an [autosave](./workspace.md#autosave)
-  workspace a push naming a saved item saves over it: a dashboard on delivery
-  (`persisted: true`), a query once its auto-run succeeds. An unnamed draft
-  still waits for the user.
+- **The agent saves only on request.** `save_query` and `save_dashboard`
+  create `name` or overwrite it, then push it. They are for a user who
+  explicitly asks the agent to save; being separate tools, an MCP client can
+  require approval for them. Nothing is saved unless the push is delivered.
 
 ## How it works
 
