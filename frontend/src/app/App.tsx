@@ -449,7 +449,8 @@ function Shell() {
     on<DashboardPush>('dashboard', (payload) => {
       setDashboardPush(payload)
       setToast('Agent updated the dashboard')
-      navigate(`/dashboard?name=${encodeURIComponent(payload.name)}`)
+      // An unnamed draft has no `?name=`: the user names it on Save.
+      navigate(payload.name ? `/dashboard?name=${encodeURIComponent(payload.name)}` : '/dashboard')
     })
     on<{ table: string | null }>('explorer', (payload) => {
       setToast('Agent opened the Explorer')

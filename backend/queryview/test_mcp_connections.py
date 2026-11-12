@@ -64,6 +64,24 @@ def test_run_query_unknown_session_fails():
     assert out["ok"] is False
 
 
+def test_push_query_takes_only_a_saved_name(default_ws_id):
+    """The agent edits a saved query or pushes an unnamed draft; it can't coin a name."""
+    from queryview.mcp_server import push_query
+    from queryview.queries import save_predefined_query
+
+    sid = _connected_session("sc-named")
+    rid = remote.register(sid)
+    try:
+        out = _run(push_query(rid, "SELECT 1", name="agent made"))
+        assert out["ok"] is False and 'no saved query named "agent made"' in out["message"]
+        assert _run(remote.next_message(rid, 0.1)) is None
+        _run(save_predefined_query("user made", "duckdb", "SELECT 0", workspace_id=default_ws_id))
+        assert _run(push_query(rid, "SELECT 1", name="user made"))["ok"] is True
+        assert _run(push_query(rid, "SELECT 1"))["ok"] is True
+    finally:
+        remote.unregister(rid)
+
+
 def test_push_dashboard_names_no_connection():
     """The draft carries no connection: it runs on whichever session views it."""
     from queryview.mcp_server import push_dashboard
@@ -71,7 +89,7 @@ def test_push_dashboard_names_no_connection():
     sid = _connected_session("sc-dash")
     rid = remote.register(sid)
     try:
-        out = _run(push_dashboard(rid, "d", "<p></p>", {"q": "SELECT 1"}))
+        out = _run(push_dashboard(rid, "<p></p>", {"q": "SELECT 1"}))
         assert out["ok"] is True and out["pushed"] is True
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None and msg["type"] == "dashboard" and "connection" not in msg
@@ -85,7 +103,7 @@ def test_push_dashboard_on_disconnected_session_fails_without_pushing():
     rec = _run(sessions.create_session())
     rid = remote.register(rec.id)
     try:
-        out = _run(push_dashboard(rid, "d", "<p></p>", {"q": "SELECT 1"}))
+        out = _run(push_dashboard(rid, "<p></p>", {"q": "SELECT 1"}))
         assert out["ok"] is False and out["pushed"] is False
         assert out["message"] == "not connected"
         assert _run(remote.next_message(rid, 0.1)) is None

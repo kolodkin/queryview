@@ -163,13 +163,16 @@ def test_mcp_upsert_dashboard_pushes_draft_without_persisting(default_ws_id):
     _run(sessions.set_connection(rec.id, "c"))
     rid = remote.register(rec.id)
     try:
-        out = _run(mcp_push(rid, "draftdash", "<p>d</p>", {"q": "SELECT 1"}))
+        # The agent can't coin a name: only the user names a new dashboard.
+        out = _run(mcp_push(rid, "<p>d</p>", {"q": "SELECT 1"}, name="draftdash"))
+        assert out["pushed"] is False and 'no saved dashboard named "draftdash"' in out["message"]
+        out = _run(mcp_push(rid, "<p>d</p>", {"q": "SELECT 1"}))
         assert out["pushed"] is True and out["persisted"] is False
         # Draft: the agent push must NOT persist — only the user's Save does.
         assert _run(get_dashboard("draftdash", default_ws_id)) is None
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None
-        assert msg["type"] == "dashboard" and msg["name"] == "draftdash"
+        assert msg["type"] == "dashboard" and msg["name"] == ""
     finally:
         remote.unregister(rid)
 
@@ -188,7 +191,12 @@ def test_mcp_push_persists_when_the_session_workspace_autosaves():
     _run(sessions.patch_session(rec.id, workspace="t4-autosave"))
     rid = remote.register(rec.id)
     try:
-        out = _run(mcp_push(rid, "autodash", "<p>a</p>", {"q": "SELECT 1"}))
+        # An unnamed push has nothing to save under, even with autosave on.
+        out = _run(mcp_push(rid, "<p>a</p>", {"q": "SELECT 1"}))
+        assert out["pushed"] is True and out["persisted"] is False
+        assert _run(remote.next_message(rid, 1.0)) is not None
+        _run(upsert_dashboard("autodash", "<p>old</p>", {}, workspace_id=ws_id))
+        out = _run(mcp_push(rid, "<p>a</p>", {"q": "SELECT 1"}, name="autodash"))
         assert out["pushed"] is True and out["persisted"] is True
         saved = _run(get_dashboard("autodash", ws_id))
         assert saved is not None and saved["html"] == "<p>a</p>"

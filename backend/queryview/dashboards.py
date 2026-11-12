@@ -137,9 +137,9 @@ async def _push_dashboard(
     params: list[dict[str, Any]] | None = None,
     workspace: str | None = None,
 ) -> tuple[bool, bool, str]:
-    """Push a dashboard to a live session. A DRAFT unless `workspace` (the
-    session's) has autosave on: then a delivered push is also persisted — only
-    once delivered, since a disarmed session grants nothing. Otherwise only the
+    """Push a dashboard to a live session. A DRAFT unless it is named and
+    `workspace` (the session's) has autosave on: then a delivered push is also
+    persisted — only once delivered, since a disarmed session grants nothing. Otherwise only the
     user's Save (POST /api/dashboards) writes it. Returns (pushed, persisted,
     message); no session_id -> (False, False, "no session")."""
     if not session_id:
@@ -148,7 +148,7 @@ async def _push_dashboard(
     if not pushed:
         return False, False, message
     ws = await (workspaces.resolve(workspace) if workspace else workspaces.fallback())
-    if not ws.autosave:
+    if not ws.autosave or not name:
         return True, False, message
     await upsert_dashboard(name, html, queries, params, workspace_id=ws.id)
     return True, True, message

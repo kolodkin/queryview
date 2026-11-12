@@ -37,7 +37,8 @@ tools (among others):
 - `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
   push a query. `order_by` is `[{name, dir}]`; `fields` are the columns to show
   (omit for all); `cell_view` is raw YAML for this push only (not persisted);
-  `name` selects a saved query. Returns `{ok, message, database}` (`database` is
+  `name` selects an existing saved query to edit; any other name is refused,
+  since only the user names a new query. Returns `{ok, message, database}` (`database` is
   the session's currently-selected DB, reported by the browser) — `ok:false` for
   an unknown id, a held lock (`"blocked, user editing"`), or malformed
   `order_by`/`fields` (`"invalid …"`).
@@ -87,9 +88,11 @@ tools (among others):
   [Explorer](./explorer.md), on `table` when given (refused when the database
   doesn't list it). Returns `{ok, message, database}`; past the switch, a
   failure still leaves the session on `database`.
-- `push_dashboard(session_id, name, html, queries, params?)` — push a dashboard
+- `push_dashboard(session_id, html, queries, params?, name?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
-  renders it. Only the user's **Save** persists it, unless the workspace has
+  renders it. Unnamed, it is new: the user names it on **Save**. `name` must be
+  a saved dashboard, which the push then edits. Only the user's **Save**
+  persists it, unless it is named and the workspace has
   [autosave](./workspace.md#autosave) on. Returns
   `{ok, pushed, persisted, message, database}`; a disconnected session fails with
   `not connected`. See [dashboard.md](./dashboard.md).

@@ -98,7 +98,7 @@ def test_mcp_tools_are_refused_on_a_locked_connection():
     assert _run(mcp_server.run_script(sid, "SELECT 1"))["message"] == "connection is locked"
     assert _run(mcp_server.push_script(sid, "SELECT 1"))["message"] == "connection is locked"
     assert _run(mcp_server.push_query(sid, "SELECT 1"))["message"] == "connection is locked"
-    pushed = _run(mcp_server.push_dashboard(sid, "d", "<p>", {"q": "SELECT 1"}))
+    pushed = _run(mcp_server.push_dashboard(sid, "<p>", {"q": "SELECT 1"}))
     assert pushed["ok"] is False and pushed["message"] == "connection is locked"
     info = _run(mcp_server.session_info(sid))
     assert info["locked"] is True and info["tables"] == [] and "unlocked" not in info

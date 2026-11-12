@@ -76,13 +76,18 @@ async def push_query(
             HTML token. Same format as the "Cell view" modal; see docs/query.md.
             Unlike the modal it isn't persisted — it rides with this one push and
             overrides any selected predefined query's saved cell_view.
-        name: Optional predefined-query name to select in the dropdown (e.g.
-            "findings sources"). Selection only — nothing is persisted, unless
-            the workspace has autosave on: then a successful auto-run saves it
-            under this name. When the
-            name matches a saved query and no `cell_view` is given, the pushed
-            result renders with that query's saved cell_view.
+        name: Optional name of an existing saved query (see list_queries) to
+            edit: it is selected in the dropdown, and with no `cell_view` its
+            saved cell_view applies. Nothing is persisted, unless the workspace
+            has autosave on: then a successful auto-run saves over it. A name
+            that isn't saved is refused — omit it to push an unnamed draft; the
+            user names and saves it.
     """
+    if name is not None:
+        conn_type = (await get_session(session_id)).get("type", "")
+        ws = await _session_workspace_rec(session_id)
+        if not any(q["query_name"] == name for q in await list_predefined_queries_view(conn_type, ws.id)):
+            return _failed(_NEW_NAME.format(kind="query", name=name))
     payload = {
         "type": "query",
         "query": query,
@@ -418,7 +423,7 @@ async def list_queries(conn_type: str = "clickhouse", session_id: str | None = N
     {"queries": [{query_name, query, cell_view, order_by, fields}]}, where
     order_by is [{"name","dir"}] or null, fields is ["col", ...] or null, and
     cell_view is raw YAML or null. Pass a query_name back as push_query's `name`
-    to select that query in the browser (its saved presentation then applies).
+    to edit that query in the browser (its saved presentation then applies).
 
     Args:
         conn_type: Connection type to list queries for.
@@ -453,17 +458,19 @@ async def list_dashboards(session_id: str | None = None) -> dict[str, Any]:
 @mcp.tool()
 async def push_dashboard(
     session_id: str,
-    name: str,
     html: str,
     queries: dict[str, str],
     params: list[dict[str, Any]] | None = None,
+    name: str | None = None,
 ) -> dict[str, Any]:
     """Push a dashboard to a live QueryView session.
 
     The dashboard renders immediately in the browser. By default it is a DRAFT:
     nothing is written to the store until the user's **Save** in the dashboard
-    view, mirroring how push_query drafts a query. When the session's workspace
-    has autosave on, a delivered push is also persisted (`persisted: true`).
+    view, mirroring how push_query drafts a query. Omit `name` for a new
+    dashboard: the user names it on Save. With the `name` of a saved dashboard
+    (see list_dashboards) the push edits that one, and when the session's
+    workspace has autosave on it is also persisted (`persisted: true`).
     Re-push to update it. Its queries run on the viewing session's connection
     and selected database — a dashboard never names a connection.
 
@@ -479,10 +486,11 @@ async def push_dashboard(
 
     Args:
         session_id: The session id shown in the QueryView popover.
-        name: Dashboard name (the name the user's Save will persist under).
         html: The dashboard HTML document (renders in a sandboxed iframe).
         queries: Map of query name to SQL.
         params: Optional selector specs (see above).
+        name: Optional name of an existing saved dashboard to edit; any other
+            name is refused.
 
     Returns {ok, pushed, persisted, message, database}; "not connected" if
     the session has no connection.
@@ -493,7 +501,12 @@ async def push_dashboard(
     perr = dashboard_params_error(params)
     if perr is not None:
         return _push_failed(perr)
-    pushed, persisted, message = await _push_dashboard(name, html, queries, session_id, params, rec.workspace)
+    if name:
+        from .dashboards import get_dashboard
+
+        if await get_dashboard(name, (await _session_workspace_rec(session_id)).id) is None:
+            return _push_failed(_NEW_NAME.format(kind="dashboard", name=name))
+    pushed, persisted, message = await _push_dashboard(name or "", html, queries, session_id, params, rec.workspace)
     return _with_url(
         session_id,
         {
@@ -504,6 +517,10 @@ async def push_dashboard(
             "database": await sessions.database_of(session_id),
         },
     )
+
+
+# Agents edit saved entities or push unnamed drafts; only the user names one.
+_NEW_NAME = 'no saved {kind} named "{name}"; omit `name` to push a draft the user names and saves'
 
 
 def _failed(message: str) -> dict[str, Any]:
