@@ -108,7 +108,7 @@ session would overwrite each other's state.
 
 - **New session** starts a fresh one in this tab.
 - **Rename this session** pins a name, so the session survives its tab;
-  clearing it unpins.
+  clearing it, or typing a `Session <n>` name, unpins.
 - **×** deletes a session; a session a live tab holds (this one included) has none.
 
 An unpinned label is `Session <n>`, with `n` a stable ordinal, so a name never

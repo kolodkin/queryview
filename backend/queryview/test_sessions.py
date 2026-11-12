@@ -78,6 +78,11 @@ def test_patch_returns_the_updated_record():
     assert unpinned.label is None
     assert sessions.display_label(unpinned) == f"Session {rec.seq}"
 
+    # A typed ordinal would pass for another session's derived label.
+    for typed in (f"Session {rec.seq}", " session 99 "):
+        rec2 = _run(sessions.patch_session(rec.id, label=typed))
+        assert rec2 is not None and rec2.label is None
+
 
 def test_delete_removes_the_row_and_its_in_memory_state():
     from queryview import connect
