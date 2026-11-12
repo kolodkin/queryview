@@ -27,11 +27,12 @@ export type SessionSummary = {
   connection: string | null
   database: string | null
   held: boolean
+  pinned: boolean
   deletable: boolean // false while held
 }
 
 // `table` is the Explorer's selection, remembered per connection server-side.
-export type SessionPatch = { url?: string; label?: string; workspace?: string; table?: string }
+export type SessionPatch = { url?: string; workspace?: string; table?: string }
 
 // Well inside the backend's 90s claim TTL, which also covers a hidden tab
 // throttled to about one beat a minute. `npm run build:e2e` shortens it so
@@ -53,7 +54,7 @@ let taken = false
 let beating: Promise<void> | null = null
 let holds = 0
 let pending: PendingPatch = {}
-// Bumped by patchSession and selectSession. A reply is adopted only if this
+// Bumped by patchSession, renameSession and selectSession. A reply is adopted only if this
 // hasn't moved since its request, so a late one can't roll back a newer change.
 let localGen = 0
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -237,10 +238,22 @@ function schedule(): void {
   timer = setTimeout(() => void flushPatches(), IDLE_MS)
 }
 
+// One PATCH of the tab's session; a non-JSON error page reads as its status.
+async function sendPatch(
+  sid: string,
+  body: object,
+): Promise<{ message?: string; session?: SessionState }> {
+  const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return res.json().catch(() => ({ message: `HTTP ${res.status}` }))
+}
+
 // Patches are fire-and-forget and last-write-wins: a failed one loses a
 // remembered preference, never the user's work in the live tab. The response
-// carries the updated session, so server-derived values (a label an empty name
-// unpinned) land back in the mirror.
+// carries the updated session, so server-derived values land back in the mirror.
 export async function flushPatches(): Promise<void> {
   clearTimeout(timer)
   const sid = state?.id
@@ -249,13 +262,8 @@ export async function flushPatches(): Promise<void> {
   if (!sid || taken || Object.keys(body).length === 0) return
   const gen = localGen
   try {
-    const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const data = await res.json()
-    if (data?.session) adoptIfCurrent(gen, data.session as SessionState, 'patch')
+    const data = await sendPatch(sid, body)
+    if (data.session) adoptIfCurrent(gen, data.session, 'patch')
   } catch {
     /* a lost patch costs a remembered preference, never live work */
   }
@@ -288,7 +296,7 @@ export function patchView(view: string, changes: Record<string, unknown>): void 
   schedule()
 }
 
-// Row fields are discrete acts — a navigation, a workspace switch, a rename —
+// Row fields are discrete acts — a navigation, a workspace switch —
 // so they flush at once rather than queueing.
 export function patchSession(changes: SessionPatch): Promise<void> {
   if (!state) return Promise.resolve()
@@ -327,9 +335,18 @@ export async function removeSession(id: string): Promise<{ ok: boolean; message?
   return res.json()
 }
 
-// Returns the label the server settled on: clearing the name unpins, and the
-// derived label comes back on the patch response.
+// Returns the label the server settled on (clearing the name unpins); throws
+// the server's reason when it refuses the name. A PATCH of its own, so a
+// refusal does not take queued changes down with it.
 export async function renameSession(label: string): Promise<string> {
-  await patchSession({ label })
-  return state?.label ?? label
+  await flushPatches()
+  const sid = state?.id
+  // A taken tab stops writing: the session belongs to another tab now.
+  if (!sid || taken) throw new Error('This session is open in another tab.')
+  const gen = ++localGen
+  const data = await sendPatch(sid, { label })
+  if (!data.session) throw new Error(data.message ?? 'rename failed')
+  adoptIfCurrent(gen, data.session, 'rename')
+  // The reply's label even when a newer local change made the row stale.
+  return data.session.label
 }

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import uuid
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
@@ -25,6 +26,16 @@ from .connect import _engine_for_db, _ensure_schema, _now_ms, forget_session
 SESSION_CLAIM_TTL_MS = 90_000
 
 DEFAULT_URL = "/connect"
+
+# A pinned "Session 7" would pass for another session's derived label.
+_ORDINAL_LABEL = re.compile(r"session\s*(\d+)", re.IGNORECASE)
+
+
+class ReservedLabelError(ValueError):
+    """A label patch_session refuses: it would read as an ordinal one."""
+
+    status = 400
+
 
 # Session writes run one at a time, so a reload's `attach` sees the pagehide
 # beacon's patch committed. See docs/session.md, "How it is stored".
@@ -237,6 +248,7 @@ async def list_sessions() -> list[dict[str, Any]]:
             {
                 "id": r.id,
                 "label": _label(r.label, r.seq, r.tab),
+                "pinned": r.label is not None,
                 "connection": r.connection_name,
                 "database": r.database,
                 "held": held,
@@ -259,7 +271,8 @@ async def patch_session(
     Explorer's selection, kept in last_visited for the session's connection
     (empty = none). The updated record comes back so callers see
     server-derived values (the label an empty `label` unpins). None if the
-    session is unknown."""
+    session is unknown; ReservedLabelError, with nothing written, for a
+    `Session <n>` label other than the session's own unpinned one (a no-op)."""
     await _ensure_schema()
     async with _writes, _open() as s:
         row = await s.get(Session, sid)
@@ -270,8 +283,13 @@ async def patch_session(
         if workspace is not None:
             row.workspace = workspace
         if label is not None:
-            # An empty label unpins, falling back to the derived one.
-            row.label = label.strip() or None
+            label = label.strip()
+            ordinal = _ORDINAL_LABEL.fullmatch(label)
+            if ordinal is None:
+                # An empty label unpins, falling back to the derived one.
+                row.label = label or None
+            elif row.label is not None or row.tab or int(ordinal[1]) != row.seq:
+                raise ReservedLabelError(f'"{label}" is reserved for unnamed sessions')
         if ui is not None:
             row.ui = json.dumps(_merge_ui(_to_rec(row).ui, ui))
         if table is not None and row.connection_name:

@@ -79,6 +79,31 @@ def test_patch_returns_the_updated_record():
     assert sessions.display_label(unpinned) == f"Session {rec.seq}"
 
 
+def test_ordinal_label_is_rejected():
+    """A pinned "Session 7" would pass for another session's derived label."""
+    rec = _run(sessions.create_session())
+    _run(sessions.patch_session(rec.id, label="nightly audit"))
+    for typed in (f"Session {rec.seq}", " session 99 "):
+        with pytest.raises(sessions.ReservedLabelError, match="reserved"):
+            _run(sessions.patch_session(rec.id, label=typed, url="/elsewhere"))
+    kept = _run(sessions.get_session_rec(rec.id))
+    assert kept is not None and kept.label == "nightly audit" and kept.url != "/elsewhere"
+
+
+def test_own_ordinal_on_an_unnamed_session_is_a_no_op():
+    """Re-sending the label it already shows, in any case, does not pin it."""
+    rec = _run(sessions.create_session())
+    same = _run(sessions.patch_session(rec.id, label=f"session  {rec.seq}"))
+    assert same is not None and same.label is None
+
+
+def test_own_ordinal_on_an_agent_tab_is_refused():
+    """A tab shows "Agent › <name>", so its ordinal would pin a label it never showed."""
+    tab = _run(sessions.create_tab("sales_reporting"))
+    with pytest.raises(sessions.ReservedLabelError):
+        _run(sessions.patch_session(tab.id, label=f"Session {tab.seq}"))
+
+
 def test_delete_removes_the_row_and_its_in_memory_state():
     from queryview import connect
 
@@ -107,6 +132,7 @@ def test_list_returns_display_label_and_held_flag():
     rows = _run(sessions.list_sessions())
     row = next(r for r in rows if r["id"] == rec.id)
     assert row["label"] == f"Session {rec.seq}"
+    assert row["pinned"] is False
     assert row["held"] is False
 
 

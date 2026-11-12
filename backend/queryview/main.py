@@ -90,7 +90,11 @@ def _clean_str(value: Any) -> str:
 
 
 def _status_error(
-    e: workspaces.WorkspaceError | gitsync.GitSyncError | yamlio.YamlIOError | PredefinedQueryError,
+    e: workspaces.WorkspaceError
+    | gitsync.GitSyncError
+    | yamlio.YamlIOError
+    | PredefinedQueryError
+    | sessions.ReservedLabelError,
 ) -> JSONResponse:
     """The `{ok: false, message}` response for a domain error carrying its HTTP status."""
     return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
@@ -235,14 +239,17 @@ async def sessions_list() -> dict[str, Any]:
 async def sessions_patch(sid: str, request: Request):
     b = await _read_json(request) or {}
     ui = b.get("ui")
-    rec = await sessions.patch_session(
-        sid,
-        url=_str_or_none(b, "url"),
-        ui=ui if isinstance(ui, dict) else None,
-        label=_str_or_none(b, "label"),
-        workspace=_str_or_none(b, "workspace"),
-        table=_str_or_none(b, "table"),
-    )
+    try:
+        rec = await sessions.patch_session(
+            sid,
+            url=_str_or_none(b, "url"),
+            ui=ui if isinstance(ui, dict) else None,
+            label=_str_or_none(b, "label"),
+            workspace=_str_or_none(b, "workspace"),
+            table=_str_or_none(b, "table"),
+        )
+    except sessions.ReservedLabelError as e:
+        return _status_error(e)
     if rec is None:
         return JSONResponse({"ok": False, "message": "unknown session"}, status_code=404)
     return {"ok": True, "session": _session_payload(rec)}
@@ -268,11 +275,11 @@ async def sessions_release(request: Request):
     sid = _clean_str(b.get("session_id"))
     if sid:
         ui = b.get("ui")
+        # No label: a rename is its own PATCH, never part of the beacon.
         await sessions.patch_session(
             sid,
             url=_str_or_none(b, "url"),
             ui=ui if isinstance(ui, dict) else None,
-            label=_str_or_none(b, "label"),
             workspace=_str_or_none(b, "workspace"),
         )
     await sessions.release(tab)
