@@ -1,5 +1,4 @@
-"""workspaces: drop autosave — saving is always explicit (the user's Save, or
-an agent's save_query / save_dashboard)
+"""workspaces: drop autosave — only the user's Save persists
 
 Revision ID: c6d7e8f9a0b1
 Revises: a8b9c0d1e2f3

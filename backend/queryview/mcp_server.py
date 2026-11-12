@@ -26,7 +26,7 @@ from .connect import (
 )
 from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
-from .dashboards import _push_dashboard, get_dashboard
+from .dashboards import _dashboard_event, get_dashboard
 from .mcp_skills import SkillsExtension
 from .queries import get_predefined_query, list_predefined_queries_view
 from .validation import dashboard_params_error
@@ -469,8 +469,9 @@ async def push_dashboard(
     written to the store until the user's **Save** in the dashboard view,
     mirroring how push_query drafts a query. Omit `name` for a new dashboard:
     the user names it on Save. With the `name` of a saved dashboard (see
-    list_dashboards) the push edits that one. Re-push to update it. Its queries run on the viewing session's connection
-    and selected database — a dashboard never names a connection.
+    list_dashboards) the push edits that one. Re-push to update it. Its queries
+    run on the viewing session's connection and selected database — a dashboard
+    never names a connection.
 
     The browser consumes the results, not the agent: the HTML reads them from a
     `window.queries` global, a column-oriented map
@@ -501,7 +502,7 @@ async def push_dashboard(
         return _push_failed(perr)
     if name and await get_dashboard(name, (await _session_workspace_rec(session_id)).id) is None:
         return _push_failed(_NEW_NAME.format(kind="dashboard", name=name))
-    pushed, message = await _push_dashboard(name or "", html, queries, session_id, params)
+    pushed, message = await push(session_id, _dashboard_event(name or "", html, queries, params))
     return _with_url(
         session_id,
         {

@@ -141,9 +141,8 @@ function QueryPanel({
   const [selectedName, setSelectedName] = useState('')
   // A saved query picked from the dropdown, waiting to run.
   const [picked, setPicked] = useState<PredefinedQuery | null>(null)
-  // The last successful run — its SQL and the name it runs for, taken at start;
-  // a fresh object per run.
-  const [lastOk, setLastOk] = useState<{ query: string; name: string } | null>(null)
+  // The SQL of the last successful run, re-run when the connection changes.
+  const [lastOk, setLastOk] = useState<string | null>(null)
   const runSeq = useRef(0)
   const [fields, setFields] = useState<Field[]>([])
   const [visibleCols, setVisibleCols] = useState<string[]>(() =>
@@ -353,7 +352,7 @@ function QueryPanel({
     // query that was open.
     setSelectedName(pushed.name ?? '')
     /* eslint-enable react-hooks/set-state-in-effect */
-    void runWith(q, lim, off, ord, { selectFields: fld, runFor: pushed.name ?? '' })
+    void runWith(q, lim, off, ord, { selectFields: fld })
     // Consume the push so re-mounting doesn't re-run a stale query.
     onPushConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -393,9 +392,7 @@ function QueryPanel({
     {
       selectFields,
       paramOverride,
-      // The query name this run is for; defaults to the selection.
-      runFor = selectedName,
-    }: { selectFields?: string[]; paramOverride?: Record<string, string>; runFor?: string } = {},
+    }: { selectFields?: string[]; paramOverride?: Record<string, string> } = {},
   ) {
     // Only the newest run lands: an older one still in flight (a slow query
     // overtaken by a re-run) must not overwrite fresher results.
@@ -417,7 +414,7 @@ function QueryPanel({
         const rows: QueryRows = { meta: data.meta ?? [], data: data.data ?? [] }
         setResult(rows)
         setOffset(off)
-        setLastOk({ query: q, name: runFor.trim() })
+        setLastOk(q)
         // A pushed selection is authoritative: synthesize the field list from the
         // result columns so the visibility filter restricts the table to exactly
         // the pushed columns (empty/absent => show all).
@@ -459,8 +456,7 @@ function QueryPanel({
     if (!rerunPending.current || optionsFor?.runOn !== runOn) return
     rerunPending.current = false
     if (!optionsReady || !lastOk) return
-    void runWith(lastOk.query, limit, 0, orderBy, {
-      runFor: lastOk.name,
+    void runWith(lastOk, limit, 0, orderBy, {
       paramOverride: seedParamValues(paramDefs, paramValues),
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -537,7 +533,6 @@ function QueryPanel({
     setPicked(null)
     if (!optionsReady) return
     void runWith(picked.query, limit, 0, picked.order_by ?? [], {
-      runFor: picked.query_name,
       paramOverride: seedParamValues(paramDefs, paramValues),
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps

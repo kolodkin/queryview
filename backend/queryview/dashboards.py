@@ -129,21 +129,6 @@ def _dashboard_event(
     }
 
 
-async def _push_dashboard(
-    name: str,
-    html: str,
-    queries: dict[str, str],
-    session_id: str | None,
-    params: list[dict[str, Any]] | None = None,
-) -> tuple[bool, str]:
-    """Push a dashboard to a live session as a DRAFT: only the user's Save
-    (POST /api/dashboards) writes it. Returns (pushed, message); no
-    session_id -> (False, "no session")."""
-    if not session_id:
-        return False, "no session"
-    return await connect.push(session_id, _dashboard_event(name, html, queries, params))
-
-
 async def _upsert_and_push(
     name: str,
     html: str,
