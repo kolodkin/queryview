@@ -111,6 +111,10 @@ function DashboardView({
     // An agent's new draft arrives unnamed: naming it is the user's.
     const saveAs = active.name || window.prompt('Save dashboard as (name):')?.trim()
     if (!saveAs) return
+    if (!active.name && dashboards.some((d) => d.name === saveAs)) {
+      setError(`A dashboard named “${saveAs}” already exists.`)
+      return
+    }
     setSaving(true)
     setError(null)
     try {

@@ -30,14 +30,13 @@ session id) exposes:
 
 - `push_dashboard(session_id, html, queries, params?, name?)` — push the
   dashboard **draft** to the browser identified by `session_id`, which navigates
-  to the dashboard view and renders it. Without `name` the draft is new and
-  unnamed: **Save** asks the user for its name. `name` must be an existing saved
-  dashboard, which the push edits; the agent cannot name a new one. It does
-  **not** persist — only the
-  user's **Save** button in the dashboard view writes it to the store (mirrors
-  `push_query`) — unless the session's workspace has
-  [autosave](./workspace.md#autosave) on, which persists each delivered named push and
-  hides Save (an unnamed draft keeps it). Returns `{ok, pushed, persisted, message, database}`; an unknown/disarmed
+  to the dashboard view and renders it. Without `name` the draft is new:
+  **Save** asks the user for its name. `name` must be a saved dashboard, which
+  the push edits; the agent cannot name a new one. Only the user's **Save**
+  writes it to the store (mirrors `push_query`), unless the session's workspace
+  has [autosave](./workspace.md#autosave) on, which persists each delivered
+  named push and hides Save (an unnamed draft keeps it). Returns
+  `{ok, pushed, persisted, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
 
 A dashboard never names a [connection](./connect.md): it runs on the

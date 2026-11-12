@@ -78,6 +78,9 @@ def test_push_query_takes_only_a_saved_name(default_ws_id):
         _run(save_predefined_query("user made", "duckdb", "SELECT 0", workspace_id=default_ws_id))
         assert _run(push_query(rid, "SELECT 1", name="user made"))["ok"] is True
         assert _run(push_query(rid, "SELECT 1"))["ok"] is True
+        # A session that can't take the push reports that, not the name.
+        gone = _run(push_query("no-such-session", "SELECT 1", name="user made"))
+        assert gone["ok"] is False and "no saved query" not in gone["message"]
     finally:
         remote.unregister(rid)
 

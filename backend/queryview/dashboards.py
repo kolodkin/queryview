@@ -139,9 +139,9 @@ async def _push_dashboard(
 ) -> tuple[bool, bool, str]:
     """Push a dashboard to a live session. A DRAFT unless it is named and
     `workspace` (the session's) has autosave on: then a delivered push is also
-    persisted — only once delivered, since a disarmed session grants nothing. Otherwise only the
-    user's Save (POST /api/dashboards) writes it. Returns (pushed, persisted,
-    message); no session_id -> (False, False, "no session")."""
+    persisted — only once delivered, since a disarmed session grants nothing.
+    Otherwise only the user's Save (POST /api/dashboards) writes it. Returns
+    (pushed, persisted, message); no session_id -> (False, False, "no session")."""
     if not session_id:
         return False, False, "no session"
     pushed, message = await connect.push(session_id, _dashboard_event(name, html, queries, params))

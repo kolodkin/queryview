@@ -26,9 +26,9 @@ from .connect import (
 )
 from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
-from .dashboards import _push_dashboard
+from .dashboards import _push_dashboard, get_dashboard
 from .mcp_skills import SkillsExtension
-from .queries import list_predefined_queries_view
+from .queries import get_predefined_query, list_predefined_queries_view
 from .validation import dashboard_params_error
 
 mcp = MCPServer(
@@ -83,10 +83,10 @@ async def push_query(
             that isn't saved is refused — omit it to push an unnamed draft; the
             user names and saves it.
     """
-    if name is not None:
-        conn_type = (await get_session(session_id)).get("type", "")
+    info = await get_session(session_id) if name else {}
+    if info.get("connected"):  # otherwise the push itself says what's wrong
         ws = await _session_workspace_rec(session_id)
-        if not any(q["query_name"] == name for q in await list_predefined_queries_view(conn_type, ws.id)):
+        if await get_predefined_query(info["type"], name, ws.id) is None:
             return _failed(_NEW_NAME.format(kind="query", name=name))
     payload = {
         "type": "query",
@@ -439,8 +439,8 @@ async def list_dashboards(session_id: str | None = None) -> dict[str, Any]:
     """List the saved dashboards (names + metadata, no HTML/queries payload).
 
     Use this to discover dashboard names — e.g. to pick a `name` for
-    git_store/git_history/git_restore with kind="dashboard", or to avoid
-    overwriting an existing dashboard when pushing a new one.
+    git_store/git_history/git_restore with kind="dashboard", or to edit one
+    with push_dashboard.
 
     Args:
         session_id: Optional armed-session id; scopes the list to that
@@ -501,11 +501,8 @@ async def push_dashboard(
     perr = dashboard_params_error(params)
     if perr is not None:
         return _push_failed(perr)
-    if name:
-        from .dashboards import get_dashboard
-
-        if await get_dashboard(name, (await _session_workspace_rec(session_id)).id) is None:
-            return _push_failed(_NEW_NAME.format(kind="dashboard", name=name))
+    if name and await get_dashboard(name, (await _session_workspace_rec(session_id)).id) is None:
+        return _push_failed(_NEW_NAME.format(kind="dashboard", name=name))
     pushed, persisted, message = await _push_dashboard(name or "", html, queries, session_id, params, rec.workspace)
     return _with_url(
         session_id,

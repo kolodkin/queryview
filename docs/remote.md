@@ -37,8 +37,8 @@ tools (among others):
 - `push_query(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
   push a query. `order_by` is `[{name, dir}]`; `fields` are the columns to show
   (omit for all); `cell_view` is raw YAML for this push only (not persisted);
-  `name` selects an existing saved query to edit; any other name is refused,
-  since only the user names a new query. Returns `{ok, message, database}` (`database` is
+  `name` selects a saved query to edit; any other name is refused, since only
+  the user names a new query. Returns `{ok, message, database}` (`database` is
   the session's currently-selected DB, reported by the browser) — `ok:false` for
   an unknown id, a held lock (`"blocked, user editing"`), or malformed
   `order_by`/`fields` (`"invalid …"`).

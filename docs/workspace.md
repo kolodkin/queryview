@@ -35,12 +35,13 @@ dashboard pages have no **Save** button, and **Commit** / **Restore**
 
 - **Studio** — a named query saves after each *successful* run (SQL, order-by,
   fields, cell view), so broken edits never overwrite it; unchanged runs write
-  nothing, unnamed SQL is never saved. A `push_query` naming a saved query saves over it via its auto-run.
+  nothing, unnamed SQL is never saved. A `push_query` naming a saved query
+  saves over it via its auto-run.
 - **Dashboards** — a delivered `push_dashboard` naming a saved dashboard is
   persisted (`persisted: true`); an unnamed draft waits for the user's Save.
 
 Turning it on saves the open view's unsaved work first (the last named run,
-or an agent's dashboard draft), since its Save button goes away.
+or an agent's edit of a saved dashboard), since its Save button goes away.
 
 Without a remote, each save overwrites the only copy.
 
