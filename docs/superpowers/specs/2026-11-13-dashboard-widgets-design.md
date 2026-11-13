@@ -133,7 +133,17 @@ Each `predefined_queries` row becomes a dashboard:
 - HTML = a `<qv-param>` per param, then `<qv-select-view query="main">` with
   `order-by` / `fields` from the saved presentation and a `<template>` per
   `link` / `custom` cell rule;
-- `deleted_at` carries over.
+- `deleted_at` carries over;
+- its driver carries over into a new optional `conn_type` on the dashboard.
+
+### Driver scope
+
+A dashboard may name a driver (`conn_type`, e.g. `clickhouse`). The dropdown
+lists dashboards whose driver matches the session's connection, plus those
+with none. Migrated queries and **New query** drafts get the driver; existing
+dashboards and agent pushes stay unscoped and show everywhere. Names stay
+unique per workspace regardless of driver. The field is written to
+`meta.yaml` and to exports.
 
 The migration is a one-shot move, shipped together with Studio's removal.
 
