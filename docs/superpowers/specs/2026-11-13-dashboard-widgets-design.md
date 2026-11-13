@@ -30,8 +30,9 @@ layout language, and there is no widget grid or block spec.
 
 ## Constraints
 
-- The frame stays `sandbox="allow-scripts"` with an opaque origin: no session,
-  no `/api/*`, no downloads of its own.
+- The frame keeps an opaque origin: no session, no `/api/*`, no downloads of
+  its own. Its sandbox gains `allow-popups allow-popups-to-escape-sandbox`, so
+  a clicked `<a target="_blank">` in a cell template opens a normal tab.
 - The frame sends **values only**: a query name the dashboard declares, plus
   limit, offset, order-by columns and param values. The host substitutes and
   runs the dashboard's own SQL and answers only its own frame.
