@@ -81,17 +81,21 @@ export function placeholdersIn(sql: string): string[] {
   return [...seen]
 }
 
-// Backtick-quoting dialects (ClickHouse, MySQL) also read backslash as an
-// escape inside string literals, so double it there; others take it literally.
+// Backslash escapes in ClickHouse; Postgres, DuckDB and SQLite take it literally.
+// shortcut: inferred from the backtick quote, replace with a driver flag before
+// adding a dialect that breaks the pairing (Snowflake, MySQL ANSI_QUOTES).
+const backslashEscapes = (quote: string) => quote === '`'
+
 function quoteLiteral(value: string, quote: string): string {
-  const v = quote === '`' ? value.replaceAll('\\', '\\\\') : value
+  const v = backslashEscapes(quote) ? value.replaceAll('\\', '\\\\') : value
   return `'${v.replaceAll("'", "''")}'`
 }
 
-// A quote character (or, in backtick dialects, a backslash that would escape
-// it) can't be trusted through string assembly, and no real name carries one.
+// A quote character (or a backslash that would escape it) can't be trusted
+// through string assembly, and no real name carries one, so reject it.
 function quoteIdentifier(name: string, param: string, quote: string): string {
-  if (name.includes(quote) || (quote === '`' && name.includes('\\'))) throw new Error(`invalid identifier for {${param}}: ${name}`)
+  if (name.includes(quote) || (backslashEscapes(quote) && name.includes('\\')))
+    throw new Error(`invalid identifier for {${param}}: ${name}`)
   return `${quote}${name}${quote}`
 }
 
