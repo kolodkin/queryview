@@ -2,7 +2,7 @@
 // activeWorkspace() in session.ts; an omitted workspace param means the
 // backend's fallback (the oldest workspace). See docs/workspace.md.
 
-import { apiFetch } from './api'
+import { apiFetch, postJson } from './api'
 
 // `remote` is the URL without any embedded credential; the token never comes back.
 export type Workspace = {
@@ -31,10 +31,10 @@ export async function createWorkspace(
   remote?: string,
   branch?: string,
 ): Promise<WorkspaceResult> {
-  const res = await apiFetch('/api/workspaces', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, remote: remote || null, branch: branch || null }),
+  const res = await postJson('/api/workspaces', {
+    name,
+    remote: remote || null,
+    branch: branch || null,
   })
   return res.json()
 }
@@ -49,11 +49,7 @@ export async function updateWorkspace(
   name: string,
   changes: WorkspaceChanges,
 ): Promise<WorkspaceResult> {
-  const res = await apiFetch(`/api/workspaces/${encodeURIComponent(name)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(changes),
-  })
+  const res = await postJson(`/api/workspaces/${encodeURIComponent(name)}`, changes, 'PATCH')
   return res.json()
 }
 

@@ -2,17 +2,13 @@
 // (the backend TTL-expires it), so failures are swallowed.
 import { useEffect, type RefObject } from 'react'
 
-import { apiFetch } from './api'
+import { postJson } from './api'
 import { flushPatches } from './session'
 
 export async function postLock(sessionId: string, action: 'acquire' | 'release'): Promise<void> {
   if (!sessionId) return
   try {
-    await apiFetch('/api/remote/lock', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, action }),
-    })
+    await postJson('/api/remote/lock', { session_id: sessionId, action })
   } catch {
     /* advisory lock: ignore transport errors */
   }

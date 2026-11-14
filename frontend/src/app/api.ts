@@ -14,3 +14,12 @@ export function apiFetch(path: string, init: RequestInit = {}): Promise<Response
   if (token) headers['X-QV-Token'] = token
   return fetch(path, { ...init, headers })
 }
+
+// A JSON request body, POST unless `method` says otherwise.
+export function postJson(path: string, body: unknown, method = 'POST'): Promise<Response> {
+  return apiFetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}

@@ -17,7 +17,7 @@ import {
 } from '../core'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
-import { apiFetch } from './api'
+import { apiFetch, postJson } from './api'
 import DashboardSqlPanel from './DashboardSqlPanel'
 import { onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
@@ -45,11 +45,7 @@ function runError(data: { reason?: string; message?: string }): string {
 // options_sql, and set-params re-runs.
 const runQueries: QueryRunner = async (queries) => {
   try {
-    const res = await apiFetch('/api/runqueries', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ queries }),
-    })
+    const res = await postJson('/api/runqueries', { queries })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.ok) return { ok: false, message: runError(data) }
     return { ok: true, results: (data.results ?? {}) as DashboardResults }
@@ -184,16 +180,12 @@ function DashboardView({
     setSaving(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/dashboards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: saveAs,
-          html: active.html,
-          queries: active.queries,
-          params: active.params ?? [],
-          workspace: activeWorkspace(),
-        }),
+      const res = await postJson('/api/dashboards', {
+        name: saveAs,
+        html: active.html,
+        queries: active.queries,
+        params: active.params ?? [],
+        workspace: activeWorkspace(),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || !data.ok) {

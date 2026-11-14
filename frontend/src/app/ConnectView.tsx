@@ -32,7 +32,7 @@ import {
   matchConnections,
   type SavedConnection,
 } from './savedConnections'
-import { apiFetch } from './api'
+import { postJson } from './api'
 
 type TestResult = { ok: boolean; message: string }
 
@@ -630,18 +630,14 @@ function ConnectionForm({
   const [sessionOnly, setSessionOnly] = useState(false)
 
   function body() {
-    return JSON.stringify({ type: meta.type, ...values, session: sessionOnly })
+    return { type: meta.type, ...values, session: sessionOnly }
   }
 
   async function testConnection() {
     setBusy(true)
     setResult(null)
     try {
-      const res = await apiFetch('/api/db/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body(),
-      })
+      const res = await postJson('/api/db/test', body())
       setResult((await res.json()) as TestResult)
     } catch (err) {
       setResult({ ok: false, message: err instanceof Error ? err.message : 'request failed' })
@@ -654,11 +650,7 @@ function ConnectionForm({
     setBusy(true)
     setResult(null)
     try {
-      const res = await apiFetch('/api/db/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body(),
-      })
+      const res = await postJson('/api/db/connect', body())
       const data = await res.json()
       if (data.ok) {
         onConnected(toConnection({ type: meta.type, ...data }))

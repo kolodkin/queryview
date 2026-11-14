@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react'
 
 import { useEditLock } from './sessionLock'
-import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
+import TextareaSizes from './controls/TextareaSizes'
+import { textareaSizeClass } from './textareaSizes'
 
 // The dashboard's SQL editor. It sits in the app, outside the sandboxed frame:
 // the frame's widgets only ever name a query, so SQL is typed here alone.
@@ -45,19 +46,12 @@ function DashboardSqlPanel({
             </option>
           ))}
         </select>
-        <div className="ml-auto flex items-center gap-1">
-          {TEXTAREA_SIZES.map(([label, n]) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setRows(n)}
-              data-testid={`dash-sql-size-${label.toLowerCase()}`}
-              className={`glass-toggle px-2 py-1 text-xs ${rows === n ? 'is-active' : ''}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <TextareaSizes
+          rows={rows}
+          onChange={setRows}
+          testid="dash-sql-size"
+          className="ml-auto flex items-center gap-1"
+        />
       </div>
       <textarea
         value={queries[name] ?? ''}

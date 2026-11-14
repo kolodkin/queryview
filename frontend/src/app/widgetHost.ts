@@ -3,7 +3,7 @@
 // and values only; the SQL is the dashboard's own, resolved by the caller.
 
 import { failureReply, type WidgetReply, type WidgetRequest } from '../core'
-import { apiFetch } from './api'
+import { postJson } from './api'
 import { downloadText } from './yamlio'
 
 // The SQL to run for a query name, or why it can't run.
@@ -11,11 +11,7 @@ export type WidgetSql = { sql: string } | { message: string }
 
 async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
   try {
-    const res = await apiFetch(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
+    const res = await postJson(path, body)
     return await res.json()
   } catch {
     return { ok: false, message: 'request failed' }

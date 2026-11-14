@@ -1,7 +1,7 @@
 // Client for the /api/git backup/restore endpoints (see docs/gitsync.md).
 // Every operation is scoped to a workspace (see docs/workspace.md).
 
-import { apiFetch } from './api'
+import { apiFetch, postJson } from './api'
 
 export type GitKind = 'dashboard'
 
@@ -70,11 +70,7 @@ export type GitSyncResult = {
 
 // Merge the repo into `workspace` (see docs/gitsync.md, "Merge-in").
 export async function gitSync(workspace: string): Promise<GitSyncResult> {
-  const res = await apiFetch('/api/git/sync', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace }),
-  })
+  const res = await postJson('/api/git/sync', { workspace })
   const data = await res.json()
   announceGitSync()
   return data
@@ -99,11 +95,7 @@ export async function gitStore(
   name: string,
   workspace?: string,
 ): Promise<GitStoreResult> {
-  const res = await apiFetch('/api/git/store', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind, name, workspace }),
-  })
+  const res = await postJson('/api/git/store', { kind, name, workspace })
   const data = await res.json()
   announceGitSync()
   return data
@@ -130,11 +122,7 @@ export async function gitRestore(
   ref: string,
   workspace?: string,
 ): Promise<{ ok: boolean; message?: string }> {
-  const res = await apiFetch('/api/git/restore', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind, name, ref, workspace }),
-  })
+  const res = await postJson('/api/git/restore', { kind, name, ref, workspace })
   const data = await res.json()
   announceGitSync()
   return data

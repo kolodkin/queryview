@@ -1,6 +1,6 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
 
-import { apiFetch } from './api'
+import { apiFetch, postJson } from './api'
 import { withoutHeartbeat } from './session'
 import { TOKEN_KEY, tabWrite } from './tabStorage'
 
@@ -54,14 +54,6 @@ export function toConnection(data: Record<string, unknown>): Connection {
 // Where an opened connection lands: the Explorer, on its last visited table.
 export function explorerUrl(c: { table?: string | null }): string {
   return c.table ? `/explorer?table=${encodeURIComponent(c.table)}` : '/explorer'
-}
-
-function postJson(path: string, body: unknown, method = 'POST'): Promise<Response> {
-  return apiFetch(path, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
 }
 
 // Open a saved connection for this session; it comes back with no database
