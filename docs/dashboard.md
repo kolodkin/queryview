@@ -16,12 +16,39 @@ workflow (`/queryview`); see [queryview.md](./queryview.md). It has:
 
 - a **dropdown** of saved dashboards — selecting one sets `?name=<name>`, so the
   URL is shareable and the back button works;
+- **New query** — an unsaved draft holding one [`<qv-select-view>`](#widgets)
+  over an empty query, for ad-hoc SQL; **Save** asks for its name;
+- **Edit queries** — the [SQL panel](#the-sql-panel);
 - a **sandboxed iframe** that renders the selected dashboard.
+
+```
++-- /dashboard ------------------------------------------+
+| [ dashboard v ] [New query] [Save] [Edit queries] ...  |
+| +- SQL panel (Edit queries) -------------------------+ |
+| | [ sales v ]                    [Min][S][M][L][XL]  | |
+| | SELECT ...                                         | |
+| | [Execute]                                          | |
+| +----------------------------------------------------+ |
+| +- sandboxed frame (the dashboard HTML) -------------+ |
+| | <qv-param>   chart   <qv-select-view query=sales>  | |
+| +----------------------------------------------------+ |
++--------------------------------------------------------+
+```
 
 Open it from the corner nav (just the dropdown), or by URL — `?name=<name>`
 jumps straight to one. Reopening
 re-fetches the dashboard and re-runs its queries, so a reloaded or shared link
 always shows live data.
+
+## The SQL panel
+
+**Edit queries** opens an editor for the dashboard's queries, in the app and
+outside the frame: pick a query, edit its SQL, and **Execute** re-runs the
+dashboard with the edit. The frame is not reloaded, so the page keeps its
+state. **Save** persists the edited dashboard.
+
+Focus in the panel holds the human [edit lock](./query.md#co-edit--edit-lock):
+an agent push is refused with `blocked, user editing` while you type.
 
 ## The `push_dashboard` MCP tool
 
@@ -77,6 +104,46 @@ Load any chart library from a CDN inside the HTML. A minimal dashboard:
   })
 </script>
 ```
+
+## Widgets
+
+Dashboard HTML may use two tags anywhere in its own layout. They render in the
+frame like the rest of the page, and are loaded only by dashboards that use one.
+
+```html
+<qv-param name="region"></qv-param>
+<qv-select-view query="sales" limit="100" order-by="day desc" fields="day,revenue">
+  <template column="revenue"><strong>{cell}</strong></template>
+  <template column="name">
+    <a href="https://example.internal/items/{row.id}" target="_blank">{cell}</a>
+  </template>
+</qv-select-view>
+```
+
+- **`<qv-select-view query>`** — a results table over the dashboard query it
+  names: **Fields** (the select-fields and order-by pickers), **Limit**,
+  **Offset**, **Previous** / **Next** and **Download CSV**, with the
+  [default views](./query.md#default-views-for-complex-types) and
+  [long-value popup](./query.md#long-values) of the query panel. `limit`
+  (1–1000, default 100), `order-by` (`col` or `col desc`, comma-separated) and
+  `fields` (the columns shown at first) set how it opens; changes made in the
+  widget last for the visit.
+- **`<template column>`** — designs one column's cells. Its HTML is used per
+  row with `{cell}` (this column's value) and `{row.<column>}` (another
+  column's) substituted: HTML-escaped, and URL-encoded inside `href` / `src`.
+  An unknown `{row.<column>}` is left as written.
+- **`<qv-param name>`** — the selector for one
+  [dashboard parameter](#dashboard-parameters): a dropdown, or a checkbox for a
+  `dimension`. A change re-runs the dashboard.
+
+A query a `<qv-select-view>` names belongs to that widget: it runs per page
+through `/api/db/query`, is **not** in `window.queries`, and a failure shows in
+the widget, leaving the rest of the dashboard up. A name the dashboard doesn't
+declare shows `Unknown query “…”`.
+
+The widget sends the app a query name, limit, offset and order-by columns —
+**never SQL**. The app looks the name up in the dashboard's `queries`,
+substitutes the current parameters and runs it.
 
 ## Dashboard parameters
 
@@ -161,11 +228,14 @@ its panel name (e.g. `churn: Unknown table …`) so it's clear which one to fix.
 
 ## Isolation & security
 
-The HTML renders in `<iframe sandbox="allow-scripts" srcdoc=…>` **without**
-`allow-same-origin`, giving it an opaque origin: it can run JS and load CDN
+The HTML renders in
+`<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc=…>`
+**without** `allow-same-origin`, giving it an opaque origin: it can run JS and load CDN
 assets but cannot read the app's storage or call `/api/*` as the session (it
-has neither the session id nor any credential). All data reaches it only through the injected `window.queries`,
-whose JSON has `<` escaped so result data containing `</script>` can't break out
+has neither the session id nor any credential). A link the page opens with
+`target="_blank"` lands in a normal tab. Data reaches it only through the
+injected `window.queries` and the [widget](#widgets) replies; the
+`window.queries` JSON has `<` escaped so result data containing `</script>` can't break out
 of the prologue.
 
 Like the rest of the app (and [predefined queries](./query.md)), persisted

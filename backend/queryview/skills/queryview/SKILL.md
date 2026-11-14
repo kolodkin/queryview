@@ -58,6 +58,18 @@ inline bars (`width:{row.pct}%`), a `link` to the record in its own system.
 `push_dashboard` renders HTML fed by named queries as an unsaved draft; re-push to revise
 it. See the tool's description for the `window.queries` and `params` contract.
 
+Two tags save hand-drawing a table or a selector; place them anywhere in the HTML:
+
+```html
+<qv-param name="region"></qv-param>
+<qv-select-view query="sales" limit="100" order-by="day desc">
+  <template column="revenue"><strong>{cell}</strong></template>
+</qv-select-view>
+```
+
+`<qv-select-view>` pages the named query (it is then not in `window.queries`);
+a `<template column>` designs a column with `{cell}` and `{row.<column>}`.
+
 Never name a new query or dashboard: push it unnamed and the user names it on Save.
 `name` only takes one that is already saved, to edit it.
 You cannot save: when asked to, push it and tell the user to click **Save**.

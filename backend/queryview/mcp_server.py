@@ -483,6 +483,11 @@ async def push_dashboard(
     `options_sql`, `default: none`); the page gets them as `window.params` and
     re-runs with `window.setParams({...})`. See docs/dashboard.md.
 
+    The HTML may use `<qv-select-view query="name">` (a paged results table
+    over that query, with `<template column="col">` children designing cells
+    via `{cell}` / `{row.<column>}`) and `<qv-param name="p">` (a selector for
+    a param). A query a `<qv-select-view>` names is not in `window.queries`.
+
     Args:
         session_id: The session id shown in the QueryView popover.
         html: The dashboard HTML document (renders in a sandboxed iframe).
