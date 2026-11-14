@@ -28,3 +28,82 @@ test("qv-param reruns the dashboard", async ({ page, seeds, baseURL }) => {
   await frame.getByTestId("qv-param").selectOption("beta");
   await expect(frame.locator("#out")).toHaveText("beta");
 });
+
+const VIEW = '<qv-select-view query="q" limit="2" order-by="id"></qv-select-view>';
+const ITEMS = { q: "SELECT id, name FROM items" };
+
+test("qv-select-view pages a query", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, { name: "paging", html: VIEW, queries: ITEMS });
+  const rows = frame.getByTestId("qv-results").locator("tbody tr");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText("alpha");
+  await expect(frame.getByTestId("qv-prev")).toBeDisabled();
+  await frame.getByTestId("qv-next").click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText("gamma");
+  await frame.getByTestId("qv-prev").click();
+  await expect(rows.first()).toContainText("alpha");
+});
+
+test("a cell template designs a column", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "templated",
+    html:
+      '<qv-select-view query="q" order-by="id">' +
+      '<template column="name"><a href="https://example.internal/i/{row.id}" target="_blank">{cell}</a></template>' +
+      "</qv-select-view>",
+    queries: ITEMS,
+  });
+  const link = frame.getByTestId("cell-name").first().locator("a");
+  await expect(link).toHaveText("alpha");
+  await expect(link).toHaveAttribute("href", "https://example.internal/i/1");
+});
+
+test("a widget query error stays in the widget", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "typo",
+    html: VIEW,
+    queries: { q: "SELECT * FROM no_such_table" },
+  });
+  await expect(frame.getByTestId("qv-error")).toContainText("no_such_table");
+  await expect(page.getByTestId("dashboard-error")).toHaveCount(0);
+});
+
+test("an unknown query name runs nothing", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "unknown",
+    html: '<qv-select-view query="missing"></qv-select-view>',
+    queries: ITEMS,
+  });
+  await expect(frame.getByTestId("qv-error")).toHaveText("Unknown query “missing”");
+});
+
+test("the fields picker stays open on an inside click", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, { name: "fields", html: VIEW, queries: ITEMS });
+  await expect(frame.getByTestId("qv-results").locator("th")).toHaveCount(2);
+  await frame.getByTestId("qv-fields").click();
+  await frame.getByTestId("fields-menu").click();
+  const toggle = frame.locator('[data-testid="field-toggle"][data-col="id"]');
+  await toggle.click();
+  await expect(toggle).toBeVisible();
+  await expect(frame.getByTestId("qv-results").locator("th")).toHaveCount(1);
+});
+
+test("a widget query is not in window.queries", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "owned",
+    html:
+      VIEW +
+      '<div id="keys"></div><script>' +
+      "document.getElementById('keys').textContent = Object.keys(window.queries).join(',');</script>",
+    queries: { ...ITEMS, other: "SELECT 1 AS one" },
+  });
+  await expect(frame.locator("#keys")).toHaveText("other");
+  await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(2);
+});

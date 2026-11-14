@@ -6,7 +6,9 @@ import {
   applyToQueries,
   parseDashboardParams,
   parseParamsRequest,
+  parseWidgetRequest,
   resolveParams,
+  widgetQueryNames,
   type DashboardResults,
   type QueryRunner,
   type ResolvedParam,
@@ -16,6 +18,7 @@ import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
 import { onGitSync } from './gitsync'
 import { activeWorkspace } from './session'
+import { answerWidget, type WidgetSql } from './widgetHost'
 
 // A dashboard names no connection: it runs on the viewing session's.
 export type DashboardPush = {
@@ -52,6 +55,16 @@ const runQueries: QueryRunner = async (queries) => {
   }
 }
 
+// A query a <qv-select-view> names is the widget's alone: it runs per widget,
+// paged, so it is left out of the up-front run and of `window.queries`.
+function withoutWidgetQueries(
+  queries: Record<string, string>,
+  html: string,
+): Record<string, string> {
+  const owned = new Set(widgetQueryNames(html))
+  return Object.fromEntries(Object.entries(queries).filter(([name]) => !owned.has(name)))
+}
+
 // The dashboard page (`/dashboard?name=x`). Picks a saved dashboard (dropdown or
 // `?name=`), resolves its params, runs its queries via /api/runqueries on the
 // session's connection and selected database, and renders the agent HTML in a
@@ -80,6 +93,9 @@ function DashboardView({
   const [results, setResults] = useState<DashboardResults | null>(null)
   // Resolved selectors at load; later changes live in the frame (window.params).
   const [params, setParams] = useState<ResolvedParam[]>([])
+  // The selectors as last resolved (load or set-params): what a widget's
+  // query is substituted with.
+  const resolvedRef = useRef<ResolvedParam[]>([])
   const frameRef = useRef<HTMLIFrameElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -209,9 +225,15 @@ function DashboardView({
         const resolved = await resolveParams(declared, {}, runQueries, identQuote)
         if (cancelled) return
         setParams(resolved)
+        resolvedRef.current = resolved
         // Queries still waiting on an unchosen selector (`default: none`) are
         // held back; the page gets them once it calls setParams.
-        const runnable = applyToQueries(dash.queries, declared, resolved, identQuote)
+        const runnable = applyToQueries(
+          withoutWidgetQueries(dash.queries, dash.html),
+          declared,
+          resolved,
+          identQuote,
+        )
         const r = Object.keys(runnable).length
           ? await runQueries(runnable)
           : { ok: true as const, results: {} }
@@ -237,15 +259,38 @@ function DashboardView({
   useEffect(() => {
     if (!active) return
     const declared = parseDashboardParams(active.params)
+    // One of this dashboard's queries, with the current selections applied.
+    function sqlFor(query: string): WidgetSql {
+      const sql = active?.queries[query]
+      if (sql === undefined) return { message: `Unknown query “${query}”` }
+      if (!sql.trim()) return { message: 'Enter a query.' }
+      const applied = applyToQueries({ [query]: sql }, declared, resolvedRef.current, identQuote)
+      return query in applied
+        ? { sql: applied[query] }
+        : { message: 'Waiting for a parameter choice.' }
+    }
     async function onMessage(e: MessageEvent) {
       const frame = frameRef.current
       if (!frame || e.source !== frame.contentWindow) return
+      if (!active) return
+      const widget = parseWidgetRequest(e.data)
+      if (widget) {
+        const reply = await answerWidget(widget, sqlFor)
+        if (reply) frame.contentWindow?.postMessage(reply, '*')
+        return
+      }
       const values = parseParamsRequest(e.data)
-      if (!values || !active) return
+      if (!values) return
       let answer: Record<string, unknown>
       try {
         const resolved = await resolveParams(declared, values, runQueries, identQuote)
-        const runnable = applyToQueries(active.queries, declared, resolved, identQuote)
+        resolvedRef.current = resolved
+        const runnable = applyToQueries(
+          withoutWidgetQueries(active.queries, active.html),
+          declared,
+          resolved,
+          identQuote,
+        )
         const r = Object.keys(runnable).length
           ? await runQueries(runnable)
           : { ok: true as const, results: {} }
