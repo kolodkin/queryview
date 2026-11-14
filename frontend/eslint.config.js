@@ -5,6 +5,13 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
+// src/core ships on its own: it may import packages and itself, nothing else.
+const noRouter = { group: ['react-router-dom'], message: 'core must stay router-free.' }
+const outside = (pattern) => ({
+  group: [pattern],
+  message: 'core must not import outside src/core.',
+})
+
 export default defineConfig([
   globalIgnores(['dist']),
   {
@@ -23,19 +30,25 @@ export default defineConfig([
     // src/core is the reusable kernel: no routing, no fetching, no app state.
     files: ['src/core/**/*.{ts,tsx}'],
     rules: {
-      'no-restricted-imports': [
+      'no-restricted-imports': ['error', { patterns: [noRouter, outside('../../*')] }],
+      'no-restricted-syntax': [
         'error',
         {
-          patterns: [
-            { group: ['react-router-dom'], message: 'core must stay router-free.' },
-            { group: ['../app/*', '../../app/*', '../../../app/*'], message: 'core must not import the app.' },
-          ],
+          selector: 'Literal[value=/indigo-/], TemplateElement[value.raw=/indigo-/]',
+          message: 'core reads accents from --qv-* tokens, not indigo-* utilities.',
         },
       ],
       'no-restricted-globals': [
         'error',
         { name: 'fetch', message: 'core must not fetch; the app passes data in.' },
       ],
+    },
+  },
+  {
+    // One level shallower: a file directly in src/core leaves it with '../'.
+    files: ['src/core/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [noRouter, outside('../*')] }],
     },
   },
 ])
