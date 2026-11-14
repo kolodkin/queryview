@@ -28,7 +28,7 @@ export function DashboardFrame({
   // Deliberately keyed on the load, not on params: a re-run posts new params
   // into the live frame rather than rebuilding it. The theme is keyed by value
   // so an inline object doesn't reload the frame on every render.
-  const themeKey = JSON.stringify(theme ?? {})
+  const themeKey = JSON.stringify(theme)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const srcDoc = useMemo(() => buildSrcDoc(html, results, params, theme), [html, results, themeKey])
   return (

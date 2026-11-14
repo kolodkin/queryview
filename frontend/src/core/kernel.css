@@ -84,15 +84,20 @@
     cursor: not-allowed;
   }
 
-  .glass-btn-primary {
-    border-radius: 0.75rem;
-    border: 1px solid color-mix(in srgb, var(--qv-accent) 50%, transparent);
+  /* The filled accent shared by the primary button and an active toggle. */
+  .glass-btn-primary,
+  .glass-toggle.is-active {
     color: var(--qv-accent-ink);
     background-image: linear-gradient(
       180deg,
       var(--qv-accent),
       color-mix(in oklab, var(--qv-accent) 70%, black)
     );
+  }
+
+  .glass-btn-primary {
+    border-radius: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--qv-accent) 50%, transparent);
     box-shadow:
       0 10px 26px -10px color-mix(in srgb, var(--qv-accent) 60%, transparent),
       inset 0 1px 0 0 rgba(255, 255, 255, 0.28);
@@ -139,12 +144,6 @@
   /* Filled accent active state. */
   .glass-toggle.is-active {
     border-color: color-mix(in srgb, var(--qv-accent) 60%, transparent);
-    color: var(--qv-accent-ink);
-    background-image: linear-gradient(
-      180deg,
-      var(--qv-accent),
-      color-mix(in oklab, var(--qv-accent) 70%, black)
-    );
     box-shadow:
       0 8px 20px -10px color-mix(in srgb, var(--qv-accent) 60%, transparent),
       inset 0 1px 0 0 rgba(255, 255, 255, 0.25);

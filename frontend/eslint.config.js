@@ -31,6 +31,13 @@ export default defineConfig([
     files: ['src/core/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': ['error', { patterns: [noRouter, outside('../../*')] }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'Literal[value=/indigo-/], TemplateElement[value.raw=/indigo-/]',
+          message: 'core reads accents from --qv-* tokens, not indigo-* utilities.',
+        },
+      ],
       'no-restricted-globals': [
         'error',
         { name: 'fetch', message: 'core must not fetch; the app passes data in.' },
