@@ -3,8 +3,8 @@
 The **Scripts** page (`/scripts`) is a flat SQL textbox: whatever you type runs
 **as written** against the session's selected database — `CREATE`, `INSERT`,
 `ALTER`, `DROP` included — with no pagination wrapper, no saved names, no
-column pickers. [Studio](./query.md) wraps a single `SELECT` for paging,
-saving and presentation; the MCP `run_sql` tool stays read-only (see
+column pickers. A dashboard's [**New query**](./dashboard.md#the-page-dashboard)
+wraps a single `SELECT` for paging, saving and presentation; the MCP `run_sql` tool stays read-only (see
 [Agent pushes](#agent-pushes) for the script tools). Before a
 database is selected the page redirects to Connect.
 
@@ -19,7 +19,7 @@ database is selected the page redirects to Connect.
 | | INSERT INTO t VALUES (1), (2);                         | |
 | | SELECT * FROM t|                                       | |
 | +--------------------------------------------------------+ |
-| [> Run] [>> Run all] [Open in Studio]                      |
+| [> Run] [>> Run all] [Open in Dashboard]                   |
 | 3 statements - 2 rows - 6 ms                               |  <- status line
 | +--------------------------------------------------------+ |
 | | id                                                     | |  <- the last
@@ -29,8 +29,8 @@ database is selected the page redirects to Connect.
 +------------------------------------------------------------+
 ```
 
-- **SQL textarea** — the script. **Min / S / M / L / XL** set its height as on
-  Studio; **Min** collapses it, keeping the text, so the table gets the room.
+- **SQL textarea** — the script. **Min / S / M / L / XL** set its height;
+  **Min** collapses it, keeping the text, so the table gets the room.
 - **▶ Run** (**Ctrl/⌘+Enter**) — runs the **statement under the cursor**, or
   the **selection** when there is one. Just past a `;` on the same line still
   counts as that statement; a blank line below belongs to the next one.
@@ -38,12 +38,11 @@ database is selected the page redirects to Connect.
 - **Status line** — one line per run; the statements are already in the
   textbox, so it never repeats them (see below).
 - **Results table** — the rows of the **last statement run**, when it returned
-  any: the same grid as Studio and the explorer. DDL, DML or a failure as
+  any: the same grid as the dashboard widget and the explorer. DDL, DML or a failure as
   the last statement means no table.
-- **Open in Studio** — enabled while that table shows: loads the last
-  statement's SQL into [Studio](./query.md) for paging, column pickers,
-  saving and CSV, with a fresh sort and column selection. Nothing runs until
-  you click Execute there.
+- **Open in Dashboard** — enabled while that table shows: opens the last
+  statement's SQL as a dashboard [**New query**](./dashboard.md#the-page-dashboard)
+  draft and runs it there, for paging, column pickers, saving and CSV.
 
 ## Statements
 
@@ -77,7 +76,7 @@ A script's line starts with `N statements ·` and `T` is the total.
 
 The 100-row cap exists because the page has no pagination: a bare `SELECT *`
 must not pull a whole table into the browser. Page with your own
-`LIMIT`/`OFFSET`, or hand the statement to Studio. Values arrive in the
+`LIMIT`/`OFFSET`, or open the statement in a dashboard. Values arrive in the
 same JSON shape as every other result
 ([Results & CSV](./query.md#results--csv)).
 
@@ -92,7 +91,7 @@ same JSON shape as every other result
   with no result columns reports its command tag.
 - **DuckDB** — the file is opened **read-write** for the run, while every other
   page opens it read-only. DuckDB refuses a second open of one file with a
-  different mode in the same process, so the explorer and Studio error on
+  different mode in the same process, so the explorer and dashboards error on
   that file until the run finishes. A `:memory:` database is new on every run.
 - **SQLite** — the run opens the file read-write in autocommit mode; every
   other page opens it read-only. Each statement persists as it runs, and a
@@ -134,6 +133,7 @@ Keep an agent off file connections you wouldn't hand it the filesystem for.
 
 ## Related docs
 
-- [query.md](./query.md) — Studio: the paginated, saveable single query.
+- [query.md](./query.md) — querying: pagination, the results grid, CSV.
+- [dashboard.md](./dashboard.md) — dashboards and **New query**.
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [session.md](./session.md) — what a session remembers.

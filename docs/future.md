@@ -35,4 +35,4 @@ each workspace; multi-user sync needs git pulling or a webhook first.
 - [workspace.md](./workspace.md) — workspaces and their git remotes.
 - [session.md](./session.md) — sessions and what they remember.
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
-- [query.md](./query.md) — running queries: pagination, predefined queries, CSV.
+- [query.md](./query.md) — querying: pagination, the results grid, CSV.

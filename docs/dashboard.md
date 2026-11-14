@@ -11,8 +11,9 @@ agent-authored HTML, which renders inside an isolated iframe.
 
 ## The page (`/dashboard`)
 
-`/dashboard` is a top-level page beside Connect (`/connect`) and the query
-workflow (`/queryview`); see [queryview.md](./queryview.md). It has:
+`/dashboard` is a top-level page beside Connect (`/connect`), the
+[explorer](./explorer.md) and [Scripts](./scripts.md); see
+[queryview.md](./queryview.md). It has:
 
 - a **dropdown** of saved dashboards — selecting one sets `?name=<name>`, so the
   URL is shareable and the back button works;
@@ -61,12 +62,12 @@ session id) exposes:
   to the dashboard view and renders it. Without `name` the draft is new:
   **Save** asks the user for its name. `name` must be a saved dashboard, which
   the push edits; the agent cannot name a new one. Only the user's **Save**
-  writes it to the store (mirrors `push_studio`). Returns
+  writes it to the store. Returns
   `{ok, pushed, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
 
 A dashboard never names a [connection](./connect.md): it runs on the
-**viewing** session's connection and selected database, like a saved query. So
+**viewing** session's connection and selected database. So
 a dashboard is portable across sessions, instances and git sync; opened in a
 disconnected session it asks you to connect. Select a database first, or
 fully-qualify tables as `db.table`.
@@ -125,7 +126,7 @@ frame like the rest of the page, and are loaded only by dashboards that use one.
   names: **Fields** (the select-fields and order-by pickers), **Limit**,
   **Offset**, **Previous** / **Next** and **Download CSV**, with the
   [default views](./query.md#default-views-for-complex-types) and
-  [long-value popup](./query.md#long-values) of the query panel. `limit`
+  [long-value popup](./query.md#long-values) of every results grid. `limit`
   (1–1000, default 100), `order-by` (`col` or `col desc`, comma-separated) and
   `fields` (the columns shown at first) set how it opens; changes made in the
   widget last for the visit.
@@ -188,7 +189,7 @@ gives a string where the SQL wants one while `FROM {table}` still gets the
 identifier. The casts are `literal` and `identifier`; anything else is an error.
 An identifier containing the quote character is rejected.
 
-As with [query params](./query.md#query-parameters), `options` and `options_sql`
+`options` and `options_sql`
 are mutually exclusive (a `dimension` needs neither), and the first option is
 chosen for you unless the param says **`default: none`** — then the selector
 starts empty and every query that needs it is held back until a choice is made.
@@ -242,14 +243,15 @@ injected `window.queries` and the [widget](#widgets) replies; the
 `window.queries` JSON has `<` escaped so result data containing `</script>` can't break out
 of the prologue.
 
-Like the rest of the app (and [predefined queries](./query.md)), persisted
-dashboards are **global**, shared via SQLite, and keyed by name. The agent HTML
+Persisted dashboards are shared via SQLite and keyed by name within their
+[workspace](./workspace.md). The agent HTML
 is untrusted and confined to the sandbox; it never sees connection secrets or
 the session id.
 
 ## Related docs
 
 - [queryview.md](./queryview.md) — the pages and the Connect page.
+- [query.md](./query.md) — pagination, the results grid, CSV, the edit lock.
 - [mcp.md](./mcp.md) — arming a session, the session id, the MCP server.
 - [api.md](./api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
 - [connect.md](./connect.md) — connections and their stored database.
