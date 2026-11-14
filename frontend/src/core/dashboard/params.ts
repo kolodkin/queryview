@@ -1,6 +1,5 @@
 // Dashboard-level selectors, declared in a dashboard's `params` and substituted
-// into its queries via `{name}` placeholders — the vocabulary predefined query
-// params use (see ../params/queryParams.ts), extended for dashboards:
+// into its queries via `{name}` placeholders:
 //
 //   value       a literal: {region} -> 'eu'
 //   identifier  a table/column: {field} -> "city" (a literal would make

@@ -183,9 +183,8 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
           </p>
           <ul className="space-y-1 text-slate-200">
             {conflicts.map((c) => (
-              <li key={`${c.kind}/${c.conn_type}/${c.name}`} className="truncate">
+              <li key={`${c.kind}/${c.name}`} className="truncate">
                 <span className="text-xs text-slate-400">{c.kind}</span> {c.name}
-                {c.conn_type && <span className="text-xs text-slate-500"> · {c.conn_type}</span>}
               </li>
             ))}
           </ul>
@@ -287,7 +286,7 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
             </div>
           )}
           <div className="text-xs text-slate-400">
-            Export / import the whole workspace (queries + dashboards) as YAML
+            Export / import the whole workspace (its dashboards) as YAML
           </div>
           <ExportImportControls kind="workspace" compact onImported={() => void reload()} />
           <div className="flex gap-2 pt-1">

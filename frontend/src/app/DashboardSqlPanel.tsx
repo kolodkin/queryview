@@ -5,7 +5,7 @@ import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
 
 // The dashboard's SQL editor. It sits in the app, outside the sandboxed frame:
 // the frame's widgets only ever name a query, so SQL is typed here alone.
-// Focus inside it holds the human edit lock, like Studio and Scripts.
+// Focus inside it holds the human edit lock, like the Scripts page.
 function DashboardSqlPanel({
   queries,
   onChange,

@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { exportPath, filenameFromDisposition } from './yamlio'
 
 describe('exportPath', () => {
-  it('builds a query export URL with all params', () => {
-    expect(
-      exportPath('query', { name: 'top users', connType: 'clickhouse', workspace: 'team' }),
-    ).toBe('/api/export?kind=query&name=top+users&conn_type=clickhouse&workspace=team')
+  it('builds a dashboard export URL with all params', () => {
+    expect(exportPath('dashboard', { name: 'top users', workspace: 'team' })).toBe(
+      '/api/export?kind=dashboard&name=top+users&workspace=team',
+    )
   })
 
   it('omits absent params for a workspace export', () => {

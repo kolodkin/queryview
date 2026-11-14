@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 
 import {
   DashboardFrame,
@@ -170,6 +170,16 @@ function DashboardView({
     }
   }
 
+  // `/dashboard?new` opens a New query draft: where /studio redirects, and how
+  // the Scripts page hands over its last statement (as router state).
+  const location = useLocation()
+  useEffect(() => {
+    if (!searchParams.has('new')) return
+    const sql = (location.state as { sql?: unknown } | null)?.sql
+    newQuery(typeof sql === 'string' ? sql : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
   // A git sync may have imported dashboards from the repo.
   useEffect(() => onGitSync(() => void loadDashboards()), [])
 
@@ -326,8 +336,8 @@ function DashboardView({
     frame.contentWindow?.postMessage(answer, '*')
   }
 
-  // Unsaved scratch: one widget over one empty query, the SQL panel open.
-  function newQuery() {
+  // Unsaved scratch: one widget over one query, the SQL panel open.
+  function newQuery(sql = '') {
     editedRef.current = null
     setLocalPush({
       name: '',
@@ -335,7 +345,7 @@ function DashboardView({
       html:
         '<style>body{margin:0;background:#0c1124}</style>' +
         '<qv-select-view query="main"></qv-select-view>',
-      queries: { main: '' },
+      queries: { main: sql },
       params: [],
     })
     setSearchParams({})
@@ -416,7 +426,7 @@ function DashboardView({
         <button
           type="button"
           data-testid="dashboard-new-query"
-          onClick={newQuery}
+          onClick={() => newQuery()}
           className="glass-btn px-3 py-2 text-sm font-medium"
         >
           New query

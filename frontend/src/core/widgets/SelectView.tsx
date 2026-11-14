@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { renderCellTemplate } from '../cells/cellTemplate'
-import { renderCell } from '../cells/cellViewYaml'
+import { renderDefaultCell } from '../cells/defaultCell'
 import type { WidgetReply } from '../dashboard/widgetChannel'
 import { FieldPickers, type Field, type OrderCol } from '../presentation/FieldPickers'
 import { shownColumnIndices } from '../presentation/presentation'
@@ -245,7 +245,7 @@ export function SelectView({
                   }}
                 />
               ) : (
-                renderCell(col, value, {}, row, columns, colTypes)
+                renderDefaultCell(col, value, colTypes)
               )
             }
           />

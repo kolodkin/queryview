@@ -39,7 +39,7 @@ export type SessionPatch = { url?: string; workspace?: string; table?: string }
 // tests that wait on a beat don't idle for the full interval.
 const HEARTBEAT_MS = Number(import.meta.env.VITE_HEARTBEAT_MS) || 10_000
 // Flushes queued view state after a pause in editing. A backstop, not the main
-// mechanism — the query panel flushes on focus-out and `pagehide` beacons what
+// mechanism — an editor flushes on focus-out and `pagehide` beacons what
 // is still pending — so a tab that dies mid-edit loses at most what was typed
 // since its last pause.
 const IDLE_MS = 5_000
@@ -101,7 +101,7 @@ export function sessionId(): string | null {
 }
 
 // The workspace the attached session is on. Call sites that only need the name
-// — scoping predefined queries, dashboards, export/import — read it here rather
+// — scoping dashboards, export/import — read it here rather
 // than threading it through props.
 export function activeWorkspace(): string {
   // Empty before attach: the backend then uses its fallback workspace.
