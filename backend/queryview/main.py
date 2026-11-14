@@ -827,7 +827,12 @@ async def api_not_found(rest: str):
     return JSONResponse({"error": "not found"}, status_code=404)
 
 
-async def _serve_static(full_path: str):
+# Vite names everything under assets/ by content, and the app asks for the
+# widget bundle as /widgets.js?v=<content hash>: either can be cached for good.
+_FOREVER = {"Cache-Control": "public, max-age=31536000, immutable"}
+
+
+async def _serve_static(full_path: str, versioned: bool = False):
     """A built file, or index.html for a client-side route. A missing path with
     a file extension is a missing file, not a route: 404, so a broken build
     fails loudly instead of handing a script the app's HTML."""
@@ -838,14 +843,18 @@ async def _serve_static(full_path: str):
     except ValueError:
         return JSONResponse({"error": "not found"}, status_code=404)
     if candidate.is_file():
-        return FileResponse(candidate)
+        cached = versioned or full_path.startswith("assets/")
+        return FileResponse(candidate, headers=_FOREVER if cached else None)
     if candidate.suffix:
         return JSONResponse({"error": "not found"}, status_code=404)
     return FileResponse(root / "index.html")
 
 
 if SERVE_STATIC:
-    app.get("/{full_path:path}")(_serve_static)
+
+    @app.get("/{full_path:path}")
+    async def spa(full_path: str, v: str | None = None):
+        return await _serve_static(full_path, v is not None)
 
 else:
 

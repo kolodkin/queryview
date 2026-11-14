@@ -126,7 +126,13 @@ export function SelectView({
   }, [run, page])
 
   // A param change or an edited query: back to the first page.
-  useEffect(() => onParamsResults(() => setPage((p) => ({ ...p, offset: 0 }))), [])
+  useEffect(
+    () =>
+      onParamsResults((queries) => {
+        if (!queries || queries.includes(query)) setPage((p) => ({ ...p, offset: 0 }))
+      }),
+    [query],
+  )
 
   async function describe() {
     const reply = await requestHost<Extract<WidgetReply, { type: 'widget-fields' }>>({

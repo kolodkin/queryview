@@ -140,6 +140,8 @@ function DashboardView({
   // The SQL as last run (load or Execute). The frame's widgets and param
   // re-runs use this, so a half-typed edit in the SQL panel never runs.
   const executedRef = useRef<Record<string, string>>({})
+  // The page-query results the frame holds as `window.queries`.
+  const shownRef = useRef<DashboardResults>({})
   // The open dashboard with unsaved SQL-panel edits, or null.
   const editedRef = useRef<DashboardPush | null>(null)
   const [showSql, setShowSql] = useState(() => localPush !== null)
@@ -297,6 +299,7 @@ function DashboardView({
         if (cancelled) return
         if (r.ok) {
           setResults(r.results)
+          shownRef.current = r.results
           setLoadSeq((n) => n + 1)
         } else setError(r.message)
       } catch (e) {
@@ -315,9 +318,12 @@ function DashboardView({
   // Re-run the open dashboard's own queries, as last executed, and build the
   // message the frame expects. `values` are fresh selections to resolve; null
   // keeps the current ones (the SQL changed, not the params).
+  // `only` limits the run to those queries (the ones Execute changed); the
+  // frame keeps the rest, and only widgets over those re-query.
   async function rerun(
     dash: DashboardPush,
     values: Record<string, string> | null,
+    only: string[] | null = null,
   ): Promise<Record<string, unknown>> {
     const declared = parseDashboardParams(dash.params)
     let resolved = resolvedRef.current
@@ -326,10 +332,19 @@ function DashboardView({
         resolved = await resolveParams(declared, values, runQueries, identQuote)
         resolvedRef.current = resolved
       }
-      const r = await runOwnQueries(executedRef.current, dash.html, declared, resolved, identQuote)
-      return r.ok
-        ? { type: 'params-results', ok: true, results: r.results, params: resolved }
-        : { type: 'params-results', ok: false, message: r.message, params: resolved }
+      const executed = executedRef.current
+      const queries = only ? Object.fromEntries(only.map((n) => [n, executed[n]])) : executed
+      const r = await runOwnQueries(queries, dash.html, declared, resolved, identQuote)
+      if (!r.ok) return { type: 'params-results', ok: false, message: r.message, params: resolved }
+      // window.queries is replaced whole: keep what this run left alone.
+      shownRef.current = only ? { ...shownRef.current, ...r.results } : r.results
+      return {
+        type: 'params-results',
+        ok: true,
+        results: shownRef.current,
+        params: resolved,
+        queries: only,
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to run queries.'
       return { type: 'params-results', ok: false, message, params: [] }
@@ -351,13 +366,16 @@ function DashboardView({
   // it, so the page keeps its state; its widgets re-query on the same message.
   async function execute() {
     if (!active) return
+    const before = executedRef.current
+    const changed = Object.keys(active.queries).filter((n) => active.queries[n] !== before[n])
     executedRef.current = active.queries
     const frame = frameRef.current
     if (!frame) {
       setReloadNonce((n) => n + 1)
       return
     }
-    const answer = await rerun(active, null)
+    // Nothing edited: Execute refreshes everything.
+    const answer = await rerun(active, null, changed.length ? changed : null)
     // The page keeps its last results; the failure shows above it.
     setError(answer.ok ? null : String(answer.message))
     frame.contentWindow?.postMessage(answer, '*')

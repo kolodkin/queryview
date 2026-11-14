@@ -45,8 +45,8 @@ shared link always shows live data.
 ## The SQL panel
 
 **Edit queries** opens an editor for the dashboard's queries, outside the
-frame: pick a query, edit its SQL, and **Execute** re-runs the dashboard with
-the edit. The frame is not reloaded, so the page keeps its state; a failing
+frame: pick a query, edit its SQL, and **Execute** re-runs the queries you
+edited, and the widgets over them (everything, when nothing was edited). The frame is not reloaded, so the page keeps its state; a failing
 query shows its error above it. Until **Execute**, the page and its widgets
 run the SQL as last executed. **Save** persists the edited dashboard.
 

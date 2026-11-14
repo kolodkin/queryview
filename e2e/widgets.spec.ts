@@ -308,3 +308,45 @@ test("a New query draft survives leaving the page and a reload", async ({ page, 
   await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 2");
   await expect(frame.getByTestId("qv-results")).toContainText("beta");
 });
+
+test("Execute re-runs only the queries that were edited", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "partial",
+    html:
+      '<div id="chart"></div><script>' +
+      "const show = (q) => { document.getElementById('chart').textContent = q.chart.name.join(','); };" +
+      "show(window.queries); window.onQueryResults = show;</script>" +
+      '<qv-select-view id="a" query="a"></qv-select-view><qv-select-view id="b" query="b"></qv-select-view>',
+    queries: {
+      chart: "SELECT name FROM items WHERE id = 1",
+      a: "SELECT name FROM items WHERE id = 2",
+      b: "SELECT name FROM items WHERE id = 3",
+    },
+  });
+  await expect(frame.locator("#chart")).toHaveText("alpha");
+  await expect(frame.locator("#b").getByTestId("qv-results")).toContainText("gamma");
+
+  // Record what each Execute sends to the database.
+  const sent: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().endsWith("/api/db/query")) sent.push(r.postDataJSON().query);
+    if (r.url().endsWith("/api/runqueries")) sent.push(...Object.keys(r.postDataJSON().queries));
+  });
+
+  await page.getByTestId("dashboard-edit-queries").click();
+  await page.getByTestId("dash-sql-query").selectOption("a");
+  await page.getByTestId("dash-sql").fill("SELECT name FROM items WHERE id = 1");
+  await page.getByTestId("dash-sql-execute").click();
+  await expect(frame.locator("#a").getByTestId("qv-results")).toContainText("alpha");
+  await expect(frame.locator("#b").getByTestId("qv-results")).toContainText("gamma");
+  await expect(frame.locator("#chart")).toHaveText("alpha");
+  expect(sent).toEqual(["SELECT name FROM items WHERE id = 1"]); // b and chart did not re-run
+
+  sent.length = 0;
+  await page.getByTestId("dash-sql-query").selectOption("chart");
+  await page.getByTestId("dash-sql").fill("SELECT name FROM items WHERE id = 2");
+  await page.getByTestId("dash-sql-execute").click();
+  await expect(frame.locator("#chart")).toHaveText("beta");
+  expect(sent).toEqual(["chart"]); // only the edited page query; neither widget
+});

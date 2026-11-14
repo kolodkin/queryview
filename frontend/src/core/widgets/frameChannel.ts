@@ -24,10 +24,12 @@ export function tellHost(msg: Record<string, unknown>): void {
   window.parent.postMessage(msg, '*')
 }
 
-// The host re-ran the dashboard (a param changed, or its SQL was edited).
-export function onParamsResults(fn: () => void): () => void {
+// The host re-ran the dashboard: a param changed (every query), or Execute ran
+// the edited ones, named in `queries`.
+export function onParamsResults(fn: (queries: string[] | null) => void): () => void {
   const onMessage = (e: MessageEvent) => {
-    if (e.source === window.parent && e.data?.type === 'params-results') fn()
+    if (e.source !== window.parent || e.data?.type !== 'params-results') return
+    fn(Array.isArray(e.data.queries) ? e.data.queries : null)
   }
   window.addEventListener('message', onMessage)
   return () => window.removeEventListener('message', onMessage)

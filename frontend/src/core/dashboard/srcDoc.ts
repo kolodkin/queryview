@@ -38,7 +38,7 @@ export function buildSrcDoc(
     `${SET_PARAMS_HELPER}\n</script>\n` +
     // The <qv-*> tags: loaded only by dashboards that use one, deferred so the
     // tags upgrade once the HTML, their <template> children included, is parsed.
-    (/<qv-/i.test(html) ? '<script defer src="/widgets.js"></script>\n' : '') +
+    (/<qv-/i.test(html) ? `<script defer src="${__WIDGETS_URL__}"></script>\n` : '') +
     html
   )
 }
