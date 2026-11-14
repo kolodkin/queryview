@@ -129,6 +129,9 @@ test("long cells scroll and open in the cell popup", async ({ page, seeds, shot 
   );
   const output = frame.getByTestId("qv-results");
   await expect(output).toBeVisible();
+  // Close the SQL panel so the whole frame, and the popup centred in it, fits
+  // the viewport: a click at its bottom edge is lost now and then.
+  await page.getByTestId("dashboard-edit-queries").click();
 
   const expand = (col: string) => output.locator(`[data-testid="cell-expand"][data-col="${col}"]`);
   await expect(expand("brief")).toHaveCount(0);
