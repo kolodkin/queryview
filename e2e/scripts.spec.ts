@@ -1,9 +1,21 @@
 // The Scripts page (`/scripts`): a flat SQL textbox that runs a `;`-separated
 // script as written — writes included — leaving one status line and, when the
-// last statement returned rows, a results table and an Open-in-Studio button,
+// last statement returned rows, a results table and an Open-in-Dashboard button,
 // for every driver (same seeds as drivers.spec.ts).
 import type { Page } from "@playwright/test";
-import { CASES, CH, DUCK, type DriverCase, chDb, chExec, connect, dbExec, expect, test } from "./fixtures";
+import {
+  CASES,
+  CH,
+  DUCK,
+  type DriverCase,
+  chDb,
+  chExec,
+  connect,
+  dashboardFrame,
+  dbExec,
+  expect,
+  test,
+} from "./fixtures";
 
 // A table the write round-trip creates: unique per run, so parallel workers
 // sharing one database server never collide; dropTable cleans it up.
@@ -47,8 +59,8 @@ for (const c of CASES) {
       const select = `SELECT id, name FROM ${table} ORDER BY id`;
       const script = `${DDL[c.id].replace("{t}", table)};\nINSERT INTO ${table} (id, name) VALUES (1, 'one'), (2, 'two');\n${select}`;
       await page.getByTestId("scripts-input").fill(script);
-      // Nothing has run yet: no rows to hand to Studio.
-      await expect(page.getByTestId("scripts-open-studio")).toBeDisabled();
+      // Nothing has run yet: no rows to hand to a dashboard.
+      await expect(page.getByTestId("scripts-open-dashboard")).toBeDisabled();
       await shot(`${c.id} script typed`);
       await page.getByTestId("scripts-run-all").click();
 
@@ -64,11 +76,14 @@ for (const c of CASES) {
       await expect(output).toContainText("two");
       await shot(`${c.id} script results`);
 
-      // Open in Studio carries that SELECT over.
-      await page.getByTestId("scripts-open-studio").click();
-      await expect(page.getByTestId("query-panel")).toBeVisible();
-      await expect(page.getByTestId("query-input")).toHaveValue(select);
-      await shot(`${c.id} opened in Studio`);
+      // Open in Dashboard carries that SELECT over into a New query draft,
+      // which runs it: the same rows, now pageable.
+      await page.getByTestId("scripts-open-dashboard").click();
+      await expect(page.getByTestId("dash-sql")).toHaveValue(select);
+      const draft = dashboardFrame(page).getByTestId("qv-results");
+      await expect(draft.locator("thead th")).toContainText(["id", "name"]);
+      await expect(draft.locator("tbody tr")).toContainText(["one", "two"]);
+      await shot(`${c.id} opened in Dashboard`);
 
       // Back on Scripts the script is still there; run just the DROP under the cursor.
       await openScriptsPage(page);
@@ -137,7 +152,7 @@ test("run all stops at the first failing statement", async ({ page, seeds, shot 
   await expect(mark).toHaveCount(0);
   // The last statement run failed, so there is no table to show.
   await expect(page.getByTestId("scripts-output")).toHaveCount(0);
-  await expect(page.getByTestId("scripts-open-studio")).toBeDisabled();
+  await expect(page.getByTestId("scripts-open-dashboard")).toBeDisabled();
 });
 
 test("run current runs the statement under the cursor", async ({ page, seeds }) => {

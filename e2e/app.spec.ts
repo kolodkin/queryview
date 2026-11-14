@@ -256,13 +256,13 @@ test("connect page and disconnect", async ({ page, seeds }) => {
 });
 
 test("disconnected lands on connect", async ({ page }) => {
-  // A disconnected session opens on /connect, and Studio sends it there too:
-  // the query panel needs a database. The old /prompt URL redirects.
+  // A disconnected session opens on /connect, and Scripts sends it there too:
+  // a script needs a database. The old /prompt URL redirects.
   await page.goto("/", { waitUntil: "networkidle" });
   await expect(page).toHaveURL(/\/connect$/);
   await expect(page.getByTestId("connect-page")).toBeVisible();
 
-  await page.getByTestId("nav-studio").click();
+  await page.getByTestId("nav-scripts").click();
   await expect(page).toHaveURL(/\/connect$/);
 
   await page.goto("/prompt", { waitUntil: "networkidle" });
