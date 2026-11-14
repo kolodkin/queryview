@@ -15,6 +15,7 @@ export {
 } from './results/rows'
 export { ResultsTable } from './results/ResultsTable'
 export { escapeHtml, substituteCellTemplate } from './cells/cellView'
+export { renderCellTemplate } from './cells/cellTemplate'
 export {
   parseCellViewYaml,
   renderCell,
@@ -54,3 +55,11 @@ export {
   type QueryRunner,
   type ResolvedParam,
 } from './dashboard/params'
+export {
+  parseFieldsAttr,
+  parseOrderByAttr,
+  parseWidgetRequest,
+  widgetQueryNames,
+  type WidgetReply,
+  type WidgetRequest,
+} from './dashboard/widgetChannel'
