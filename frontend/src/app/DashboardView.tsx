@@ -108,6 +108,10 @@ function DashboardView({
   // The open dashboard with unsaved SQL-panel edits, or null.
   const editedRef = useRef<DashboardPush | null>(null)
   const [showSql, setShowSql] = useState(false)
+  // Bumped per load, keying the frame: a draft reloads from memory with the
+  // same HTML and results, which alone would leave the old frame (and its
+  // widgets' rows from the previous database) in place.
+  const [loadSeq, setLoadSeq] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -216,8 +220,9 @@ function DashboardView({
 
     // The selected dashboard; returns null (and sets an error) if it can't load.
     async function loadDashboard(): Promise<DashboardPush | null> {
-      const edited = editedRef.current
-      if (edited && edited.name === name) return edited
+      // Edits belong to the dashboard they were made on.
+      if (editedRef.current && editedRef.current.name !== name) editedRef.current = null
+      if (editedRef.current) return editedRef.current
       if (localPush && localPush.name === name) return localPush
       try {
         const res = await fetch(
@@ -243,7 +248,10 @@ function DashboardView({
       const dash = await loadDashboard()
       if (cancelled || !dash) return
       setActive(dash)
-      executedRef.current = dash.queries
+      // A reload with unexecuted edits (a database switch) keeps them in the
+      // editor and re-runs the SQL as last executed.
+      if (dash !== editedRef.current) executedRef.current = dash.queries
+      const executed = executedRef.current
 
       setLoading(true)
       try {
@@ -255,7 +263,7 @@ function DashboardView({
         // Queries still waiting on an unchosen selector (`default: none`) are
         // held back; the page gets them once it calls setParams.
         const runnable = applyToQueries(
-          withoutWidgetQueries(dash.queries, dash.html),
+          withoutWidgetQueries(executed, dash.html),
           declared,
           resolved,
           identQuote,
@@ -264,8 +272,10 @@ function DashboardView({
           ? await runQueries(runnable)
           : { ok: true as const, results: {} }
         if (cancelled) return
-        if (r.ok) setResults(r.results)
-        else setError(r.message)
+        if (r.ok) {
+          setResults(r.results)
+          setLoadSeq((n) => n + 1)
+        } else setError(r.message)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to run queries.')
       } finally {
@@ -324,12 +334,12 @@ function DashboardView({
   // it, so the page keeps its state; its widgets re-query on the same message.
   async function execute() {
     if (!active) return
+    executedRef.current = active.queries
     const frame = frameRef.current
     if (!frame) {
       setReloadNonce((n) => n + 1)
       return
     }
-    executedRef.current = active.queries
     const answer = await rerun(active, null)
     // The page keeps its last results; the failure shows above it.
     setError(answer.ok ? null : String(answer.message))
@@ -506,7 +516,13 @@ function DashboardView({
       )}
 
       {active && results && (
-        <DashboardFrame ref={frameRef} html={active.html} results={results} params={params} />
+        <DashboardFrame
+          key={loadSeq}
+          ref={frameRef}
+          html={active.html}
+          results={results}
+          params={params}
+        />
       )}
     </div>
   )

@@ -14,18 +14,29 @@ computes. Same driver and same picker as folder mode (see
 [explorer.md](./explorer.md)); the `path` decides the mode. Today file mode has
 no picker and lists only what `SHOW TABLES` returns.
 
+## Dashboards after Studio
+
+Left out when dashboards took over from the Studio page:
+
+- **Rename and delete.** A saved dashboard can only be overwritten. Add
+  **Rename** and a soft **Delete** / **Undelete** / **Purge**, with git sync
+  following a deletion.
+- **Draft survives a reload.** A **New query** draft and unsaved
+  [SQL panel](./dashboard.md#the-sql-panel) edits live in the page: keep them
+  in the [session](./session.md), as the Scripts text is.
+- **Driver scope.** A dashboard's SQL is written for one driver, yet every
+  dashboard lists for every connection. An optional driver on the dashboard
+  would hide it from sessions on another.
+- **More widgets.** Only `<qv-select-view>` and `<qv-param>` exist; a chip is
+  the next candidate.
+- **Widget detection.** A widget's query is found by scanning the HTML for a
+  quoted `query="…"`, so a tag a script creates, or an unquoted attribute,
+  also runs up front with the page's own queries.
+
 ## Deferred
 
 Out of scope by design, not planned yet. Git sync assumes a single user syncs
 each workspace; multi-user sync needs git pulling or a webhook first.
-
-- **Content check when a sync follows a deletion.** The merge reads a query,
-  then soft-deletes it in a second DB session without re-checking its
-  content. A save landing in between is soft-deleted instead of becoming a
-  conflict (it stays recoverable with **Undelete**). With one user this needs
-  their own save to race their own sync. Multi-user sync should make that
-  write a compare-and-set on what the merge read, and report a conflict on a
-  mismatch.
 
 ## Related docs
 
