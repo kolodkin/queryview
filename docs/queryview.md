@@ -65,7 +65,7 @@ redirects here, and `/studio` to a dashboard
   squeezing.
 - **Popovers** — dropdowns and their panels close on a click outside or on
   Escape. Panels holding unsaved input are the exception: the workspace manage
-  form once edited, and the cell-view editor, close through their own buttons.
+  form once edited, closes through its own buttons.
 
 ## Sessions
 

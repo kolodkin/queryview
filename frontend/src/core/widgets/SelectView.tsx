@@ -100,6 +100,7 @@ export function SelectView({
       setBusy(false)
       if (!reply.ok) {
         setError(reply.message)
+        setResult(null)
         return
       }
       setError(null)
@@ -134,8 +135,10 @@ export function SelectView({
       setError(reply.message)
       return
     }
+    const names = reply.fields.map((f) => f.name)
+    // A first describe shows every column; a later one keeps the picks.
+    setVisibleCols(fields.length ? visibleCols.filter((c) => names.includes(c)) : names)
     setFields(reply.fields)
-    setVisibleCols(reply.fields.map((f) => f.name))
   }
 
   const columns = result ? columnNames(result) : []
@@ -218,38 +221,37 @@ export function SelectView({
         />
       )}
 
-      {error ? (
+      {error && (
         <p data-testid="qv-error" className="text-red-300">
           {error}
         </p>
-      ) : (
-        result && (
-          <ResultsTable
-            columns={columns}
-            types={colTypes}
-            rows={result.data}
-            shownIdx={shownColumnIndices(columns, fields, visibleCols)}
-            testid="qv-results"
-            dimmed={busy}
-            renderCell={(col, value, row) =>
-              templates[col] !== undefined ? (
-                <span
-                  data-testid={`cell-${col}`}
-                  dangerouslySetInnerHTML={{
-                    __html: renderCellTemplate(
-                      templates[col],
-                      cellText(value),
-                      row.map(cellText),
-                      columns,
-                    ),
-                  }}
-                />
-              ) : (
-                renderDefaultCell(col, value, colTypes)
-              )
-            }
-          />
-        )
+      )}
+      {result && (
+        <ResultsTable
+          columns={columns}
+          types={colTypes}
+          rows={result.data}
+          shownIdx={shownColumnIndices(columns, fields, visibleCols)}
+          testid="qv-results"
+          dimmed={busy}
+          renderCell={(col, value, row) =>
+            templates[col] !== undefined ? (
+              <span
+                data-testid={`cell-${col}`}
+                dangerouslySetInnerHTML={{
+                  __html: renderCellTemplate(
+                    templates[col],
+                    cellText(value),
+                    row.map(cellText),
+                    columns,
+                  ),
+                }}
+              />
+            ) : (
+              renderDefaultCell(col, value, colTypes)
+            )
+          }
+        />
       )}
     </section>
   )

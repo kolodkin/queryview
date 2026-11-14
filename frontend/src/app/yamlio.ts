@@ -9,7 +9,6 @@ export type ExportKind = 'dashboard' | 'workspace'
 export type ImportResult = {
   ok: boolean
   kind?: ExportKind
-  queries?: number
   dashboards?: number
   message?: string
 }

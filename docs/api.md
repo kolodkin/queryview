@@ -111,8 +111,8 @@ optional `session_id` (see [workspace.md](./workspace.md)).
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [connect.md](./connect.md) — connecting (new and saved connection cards), storage, sessions.
 - [query.md](./query.md) — querying: pagination, the results grid, CSV.
-- [mcp.md](./mcp.md) — pushing queries to a live session over MCP.
+- [mcp.md](./mcp.md) — driving a live session over MCP.
 - [dashboard.md](./dashboard.md) — the dashboard page, `upsert_dashboard`, and the `window.queries` contract.
-- [gitsync.md](./gitsync.md) — backing up and restoring queries and dashboards via git.
+- [gitsync.md](./gitsync.md) — backing up and restoring dashboards via git.
 - [export-import.md](./export-import.md) — YAML export/import of dashboards and workspaces.
 - [workspace.md](./workspace.md) — workspaces: entity ownership and per-workspace remotes.

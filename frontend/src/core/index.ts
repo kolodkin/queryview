@@ -14,7 +14,6 @@ export {
   type QueryRows,
 } from './results/rows'
 export { ResultsTable } from './results/ResultsTable'
-export { escapeHtml, substituteCellTemplate } from './cells/cellView'
 export { renderCellTemplate } from './cells/cellTemplate'
 export { renderDefaultCell } from './cells/defaultCell'
 export {

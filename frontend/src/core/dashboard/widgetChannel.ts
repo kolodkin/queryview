@@ -79,8 +79,10 @@ export function rejectedWidgetReply(data: unknown): WidgetReply | null {
 // leaves these out of the up-front run: each runs for its widget alone.
 export function widgetQueryNames(html: string): string[] {
   const names = new Set<string>()
-  for (const m of html.matchAll(/<qv-select-view\b[^>]*?\bquery=(?:"([^"]*)"|'([^']*)')/g)) {
-    const name = m[1] ?? m[2]
+  // The lookbehind keeps `data-query=` from reading as `query=`.
+  const tag = /<qv-select-view\b[^>]*?(?<![-\w])query\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi
+  for (const m of html.matchAll(tag)) {
+    const name = m[1] ?? m[2] ?? m[3]
     if (name) names.add(name)
   }
   return [...names]

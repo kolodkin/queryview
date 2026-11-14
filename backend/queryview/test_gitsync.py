@@ -652,3 +652,20 @@ def test_restore_of_a_dashboard_missing_meta_names_the_file(git_env, tmp_path):
     with pytest.raises(GitSyncError) as e:
         _run(gitsync.restore(_default_ws(), "dashboard", "gs nometa", ref="no-such-ref"))
     assert e.value.status == 404 and str(e.value) == "dashboard 'gs nometa' not found at no-such-ref"
+
+
+def test_conflicts_of_a_kind_that_no_longer_exists_are_not_reported(git_env):
+    """A state file from before only dashboards synced may list other kinds;
+    nothing could settle those, so they must not show under the warning."""
+    ws = _default_ws()
+    gitsync._save_state(
+        ws,
+        {
+            "agreed": {},
+            "conflicts": [
+                {"kind": "query", "name": "old report", "conn_type": "clickhouse"},
+                {"kind": "dashboard", "name": "sales overview"},
+            ],
+        },
+    )
+    assert gitsync.conflicts(ws) == [{"kind": "dashboard", "name": "sales overview"}]

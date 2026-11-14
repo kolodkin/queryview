@@ -65,8 +65,8 @@ The merge only adds, never overwrites:
 - different, but only because you edited it locally → just an uncommitted
   change, not a conflict.
 
-A sync never removes a row, and ignores a leftover `queries/` directory from
-before saved queries were removed. "Last agreed" is the repo object id each entity had when it
+A sync never removes a row, and ignores anything in the repo outside
+`dashboards/`. "Last agreed" is the repo object id each entity had when it
 was imported, committed, restored or found identical, kept with the conflict
 list in `{data dir}/gitsync/{workspace id}.sync.json`.
 Changing a workspace's remote or branch drops its clone and that file.

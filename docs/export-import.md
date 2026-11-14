@@ -27,7 +27,7 @@ params: # optional selectors, see dashboard.md#dashboard-parameters
 # kind: workspace — everything a workspace owns
 kind: workspace
 dashboards: # list of dashboard entries (as above, minus kind)
-  - { name: ..., connection: ..., html: ..., queries: {} }
+  - { name: ..., html: ..., queries: {} }
 ```
 
 Import upserts by name into the target workspace (same overwrite semantics as

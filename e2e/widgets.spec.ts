@@ -1,6 +1,6 @@
 // Dashboard widgets: the <qv-*> tags an agent drops into dashboard HTML. Once
 // on DuckDB (no service); drivers.spec.ts runs the widget's query path per driver.
-import { DUCK, armRemote, connect, expect, mcpCall, openDashboard, openNewQuery, test } from "./fixtures";
+import { DUCK, armRemote, connect, executeSql, expect, mcpCall, openDashboard, openNewQuery, test } from "./fixtures";
 
 test("qv-param reruns the dashboard", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
@@ -223,4 +223,88 @@ test("a widget pages the executed SQL, not a half-typed edit", async ({ page, se
   await frame.getByTestId("qv-next").click();
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText("gamma");
+});
+
+test("a saved edit is what reopens, not the draft it was saved from", async ({ page, seeds }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openNewQuery(page);
+  await executeSql(page, "SELECT name FROM items WHERE id = 1");
+  page.once("dialog", (d) => d.accept("first"));
+  await page.getByTestId("dashboard-save").click();
+  await expect(page.getByTestId("dashboard-select")).toHaveValue("first");
+
+  await executeSql(page, "SELECT name FROM items WHERE id = 2");
+  await expect(frame.getByTestId("qv-results")).toContainText("beta");
+  const saved = page.waitForResponse((r) => r.url().endsWith("/api/dashboards") && r.request().method() === "POST");
+  await page.getByTestId("dashboard-save").click();
+  await saved;
+
+  await page.getByTestId("dashboard-new-query").click(); // leave, then come back
+  await page.getByTestId("dashboard-select").selectOption("first");
+  await expect(frame.getByTestId("qv-results")).toContainText("beta");
+});
+
+test("saving a draft does not run a half-typed edit", async ({ page, seeds }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openNewQuery(page);
+  await executeSql(page, "SELECT name FROM items WHERE id = 1");
+  await expect(frame.getByTestId("qv-results")).toContainText("alpha");
+  await page.getByTestId("dash-sql").fill("SELECT name FROM items WHERE id = 3"); // not executed
+  page.once("dialog", (d) => d.accept("half"));
+  await page.getByTestId("dashboard-save").click();
+  await expect(page.getByTestId("dashboard-select")).toHaveValue("half");
+  await expect(frame.getByTestId("qv-results")).toContainText("alpha");
+  await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 3");
+});
+
+test("Back from a draft opened by link leaves the dashboard page", async ({ page, seeds }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  await page.getByTestId("nav-scripts").click();
+  await expect(page.getByTestId("scripts-input")).toBeVisible();
+  await page.goto("/studio"); // the old URL opens a New query draft
+  await expect(page.getByTestId("dash-sql")).toBeVisible();
+  await page.goBack();
+  await expect(page.getByTestId("scripts-input")).toBeVisible();
+});
+
+test("Fields keeps the columns already picked", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "picked",
+    html: '<qv-select-view query="q" fields="name"></qv-select-view>',
+    queries: { q: "SELECT id, name FROM items" },
+  });
+  const heads = frame.getByTestId("qv-results").locator("th");
+  await expect(heads).toHaveCount(1);
+  await frame.getByTestId("qv-fields").click();
+  await expect(frame.getByTestId("fields-count")).toHaveText("1/2");
+  await expect(heads).toHaveCount(1);
+});
+
+test("a failed CSV download says why", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "csv-fail",
+    html: '<qv-select-view query="q"></qv-select-view>',
+    queries: { q: "SELECT * FROM no_such_table" },
+  });
+  await expect(frame.getByTestId("qv-error")).toBeVisible();
+  await frame.getByTestId("qv-csv").click();
+  await expect(page.getByTestId("dashboard-error")).toContainText("no_such_table");
+});
+
+test("a New query draft survives leaving the page and a reload", async ({ page, seeds }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openNewQuery(page);
+  await executeSql(page, "SELECT name FROM items WHERE id = 2");
+  await expect(frame.getByTestId("qv-results")).toContainText("beta");
+
+  await page.getByTestId("nav-explorer").click();
+  await page.getByTestId("nav-dashboard").click();
+  await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 2");
+  await expect(frame.getByTestId("qv-results")).toContainText("beta");
+
+  await page.reload();
+  await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 2");
+  await expect(frame.getByTestId("qv-results")).toContainText("beta");
 });

@@ -39,7 +39,7 @@ export function buildSrcDoc(
     `${SET_PARAMS_HELPER}\n</script>\n` +
     // The <qv-*> tags: loaded only by dashboards that use one, and before the
     // HTML so the tags upgrade as they parse.
-    (html.includes('<qv-') ? `<script src="${widgetsSrc}"></script>\n` : '') +
+    (/<qv-/i.test(html) ? `<script src="${widgetsSrc}"></script>\n` : '') +
     html
   )
 }

@@ -106,11 +106,10 @@ you [armed](#arming-a-session).
 - `new_tab(name)` — a session of the agent's own; see [Tabs](#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
 - `git_store` / `git_history` / `git_restore` — back up, list and restore a
-  saved query or dashboard through [workspace git](./gitsync.md).
+  saved dashboard through [workspace git](./gitsync.md).
 
-The pushed query runs through the normal `POST /api/db/query`, so all of
-that path's pagination and order-by safety applies; the push layer never talks
-to ClickHouse directly.
+A pushed dashboard's queries run through the browser's own `/api/runqueries`
+and `/api/db/query` calls; the push layer never talks to a database.
 
 ## Naming and saving
 

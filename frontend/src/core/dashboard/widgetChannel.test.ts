@@ -72,6 +72,12 @@ describe('widgetQueryNames', () => {
     expect(widgetQueryNames(html)).toEqual(['sales', 'top'])
     expect(widgetQueryNames('<canvas id="c"></canvas>')).toEqual([])
   })
+
+  it('reads the attribute however it is written, and only that attribute', () => {
+    expect(widgetQueryNames('<qv-select-view query=sales>')).toEqual(['sales'])
+    expect(widgetQueryNames('<QV-SELECT-VIEW Query = "sales">')).toEqual(['sales'])
+    expect(widgetQueryNames('<qv-select-view data-query="totals" query="main">')).toEqual(['main'])
+  })
 })
 
 describe('presentation attributes', () => {

@@ -276,7 +276,10 @@ def _load_state(ws: WorkspaceRec) -> dict[str, Any]:
         state = json.loads(_state_path(ws).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         state = {}
-    return {"agreed": state.get("agreed") or {}, "conflicts": state.get("conflicts") or []}
+    # A state file written when other kinds existed may still list them: nothing
+    # here could resolve those, so they are not reported.
+    kept = [c for c in state.get("conflicts") or [] if c.get("kind") == "dashboard"]
+    return {"agreed": state.get("agreed") or {}, "conflicts": kept}
 
 
 def _save_state(ws: WorkspaceRec, state: dict[str, Any]) -> None:

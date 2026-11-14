@@ -19,7 +19,7 @@ import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
 import DashboardSqlPanel from './DashboardSqlPanel'
 import { onGitSync } from './gitsync'
-import { activeWorkspace } from './session'
+import { activeWorkspace, patchView, viewState } from './session'
 import { answerWidget, type WidgetSql } from './widgetHost'
 
 // A dashboard names no connection: it runs on the viewing session's.
@@ -55,6 +55,24 @@ const runQueries: QueryRunner = async (queries) => {
   } catch {
     return { ok: false, message: 'Failed to run queries.' }
   }
+}
+
+// The frame paints its own backdrop; match the app's instead of white.
+const NEW_QUERY_HTML =
+  '<style>body{margin:0;background:#0c1124}</style>' +
+  '<qv-select-view query="main"></qv-select-view>'
+
+// The session view holding the unsaved New query draft, so it survives leaving
+// the page and a reload (docs/session.md).
+const VIEW = 'dashboard'
+
+// The draft the session remembers, when the page opens without a dashboard.
+function restoredDraft(): DashboardPush | null {
+  const params = new URLSearchParams(window.location.search)
+  if (params.has('name') || params.has('new')) return null
+  const d = viewState(VIEW).draft as { html?: unknown; queries?: unknown } | null | undefined
+  if (!d || typeof d.html !== 'string' || !d.queries || typeof d.queries !== 'object') return null
+  return { name: '', html: d.html, queries: d.queries as Record<string, string>, params: [] }
 }
 
 // A query a <qv-select-view> names is the widget's alone: it runs per widget,
@@ -93,7 +111,7 @@ function DashboardView({
 
   const [dashboards, setDashboards] = useState<DashboardSummary[]>([])
   // Captured locally so consuming the shell push doesn't re-trigger resolve.
-  const [localPush, setLocalPush] = useState<DashboardPush | null>(null)
+  const [localPush, setLocalPush] = useState<DashboardPush | null>(() => restoredDraft())
   const [active, setActive] = useState<DashboardPush | null>(null)
   const [results, setResults] = useState<DashboardResults | null>(null)
   // Resolved selectors at load; later changes live in the frame (window.params).
@@ -107,7 +125,7 @@ function DashboardView({
   const executedRef = useRef<Record<string, string>>({})
   // The open dashboard with unsaved SQL-panel edits, or null.
   const editedRef = useRef<DashboardPush | null>(null)
-  const [showSql, setShowSql] = useState(false)
+  const [showSql, setShowSql] = useState(() => localPush !== null)
   // Bumped per load, keying the frame: a draft reloads from memory with the
   // same HTML and results, which alone would leave the old frame (and its
   // widgets' rows from the previous database) in place.
@@ -163,8 +181,12 @@ function DashboardView({
       }
       await loadDashboards()
       if (!active.name) {
-        editedRef.current = null
-        setLocalPush({ ...active, name: saveAs })
+        // Same object in both: the reload under the new name keeps running
+        // the SQL as last executed, not an unexecuted edit just saved.
+        const saved = { ...active, name: saveAs }
+        editedRef.current = saved
+        setLocalPush(saved)
+        patchView(VIEW, { draft: null })
         setSearchParams({ name: saveAs })
       }
     } catch {
@@ -180,7 +202,7 @@ function DashboardView({
   useEffect(() => {
     if (!searchParams.has('new')) return
     const sql = (location.state as { sql?: unknown } | null)?.sql
-    newQuery(typeof sql === 'string' ? sql : '')
+    newQuery(typeof sql === 'string' ? sql : '', true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
@@ -328,6 +350,8 @@ function DashboardView({
     const next = { ...active, queries: { ...active.queries, [query]: sql } }
     editedRef.current = next
     setActive(next)
+    // Queued; written when the SQL panel is left (its edit lock flushes).
+    if (!next.name) patchView(VIEW, { draft: { html: next.html, queries: next.queries } })
   }
 
   // Execute from the SQL panel: post into the live frame rather than rebuild
@@ -347,18 +371,17 @@ function DashboardView({
   }
 
   // Unsaved scratch: one widget over one query, the SQL panel open.
-  function newQuery(sql = '') {
+  function newQuery(sql = '', replace = false) {
     editedRef.current = null
     setLocalPush({
       name: '',
-      // The frame paints its own backdrop; match the app's instead of white.
-      html:
-        '<style>body{margin:0;background:#0c1124}</style>' +
-        '<qv-select-view query="main"></qv-select-view>',
+      html: NEW_QUERY_HTML,
       queries: { main: sql },
       params: [],
     })
-    setSearchParams({})
+    patchView(VIEW, { draft: { html: NEW_QUERY_HTML, queries: { main: sql } } })
+    // From `?new`, replace it: Back must not land on it and reset the draft.
+    setSearchParams({}, { replace })
     setShowSql(true)
   }
 
@@ -385,7 +408,7 @@ function DashboardView({
       if (!active) return
       const widget = parseWidgetRequest(e.data)
       if (widget) {
-        const reply = await answerWidget(widget, sqlFor)
+        const reply = await answerWidget(widget, sqlFor, setError)
         if (reply) frame.contentWindow?.postMessage(reply, '*')
         return
       }
@@ -418,6 +441,11 @@ function DashboardView({
           value={name}
           onChange={(e) => {
             const next = e.target.value
+            // Leaving a dashboard drops its unsaved state: the store is what
+            // a pick opens.
+            editedRef.current = null
+            setLocalPush(null)
+            patchView(VIEW, { draft: null })
             if (next) setSearchParams({ name: next })
             else setSearchParams({})
           }}

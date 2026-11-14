@@ -13,7 +13,7 @@ type Props = {
   onImported: () => void
 }
 
-// Export / Import pair for one entity (query or dashboard) or a whole
+// Export / Import pair for one dashboard or a whole
 // workspace. Export downloads the *saved* DB state as a YAML file; Import
 // reads a picked YAML file and upserts whatever the file's `kind` declares.
 export default function ExportImportControls({ kind, name, disabled, compact, onImported }: Props) {

@@ -14,24 +14,22 @@ computes. Same driver and same picker as folder mode (see
 [explorer.md](./explorer.md)); the `path` decides the mode. Today file mode has
 no picker and lists only what `SHOW TABLES` returns.
 
-## Dashboards after Studio
-
-Left out when dashboards took over from the Studio page:
+## Dashboards
 
 - **Rename and delete.** A saved dashboard can only be overwritten. Add
   **Rename** and a soft **Delete** / **Undelete** / **Purge**, with git sync
   following a deletion.
-- **Draft survives a reload.** A **New query** draft and unsaved
-  [SQL panel](./dashboard.md#the-sql-panel) edits live in the page: keep them
-  in the [session](./session.md), as the Scripts text is.
+- **Unsaved edits survive a reload.** A **New query** draft is kept in the
+  [session](./session.md); [SQL panel](./dashboard.md#the-sql-panel) edits to
+  a saved dashboard are not, and are lost on leaving it.
 - **Driver scope.** A dashboard's SQL is written for one driver, yet every
   dashboard lists for every connection. An optional driver on the dashboard
   would hide it from sessions on another.
 - **More widgets.** Only `<qv-select-view>` and `<qv-param>` exist; a chip is
   the next candidate.
-- **Widget detection.** A widget's query is found by scanning the HTML for a
-  quoted `query="…"`, so a tag a script creates, or an unquoted attribute,
-  also runs up front with the page's own queries.
+- **Script-created widgets.** The widget bundle loads, and a widget's query is
+  kept out of the up-front run, only when the tag is written in the HTML: one
+  a script creates is not seen.
 
 ## Deferred
 

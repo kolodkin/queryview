@@ -18,7 +18,9 @@ agent-authored HTML, which renders inside an isolated iframe.
 - a **dropdown** of saved dashboards — selecting one sets `?name=<name>`, so the
   URL is shareable and the back button works;
 - **New query** — an unsaved draft holding one [`<qv-select-view>`](#widgets)
-  over an empty query, for ad-hoc SQL; **Save** asks for its name;
+  over one query, for ad-hoc SQL; **Save** asks for its name. The
+  [session](./session.md) remembers the draft's SQL, so it survives leaving
+  the page and a reload; picking a dashboard discards it;
 - **Edit queries** — the [SQL panel](#the-sql-panel);
 - a **sandboxed iframe** that renders the selected dashboard.
 

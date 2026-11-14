@@ -182,7 +182,7 @@ def test_folders_past_the_limit_stay_reachable_by_path(tmp_path):
     r = c.post("/api/db/connect", json=body).json()
     assert "d12" not in r["databases"] and r["databases_truncated"] is True
 
-    # A saved query or link can still select d12/deep: it is checked by path.
+    # A saved dashboard or link can still select d12/deep: it is checked by path.
     r = c.post("/api/db/database", json={"database": "d12/deep"}).json()
     assert r["ok"] and r["databases"] == [".", "d12", "d12/deep"]
     assert [t["name"] for t in c.get("/api/db/tables").json()["tables"]] == ["a.csv"]

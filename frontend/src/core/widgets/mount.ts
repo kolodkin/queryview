@@ -3,7 +3,7 @@
 // the agent's CSS and ours cannot touch each other.
 
 import type { ReactNode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createRoot, type Root } from 'react-dom/client'
 
 import css from '../../index.css?inline'
 
@@ -24,16 +24,23 @@ export function defineWidget(
   display: 'block' | 'inline-block' = 'block',
 ): void {
   class Widget extends HTMLElement {
+    private root: Root | null = null
+    private queued = false
     connectedCallback() {
-      if (this.shadowRoot) return
+      if (this.root || this.queued) return
+      this.queued = true
       const mount = () => {
+        this.queued = false
+        if (!this.isConnected) return
         registerProperties()
-        const shadow = this.attachShadow({ mode: 'open' })
+        // Re-attached after a removal: the shadow root is still there.
+        const shadow = this.shadowRoot ?? this.attachShadow({ mode: 'open' })
         const style = document.createElement('style')
         style.textContent = `${css}\n:host{display:${display};color-scheme:dark}`
-        const root = document.createElement('div')
-        shadow.append(style, root)
-        createRoot(root).render(render(this))
+        const el = document.createElement('div')
+        shadow.replaceChildren(style, el)
+        this.root = createRoot(el)
+        this.root.render(render(this))
       }
       // The bundle loads before the page's HTML, so the tag upgrades before its
       // children (the <template>s) are parsed: wait for the document.
@@ -42,6 +49,11 @@ export function defineWidget(
       } else {
         mount()
       }
+    }
+    // A page that re-renders its HTML must not leave the old widget querying.
+    disconnectedCallback() {
+      this.root?.unmount()
+      this.root = null
     }
   }
   customElements.define(tag, Widget)

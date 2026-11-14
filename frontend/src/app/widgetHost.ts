@@ -26,17 +26,22 @@ async function post(path: string, body: unknown): Promise<Record<string, unknown
 export async function answerWidget(
   req: WidgetRequest,
   sqlFor: (query: string) => WidgetSql,
+  // A CSV request has no reply to carry its failure; the host shows it.
+  onCsvError: (message: string) => void,
 ): Promise<WidgetReply | null> {
   const resolved = sqlFor(req.query)
-  const failed = (message: string): WidgetReply | null =>
-    req.type === 'widget-csv'
-      ? null
-      : {
-          type: req.type === 'widget-query' ? 'widget-result' : 'widget-fields',
-          id: req.id,
-          ok: false,
-          message,
-        }
+  const failed = (message: string): WidgetReply | null => {
+    if (req.type === 'widget-csv') {
+      onCsvError(message)
+      return null
+    }
+    return {
+      type: req.type === 'widget-query' ? 'widget-result' : 'widget-fields',
+      id: req.id,
+      ok: false,
+      message,
+    }
+  }
   if ('message' in resolved) return failed(resolved.message)
   const query = resolved.sql
 
@@ -49,7 +54,8 @@ export async function answerWidget(
   const page = { query, limit: req.limit, offset: req.offset, order_by: req.orderBy }
   if (req.type === 'widget-csv') {
     const d = await post('/api/db/query', { ...page, format: 'csv' })
-    if (d.ok) downloadText('query.csv', String(d.output ?? ''), 'text/csv')
+    if (!d.ok) return failed(String(d.message ?? 'download failed'))
+    downloadText('query.csv', String(d.output ?? ''), 'text/csv')
     return null
   }
   const d = await post('/api/db/query', page)
