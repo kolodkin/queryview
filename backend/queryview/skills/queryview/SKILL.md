@@ -1,6 +1,6 @@
 ---
 name: queryview
-description: Drive a live QueryView browser tab over MCP — open a tab, pick a connection, run SQL with run_script (writes applied once), and push the final script, or a Studio query or dashboard when asked, for the user to see.
+description: Drive a live QueryView browser tab over MCP — open a tab, pick a connection, run SQL with run_script (writes applied once), and push the final script, or a dashboard when asked, for the user to see.
 ---
 
 # QueryView
@@ -28,30 +28,7 @@ statement's result to you (`run_sql` is the read-only alternative).
 
 If a push fails, reply with the SQL.
 
-Use `push_studio` or `push_dashboard` only when the user asks for them.
-
-## Studio results
-
-When the user asks for a Studio query, push a designed result, not a raw dump:
-
-- `fields`: only the columns that answer the question, in reading order.
-- `order_by`: the order the user cares about (e.g. `[{"name": "revenue", "dir": "DESC"}]`).
-- `limit`: a page that fits the question; aggregate in SQL instead of pushing raw rows.
-- `cell_view`: YAML, one entry per column, `type: link` or `type: custom` with a `value`
-  template; `{cell}` is the value, `{row.<column>}` another column of the same row.
-  Substituted values are HTML-escaped; the template HTML (inline `style` included) is
-  rendered as written.
-
-Use `custom` for chips on categorical columns (status, severity, environment, type):
-
-```yaml
-status:
-  type: custom
-  value: <span style="padding:1px 8px;border-radius:999px;font-size:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#e2e8f0">{cell}</span>
-```
-
-Other good uses: right-aligned numbers with `font-variant-numeric:tabular-nums`, small
-inline bars (`width:{row.pct}%`), a `link` to the record in its own system.
+Use `push_dashboard` only when the user asks for it.
 
 ## Dashboards
 
@@ -71,7 +48,7 @@ Two tags save hand-drawing a table or a selector; place them anywhere in the HTM
 a `<template column>` designs a column with `{cell}` and `{row.<column>}`. Put
 placeholders in text or inside `href` / `src` only.
 
-Never name a new query or dashboard: push it unnamed and the user names it on Save.
+Never name a new dashboard: push it unnamed and the user names it on Save.
 `name` only takes one that is already saved, to edit it.
 You cannot save: when asked to, push it and tell the user to click **Save**.
 

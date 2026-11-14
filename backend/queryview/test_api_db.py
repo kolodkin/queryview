@@ -33,21 +33,6 @@ def test_connect_validation_error_is_400():
     assert r.status_code == 400
 
 
-def test_predefined_query_save_rejects_malformed_cell_view():
-    c = TestClient(app)
-    body = {"query_name": "cv bad", "type": "clickhouse", "query": "SELECT 1"}
-    r = c.post("/api/predefined-queries", json={**body, "cell_view": "col: [unclosed"})
-    assert r.status_code == 400 and "invalid cell_view" in r.json()["message"]
-    # A non-string cell_view is rejected, not silently dropped.
-    r = c.post("/api/predefined-queries", json={**body, "cell_view": {"col": {"type": "link"}}})
-    assert r.status_code == 400
-    # The valid shape still saves.
-    ok = c.post(
-        "/api/predefined-queries", json={**body, "cell_view": "col:\n  type: link\n  value: https://x/{cell}\n"}
-    )
-    assert ok.json() == {"ok": True}
-
-
 def test_old_clickhouse_path_is_gone():
     c = TestClient(app)
     assert c.post("/api/clickhouse/connect", json={}).status_code == 404

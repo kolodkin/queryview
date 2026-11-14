@@ -1,5 +1,4 @@
-"""Workspace domain: named git-sync targets that own predefined queries and
-dashboards. The remote URL may embed a token, so it is encrypted at rest with
+"""Workspace domain: named git-sync targets that own dashboards. The remote URL may embed a token, so it is encrypted at rest with
 connect.py's AES-GCM helpers and never returned by list_workspaces. Docs:
 docs/workspace.md."""
 
@@ -9,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from sqlalchemy import and_, column, delete, exists, func, table, update
+from sqlalchemy import column, delete, exists, func, table, update
 from sqlalchemy import select as sa_select
 from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -72,8 +71,6 @@ def _valid_name(name: str) -> str:
 # Sessions name their workspace. This module can't import sessions (sessions ->
 # connect -> here), so it reaches the table through a bare table clause.
 _sessions_table = table("sessions", column("workspace"))
-# Deleted queries (docs/query.md) don't keep a workspace alive; they go with it.
-_queries_table = table("predefined_queries", column("workspace_id"), column("deleted_at"))
 _dashboards_table = table("dashboards", column("workspace_id"))
 
 
@@ -181,18 +178,11 @@ async def update_workspace(
         await s.commit()
 
 
-def _owned(workspace_id: int):
-    """What keeps a workspace alive: a WHERE clause each for its live queries
-    and its dashboards. Bare table clauses, so no entity-module imports."""
-    q, d = _queries_table.c, _dashboards_table.c
-    return and_(q.workspace_id == workspace_id, q.deleted_at.is_(None)), d.workspace_id == workspace_id
-
-
 async def _entity_count(s: AsyncSession, workspace_id: int) -> int:
-    """How many entities the workspace still owns."""
-    queries, dashboards = (sa_select(func.count()).where(c).scalar_subquery() for c in _owned(workspace_id))
+    """How many entities (dashboards) the workspace still owns."""
     conn = await s.connection()  # the session's own transaction
-    return int((await conn.execute(sa_select(queries + dashboards))).scalar() or 0)
+    count = sa_select(func.count()).where(_dashboards_table.c.workspace_id == workspace_id)
+    return int((await conn.execute(count)).scalar() or 0)
 
 
 async def delete_workspace(name: str) -> str:
@@ -216,17 +206,11 @@ async def delete_workspace(name: str) -> str:
         if others is None:
             raise WorkspaceError("can't delete the last workspace", status=409)
         moved_to = others.name  # read before the commit expires it
-        # Purge deleted queries, then delete the row only if still empty, in one
-        # transaction: the count above ran before the first write, so an entity
-        # saved since keeps the workspace. Live queries are never purged.
-        await s.exec(
-            delete(_queries_table).where(
-                _queries_table.c.workspace_id == row.id, _queries_table.c.deleted_at.is_not(None)
-            )
-        )
-        still_empty = [~exists().where(c) for c in _owned(row.id)]  # type: ignore[arg-type]
-        gone = await s.exec(delete(Workspace).where(col(Workspace.id) == row.id, *still_empty))
-        if gone.rowcount != 1:  # the purge rolls back with the session
+        # Delete the row only if still empty: the count above ran before the
+        # first write, so an entity saved since keeps the workspace.
+        still_empty = ~exists().where(_dashboards_table.c.workspace_id == row.id)
+        gone = await s.exec(delete(Workspace).where(col(Workspace.id) == row.id, still_empty))
+        if gone.rowcount != 1:
             raise WorkspaceError(f"workspace {name!r} is no longer empty; delete its entities first", status=409)
         await s.exec(_move_sessions(name, moved_to))
         await s.commit()

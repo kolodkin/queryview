@@ -11,7 +11,6 @@ from __future__ import annotations
 # Import for side effects: register all tables on SQLModel.metadata.
 import queryview.connect  # noqa: F401
 import queryview.dashboards  # noqa: F401
-import queryview.queries  # noqa: F401
 from alembic import context
 from sqlalchemy import create_engine, pool
 from sqlmodel import SQLModel

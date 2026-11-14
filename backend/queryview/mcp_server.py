@@ -1,5 +1,5 @@
 """The MCP layer: an MCPServer (mounted by main.py at /mcp) whose tools push
-queries/scripts/dashboards to a live QueryView browser session, delegating to the
+scripts/dashboards to a live QueryView browser session, delegating to the
 in-process remote.py hub."""
 
 from __future__ import annotations
@@ -28,7 +28,6 @@ from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
 from .dashboards import _dashboard_event, get_dashboard
 from .mcp_skills import SkillsExtension
-from .queries import get_predefined_query, list_predefined_queries_view
 from .validation import dashboard_params_error
 
 mcp = MCPServer(
@@ -36,77 +35,18 @@ mcp = MCPServer(
     description="Local, agent-controlled SQL workbench for ClickHouse, Postgres, DuckDB and SQLite.",
     instructions=(
         "Open your own tab with new_tab unless given a session id. Run SQL, reads and writes, with run_script "
-        "(apply writes once), then push_script the final SQL with run=False. Use push_studio or "
-        "push_dashboard only when asked. Full workflow: the queryview skill (skill://queryview/SKILL.md)."
+        "(apply writes once), then push_script the final SQL with run=False. Use push_dashboard "
+        "only when asked. Full workflow: the queryview skill (skill://queryview/SKILL.md)."
     ),
     extensions=[SkillsExtension()],
 )
 
 
 @mcp.tool()
-async def push_studio(
-    session_id: str,
-    query: str,
-    limit: int = 100,
-    offset: int = 0,
-    order_by: list[dict[str, Any]] | None = None,
-    fields: list[str] | None = None,
-    cell_view: str | None = None,
-    name: str | None = None,
-) -> dict[str, Any]:
-    """Push a SQL query to a live QueryView browser session.
-
-    The targeted browser fills its query panel and auto-runs the query against
-    the session's own connection. Get the `session_id` from the QueryView UI:
-    the agent icon next to the connection status pill, after enabling "Allow
-    remote control"; without one, open a tab of your own with new_tab.
-    To explore data first, use run_script with the same id.
-    A session on a locked connection (see session_info) refuses every push and
-    query with "connection is locked"; use_connection another one.
-
-    Args:
-        session_id: The session id shown in the QueryView popover.
-        query: The SQL to run.
-        limit: Page size (default 100).
-        offset: Row offset (default 0).
-        order_by: Optional sort, e.g. [{"name": "id", "dir": "DESC"}].
-        fields: Optional column names to display; omit to show all columns.
-        cell_view: Optional raw cell-view YAML (column -> {type, value}) applied
-            to this pushed result only, e.g. to render a column as a custom
-            HTML token. Same format as the "Cell view" modal; see docs/query.md.
-            Unlike the modal it isn't persisted — it rides with this one push and
-            overrides any selected predefined query's saved cell_view.
-        name: Optional name of an existing saved query (see list_queries) to
-            edit: it is selected in the dropdown, and with no `cell_view` its
-            saved cell_view applies. Nothing is persisted: only the user's
-            Save does that. A name that isn't saved is refused — omit it to
-            push an unnamed draft; the user names and saves it.
-    """
-    if name:
-        info = await get_session(session_id)
-        ws = await _session_workspace_rec(session_id)
-        # A session that isn't connected lets the push itself say what's wrong.
-        if info.get("connected") and await get_predefined_query(info["type"], name, ws.id) is None:
-            return _failed(_NEW_NAME.format(kind="query", name=name))
-    payload = {
-        "type": "studio",
-        "query": query,
-        "limit": limit,
-        "offset": offset,
-        "order_by": order_by,
-        "fields": fields,
-        "cell_view": cell_view,
-        "name": name,
-    }
-    ok, message = await push(session_id, payload)
-    return _with_url(session_id, {"ok": ok, "message": message, "database": await sessions.database_of(session_id)})
-
-
-@mcp.tool()
 async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any]:
     """Run one read-only SQL statement on the session's connection and selected
-    database, returning the rows to the agent (push_studio only fills a browser
-    panel). Use it to explore schema and data before a push. Runs as written
+    database, returning the rows to the agent (a push only fills the browser).
+    Use it to explore schema and data before a push. Runs as written
     (SELECT, DESCRIBE, SHOW, EXPLAIN...): page with your own LIMIT/OFFSET.
     Stops after a minute.
 
@@ -378,7 +318,7 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
 async def open_explorer(session_id: str, database: str, table: str | None = None) -> dict[str, Any]:
     """Switch the session to `database` and open the browser's Explorer page
     (the table navigator) on it; with `table`, browse that table's rows (SELECT *
-    with field and order-by pickers). Use push_studio instead for custom SQL.
+    with field and order-by pickers). Use push_script instead for custom SQL.
 
     Returns {"ok", "message", "database"}; not ok when select_database fails,
     the table isn't in the database, or the push fails (unknown session,
@@ -415,26 +355,6 @@ async def _session_workspace_rec(session_id: str | None):
 
 
 @mcp.tool()
-async def list_queries(conn_type: str = "clickhouse", session_id: str | None = None) -> dict[str, Any]:
-    """List the saved (predefined) queries for a connection type.
-
-    These are reusable queries a human has saved, shared per connection type
-    (default "clickhouse") within a workspace. Returns
-    {"queries": [{query_name, query, cell_view, order_by, fields}]}, where
-    order_by is [{"name","dir"}] or null, fields is ["col", ...] or null, and
-    cell_view is raw YAML or null. Pass a query_name back as push_studio's `name`
-    to edit that query in the browser (its saved presentation then applies).
-
-    Args:
-        conn_type: Connection type to list queries for.
-        session_id: Optional armed-session id; scopes the list to that
-            session's workspace (default workspace otherwise).
-    """
-    ws = await _session_workspace_rec(session_id)
-    return {"queries": await list_predefined_queries_view(conn_type, ws.id)}
-
-
-@mcp.tool()
 async def list_dashboards(session_id: str | None = None) -> dict[str, Any]:
     """List the saved dashboards (names + metadata, no HTML/queries payload).
 
@@ -466,8 +386,7 @@ async def push_dashboard(
     """Push a dashboard to a live QueryView session.
 
     The dashboard renders immediately in the browser as a DRAFT: nothing is
-    written to the store until the user's **Save** in the dashboard view,
-    mirroring how push_studio drafts a query. Omit `name` for a new dashboard:
+    written to the store until the user's **Save** in the dashboard view. Omit `name` for a new dashboard:
     the user names it on Save. With the `name` of a saved dashboard (see
     list_dashboards) the push edits that one. Re-push to update it. Its queries
     run on the viewing session's connection and selected database — a dashboard
@@ -585,23 +504,19 @@ async def _git_tool(coro) -> dict[str, Any]:
 async def git_store(
     kind: str,
     name: str,
-    conn_type: str | None = None,
     message: str | None = None,
     session_id: str | None = None,
 ) -> dict[str, Any]:
-    """Back up one predefined query or dashboard to its workspace's git remote.
+    """Back up one dashboard to its workspace's git remote.
 
     Exports the entity's saved DB state as files, makes one commit, and pushes.
     Requires the target workspace to have a git remote configured. Versions are
     git commits — use git_history to list them and git_restore to roll back.
 
     Args:
-        kind: "query" or "dashboard".
+        kind: "dashboard" (the only kind).
         name: The entity's name.
-        conn_type: The query's connection type (e.g. "clickhouse"); required
-            for kind="query", ignored for dashboards.
-        message: Optional commit message (default: "store query {conn_type}/{name}"
-            for queries, "store dashboard {name}" for dashboards).
+        message: Optional commit message (default: "store dashboard {name}").
         session_id: Optional armed-session id; the operation runs in that
             session's workspace (default workspace otherwise).
 
@@ -609,14 +524,13 @@ async def git_store(
     when the repo already matches the DB.
     """
     ws = await _session_workspace_rec(session_id)
-    return await _git_tool(gitsync.store(ws, kind, name, conn_type, message))
+    return await _git_tool(gitsync.store(ws, kind, name, message))
 
 
 @mcp.tool()
 async def git_history(
     kind: str,
     name: str,
-    conn_type: str | None = None,
     before: str | None = None,
     limit: int = 10,
     session_id: str | None = None,
@@ -624,9 +538,8 @@ async def git_history(
     """List an entity's backup revisions (commits touching it), newest first.
 
     Args:
-        kind: "query" or "dashboard".
+        kind: "dashboard" (the only kind).
         name: The entity's name.
-        conn_type: The query's connection type; required for kind="query".
         before: A sha from a previous page; returns strictly older revisions.
         limit: Page size (default 10).
         session_id: Optional armed-session id; the operation runs in that
@@ -636,27 +549,25 @@ async def git_history(
     Pass a sha to git_restore's `ref` to restore that revision.
     """
     ws = await _session_workspace_rec(session_id)
-    return await _git_tool(gitsync.history(ws, kind, name, conn_type, before, limit))
+    return await _git_tool(gitsync.history(ws, kind, name, before, limit))
 
 
 @mcp.tool()
 async def git_restore(
     kind: str,
     name: str,
-    conn_type: str | None = None,
     ref: str | None = None,
     session_id: str | None = None,
 ) -> dict[str, Any]:
-    """Overwrite the local DB copy of one query/dashboard with a git revision.
+    """Overwrite the local DB copy of one dashboard with a git revision.
 
     Reads the entity's files at `ref` (default: the remote branch head) and
     upserts them into the store. Git history is untouched — HEAD never moves;
     a later git_store simply commits on top.
 
     Args:
-        kind: "query" or "dashboard".
+        kind: "dashboard" (the only kind).
         name: The entity's name.
-        conn_type: The query's connection type; required for kind="query".
         ref: A sha from git_history or a branch name, read as origin/<name>
             (default: latest backup).
         session_id: Optional armed-session id; the operation runs in that
@@ -665,4 +576,4 @@ async def git_restore(
     Returns {ok, restored, sha} or {ok: False, message}.
     """
     ws = await _session_workspace_rec(session_id)
-    return await _git_tool(gitsync.restore(ws, kind, name, conn_type, ref))
+    return await _git_tool(gitsync.restore(ws, kind, name, ref))

@@ -34,7 +34,6 @@ from .connect import (
     lock_connection,
     open_saved,
     parse_driver_config,
-    push,
     refresh_databases,
     remove_lock,
     request_token,
@@ -48,15 +47,7 @@ from .dashboard_queries import run_dashboard_queries
 from .dashboards import _upsert_and_push, get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
-from .queries import (
-    PredefinedQueryError,
-    list_predefined_queries_view,
-    purge_predefined_query,
-    save_predefined_query,
-    set_predefined_query_deleted,
-    update_predefined_query,
-)
-from .validation import cell_view_error, dashboard_params_error, presentation_error
+from .validation import dashboard_params_error
 
 # SPA bundle shipped inside the wheel (release CI copies frontend/dist here);
 # absent in a source checkout, where the repo's frontend/dist is used instead.
@@ -90,11 +81,7 @@ def _clean_str(value: Any) -> str:
 
 
 def _status_error(
-    e: workspaces.WorkspaceError
-    | gitsync.GitSyncError
-    | yamlio.YamlIOError
-    | PredefinedQueryError
-    | sessions.ReservedLabelError,
+    e: workspaces.WorkspaceError | gitsync.GitSyncError | yamlio.YamlIOError | sessions.ReservedLabelError,
 ) -> JSONResponse:
     """The `{ok: false, message}` response for a domain error carrying its HTTP status."""
     return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
@@ -496,103 +483,6 @@ async def _resolve_workspace(raw: Any) -> workspaces.WorkspaceRec | JSONResponse
         return _status_error(e)
 
 
-# Predefined queries: keyed by connection type within a workspace.
-@app.get("/api/predefined-queries")
-async def predefined_queries_list(request: Request):
-    conn_type = request.query_params.get("type") or "clickhouse"
-    ws = await _resolve_workspace(request.query_params.get("workspace"))
-    if isinstance(ws, JSONResponse):
-        return ws
-    include_deleted = request.query_params.get("include_deleted") in ("1", "true")
-    return {"queries": await list_predefined_queries_view(conn_type, ws.id, include_deleted=include_deleted)}
-
-
-@app.post("/api/predefined-queries")
-async def predefined_queries_save(request: Request):
-    body = await _read_json(request)
-    b = body if isinstance(body, dict) else {}
-    name = b.get("query_name")
-    conn_type = b.get("type")
-    query = b.get("query")
-    name = name.strip() if isinstance(name, str) else ""
-    conn_type = conn_type.strip() if isinstance(conn_type, str) else ""
-    query = query.strip() if isinstance(query, str) else ""
-    if not name or not conn_type or not query:
-        return JSONResponse(
-            {"ok": False, "message": "query_name, type and query are required"},
-            status_code=400,
-        )
-    raw_cv = b.get("cell_view")
-    cverr = cell_view_error(raw_cv)
-    if cverr is not None:
-        return JSONResponse({"ok": False, "message": cverr}, status_code=400)
-    # Store the raw YAML text verbatim; empty string => NULL (no custom views).
-    cell_view = raw_cv if isinstance(raw_cv, str) and raw_cv.strip() else None
-    order_by_arr = b.get("order_by")
-    fields_arr = b.get("fields")
-    perr = presentation_error(order_by_arr, fields_arr)
-    if perr is not None:
-        return JSONResponse({"ok": False, "message": perr}, status_code=400)
-    import json
-
-    order_by = json.dumps(order_by_arr) if isinstance(order_by_arr, list) and order_by_arr else None
-    fields = json.dumps(fields_arr) if isinstance(fields_arr, list) and fields_arr else None
-    ws = await _resolve_workspace(b.get("workspace"))
-    if isinstance(ws, JSONResponse):
-        return ws
-    await save_predefined_query(name, conn_type, query, cell_view, order_by, fields, workspace_id=ws.id)
-    return {"ok": True}
-
-
-# Partial update: `new_name` renames, `deleted: false` undeletes (DELETE deletes).
-@app.patch("/api/predefined-queries")
-async def predefined_queries_update(request: Request):
-    b = await _read_json(request)
-    b = b if isinstance(b, dict) else {}
-    name = _clean_str(b.get("query_name"))
-    conn_type = _clean_str(b.get("type"))
-    new_name = _clean_str(b.get("new_name"))
-    undelete = b.get("deleted") is False
-    if not name or not conn_type or (not new_name and not undelete) or b.get("deleted") is True:
-        return JSONResponse(
-            {"ok": False, "message": "query_name, type and new_name or deleted: false are required"},
-            status_code=400,
-        )
-    ws = await _resolve_workspace(b.get("workspace"))
-    if isinstance(ws, JSONResponse):
-        return ws
-    try:
-        await update_predefined_query(
-            conn_type, name, workspace_id=ws.id, new_name=new_name or None, deleted=False if undelete else None
-        )
-    except PredefinedQueryError as e:
-        return _status_error(e)
-    return {"ok": True}
-
-
-# Soft-deletes; `purge=1` removes an already deleted query for good.
-@app.delete("/api/predefined-queries")
-async def predefined_queries_delete(request: Request):
-    q = request.query_params
-    name = _clean_str(q.get("query_name"))
-    conn_type = _clean_str(q.get("type"))
-    if not name or not conn_type:
-        return JSONResponse({"ok": False, "message": "query_name and type are required"}, status_code=400)
-    ws = await _resolve_workspace(q.get("workspace"))
-    if isinstance(ws, JSONResponse):
-        return ws
-    try:
-        if q.get("purge") in ("1", "true"):
-            if gitsync.configured(ws):  # repo first: a failed push leaves the query to retry
-                await gitsync.purge(ws, conn_type, name)
-            await purge_predefined_query(conn_type, name, workspace_id=ws.id)
-        else:
-            await set_predefined_query_deleted(conn_type, name, True, workspace_id=ws.id)
-    except (PredefinedQueryError, gitsync.GitSyncError) as e:
-        return _status_error(e)
-    return {"ok": True}
-
-
 # --- Remote control (MCP push -> live browser session) --------------------
 
 _SSE_POLL_SECONDS = 1.0
@@ -623,7 +513,7 @@ async def _event_stream(remote_id: str, request: Request):
                     elapsed = 0.0
                     yield b": ping\n\n"
                 continue
-            yield _sse(msg.get("type", "studio"), msg)
+            yield _sse(msg.get("type", "message"), msg)
     finally:
         remote.unregister(remote_id)
 
@@ -640,42 +530,6 @@ async def remote_events(request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-
-# Push a query to a live session's Studio (used by the MCP tool and, in tests, directly).
-@app.post("/api/remote/push_studio")
-async def remote_push_studio(request: Request):
-    body = await _read_json(request)
-    b = body if isinstance(body, dict) else {}
-    raw_sid = b.get("session_id")
-    session_id = raw_sid.strip() if isinstance(raw_sid, str) else ""
-    raw_sql = b.get("query")
-    query = raw_sql.strip() if isinstance(raw_sql, str) else ""
-    if not session_id or not query:
-        return JSONResponse(
-            {"ok": False, "message": "session_id and query are required"},
-            status_code=400,
-        )
-    limit = _parse_int(b.get("limit"), 100)
-    offset = _parse_int(b.get("offset"), 0)
-    raw_cv = b.get("cell_view")
-    cell_view = raw_cv if isinstance(raw_cv, str) and raw_cv.strip() else None
-    raw_name = b.get("name")
-    name = raw_name if isinstance(raw_name, str) and raw_name.strip() else None
-    # Pass order_by/fields raw so remote.push's validator can reject malformed
-    # input (fail-fast) rather than silently coercing it away.
-    payload = {
-        "type": "studio",
-        "query": query,
-        "limit": limit,
-        "offset": offset,
-        "order_by": b.get("order_by"),
-        "fields": b.get("fields"),
-        "cell_view": cell_view,
-        "name": name,
-    }
-    ok, message = await push(session_id, payload)
-    return {"ok": ok, "message": message}
 
 
 @app.post("/api/remote/lock")
@@ -768,21 +622,14 @@ async def dashboards_get(name: str, request: Request):
 # --- Git sync: per-entity backup/restore (see docs/gitsync.md) -------------
 
 
-def _gitsync_args(kind: Any, name: Any, conn_type: Any) -> tuple[str, str, str | None] | JSONResponse:
-    """Validated (kind, name, conn_type), or the 400 response to return,
-    mirroring _driver_and_config's convention."""
+def _gitsync_args(kind: Any, name: Any) -> tuple[str, str] | JSONResponse:
+    """Validated (kind, name), or the 400 response to return, mirroring
+    _driver_and_config's convention."""
     kind = _clean_str(kind)
     name = _clean_str(name)
-    conn_type = _clean_str(conn_type)
-    if kind not in ("query", "dashboard") or not name or (kind == "query" and not conn_type):
-        return JSONResponse(
-            {
-                "ok": False,
-                "message": "kind ('query'|'dashboard'), name and (for queries) conn_type are required",
-            },
-            status_code=400,
-        )
-    return kind, name, conn_type or None
+    if kind != "dashboard" or not name:
+        return JSONResponse({"ok": False, "message": "kind ('dashboard') and name are required"}, status_code=400)
+    return kind, name
 
 
 async def _gitsync_json(coro):
@@ -827,24 +674,24 @@ async def _sync_attached(name: str) -> dict[str, Any]:
 async def git_store(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
-    args = _gitsync_args(b.get("kind"), b.get("name"), b.get("conn_type"))
+    args = _gitsync_args(b.get("kind"), b.get("name"))
     if isinstance(args, JSONResponse):
         return args
-    kind, name, conn_type = args
+    kind, name = args
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
     message = _clean_str(b.get("message")) or None
-    return await _gitsync_json(gitsync.store(ws, kind, name, conn_type, message))
+    return await _gitsync_json(gitsync.store(ws, kind, name, message))
 
 
 @app.get("/api/git/history")
 async def git_history(request: Request):
     q = request.query_params
-    args = _gitsync_args(q.get("kind"), q.get("name"), q.get("conn_type"))
+    args = _gitsync_args(q.get("kind"), q.get("name"))
     if isinstance(args, JSONResponse):
         return args
-    kind, name, conn_type = args
+    kind, name = args
     try:
         limit = max(1, min(int(q.get("limit") or 10), 100))
     except ValueError:
@@ -852,21 +699,21 @@ async def git_history(request: Request):
     ws = await _resolve_workspace(q.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    return await _gitsync_json(gitsync.history(ws, kind, name, conn_type, q.get("before") or None, limit))
+    return await _gitsync_json(gitsync.history(ws, kind, name, q.get("before") or None, limit))
 
 
 @app.post("/api/git/restore")
 async def git_restore(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
-    args = _gitsync_args(b.get("kind"), b.get("name"), b.get("conn_type"))
+    args = _gitsync_args(b.get("kind"), b.get("name"))
     if isinstance(args, JSONResponse):
         return args
-    kind, name, conn_type = args
+    kind, name = args
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    return await _gitsync_json(gitsync.restore(ws, kind, name, conn_type, _clean_str(b.get("ref")) or None))
+    return await _gitsync_json(gitsync.restore(ws, kind, name, _clean_str(b.get("ref")) or None))
 
 
 # --- YAML export / import (see docs/export-import.md) ----------------------
@@ -882,9 +729,7 @@ async def export_yaml(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     try:
-        filename, text = await yamlio.export(
-            _clean_str(q.get("kind")), _clean_str(q.get("name")), _clean_str(q.get("conn_type")), ws
-        )
+        filename, text = await yamlio.export(_clean_str(q.get("kind")), _clean_str(q.get("name")), ws)
     except yamlio.YamlIOError as e:
         return _status_error(e)
     return PlainTextResponse(

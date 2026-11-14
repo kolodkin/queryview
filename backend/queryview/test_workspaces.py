@@ -37,9 +37,9 @@ def _sql(statement: str, *params) -> int:
     return row[0] if row else 0
 
 
-def _add_live_query(workspace_id: int, name: str) -> None:
+def _add_dashboard(workspace_id: int, name: str) -> None:
     _sql(
-        "INSERT INTO predefined_queries (query_name, type, query, workspace_id) VALUES (?, 'clickhouse', 'SELECT 1', ?)",
+        "INSERT INTO dashboards (name, workspace_id, html, queries, params, updated_at) VALUES (?, ?, '<p/>', '{}', '[]', 1)",
         name,
         workspace_id,
     )
@@ -110,12 +110,12 @@ def test_update_rename_set_and_clear_remote():
 def test_delete_refuses_non_empty_then_deletes_empty():
     _run(create_workspace("t2-del"))
     rec = _run(resolve("t2-del"))
-    _add_live_query(rec.id, "held")
+    _add_dashboard(rec.id, "held")
     with pytest.raises(WorkspaceError) as e:
         _run(delete_workspace("t2-del"))
     assert e.value.status == 409
 
-    _sql("DELETE FROM predefined_queries WHERE workspace_id=?", rec.id)
+    _sql("DELETE FROM dashboards WHERE workspace_id=?", rec.id)
     _run(delete_workspace("t2-del"))
     with pytest.raises(WorkspaceError):
         _run(resolve("t2-del"))
@@ -153,9 +153,9 @@ def test_the_fallback_survives_renaming_the_seeded_workspace():
         _run(update_workspace("t-renamed-default", new_name=DEFAULT_WORKSPACE))
 
 
-def test_delete_refuses_a_query_saved_after_the_emptiness_check(monkeypatch):
-    """A live query saved between the emptiness check and the deletes must
-    keep the workspace (409), not be purged along with it."""
+def test_delete_refuses_a_dashboard_saved_after_the_emptiness_check(monkeypatch):
+    """A dashboard saved between the emptiness check and the delete must keep
+    the workspace (409), not be orphaned by it."""
     from queryview import workspaces
 
     _run(create_workspace("t2-race"))
@@ -164,7 +164,7 @@ def test_delete_refuses_a_query_saved_after_the_emptiness_check(monkeypatch):
 
     async def count_then_save(*args):
         n = await real_count(*args)
-        _add_live_query(rec.id, "late")
+        _add_dashboard(rec.id, "late")
         return n
 
     monkeypatch.setattr(workspaces, "_entity_count", count_then_save)
@@ -174,6 +174,6 @@ def test_delete_refuses_a_query_saved_after_the_emptiness_check(monkeypatch):
     monkeypatch.undo()
 
     assert _run(resolve("t2-race")).id == rec.id
-    assert _sql("SELECT COUNT(*) FROM predefined_queries WHERE workspace_id=?", rec.id) == 1
-    _sql("DELETE FROM predefined_queries WHERE workspace_id=?", rec.id)
+    assert _sql("SELECT COUNT(*) FROM dashboards WHERE workspace_id=?", rec.id) == 1
+    _sql("DELETE FROM dashboards WHERE workspace_id=?", rec.id)
     _run(delete_workspace("t2-race"))

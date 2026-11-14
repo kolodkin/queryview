@@ -9,8 +9,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from .validation import cell_view_error, presentation_error
-
 LOCK_TTL_SECONDS = 30.0
 # How long a tab's channel waits for its browser tab to open and arm.
 PENDING_TTL_SECONDS = 60.0
@@ -109,16 +107,11 @@ def unregister(remote_id: str) -> None:
 
 
 def push(remote_id: str, payload: dict[str, Any]) -> tuple[bool, str]:
-    """Validate + lock-check + enqueue a payload for a channel. Ordered:
-    unknown session -> invalid presentation -> human holds lock -> deliver."""
+    """Lock-check + enqueue a payload for a channel. Ordered:
+    unknown session -> human holds lock -> deliver."""
     channel = _live(remote_id)
     if channel is None:
         return False, "unknown or inactive session"
-    err = presentation_error(payload.get("order_by"), payload.get("fields")) or cell_view_error(
-        payload.get("cell_view")
-    )
-    if err is not None:
-        return False, err
     if _human_holds(channel):
         return False, "blocked, user editing"
     channel.queue.put_nowait(payload)

@@ -58,7 +58,6 @@ def wipe_workspace_entities():
 
         async def go():
             async with c._engine_for_db().begin() as conn:
-                await conn.execute(text("DELETE FROM predefined_queries WHERE workspace_id = :w"), {"w": workspace_id})
                 await conn.execute(text("DELETE FROM dashboards WHERE workspace_id = :w"), {"w": workspace_id})
 
         asyncio.run(go())
