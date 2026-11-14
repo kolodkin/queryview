@@ -57,15 +57,26 @@ export function parseQueryParams(text: string | null | undefined): ParamSpec[] {
   return out
 }
 
-// Substitute each `{name}` with the selected value as a quoted SQL literal
-// (single quotes doubled). Unselected params fall back to their first option;
-// an unmatched placeholder is left untouched.
-export function applyParams(sql: string, defs: ParamDef[], values: Record<string, string>): string {
+// A quoted SQL string literal: single quotes doubled, and backslashes too where
+// the dialect reads them as escapes (the connection's backslashEscapes).
+export function quoteLiteral(value: string, backslashEscapes: boolean): string {
+  const v = backslashEscapes ? value.replaceAll('\\', '\\\\') : value
+  return `'${v.replaceAll("'", "''")}'`
+}
+
+// Substitute each `{name}` with the selected value as a quoted SQL literal.
+// Unselected params fall back to their first option; an unmatched placeholder
+// is left untouched.
+export function applyParams(
+  sql: string,
+  defs: ParamDef[],
+  values: Record<string, string>,
+  backslashEscapes: boolean,
+): string {
   let out = sql
   for (const def of defs) {
     const value = values[def.name] ?? def.options[0]
-    const literal = `'${value.replaceAll("'", "''")}'`
-    out = out.replaceAll(`{${def.name}}`, literal)
+    out = out.replaceAll(`{${def.name}}`, quoteLiteral(value, backslashEscapes))
   }
   return out
 }

@@ -108,14 +108,16 @@ FROM {table} GROUP BY value, category
 
 | kind | substitutes as | example |
 | --- | --- | --- |
-| `value` (default) | quoted string literal, single quotes doubled | `{region}` → `'eu'` |
+| `value` (default) | quoted string literal, single quotes doubled (and backslashes on ClickHouse) | `{region}` → `'eu'` |
 | `identifier` | a quoted table/column, in the connection's own quoting | `{field}` → `"city"` (`` `city` `` on ClickHouse) |
 | `dimension` | a checkbox: its own column when checked, `''` when not | `{category}` → `"category"` / `''` |
 
 A placeholder can override its param's kind in one spot: **`{table:literal}`**
 gives a string where the SQL wants one while `FROM {table}` still gets the
 identifier. The casts are `literal` and `identifier`; anything else is an error.
-An identifier containing the quote character is rejected.
+An identifier containing the quote character, or a backslash on ClickHouse, is
+rejected. Write option values as they are stored (`CORP\alice`); never
+pre-escape them.
 
 As with [query params](./query.md#query-parameters), `options` and `options_sql`
 are mutually exclusive (a `dimension` needs neither), and the first option is

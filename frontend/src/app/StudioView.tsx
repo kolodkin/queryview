@@ -62,12 +62,15 @@ const TOGGLE_DELETED_OPTION = '::deleted::'
 // connection; picking one happens on the Connect page (ConnectView).
 function StudioView({
   connectionType,
+  backslashEscapes = false,
   runOn,
   pushed,
   onPushConsumed,
   remoteId,
 }: {
   connectionType: string
+  // Whether backslash escapes in the connection's dialect, for param literals.
+  backslashEscapes?: boolean
   // The session's connection and database; results follow it (see QueryPanel).
   runOn?: string | null
   pushed?: StudioPush | null
@@ -83,6 +86,7 @@ function StudioView({
       </div>
       <QueryPanel
         connectionType={connectionType}
+        backslashEscapes={backslashEscapes}
         runOn={runOn}
         pushed={pushed}
         onPushConsumed={onPushConsumed}
@@ -110,12 +114,14 @@ function seedParamValues(defs: ParamDef[], prev: Record<string, string>): Record
 
 function QueryPanel({
   connectionType,
+  backslashEscapes,
   runOn,
   pushed,
   onPushConsumed,
   remoteId,
 }: {
   connectionType: string
+  backslashEscapes: boolean
   runOn?: string | null
   pushed?: StudioPush | null
   onPushConsumed?: () => void
@@ -365,7 +371,7 @@ function QueryPanel({
       const res = await apiFetch('/api/db/describe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: applyParams(sql, paramDefs, paramValues) }),
+        body: JSON.stringify({ query: applyParams(sql, paramDefs, paramValues, backslashEscapes) }),
       })
       const data = await res.json()
       if (data.ok) {
@@ -402,7 +408,7 @@ function QueryPanel({
     try {
       // Substitute {name} placeholders from the param dropdowns. An override is
       // passed when a dropdown change triggers the run (its setState hasn't committed).
-      const query = applyParams(q, paramDefs, paramOverride ?? paramValues)
+      const query = applyParams(q, paramDefs, paramOverride ?? paramValues, backslashEscapes)
       const res = await apiFetch('/api/db/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -470,7 +476,7 @@ function QueryPanel({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          query: applyParams(sql, paramDefs, paramValues),
+          query: applyParams(sql, paramDefs, paramValues, backslashEscapes),
           limit,
           offset,
           format: 'csv',

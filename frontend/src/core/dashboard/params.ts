@@ -11,6 +11,8 @@
 // can depend on the selected table; resolveOrder sequences those. See
 // docs/dashboard.md, "Dashboard parameters".
 
+import { quoteLiteral } from '../params/queryParams'
+
 export type ParamKind = 'value' | 'identifier' | 'dimension'
 
 // A selector with its option list resolved and a value chosen (or left empty) —
@@ -81,16 +83,19 @@ export function placeholdersIn(sql: string): string[] {
   return [...seen]
 }
 
-// Values are always one of the param's options, which the dashboard author
-// controls; dialect escapes such as ClickHouse's backslash are theirs to handle.
-function quoteLiteral(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`
-}
+// How the connection's dialect quotes: its identifier quote and whether
+// backslash escapes (see /api/session's ident_quote and backslash_escapes).
+export type Dialect = { quote: string; backslashEscapes: boolean }
 
-// A quote character in the name can't be trusted through string assembly, and
-// no real table or column carries one, so reject it.
-function quoteIdentifier(name: string, param: string, quote: string): string {
-  if (name.includes(quote)) throw new Error(`invalid identifier for {${param}}: ${name}`)
+// A quote character (or a backslash that would escape it) can't be trusted
+// through string assembly, and no real name carries one, so reject it.
+function quoteIdentifier(
+  name: string,
+  param: string,
+  { quote, backslashEscapes }: Dialect,
+): string {
+  if (name.includes(quote) || (backslashEscapes && name.includes('\\')))
+    throw new Error(`invalid identifier for {${param}}: ${name}`)
   return `${quote}${name}${quote}`
 }
 
@@ -98,13 +103,12 @@ function quoteIdentifier(name: string, param: string, quote: string): string {
 const isChecked = (v?: string): v is string => !!v && v !== '0'
 
 // Replace every declared `{name}`; placeholders with no matching param are left
-// alone (they may be literal braces in the SQL). `quote` is the connection's
-// identifier quote (see /api/session's ident_quote).
+// alone (they may be literal braces in the SQL).
 export function substituteParams(
   sql: string,
   params: DashboardParam[],
   values: Record<string, string>,
-  quote: string,
+  dialect: Dialect,
 ): string {
   const byName = new Map(params.map((p) => [p.name, p]))
   return sql.replace(PLACEHOLDER, (token, name: string, cast?: string) => {
@@ -115,11 +119,13 @@ export function substituteParams(
     if (p.kind === 'dimension') {
       // Unchecked: an empty literal keeps the query's shape; the column just
       // contributes nothing to the grouping.
-      return isChecked(raw) ? quoteIdentifier(name, name, quote) : "''"
+      return isChecked(raw) ? quoteIdentifier(name, name, dialect) : "''"
     }
     if (raw === undefined || raw === '') throw new Error(`no value selected for {${name}}`)
     const asIdentifier = cast ? cast === 'identifier' : p.kind === 'identifier'
-    return asIdentifier ? quoteIdentifier(raw, name, quote) : quoteLiteral(raw)
+    return asIdentifier
+      ? quoteIdentifier(raw, name, dialect)
+      : quoteLiteral(raw, dialect.backslashEscapes)
   })
 }
 
@@ -168,7 +174,7 @@ export async function resolveParams(
   params: DashboardParam[],
   values: Record<string, string>,
   run: QueryRunner,
-  quote: string,
+  dialect: Dialect,
 ): Promise<ResolvedParam[]> {
   const resolved: ResolvedParam[] = []
   const chosen: Record<string, string> = {}
@@ -180,7 +186,7 @@ export async function resolveParams(
         resolved.push({ name: p.name, kind: p.kind, options: [], value: '' })
         continue
       }
-      const r = await run({ o: substituteParams(p.optionsSql, params, chosen, quote) })
+      const r = await run({ o: substituteParams(p.optionsSql, params, chosen, dialect) })
       if (!r.ok) throw new Error(r.message)
       options = (Object.values(r.results.o ?? {})[0] ?? []).map(String)
     }
@@ -207,13 +213,13 @@ export function applyToQueries(
   queries: Record<string, string>,
   declared: DashboardParam[],
   resolved: ResolvedParam[],
-  quote: string,
+  dialect: Dialect,
 ): Record<string, string> {
   const values = Object.fromEntries(resolved.map((p) => [p.name, p.value]))
   return Object.fromEntries(
     Object.entries(queries)
       .filter(([, sql]) => missingParams(sql, declared, values).length === 0)
-      .map(([name, sql]) => [name, substituteParams(sql, declared, values, quote)]),
+      .map(([name, sql]) => [name, substituteParams(sql, declared, values, dialect)]),
   )
 }
 

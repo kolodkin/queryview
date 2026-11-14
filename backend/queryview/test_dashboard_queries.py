@@ -16,6 +16,7 @@ class _RowsDriver:
     type = "rowsfake"
     requires_database = False
     ident_quote = '"'
+    backslash_escapes = False
 
     def parse_config(self, body):
         return {"v": 1}, None

@@ -680,6 +680,7 @@ function Shell() {
                 <StudioView
                   key={`${sessionKey}:${workspace}`}
                   connectionType={connection.type}
+                  backslashEscapes={connection.backslashEscapes}
                   runOn={connectionKey(connection)}
                   pushed={studioPush}
                   onPushConsumed={() => setStudioPush(null)}
@@ -733,6 +734,7 @@ function Shell() {
                 onPushConsumed={() => setDashboardPush(null)}
                 runOn={connectionKey(connection)}
                 identQuote={connection?.identQuote}
+                backslashEscapes={connection?.backslashEscapes}
               />
             }
           />

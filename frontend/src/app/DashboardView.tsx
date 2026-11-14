@@ -62,6 +62,7 @@ function DashboardView({
   onPushConsumed,
   runOn,
   identQuote = '"',
+  backslashEscapes = false,
 }: {
   pushed?: DashboardPush | null
   onPushConsumed?: () => void
@@ -69,6 +70,8 @@ function DashboardView({
   runOn?: string | null
   // The connection's identifier quote, for `identifier` params.
   identQuote?: string
+  // Whether backslash escapes in the connection's dialect.
+  backslashEscapes?: boolean
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const name = searchParams.get('name') ?? ''
@@ -206,12 +209,13 @@ function DashboardView({
       setLoading(true)
       try {
         const declared = parseDashboardParams(dash.params)
-        const resolved = await resolveParams(declared, {}, runQueries, identQuote)
+        const dialect = { quote: identQuote, backslashEscapes }
+        const resolved = await resolveParams(declared, {}, runQueries, dialect)
         if (cancelled) return
         setParams(resolved)
         // Queries still waiting on an unchosen selector (`default: none`) are
         // held back; the page gets them once it calls setParams.
-        const runnable = applyToQueries(dash.queries, declared, resolved, identQuote)
+        const runnable = applyToQueries(dash.queries, declared, resolved, dialect)
         const r = Object.keys(runnable).length
           ? await runQueries(runnable)
           : { ok: true as const, results: {} }
@@ -229,7 +233,7 @@ function DashboardView({
     return () => {
       cancelled = true
     }
-  }, [name, localPush, runOn, reloadNonce, identQuote])
+  }, [name, localPush, runOn, reloadNonce, identQuote, backslashEscapes])
 
   // Answer the page's setParams: values only, and only from this dashboard's
   // own frame. The SQL is the dashboard's, substituted here, so the page never
@@ -237,6 +241,7 @@ function DashboardView({
   useEffect(() => {
     if (!active) return
     const declared = parseDashboardParams(active.params)
+    const dialect = { quote: identQuote, backslashEscapes }
     async function onMessage(e: MessageEvent) {
       const frame = frameRef.current
       if (!frame || e.source !== frame.contentWindow) return
@@ -244,8 +249,8 @@ function DashboardView({
       if (!values || !active) return
       let answer: Record<string, unknown>
       try {
-        const resolved = await resolveParams(declared, values, runQueries, identQuote)
-        const runnable = applyToQueries(active.queries, declared, resolved, identQuote)
+        const resolved = await resolveParams(declared, values, runQueries, dialect)
+        const runnable = applyToQueries(active.queries, declared, resolved, dialect)
         const r = Object.keys(runnable).length
           ? await runQueries(runnable)
           : { ok: true as const, results: {} }
@@ -260,7 +265,7 @@ function DashboardView({
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [active, identQuote])
+  }, [active, identQuote, backslashEscapes])
 
   return (
     // mt clears the floating header when the page is taller than the window.
