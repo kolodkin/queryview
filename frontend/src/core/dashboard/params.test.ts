@@ -84,6 +84,11 @@ describe('substituteParams', () => {
     )
   })
 
+  test('rejects a backslash in an identifier only for backtick-quoting dialects', () => {
+    expect(() => sub('SELECT {field}', params, { field: 'a\\' })).toThrow(/invalid identifier/)
+    expect(substituteParams('SELECT {field}', params, { field: 'a\\' }, '"')).toBe('SELECT "a\\"')
+  })
+
   test('substitutes a value as a quoted literal', () => {
     expect(sub('WHERE region = {region}', params, { region: 'eu' })).toBe("WHERE region = 'eu'")
   })

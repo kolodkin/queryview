@@ -88,10 +88,10 @@ function quoteLiteral(value: string, quote: string): string {
   return `'${v.replaceAll("'", "''")}'`
 }
 
-// A quote character in the name can't be trusted through string assembly, and
-// no real table or column carries one, so reject it.
+// A quote character (or, in backtick dialects, a backslash that would escape
+// it) can't be trusted through string assembly, and no real name carries one.
 function quoteIdentifier(name: string, param: string, quote: string): string {
-  if (name.includes(quote)) throw new Error(`invalid identifier for {${param}}: ${name}`)
+  if (name.includes(quote) || (quote === '`' && name.includes('\\'))) throw new Error(`invalid identifier for {${param}}: ${name}`)
   return `${quote}${name}${quote}`
 }
 
