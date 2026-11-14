@@ -76,6 +76,14 @@ describe('substituteParams', () => {
     )
   })
 
+  test('escapes backslashes only for backtick-quoting dialects', () => {
+    const user = parseDashboardParams([{ name: 'user', options: ['CORP\\alice'] }])
+    expect(sub('WHERE u = {user}', user, { user: 'CORP\\alice' })).toBe("WHERE u = 'CORP\\\\alice'")
+    expect(substituteParams('WHERE u = {user}', user, { user: 'CORP\\alice' }, '"')).toBe(
+      "WHERE u = 'CORP\\alice'",
+    )
+  })
+
   test('substitutes a value as a quoted literal', () => {
     expect(sub('WHERE region = {region}', params, { region: 'eu' })).toBe("WHERE region = 'eu'")
   })

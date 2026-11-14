@@ -81,10 +81,11 @@ export function placeholdersIn(sql: string): string[] {
   return [...seen]
 }
 
-// Values are always one of the param's options, which the dashboard author
-// controls; dialect escapes such as ClickHouse's backslash are theirs to handle.
-function quoteLiteral(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`
+// Backtick-quoting dialects (ClickHouse, MySQL) also read backslash as an
+// escape inside string literals, so double it there; others take it literally.
+function quoteLiteral(value: string, quote: string): string {
+  const v = quote === '`' ? value.replaceAll('\\', '\\\\') : value
+  return `'${v.replaceAll("'", "''")}'`
 }
 
 // A quote character in the name can't be trusted through string assembly, and
@@ -119,7 +120,7 @@ export function substituteParams(
     }
     if (raw === undefined || raw === '') throw new Error(`no value selected for {${name}}`)
     const asIdentifier = cast ? cast === 'identifier' : p.kind === 'identifier'
-    return asIdentifier ? quoteIdentifier(raw, name, quote) : quoteLiteral(raw)
+    return asIdentifier ? quoteIdentifier(raw, name, quote) : quoteLiteral(raw, quote)
   })
 }
 
