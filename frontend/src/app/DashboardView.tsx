@@ -16,6 +16,7 @@ import {
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch } from './api'
+import DashboardSqlPanel from './DashboardSqlPanel'
 import { onGitSync } from './gitsync'
 import { activeWorkspace } from './session'
 import { answerWidget, type WidgetSql } from './widgetHost'
@@ -75,6 +76,7 @@ function DashboardView({
   onPushConsumed,
   runOn,
   identQuote = '"',
+  remoteId = null,
 }: {
   pushed?: DashboardPush | null
   onPushConsumed?: () => void
@@ -82,6 +84,8 @@ function DashboardView({
   runOn?: string | null
   // The connection's identifier quote, for `identifier` params.
   identQuote?: string
+  // The armed remote session, for the SQL panel's edit lock.
+  remoteId?: string | null
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const name = searchParams.get('name') ?? ''
@@ -97,6 +101,9 @@ function DashboardView({
   // query is substituted with.
   const resolvedRef = useRef<ResolvedParam[]>([])
   const frameRef = useRef<HTMLIFrameElement>(null)
+  // The open dashboard with unsaved SQL-panel edits, or null.
+  const editedRef = useRef<DashboardPush | null>(null)
+  const [showSql, setShowSql] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -148,6 +155,7 @@ function DashboardView({
       }
       await loadDashboards()
       if (!active.name) {
+        editedRef.current = null
         setLocalPush({ ...active, name: saveAs })
         setSearchParams({ name: saveAs })
       }
@@ -178,6 +186,7 @@ function DashboardView({
   // Capture a pushed dashboard and release it from the shell.
   useEffect(() => {
     if (pushed) {
+      editedRef.current = null
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalPush(pushed)
       onPushConsumed?.()
@@ -193,6 +202,8 @@ function DashboardView({
 
     // The selected dashboard; returns null (and sets an error) if it can't load.
     async function loadDashboard(): Promise<DashboardPush | null> {
+      const edited = editedRef.current
+      if (edited && edited.name === name) return edited
       if (localPush && localPush.name === name) return localPush
       try {
         const res = await fetch(
@@ -253,6 +264,72 @@ function DashboardView({
     }
   }, [name, localPush, runOn, reloadNonce, identQuote])
 
+  // Re-run a dashboard's own (non-widget) queries and build the message the
+  // frame expects. `values` are fresh selections to resolve; null keeps the
+  // current ones (the SQL changed, not the params).
+  async function rerun(
+    dash: DashboardPush,
+    values: Record<string, string> | null,
+  ): Promise<Record<string, unknown>> {
+    const declared = parseDashboardParams(dash.params)
+    let resolved = resolvedRef.current
+    try {
+      if (values) {
+        resolved = await resolveParams(declared, values, runQueries, identQuote)
+        resolvedRef.current = resolved
+      }
+      const runnable = applyToQueries(
+        withoutWidgetQueries(dash.queries, dash.html),
+        declared,
+        resolved,
+        identQuote,
+      )
+      const r = Object.keys(runnable).length
+        ? await runQueries(runnable)
+        : { ok: true as const, results: {} }
+      return r.ok
+        ? { type: 'params-results', ok: true, results: r.results, params: resolved }
+        : { type: 'params-results', ok: false, message: r.message, params: resolved }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to run queries.'
+      return { type: 'params-results', ok: false, message, params: [] }
+    }
+  }
+
+  // An edit in the SQL panel. Kept in a ref too, so a reload (a database
+  // switch, Execute with no frame yet) runs the edited SQL, not the stored one.
+  function editQuery(query: string, sql: string) {
+    if (!active) return
+    const next = { ...active, queries: { ...active.queries, [query]: sql } }
+    editedRef.current = next
+    setActive(next)
+  }
+
+  // Execute from the SQL panel: post into the live frame rather than rebuild
+  // it, so the page keeps its state; its widgets re-query on the same message.
+  async function execute() {
+    if (!active) return
+    const frame = frameRef.current
+    if (!frame) {
+      setReloadNonce((n) => n + 1)
+      return
+    }
+    frame.contentWindow?.postMessage(await rerun(active, null), '*')
+  }
+
+  // Unsaved scratch: one widget over one empty query, the SQL panel open.
+  function newQuery() {
+    editedRef.current = null
+    setLocalPush({
+      name: '',
+      html: '<qv-select-view query="main"></qv-select-view>',
+      queries: { main: '' },
+      params: [],
+    })
+    setSearchParams({})
+    setShowSql(true)
+  }
+
   // Answer the page's setParams: values only, and only from this dashboard's
   // own frame. The SQL is the dashboard's, substituted here, so the page never
   // issues SQL of its own.
@@ -281,30 +358,13 @@ function DashboardView({
       }
       const values = parseParamsRequest(e.data)
       if (!values) return
-      let answer: Record<string, unknown>
-      try {
-        const resolved = await resolveParams(declared, values, runQueries, identQuote)
-        resolvedRef.current = resolved
-        const runnable = applyToQueries(
-          withoutWidgetQueries(active.queries, active.html),
-          declared,
-          resolved,
-          identQuote,
-        )
-        const r = Object.keys(runnable).length
-          ? await runQueries(runnable)
-          : { ok: true as const, results: {} }
-        answer = r.ok
-          ? { type: 'params-results', ok: true, results: r.results, params: resolved }
-          : { type: 'params-results', ok: false, message: r.message, params: resolved }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to run queries.'
-        answer = { type: 'params-results', ok: false, message, params: [] }
-      }
+      const answer = await rerun(active, values)
       frame.contentWindow?.postMessage(answer, '*')
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
+    // rerun reads only refs and identQuote beyond its arguments.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, identQuote])
 
   return (
@@ -337,6 +397,14 @@ function DashboardView({
         </select>
         <button
           type="button"
+          data-testid="dashboard-new-query"
+          onClick={newQuery}
+          className="glass-btn px-3 py-2 text-sm font-medium"
+        >
+          New query
+        </button>
+        <button
+          type="button"
           data-testid="dashboard-save"
           onClick={() => void save()}
           disabled={!active || saving}
@@ -344,11 +412,21 @@ function DashboardView({
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
+        <button
+          type="button"
+          data-testid="dashboard-edit-queries"
+          onClick={() => setShowSql((v) => !v)}
+          disabled={!active}
+          className={`px-3 py-2 text-sm font-medium ${showSql ? 'glass-btn-primary' : 'glass-btn'}`}
+        >
+          Edit queries
+        </button>
         <GitSyncControls
           kind="dashboard"
           name={name}
           disabled={!name}
           onRestored={() => {
+            editedRef.current = null
             setLocalPush(null)
             setReloadNonce((n) => n + 1)
           }}
@@ -360,11 +438,21 @@ function DashboardView({
             // The imported file may carry any dashboard name: refresh the
             // dropdown, and re-load the open one in case it was overwritten.
             void loadDashboards()
+            editedRef.current = null
             setLocalPush(null)
             setReloadNonce((n) => n + 1)
           }}
         />
       </div>
+
+      {showSql && active && (
+        <DashboardSqlPanel
+          queries={active.queries}
+          onChange={editQuery}
+          onExecute={() => void execute()}
+          remoteId={remoteId}
+        />
+      )}
 
       {!name && !active && (
         <p className="text-center text-sm text-slate-400" data-testid="dashboard-empty">

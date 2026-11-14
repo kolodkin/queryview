@@ -1,6 +1,6 @@
 // Dashboard widgets: the <qv-*> tags an agent drops into dashboard HTML. They
 // run through the same query path as Studio, so once on DuckDB (no service).
-import { DUCK, api, connect, expect, test } from "./fixtures";
+import { DUCK, api, armRemote, connect, expect, mcpCall, test } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 type Dash = { name: string; html: string; queries: Record<string, string>; params?: unknown[] };
@@ -106,4 +106,62 @@ test("a widget query is not in window.queries", async ({ page, seeds, baseURL })
   });
   await expect(frame.locator("#keys")).toHaveText("other");
   await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(2);
+});
+
+test("New query runs ad-hoc SQL and saves as a dashboard", async ({ page, seeds }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  await page.getByTestId("nav-dashboard").click();
+  await page.getByTestId("dashboard-new-query").click();
+  const frame = page.frameLocator('[data-testid="dashboard-frame"]');
+  await expect(frame.getByTestId("qv-error")).toHaveText("Enter a query.");
+
+  await page.getByTestId("dash-sql").fill("SELECT name FROM items ORDER BY id");
+  await page.getByTestId("dash-sql-execute").click();
+  const rows = frame.getByTestId("qv-results").locator("tbody tr");
+  await expect(rows).toHaveCount(3);
+
+  // Saving a draft asks for its name; the saved dashboard carries the SQL.
+  page.once("dialog", (d) => d.accept("scratch"));
+  await page.getByTestId("dashboard-save").click();
+  await expect(page.getByTestId("dashboard-select")).toHaveValue("scratch");
+  await page.reload();
+  await expect(rows).toHaveCount(3);
+});
+
+test("Execute keeps the page state", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "stateful",
+    html: '<input id="keep">' + VIEW,
+    queries: ITEMS,
+  });
+  const rows = frame.getByTestId("qv-results").locator("tbody tr");
+  await expect(rows).toHaveCount(2);
+  await frame.locator("#keep").fill("x");
+
+  await page.getByTestId("dashboard-edit-queries").click();
+  await expect(page.getByTestId("dash-sql")).toHaveValue(ITEMS.q);
+  await page.getByTestId("dash-sql").fill("SELECT id, name FROM items WHERE id = 3");
+  await page.getByTestId("dash-sql-execute").click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText("gamma");
+  await expect(frame.locator("#keep")).toHaveValue("x");
+});
+
+test("an agent push is blocked while the SQL panel has focus", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const sid = await armRemote(page);
+  await openDashboard(page, baseURL, { name: "locked", html: VIEW, queries: ITEMS });
+  await page.getByTestId("dashboard-edit-queries").click();
+  await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/remote/lock")), // focus takes the lock
+    page.getByTestId("dash-sql").click(),
+  ]);
+  const out = await mcpCall(baseURL!, "push_dashboard", {
+    session_id: sid,
+    html: "<p>agent</p>",
+    queries: { q: "SELECT 1" },
+  });
+  expect(out).toMatchObject({ pushed: false, message: "blocked, user editing" });
+  await expect(page.getByTestId("dash-sql")).toHaveValue(ITEMS.q);
 });
