@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -k -n app,widgets \"vite\" \"vite build -c vite.widgets.config.ts --watch\"",
     "build": "tsc -b && vite build && vite build -c vite.widgets.config.ts",
     "build:e2e": "VITE_HEARTBEAT_MS=2000 npm run build",
     "lint": "eslint .",

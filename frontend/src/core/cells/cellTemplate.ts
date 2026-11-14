@@ -20,12 +20,3 @@ export function compileCellTemplate(
       )
       .join('')
 }
-
-export function renderCellTemplate(
-  template: string,
-  raw: string,
-  row: string[],
-  columns: string[],
-): string {
-  return compileCellTemplate(template)(raw, row, columns)
-}

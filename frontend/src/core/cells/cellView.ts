@@ -1,5 +1,5 @@
 // Cell templating: substitute placeholders in a template against a single
-// result row. The base of renderCellTemplate (./cellTemplate.ts).
+// result row. The base of compileCellTemplate (./cellTemplate.ts).
 
 export function escapeHtml(s: string): string {
   return s

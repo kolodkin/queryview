@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { renderCellTemplate } from './cellTemplate'
+import { compileCellTemplate } from './cellTemplate'
+
+const renderCellTemplate = (t: string, raw: string, row: string[], columns: string[]) =>
+  compileCellTemplate(t)(raw, row, columns)
 
 const cols = ['id', 'name']
 
