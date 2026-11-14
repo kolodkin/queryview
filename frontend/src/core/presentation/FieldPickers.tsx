@@ -66,7 +66,7 @@ function FieldMenu({
               <span
                 className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[10px] leading-none ${
                   on
-                    ? 'border-[var(--qv-accent)] bg-[var(--qv-accent)] text-[var(--qv-accent-ink)]'
+                    ? 'border-[var(--qv-accent)] bg-[var(--qv-accent-strong)] text-[var(--qv-accent-ink)]'
                     : 'border-white/25'
                 }`}
               >

@@ -11,7 +11,12 @@
   syntax: '<color>';
   inherits: true;
   initial-value: #818cf8;
-} /* borders, active toggles, focus ring */
+} /* borders, active toggles */
+@property --qv-accent-strong {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #4f46e5;
+} /* the deep end of a filled accent, glows, focus ring */
 @property --qv-accent-soft {
   syntax: '<color>';
   inherits: true;
@@ -59,7 +64,7 @@
   .glass-input:focus {
     border-color: color-mix(in srgb, var(--qv-accent) 70%, transparent);
     background: rgba(255, 255, 255, 0.07);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--qv-accent) 40%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--qv-accent-strong) 30%, transparent);
   }
 
   .glass-btn {
@@ -90,8 +95,8 @@
     color: var(--qv-accent-ink);
     background-image: linear-gradient(
       180deg,
-      var(--qv-accent),
-      color-mix(in oklab, var(--qv-accent) 70%, black)
+      color-mix(in srgb, var(--qv-accent) 95%, transparent),
+      color-mix(in srgb, var(--qv-accent-strong) 95%, transparent)
     );
   }
 
@@ -99,7 +104,7 @@
     border-radius: 0.75rem;
     border: 1px solid color-mix(in srgb, var(--qv-accent) 50%, transparent);
     box-shadow:
-      0 10px 26px -10px color-mix(in srgb, var(--qv-accent) 60%, transparent),
+      0 10px 26px -10px color-mix(in srgb, var(--qv-accent-strong) 75%, transparent),
       inset 0 1px 0 0 rgba(255, 255, 255, 0.28);
     transition:
       filter 0.15s ease,
@@ -145,7 +150,7 @@
   .glass-toggle.is-active {
     border-color: color-mix(in srgb, var(--qv-accent) 60%, transparent);
     box-shadow:
-      0 8px 20px -10px color-mix(in srgb, var(--qv-accent) 60%, transparent),
+      0 8px 20px -10px color-mix(in srgb, var(--qv-accent-strong) 70%, transparent),
       inset 0 1px 0 0 rgba(255, 255, 255, 0.25);
   }
   /* Quieter active state (order-by add buttons). */

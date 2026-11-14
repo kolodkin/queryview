@@ -7,7 +7,7 @@ export type DashboardResults = Record<string, Record<string, unknown[]>>
 
 // The kernel's theme tokens (core/kernel.css), each a --qv-<token> variable.
 // Keep in step with the @property list in kernel.css.
-const QV_TOKENS = ['accent', 'accent-soft', 'accent-text', 'accent-ink'] as const
+const QV_TOKENS = ['accent', 'accent-strong', 'accent-soft', 'accent-text', 'accent-ink'] as const
 export type QvToken = (typeof QV_TOKENS)[number]
 export type QvTheme = Partial<Record<QvToken, string>>
 
