@@ -68,7 +68,8 @@ Two tags save hand-drawing a table or a selector; place them anywhere in the HTM
 ```
 
 `<qv-select-view>` pages the named query (it is then not in `window.queries`);
-a `<template column>` designs a column with `{cell}` and `{row.<column>}`.
+a `<template column>` designs a column with `{cell}` and `{row.<column>}`. Put
+placeholders in text or inside `href` / `src` only.
 
 Never name a new query or dashboard: push it unnamed and the user names it on Save.
 `name` only takes one that is already saved, to edit it.

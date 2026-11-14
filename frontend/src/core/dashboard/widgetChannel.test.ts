@@ -4,6 +4,7 @@ import {
   parseFieldsAttr,
   parseOrderByAttr,
   parseWidgetRequest,
+  rejectedWidgetReply,
   widgetQueryNames,
 } from './widgetChannel'
 
@@ -82,5 +83,28 @@ describe('presentation attributes', () => {
     expect(parseOrderByAttr(null)).toEqual([])
     expect(parseFieldsAttr(' day, revenue ')).toEqual(['day', 'revenue'])
     expect(parseFieldsAttr('')).toEqual([])
+  })
+})
+
+describe('rejectedWidgetReply', () => {
+  it('answers a malformed widget request so the widget is not left waiting', () => {
+    expect(rejectedWidgetReply({ ...good, limit: 2.5 })).toEqual({
+      type: 'widget-result',
+      id: 'a',
+      ok: false,
+      message: 'Bad request',
+    })
+    expect(rejectedWidgetReply({ type: 'widget-describe', id: 'b' })).toEqual({
+      type: 'widget-fields',
+      id: 'b',
+      ok: false,
+      message: 'Bad request',
+    })
+  })
+
+  it('has no answer for other messages', () => {
+    expect(rejectedWidgetReply({ type: 'set-params', id: 'a' })).toBeNull()
+    expect(rejectedWidgetReply({ type: 'widget-query' })).toBeNull()
+    expect(rejectedWidgetReply(null)).toBeNull()
   })
 })

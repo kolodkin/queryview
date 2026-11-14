@@ -59,6 +59,7 @@ export {
   parseFieldsAttr,
   parseOrderByAttr,
   parseWidgetRequest,
+  rejectedWidgetReply,
   widgetQueryNames,
   type WidgetReply,
   type WidgetRequest,

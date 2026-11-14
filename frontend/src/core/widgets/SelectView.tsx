@@ -17,6 +17,49 @@ type Page = { limit: number; offset: number; orderBy: OrderCol[] }
 
 const inputClass = 'glass-input ml-1 w-20 px-2 py-1 text-sm'
 
+// A whole number applied on Enter or on leaving the box, not per keystroke:
+// each change is a query. Keyed by its value, so paging resets the text.
+function NumberBox({
+  label,
+  testid,
+  value,
+  min,
+  max = Number.MAX_SAFE_INTEGER,
+  onCommit,
+}: {
+  label: string
+  testid: string
+  value: number
+  min: number
+  max?: number
+  onCommit: (n: number) => void
+}) {
+  const [text, setText] = useState(String(value))
+  function commit() {
+    const n = Math.trunc(Number(text))
+    const next = Number.isFinite(n) && text.trim() !== '' ? Math.min(max, Math.max(min, n)) : value
+    setText(String(next))
+    if (next !== value) onCommit(next)
+  }
+  return (
+    <label className="text-slate-300">
+      {label}
+      <input
+        type="number"
+        value={text}
+        min={min}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit()
+        }}
+        data-testid={testid}
+        className={inputClass}
+      />
+    </label>
+  )
+}
+
 export function SelectView({
   query,
   limit = 100,
@@ -112,33 +155,23 @@ export function SelectView({
         >
           Fields
         </button>
-        <label className="text-slate-300">
-          Limit
-          <input
-            type="number"
-            value={page.limit}
-            min={1}
-            max={1000}
-            onChange={(e) =>
-              setPage({ ...page, limit: Math.min(1000, Math.max(1, Number(e.target.value) || 1)) })
-            }
-            data-testid="qv-limit"
-            className={inputClass}
-          />
-        </label>
-        <label className="text-slate-300">
-          Offset
-          <input
-            type="number"
-            value={page.offset}
-            min={0}
-            onChange={(e) =>
-              setPage({ ...page, offset: Math.max(0, Math.trunc(Number(e.target.value)) || 0) })
-            }
-            data-testid="qv-offset"
-            className={inputClass}
-          />
-        </label>
+        <NumberBox
+          label="Limit"
+          testid="qv-limit"
+          key={`l${page.limit}`}
+          value={page.limit}
+          min={1}
+          max={1000}
+          onCommit={(n) => setPage({ ...page, limit: n })}
+        />
+        <NumberBox
+          label="Offset"
+          testid="qv-offset"
+          key={`o${page.offset}`}
+          value={page.offset}
+          min={0}
+          onCommit={(n) => setPage({ ...page, offset: n })}
+        />
         <button
           type="button"
           onClick={() => setPage({ ...page, offset: Math.max(0, page.offset - page.limit) })}

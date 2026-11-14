@@ -61,6 +61,20 @@ export function parseWidgetRequest(data: unknown): WidgetRequest | null {
   return typeof m.id === 'string' ? { type: m.type, id: m.id, ...page } : null
 }
 
+// The answer to a widget message that failed parseWidgetRequest, so the widget
+// waiting on that id shows an error instead of hanging; null when the message
+// isn't an identifiable widget request.
+export function rejectedWidgetReply(data: unknown): WidgetReply | null {
+  if (typeof data !== 'object' || data === null) return null
+  const { type, id } = data as Record<string, unknown>
+  if (typeof id !== 'string') return null
+  if (type === 'widget-query')
+    return { type: 'widget-result', id, ok: false, message: 'Bad request' }
+  if (type === 'widget-describe')
+    return { type: 'widget-fields', id, ok: false, message: 'Bad request' }
+  return null
+}
+
 // The queries `<qv-select-view>` tags own, distinct and in order. The host
 // leaves these out of the up-front run: each runs for its widget alone.
 export function widgetQueryNames(html: string): string[] {

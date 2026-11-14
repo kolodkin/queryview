@@ -45,7 +45,8 @@ always shows live data.
 **Edit queries** opens an editor for the dashboard's queries, in the app and
 outside the frame: pick a query, edit its SQL, and **Execute** re-runs the
 dashboard with the edit. The frame is not reloaded, so the page keeps its
-state. **Save** persists the edited dashboard.
+state; a failing query shows its error above the page. Until **Execute**, the
+page and its widgets keep running the SQL as last executed. **Save** persists the edited dashboard.
 
 Focus in the panel holds the human [edit lock](./query.md#co-edit--edit-lock):
 an agent push is refused with `blocked, user editing` while you type.
@@ -131,7 +132,10 @@ frame like the rest of the page, and are loaded only by dashboards that use one.
 - **`<template column>`** — designs one column's cells. Its HTML is used per
   row with `{cell}` (this column's value) and `{row.<column>}` (another
   column's) substituted: HTML-escaped, and URL-encoded inside `href` / `src`.
-  An unknown `{row.<column>}` is left as written.
+  An unknown `{row.<column>}` is left as written. Use placeholders in text and
+  in `href` / `src` only: other attributes (`style`, `on…`) get no URL encoding.
+  A column holding a whole URL can't fill an `href` by itself, since its `://`
+  is encoded too; build the link around an id instead.
 - **`<qv-param name>`** — the selector for one
   [dashboard parameter](#dashboard-parameters): a dropdown, or a checkbox for a
   `dimension`. A change re-runs the dashboard.

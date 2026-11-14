@@ -27,4 +27,13 @@ describe('renderCellTemplate', () => {
       '{row.id} {row.nope}',
     )
   })
+
+  it.each(['HREF="{cell}"', 'href={cell}', "href = '{cell}'", 'SRC="{cell}"'])(
+    'URL-encodes %s however the attribute is written',
+    (attr) => {
+      expect(
+        renderCellTemplate(`<a ${attr}>x</a>`, 'javascript:alert(1)', ['1', ''], cols),
+      ).toContain('javascript%3Aalert(1)')
+    },
+  )
 })

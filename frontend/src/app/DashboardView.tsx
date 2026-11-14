@@ -7,6 +7,7 @@ import {
   parseDashboardParams,
   parseParamsRequest,
   parseWidgetRequest,
+  rejectedWidgetReply,
   resolveParams,
   widgetQueryNames,
   type DashboardResults,
@@ -101,6 +102,9 @@ function DashboardView({
   // query is substituted with.
   const resolvedRef = useRef<ResolvedParam[]>([])
   const frameRef = useRef<HTMLIFrameElement>(null)
+  // The SQL as last run (load or Execute). The frame's widgets and param
+  // re-runs use this, so a half-typed edit in the SQL panel never runs.
+  const executedRef = useRef<Record<string, string>>({})
   // The open dashboard with unsaved SQL-panel edits, or null.
   const editedRef = useRef<DashboardPush | null>(null)
   const [showSql, setShowSql] = useState(false)
@@ -229,6 +233,7 @@ function DashboardView({
       const dash = await loadDashboard()
       if (cancelled || !dash) return
       setActive(dash)
+      executedRef.current = dash.queries
 
       setLoading(true)
       try {
@@ -314,7 +319,11 @@ function DashboardView({
       setReloadNonce((n) => n + 1)
       return
     }
-    frame.contentWindow?.postMessage(await rerun(active, null), '*')
+    executedRef.current = active.queries
+    const answer = await rerun(active, null)
+    // The page keeps its last results; the failure shows above it.
+    setError(answer.ok ? null : String(answer.message))
+    frame.contentWindow?.postMessage(answer, '*')
   }
 
   // Unsaved scratch: one widget over one empty query, the SQL panel open.
@@ -322,7 +331,10 @@ function DashboardView({
     editedRef.current = null
     setLocalPush({
       name: '',
-      html: '<qv-select-view query="main"></qv-select-view>',
+      // The frame paints its own backdrop; match the app's instead of white.
+      html:
+        '<style>body{margin:0;background:#0c1124}</style>' +
+        '<qv-select-view query="main"></qv-select-view>',
       queries: { main: '' },
       params: [],
     })
@@ -338,8 +350,9 @@ function DashboardView({
     const declared = parseDashboardParams(active.params)
     // One of this dashboard's queries, with the current selections applied.
     function sqlFor(query: string): WidgetSql {
-      const sql = active?.queries[query]
-      if (sql === undefined) return { message: `Unknown query “${query}”` }
+      // hasOwn: a name like `constructor` must not find Object's own.
+      if (!Object.hasOwn(executedRef.current, query)) return { message: `Unknown query “${query}”` }
+      const sql = executedRef.current[query]
       if (!sql.trim()) return { message: 'Enter a query.' }
       const applied = applyToQueries({ [query]: sql }, declared, resolvedRef.current, identQuote)
       return query in applied
@@ -356,9 +369,14 @@ function DashboardView({
         if (reply) frame.contentWindow?.postMessage(reply, '*')
         return
       }
+      const rejected = rejectedWidgetReply(e.data)
+      if (rejected) {
+        frame.contentWindow?.postMessage(rejected, '*')
+        return
+      }
       const values = parseParamsRequest(e.data)
       if (!values) return
-      const answer = await rerun(active, values)
+      const answer = await rerun({ ...active, queries: executedRef.current }, values)
       frame.contentWindow?.postMessage(answer, '*')
     }
     window.addEventListener('message', onMessage)
