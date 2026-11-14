@@ -1,9 +1,22 @@
-// The document a dashboard iframe renders: a prologue + the agent HTML.
+// The document a dashboard iframe renders: a theme, a prologue + the agent HTML.
 
 import type { ResolvedParam } from './params'
 
 // Column-oriented results map: {query_name: {column_name: values[]}}.
 export type DashboardResults = Record<string, Record<string, unknown[]>>
+
+// The kernel's theme tokens (core/kernel.css), each a --qv-<token> variable.
+export type QvToken = 'accent' | 'accent-soft' | 'accent-text' | 'accent-ink'
+export type QvTheme = Partial<Record<QvToken, string>>
+
+// Variables don't cross into the sandboxed frame, so the host's theme is
+// written into it; the widgets' shadow roots inherit it from there.
+function themeStyle(theme: QvTheme): string {
+  const vars = Object.entries(theme)
+    .map(([k, v]) => `--qv-${k}:${String(v).replace(/[<;{}]/g, '')};`)
+    .join('')
+  return vars ? `<style>:root{${vars}}</style>\n` : ''
+}
 
 // The in-iframe half of the params channel. The page sends values only; the
 // host substitutes them into the dashboard's own SQL and posts results back, so
@@ -31,9 +44,11 @@ export function buildSrcDoc(
   html: string,
   results: DashboardResults,
   params: ResolvedParam[] = [],
+  theme: QvTheme = {},
 ): string {
   const safe = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c')
   return (
+    themeStyle(theme) +
     `<script>window.queries = ${safe(results)};\nwindow.params = ${safe(params)};` +
     `${SET_PARAMS_HELPER}\n</script>\n` +
     // The <qv-*> tags: loaded only by dashboards that use one, deferred so the

@@ -1,7 +1,9 @@
 // The backend-agnostic kernel: result parsing, cell rendering, presentation
 // pickers, and the dashboard sandbox and its widgets. Nothing here fetches, routes,
-// or reads app state (enforced by eslint.config.js), so this folder is what
-// another app reuses. The app imports it only through this file.
+// or reads app state, and it imports nothing outside itself (both enforced by
+// eslint.config.js), so this folder is what another app reuses; it brings its
+// own styles (kernel.css), themed through the --qv-* variables. The app
+// imports it only through this file.
 
 export {
   EMPTY_ROWS,
@@ -30,7 +32,7 @@ export { filterNames } from './nameFilter'
 export { useDismiss } from './useDismiss'
 export { useCopy } from './useCopy'
 export { DashboardFrame } from './dashboard/DashboardFrame'
-export { buildSrcDoc, type DashboardResults } from './dashboard/srcDoc'
+export { buildSrcDoc, type DashboardResults, type QvTheme, type QvToken } from './dashboard/srcDoc'
 export {
   applyToQueries,
   parseDashboardParams,

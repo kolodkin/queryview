@@ -19,6 +19,17 @@ describe('buildSrcDoc', () => {
     expect(doc).toContain('\\u003c/script>\\u003cimg')
   })
 
+  test('writes the theme as :root variables ahead of the prologue', () => {
+    const doc = buildSrcDoc('', {}, [], { accent: '#faff69', 'accent-ink': 'black' })
+    expect(
+      doc.startsWith('<style>:root{--qv-accent:#faff69;--qv-accent-ink:black;}</style>\n<script>'),
+    ).toBe(true)
+    expect(buildSrcDoc('', {}, [], { accent: 'red;}</style>' })).toContain(
+      '--qv-accent:red/style>;',
+    )
+    expect(buildSrcDoc('', {})).toMatch(/^<script>/)
+  })
+
   test('loads the widget bundle only for dashboards that use a tag', () => {
     expect(buildSrcDoc('<qv-param name="r"></qv-param>', {})).toContain(
       '<script defer src="/widgets.js"></script>',
