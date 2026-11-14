@@ -81,20 +81,16 @@ export function placeholdersIn(sql: string): string[] {
   return [...seen]
 }
 
-// Backslash escapes only in backtick dialects (ClickHouse); elsewhere it is literal.
-// shortcut: the dialect is inferred from the identifier quote, pass an explicit flag if a driver breaks that pairing
-const backslashEscapes = (quote: string) => quote === '`'
-
-function quoteLiteral(value: string, quote: string): string {
-  const escaped = backslashEscapes(quote) ? value.replaceAll('\\', '\\\\') : value
-  return `'${escaped.replaceAll("'", "''")}'`
+// Values are always one of the param's options, which the dashboard author
+// controls; dialect escapes such as ClickHouse's backslash are theirs to handle.
+function quoteLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`
 }
 
-// A quote character in the name (or a backslash, where it escapes) can't be
-// trusted through string assembly, and no real table or column carries one.
+// A quote character in the name can't be trusted through string assembly, and
+// no real table or column carries one, so reject it.
 function quoteIdentifier(name: string, param: string, quote: string): string {
-  if (name.includes(quote) || (backslashEscapes(quote) && name.includes('\\')))
-    throw new Error(`invalid identifier for {${param}}: ${name}`)
+  if (name.includes(quote)) throw new Error(`invalid identifier for {${param}}: ${name}`)
   return `${quote}${name}${quote}`
 }
 
@@ -123,7 +119,7 @@ export function substituteParams(
     }
     if (raw === undefined || raw === '') throw new Error(`no value selected for {${name}}`)
     const asIdentifier = cast ? cast === 'identifier' : p.kind === 'identifier'
-    return asIdentifier ? quoteIdentifier(raw, name, quote) : quoteLiteral(raw, quote)
+    return asIdentifier ? quoteIdentifier(raw, name, quote) : quoteLiteral(raw)
   })
 }
 

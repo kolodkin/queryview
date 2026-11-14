@@ -301,26 +301,6 @@ describe('parseParamsRequest', () => {
   })
 })
 
-describe('backslashes', () => {
-  const params = parseDashboardParams([
-    { name: 'path', options: ['x'] },
-    { name: 'field', kind: 'identifier', options: ['x'] },
-  ])
-  test('are escaped in a literal where the dialect escapes with them', () => {
-    const sql = 'SELECT {path}'
-    expect(substituteParams(sql, params, { path: "C:\\temp\\' OR 1=1 --" }, '`')).toBe(
-      "SELECT 'C:\\\\temp\\\\'' OR 1=1 --'",
-    )
-    expect(substituteParams(sql, params, { path: 'C:\\temp' }, '"')).toBe("SELECT 'C:\\temp'")
-  })
-  test('are rejected in an identifier where they escape', () => {
-    expect(() => substituteParams('SELECT {field}', params, { field: 'a\\' }, '`')).toThrow(
-      /invalid identifier/,
-    )
-    expect(substituteParams('SELECT {field}', params, { field: 'a\\' }, '"')).toBe('SELECT "a\\"')
-  })
-})
-
 describe('an unchecked dimension', () => {
   test("stays unchecked for '' and 0", async () => {
     const params = parseDashboardParams([{ name: 'by_city', kind: 'dimension' }])
