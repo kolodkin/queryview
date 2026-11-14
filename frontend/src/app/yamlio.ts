@@ -4,23 +4,21 @@
 
 import { apiFetch } from './api'
 
-export type ExportKind = 'query' | 'dashboard' | 'workspace'
+export type ExportKind = 'dashboard' | 'workspace'
 
 export type ImportResult = {
   ok: boolean
   kind?: ExportKind
-  queries?: number
   dashboards?: number
   message?: string
 }
 
 export function exportPath(
   kind: ExportKind,
-  opts: { name?: string; connType?: string; workspace?: string } = {},
+  opts: { name?: string; workspace?: string } = {},
 ): string {
   const params = new URLSearchParams({ kind })
   if (opts.name) params.set('name', opts.name)
-  if (opts.connType) params.set('conn_type', opts.connType)
   if (opts.workspace) params.set('workspace', opts.workspace)
   return `/api/export?${params.toString()}`
 }
@@ -34,7 +32,7 @@ export function filenameFromDisposition(header: string | null, fallback: string)
 
 export async function fetchExport(
   kind: ExportKind,
-  opts: { name?: string; connType?: string; workspace?: string } = {},
+  opts: { name?: string; workspace?: string } = {},
 ): Promise<{ ok: boolean; filename?: string; text?: string; message?: string }> {
   const res = await fetch(exportPath(kind, opts))
   if (!res.ok) {
@@ -67,7 +65,7 @@ export async function importYaml(text: string, workspace?: string): Promise<Impo
 }
 
 // Hand the browser a text file to save. DOM side effect, kept out of components
-// so they stay declarative. Also used for CSV downloads (Studio).
+// so they stay declarative. Also used for CSV downloads (dashboard widgets).
 export function downloadText(filename: string, text: string, mime = 'application/x-yaml'): void {
   const url = URL.createObjectURL(new Blob([text], { type: mime }))
   const a = document.createElement('a')

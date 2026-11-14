@@ -1,4 +1,4 @@
-// The height steps of a SQL textbox, shared by Studio and the Scripts page:
+// The height steps of a SQL textbox, shared by the dashboard SQL panel and the Scripts page:
 // Min collapses it so the results get the room.
 export const TEXTAREA_SIZES: [label: string, rows: number][] = [
   ['Min', 0],

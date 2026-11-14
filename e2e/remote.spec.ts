@@ -11,7 +11,7 @@ import {
   connect,
   expect,
   mcpCall,
-  openQueryPanel,
+  openNewQuery,
   sessionId,
   test,
 } from "./fixtures";
@@ -40,44 +40,14 @@ test("mcp push_script fills and runs the scripts editor", async ({ page, seeds, 
   const blocked = await mcpCall(baseURL!, "push_script", { session_id: sid, sql: "SELECT 2" });
   expect(blocked).toMatchObject({ ok: false, message: "blocked, user editing" });
   await expect(textarea).toHaveValue(script + " -- mine");
-});
-
-test("mcp push to live session", async ({ page, seeds, baseURL }) => {
-  await connect(page, DUCK, await seeds.duckdb());
-  await openQueryPanel(page);
-  const sid = await armRemote(page);
-
-  // Push a query the way an MCP client would (via the REST surface).
-  const { body } = await api(`${baseURL}/api/remote/push_studio`, {
-    json: {
-      session_id: sid,
-      query: "SELECT id, name FROM items",
-      limit: 10,
-      order_by: [{ name: "id", dir: "DESC" }],
-      fields: ["name"],
-    },
-  });
-  expect(body.ok).toBe(true);
-
-  // The browser filled the SQL box and auto-ran; only the pushed field shows.
-  await expect(page.getByTestId("query-input")).toHaveValue("SELECT id, name FROM items");
-  const output = page.getByTestId("query-output");
-  await expect(output).toBeVisible();
-  await expect(output.locator("table thead th")).toHaveCount(1);
-  await expect(output.locator("table thead th")).toContainText("name");
-  await expect(output).toContainText("gamma"); // id DESC -> gamma first
 
   // Disarm: the popover no longer exposes the session id...
   await page.getByTestId("agent-toggle").click();
   await page.getByTestId("remote-arm").uncheck();
   await expect(page.getByTestId("remote-session-id")).toHaveCount(0);
-
-  // ...and a push to an unknown/inactive id is reported as not delivered.
-  const r2 = await api(`${baseURL}/api/remote/push_studio`, {
-    json: { session_id: "deadbeef", query: "SELECT 1" },
-    ok: false,
-  });
-  expect(r2.body.ok).toBe(false);
+  // ...and a push to an unknown id is reported as not delivered.
+  const lost = await mcpCall(baseURL!, "push_script", { session_id: "deadbeef", sql: "SELECT 2" });
+  expect(lost.ok).toBe(false);
 });
 
 test("agent switch names the connection and toasts", async ({ page, seeds, baseURL }) => {
@@ -102,13 +72,13 @@ test("agent switch names the connection and toasts", async ({ page, seeds, baseU
 test("mcp open_explorer browses the table", async ({ page, seeds, baseURL }) => {
   await seeds.testDb();
   await connect(page, CH, chDb());
-  await openQueryPanel(page);
+  await openNewQuery(page);
   const sid = await armRemote(page);
 
   const out = await mcpCall(baseURL!, "open_explorer", { session_id: sid, database: chDb(), table: "items" });
   expect(out.ok).toBe(true);
 
-  // The browser left the query panel for the Explorer, browsing the table.
+  // The browser left the dashboard for the Explorer, browsing the table.
   await expect(page).toHaveURL(/\/explorer\?table=items$/);
   await expect(page.getByTestId("agent-toast")).toContainText("Agent opened the Explorer");
   await expect(page.getByTestId("explorer-output")).toContainText("gamma");

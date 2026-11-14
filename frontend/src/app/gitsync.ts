@@ -1,9 +1,9 @@
 // Client for the /api/git backup/restore endpoints (see docs/gitsync.md).
 // Every operation is scoped to a workspace (see docs/workspace.md).
 
-import { apiFetch } from './api'
+import { apiFetch, postJson } from './api'
 
-export type GitKind = 'query' | 'dashboard'
+export type GitKind = 'dashboard'
 
 export type GitRevision = { sha: string; date: number; message: string }
 
@@ -48,7 +48,7 @@ export function invalidateGitStatus(): void {
 }
 
 // An entity the last sync kept local although the repo has another version.
-export type GitConflict = { kind: GitKind; name: string; conn_type: string | null }
+export type GitConflict = { kind: GitKind; name: string }
 
 export async function gitConflicts(workspace: string): Promise<GitConflict[]> {
   try {
@@ -64,19 +64,13 @@ export async function gitConflicts(workspace: string): Promise<GitConflict[]> {
 export type GitSyncResult = {
   ok: boolean
   imported?: GitConflict[]
-  // Queries deleted here because the repo deleted them.
-  deleted?: GitConflict[]
   conflicts?: GitConflict[]
   message?: string
 }
 
 // Merge the repo into `workspace` (see docs/gitsync.md, "Merge-in").
 export async function gitSync(workspace: string): Promise<GitSyncResult> {
-  const res = await apiFetch('/api/git/sync', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace }),
-  })
+  const res = await postJson('/api/git/sync', { workspace })
   const data = await res.json()
   announceGitSync()
   return data
@@ -99,14 +93,9 @@ export function onGitSync(f: () => void): () => void {
 export async function gitStore(
   kind: GitKind,
   name: string,
-  connType?: string,
   workspace?: string,
 ): Promise<GitStoreResult> {
-  const res = await apiFetch('/api/git/store', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind, name, conn_type: connType, workspace }),
-  })
+  const res = await postJson('/api/git/store', { kind, name, workspace })
   const data = await res.json()
   announceGitSync()
   return data
@@ -115,10 +104,9 @@ export async function gitStore(
 export async function gitHistory(
   kind: GitKind,
   name: string,
-  opts: { connType?: string; before?: string; limit?: number; workspace?: string } = {},
+  opts: { before?: string; limit?: number; workspace?: string } = {},
 ): Promise<GitHistoryResult> {
   const params = new URLSearchParams({ kind, name })
-  if (opts.connType) params.set('conn_type', opts.connType)
   if (opts.before) params.set('before', opts.before)
   if (opts.limit) params.set('limit', String(opts.limit))
   if (opts.workspace) params.set('workspace', opts.workspace)
@@ -132,14 +120,9 @@ export async function gitRestore(
   kind: GitKind,
   name: string,
   ref: string,
-  connType?: string,
   workspace?: string,
 ): Promise<{ ok: boolean; message?: string }> {
-  const res = await apiFetch('/api/git/restore', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ kind, name, conn_type: connType, ref, workspace }),
-  })
+  const res = await postJson('/api/git/restore', { kind, name, ref, workspace })
   const data = await res.json()
   announceGitSync()
   return data

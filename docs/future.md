@@ -14,18 +14,27 @@ computes. Same driver and same picker as folder mode (see
 [explorer.md](./explorer.md)); the `path` decides the mode. Today file mode has
 no picker and lists only what `SHOW TABLES` returns.
 
+## Dashboards
+
+- **Rename and delete.** A saved dashboard can only be overwritten. Add
+  **Rename** and a soft **Delete** / **Undelete** / **Purge**, with git sync
+  following a deletion.
+- **Unsaved edits survive a reload.** A **New query** draft is kept in the
+  [session](./session.md); [SQL panel](./dashboard.md#the-sql-panel) edits to
+  a saved dashboard are not, and are lost on leaving it.
+- **Driver scope.** A dashboard's SQL is written for one driver, yet every
+  dashboard lists for every connection. An optional driver on the dashboard
+  would hide it from sessions on another.
+- **More widgets.** Only `<qv-select-view>` and `<qv-param>` exist; a chip is
+  the next candidate.
+- **Script-created widgets.** The widget bundle loads, and a widget's query is
+  kept out of the up-front run, only when the tag is written in the HTML: one
+  a script creates is not seen.
+
 ## Deferred
 
 Out of scope by design, not planned yet. Git sync assumes a single user syncs
 each workspace; multi-user sync needs git pulling or a webhook first.
-
-- **Content check when a sync follows a deletion.** The merge reads a query,
-  then soft-deletes it in a second DB session without re-checking its
-  content. A save landing in between is soft-deleted instead of becoming a
-  conflict (it stays recoverable with **Undelete**). With one user this needs
-  their own save to race their own sync. Multi-user sync should make that
-  write a compare-and-set on what the merge read, and report a conflict on a
-  mismatch.
 
 ## Related docs
 
@@ -35,4 +44,4 @@ each workspace; multi-user sync needs git pulling or a webhook first.
 - [workspace.md](./workspace.md) — workspaces and their git remotes.
 - [session.md](./session.md) — sessions and what they remember.
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
-- [query.md](./query.md) — running queries: pagination, predefined queries, CSV.
+- [query.md](./query.md) — querying: pagination, the results grid, CSV.

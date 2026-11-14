@@ -33,21 +33,6 @@ def test_connect_validation_error_is_400():
     assert r.status_code == 400
 
 
-def test_predefined_query_save_rejects_malformed_cell_view():
-    c = TestClient(app)
-    body = {"query_name": "cv bad", "type": "clickhouse", "query": "SELECT 1"}
-    r = c.post("/api/predefined-queries", json={**body, "cell_view": "col: [unclosed"})
-    assert r.status_code == 400 and "invalid cell_view" in r.json()["message"]
-    # A non-string cell_view is rejected, not silently dropped.
-    r = c.post("/api/predefined-queries", json={**body, "cell_view": {"col": {"type": "link"}}})
-    assert r.status_code == 400
-    # The valid shape still saves.
-    ok = c.post(
-        "/api/predefined-queries", json={**body, "cell_view": "col:\n  type: link\n  value: https://x/{cell}\n"}
-    )
-    assert ok.json() == {"ok": True}
-
-
 def test_old_clickhouse_path_is_gone():
     c = TestClient(app)
     assert c.post("/api/clickhouse/connect", json={}).status_code == 404
@@ -197,7 +182,7 @@ def test_folders_past_the_limit_stay_reachable_by_path(tmp_path):
     r = c.post("/api/db/connect", json=body).json()
     assert "d12" not in r["databases"] and r["databases_truncated"] is True
 
-    # A saved query or link can still select d12/deep: it is checked by path.
+    # A saved dashboard or link can still select d12/deep: it is checked by path.
     r = c.post("/api/db/database", json={"database": "d12/deep"}).json()
     assert r["ok"] and r["databases"] == [".", "d12", "d12/deep"]
     assert [t["name"] for t in c.get("/api/db/tables").json()["tables"]] == ["a.csv"]

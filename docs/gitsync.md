@@ -1,6 +1,6 @@
 # Git sync — backup & restore
 
-Predefined queries and dashboards can be backed up to a git repository (e.g.
+Dashboards can be backed up to a git repository (e.g.
 GitHub) and restored from any past revision, per entity. Connections are never
 written to the repo (their config is encrypted credentials).
 
@@ -32,8 +32,6 @@ for that case is in [docker.md](./docker.md#git-sync).
 ## Repository layout
 
 ```
-queries/{type}/{name}.yaml         # query, cell_view, order_by, fields
-queries/{type}/{name}.deleted      # a deleted query: same content, marked deleted
 dashboards/{name}/meta.yaml        # name, params (when declared)
 dashboards/{name}/dashboard.html   # the HTML, verbatim
 dashboards/{name}/queries.yaml     # {query_name: SQL}
@@ -57,39 +55,21 @@ Opening or refreshing the app never syncs.
 
 The merge only adds, never overwrites:
 
-- in the repo, not here → **imported** (a `.deleted` marker lands among the
-  [deleted queries](./query.md#deleted-queries)), unless it was renamed here
-  since the last agreement and the repo's copy hasn't changed since;
+- in the repo, not here → **imported**, unless it was removed here since the
+  last agreement and the repo's copy hasn't changed since;
 - the same on both sides → nothing to do;
 - different, and the repo's copy changed since this workspace last agreed with
   it → a **conflict**: the local copy is kept and the entity is listed under a
   ⚠ next to the workspace switcher until you **Commit** (push yours) or
   **Restore** (take the repo's);
-- different, but only because you edited, deleted or undeleted it locally →
-  just an uncommitted change, not a conflict;
-- deleted or undeleted in the repo since the last agreement, same content here
-  → the local copy follows (reported under `deleted` or `imported`).
+- different, but only because you edited it locally → just an uncommitted
+  change, not a conflict.
 
-A sync never removes a row: a deletion it applies is a soft delete, undone
-with **Undelete**. "Last agreed" is the repo object id each entity had when it
+A sync never removes a row, and ignores anything in the repo outside
+`dashboards/`. "Last agreed" is the repo object id each entity had when it
 was imported, committed, restored or found identical, kept with the conflict
 list in `{data dir}/gitsync/{workspace id}.sync.json`.
 Changing a workspace's remote or branch drops its clone and that file.
-
-## Deleted queries
-
-- **Commit** on a [deleted query](./query.md#deleted-queries) swaps its `.yaml`
-  for a `.deleted` marker with the same content (`delete query {type}/{name}`);
-  once undeleted, Commit swaps it back.
-- **Purge** removes the marker (`purge query {type}/{name}`) before the row,
-  so no instance imports it back (retried once, like Commit). Only Purge does:
-  deleting a workspace removes its deleted queries locally and leaves their
-  markers in the repo.
-- Other instances delete their copy on sync; one edited locally becomes a
-  conflict, where **Restore** takes the deletion.
-- History spans both paths: restoring an older revision brings the query back
-  live, restoring the marker brings it back deleted.
-- Renaming is local: committing the new name adds a file, the old one stays.
 
 ## Versioning
 
@@ -100,7 +80,7 @@ never moves and history is append-only.
 
 ## UI
 
-Next to each entity's **Save** button (query panel and dashboard page):
+Next to the dashboard page's **Save** button:
 **Commit** pushes the saved DB state to the remote (retried once if another
 instance pushed first); **Restore** opens
 the entity's revision list (newest first, 10 at a time, scroll for more) and
@@ -110,13 +90,13 @@ are disabled when the active workspace has no remote configured.
 ## API
 
 - `GET /api/git/status?workspace=` → `{configured, conflicts}`
-- `POST /api/git/sync` `{workspace?}` → `{ok, imported, deleted, conflicts}`
-- `POST /api/git/store` `{kind, name, conn_type?, message?, workspace?}` → `{ok, committed, sha, message, imported, deleted, conflicts}`
-- `GET /api/git/history?kind=&name=&conn_type=&before=&limit=10&workspace=` → `{ok, revisions: [{sha, date, message}], has_more}`
-- `POST /api/git/restore` `{kind, name, conn_type?, ref?, workspace?}` → `{ok, restored, sha, imported, deleted, conflicts}`
+- `POST /api/git/sync` `{workspace?}` → `{ok, imported, conflicts}`
+- `POST /api/git/store` `{kind, name, message?, workspace?}` → `{ok, committed, sha, message, imported, conflicts}`
+- `GET /api/git/history?kind=&name=&before=&limit=10&workspace=` → `{ok, revisions: [{sha, date, message}], has_more}`
+- `POST /api/git/restore` `{kind, name, ref?, workspace?}` → `{ok, restored, sha, imported, conflicts}`
   `ref` is a sha from history or a branch name (read as `origin/<name>`); default: the remote branch head.
 
-`kind` is `"query"` or `"dashboard"`; `conn_type` is required for queries;
+`kind` is `"dashboard"`;
 `workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_store`, `git_history`,
 `git_restore` mirror the same surface, resolving the workspace from an
 optional `session_id` (see [workspace.md](./workspace.md)).
@@ -125,7 +105,6 @@ optional `session_id` (see [workspace.md](./workspace.md)).
 
 - [workspace.md](./workspace.md) — workspaces: per-workspace remotes.
 - [export-import.md](./export-import.md) — one-shot YAML export/import of the same entities, no git needed.
-- [query.md](./query.md) — predefined queries.
 - [dashboard.md](./dashboard.md) — dashboards.
 - [api.md](./api.md) — backend JSON API.
 - [future.md](./future.md) — planned follow-ups to git sync.

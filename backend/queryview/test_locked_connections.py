@@ -97,7 +97,6 @@ def test_mcp_tools_are_refused_on_a_locked_connection():
     assert _run(mcp_server.run_sql(sid, "SELECT 1"))["message"] == "connection is locked"
     assert _run(mcp_server.run_script(sid, "SELECT 1"))["message"] == "connection is locked"
     assert _run(mcp_server.push_script(sid, "SELECT 1"))["message"] == "connection is locked"
-    assert _run(mcp_server.push_studio(sid, "SELECT 1"))["message"] == "connection is locked"
     pushed = _run(mcp_server.push_dashboard(sid, "<p>", {"q": "SELECT 1"}))
     assert pushed["ok"] is False and pushed["message"] == "connection is locked"
     info = _run(mcp_server.session_info(sid))
@@ -107,10 +106,8 @@ def test_mcp_tools_are_refused_on_a_locked_connection():
     assert _run(mcp_server.select_database(sid, "memory"))["message"] == "connection is locked"
     assert _run(mcp_server.use_connection(sid, "lock-mcp-duck"))["message"] == "connection is locked"
     # The REST push surface, with the session id only.
-    assert c.post("/api/remote/push_studio", json={"session_id": sid, "query": "SELECT 1"}).json() == {
-        "ok": False,
-        "message": "connection is locked",
-    }
+    saved = c.post("/api/dashboards", json={"name": "lock-mcp dash", "html": "<p/>", "session_id": sid}).json()
+    assert saved["pushed"] is False and saved["message"] == "connection is locked"
 
 
 def test_unlock_takes_the_passphrase_and_opening_lands_locked(_no_backoff):

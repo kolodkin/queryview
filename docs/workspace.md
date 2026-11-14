@@ -1,6 +1,6 @@
 # Workspaces
 
-Predefined queries and dashboards belong to a **workspace**; each workspace
+Dashboards belong to a **workspace**; each workspace
 git-syncs to its own remote (see [gitsync.md](./gitsync.md)). Entity names are
 unique per workspace, so two workspaces can each have a "daily revenue"
 dashboard. Connections are global by design — any workspace can use any
@@ -22,10 +22,8 @@ configs). The API returns it only with the credential stripped
 write-only. A workspace
 without a remote is a pure namespace: its git controls are disabled.
 
-Deleting a workspace requires it to be empty (409 otherwise); its
-[deleted queries](./query.md#deleted-queries) don't count and are removed with
-it, locally only: their [`.deleted` markers](./gitsync.md#deleted-queries)
-stay in the git remote, which keeps its history either way.
+Deleting a workspace requires it to be empty (409 otherwise). The git remote
+keeps its history either way.
 
 ## API
 
@@ -35,7 +33,7 @@ stay in the git remote, which keeps its history either way.
   `remote` clears it; an absent key leaves it unchanged
 - `DELETE /api/workspaces/{name}`
 
-Scoped endpoints (predefined queries, dashboards, `/api/git/*`) accept an
+Scoped endpoints (dashboards, export/import, `/api/git/*`) accept an
 optional `workspace` name, defaulting to the fallback workspace.
 
 ## UI
@@ -49,7 +47,7 @@ lists.
 
 MCP is workspace-unaware: no workspace parameter, no workspace tools. The
 armed browser session reports its active workspace (alongside the database);
-`list_queries`, `list_dashboards`, and the `git_*` tools take an optional
+`list_dashboards` and the `git_*` tools take an optional
 `session_id` and resolve the workspace from it, else the fallback. The human picks the
 workspace; the agent works inside the session it was invited into. Workspace
 CRUD stays API/UI-only because it is admin configuration involving secrets.
@@ -57,7 +55,6 @@ CRUD stays API/UI-only because it is admin configuration involving secrets.
 ## Related docs
 
 - [gitsync.md](./gitsync.md) — backup & restore mechanics.
-- [query.md](./query.md) — predefined queries.
 - [dashboard.md](./dashboard.md) — dashboards.
 - [api.md](./api.md) — backend JSON API.
 - [future.md](./future.md) — planned work.

@@ -2,9 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ResultsTable, columnNames, columnTypes, type QueryRows } from '../core'
-import { apiFetch } from './api'
+import { postJson } from './api'
 import { Spinner } from './controls/Spinner'
-import { loadIntoStudio } from './queryPanel'
 import { flushPatches, patchView, viewState } from './session'
 import { useEditLock } from './sessionLock'
 import {
@@ -14,7 +13,8 @@ import {
   type Span,
   type StatementResult,
 } from './scriptRun'
-import { TEXTAREA_SIZES, textareaSizeClass } from './textareaSizes'
+import TextareaSizes from './controls/TextareaSizes'
+import { textareaSizeClass } from './textareaSizes'
 
 // A script the agent pushed (MCP push_script).
 export type ScriptPush = { sql: string; run: boolean }
@@ -79,11 +79,7 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
     setError(null)
     setFailed(null)
     try {
-      const res = await apiFetch('/api/db/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sql: text }),
-      })
+      const res = await postJson('/api/db/execute', { sql: text })
       const data = await res.json()
       if (ticket !== runSeq.current) return
       if (data.ok) {
@@ -127,7 +123,7 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
 
   const summary = runSummary(results ?? [])
   // The last statement run, when it returned rows: the table below, and what
-  // Open in Studio carries over. A failed statement has no meta.
+  // Open in Dashboard carries over. A failed statement has no meta.
   const last = results?.at(-1) ?? null
   const lastRows: QueryRows | null = useMemo(
     () => (last?.meta && last.data ? { meta: last.meta, data: last.data } : null),
@@ -158,19 +154,7 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
         </h1>
       </div>
       <section ref={panelRef} className="glass-panel flex grow flex-col gap-3 p-6">
-        <div className="flex items-center justify-end gap-1">
-          {TEXTAREA_SIZES.map(([label, n]) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setRows(n)}
-              data-testid={`scripts-size-${label.toLowerCase()}`}
-              className={`glass-toggle px-2 py-1 text-xs ${rows === n ? 'is-active' : ''}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <TextareaSizes rows={rows} onChange={setRows} testid="scripts-size" />
         {/* The mark is a transparent twin of the textarea laid over it (same
             font, padding, border, wrapping, scroll) with only the failing
             statement painted, so it lands on the same glyphs. */}
@@ -234,15 +218,14 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
             type="button"
             onClick={() => {
               if (!last) return
-              loadIntoStudio(last.sql)
-              navigate('/studio')
+              navigate('/dashboard?new', { state: { sql: last.sql } })
             }}
             disabled={!lastRows}
-            data-testid="scripts-open-studio"
-            title="Load the last statement's SQL into Studio for paging, saving and presentation"
+            data-testid="scripts-open-dashboard"
+            title="Open the last statement's SQL as a new dashboard query, for paging and saving"
             className="glass-btn px-3 py-2 text-sm font-medium"
           >
-            Open in Studio
+            Open in Dashboard
           </button>
           {busy && (
             <span data-testid="scripts-busy" role="status" aria-label="Running">

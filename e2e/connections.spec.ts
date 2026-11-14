@@ -3,7 +3,19 @@
 // lock survives a reload but asks again in a fresh tab
 // (docs/connect.md#locked-connections).
 import type { Page } from "@playwright/test";
-import { DUCK, api, armRemote, connCard as card, connect, expect, mcpCall, openConnect, openQueryPanel, test } from "./fixtures";
+import {
+  DUCK,
+  api,
+  armRemote,
+  connCard as card,
+  connect,
+  expect,
+  mcpCall,
+  openConnect,
+  openNewQuery,
+  executeSql,
+  test,
+} from "./fixtures";
 
 const PASSPHRASE = "open sesame";
 
@@ -91,7 +103,10 @@ test("locked connection keeps the agent out", async ({ page, seeds, baseURL }) =
 
   // The agent: MCP tools and the REST surface alike, with the session id only.
   expect(await mcp("run_sql", { sql: "SELECT 1" })).toEqual({ ok: false, message: "connection is locked" });
-  expect(await mcp("push_studio", { query: "SELECT 1" })).toMatchObject({ ok: false, message: "connection is locked" });
+  expect(await mcp("push_dashboard", { html: "<p>agent</p>", queries: { q: "SELECT 1" } })).toMatchObject({
+    pushed: false,
+    message: "connection is locked",
+  });
   expect(await mcp("session_info", {})).toMatchObject({ locked: true, tables: [] });
   const r = await api(`${baseURL}/api/db/query`, {
     json: { query: "SELECT 1" },
@@ -106,10 +121,9 @@ test("locked connection keeps the agent out", async ({ page, seeds, baseURL }) =
   await c.click();
   await page.waitForURL("**/explorer"); // a ready DuckDB connection lands there
   await expect(page.getByTestId("passphrase-prompt")).toHaveCount(0);
-  await openQueryPanel(page);
-  await page.getByTestId("query-input").fill("SELECT count(*) AS n FROM items");
-  await page.getByTestId("query-run").click();
-  await expect(page.getByTestId("query-output").locator("table thead th")).toContainText(["n"]);
+  const frame = await openNewQuery(page);
+  await executeSql(page, "SELECT count(*) AS n FROM items");
+  await expect(frame.getByTestId("qv-results").locator("thead th")).toContainText(["n"]);
   await page.reload({ waitUntil: "networkidle" });
   await expect(page.getByTestId("passphrase-prompt")).toHaveCount(0);
   await expect(page.getByTestId("connection-status")).toContainText(DUCK.id);

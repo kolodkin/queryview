@@ -20,8 +20,8 @@ deleted once that tab has closed or switched away from it.
 | Route and URL | `/explorer?table=events`, `/dashboard?name=sales` |
 | Connection | the connection this session is on, and its selected database |
 | Last visited | per connection, the database (or DuckDB folder) and table it was last on |
-| Workspace | which workspace scopes its queries, dashboards and git sync |
-| Query panel | SQL text, page size, visible columns, sort |
+| Workspace | which workspace scopes its dashboards and git sync |
+| Dashboard | the unsaved **New query** draft: its SQL |
 | Scripts | the script text |
 | Explorer | the Tables sidebar width |
 

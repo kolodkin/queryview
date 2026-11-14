@@ -20,8 +20,9 @@ def test_export_validation_400():
     assert c.get("/api/export").status_code == 400
     assert c.get("/api/export", params={"kind": "nope", "name": "x"}).status_code == 400
     assert c.get("/api/export", params={"kind": "dashboard"}).status_code == 400  # name required
-    # queries additionally require conn_type
-    assert c.get("/api/export", params={"kind": "query", "name": "x"}).status_code == 400
+    # the removed query kind says why
+    r = c.get("/api/export", params={"kind": "query", "name": "x", "conn_type": "clickhouse"})
+    assert r.status_code == 400 and "no longer supported" in r.json()["message"]
 
 
 def test_export_unknown_entity_404():
@@ -40,26 +41,29 @@ def test_import_requires_body_and_valid_yaml():
     c = TestClient(app)
     assert c.post("/api/import", content=b"").status_code == 400
     assert c.post("/api/import", content=b"kind: nope\n").status_code == 400
+    r = c.post("/api/import", content=b"kind: query\ntype: clickhouse\nquery_name: x\nquery: SELECT 1\n")
+    assert r.status_code == 400
+    assert r.json() == {"ok": False, "message": "saved queries are no longer supported"}
 
 
-def test_query_export_headers_and_round_trip(default_ws_id):
-    from queryview.queries import list_predefined_queries, save_predefined_query
+def test_dashboard_export_headers_and_round_trip(default_ws_id):
+    from queryview.dashboards import get_dashboard, upsert_dashboard
 
     c = TestClient(app)
-    _run(save_predefined_query("api yio", "clickhouse", "SELECT 1", workspace_id=default_ws_id))
-    r = c.get("/api/export", params={"kind": "query", "name": "api yio", "conn_type": "clickhouse"})
+    _run(upsert_dashboard("api yio", "<p>v1</p>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
+    r = c.get("/api/export", params={"kind": "dashboard", "name": "api yio"})
     assert r.status_code == 200
-    assert r.headers["content-disposition"] == 'attachment; filename="api yio.query.yaml"'
+    assert r.headers["content-disposition"] == 'attachment; filename="api yio.dashboard.yaml"'
     assert "yaml" in r.headers["content-type"]
     doc = yaml.safe_load(r.text)
-    assert doc == {"kind": "query", "type": "clickhouse", "query_name": "api yio", "query": "SELECT 1"}
+    assert doc == {"kind": "dashboard", "name": "api yio", "html": "<p>v1</p>", "queries": {"q": "SELECT 1"}}
 
     # Drift, then import the exported text back over it.
-    _run(save_predefined_query("api yio", "clickhouse", "SELECT 2", workspace_id=default_ws_id))
+    _run(upsert_dashboard("api yio", "<p>v2</p>", {}, workspace_id=default_ws_id))
     imp = c.post("/api/import", content=r.text.encode())
-    assert imp.json() == {"ok": True, "kind": "query", "queries": 1, "dashboards": 0}
-    rows = _run(list_predefined_queries("clickhouse", default_ws_id))
-    assert next(x for x in rows if x["query_name"] == "api yio")["query"] == "SELECT 1"
+    assert imp.json() == {"ok": True, "kind": "dashboard", "dashboards": 1}
+    d = _run(get_dashboard("api yio", default_ws_id))
+    assert d is not None and d["html"] == "<p>v1</p>" and d["queries"] == {"q": "SELECT 1"}
 
 
 def test_workspace_export_import_between_workspaces(default_ws_id, wipe_workspace_entities):

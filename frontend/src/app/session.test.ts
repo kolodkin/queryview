@@ -20,7 +20,7 @@ const SESSION = {
   connection_by: null,
   database: null,
   workspace: 'default',
-  url: '/studio',
+  url: '/scripts',
   ui: {},
 }
 

@@ -1,6 +1,6 @@
-"""YAML export/import of predefined queries and dashboards — one entity at a
-time or a whole workspace as a single bundle. Every exported document is
-self-describing via a top-level `kind` (query | dashboard | workspace), so
+"""YAML export/import of dashboards — one at a time or a whole workspace as a
+single bundle. Every exported document is self-describing via a top-level
+`kind` (dashboard | workspace), so
 import dispatches on file content, never on the filename. Import validates the
 whole document before writing anything, then upserts (same overwrite semantics
 as gitsync restore). This module also owns the entity <-> plain-mapping codec
@@ -9,12 +9,11 @@ Docs: docs/export-import.md."""
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import yaml
 
-from .validation import cell_view_error, dashboard_params_error, presentation_error
+from .validation import dashboard_params_error
 from .workspaces import WorkspaceRec
 
 
@@ -31,7 +30,7 @@ class YamlIOError(Exception):
 
 
 def _repr_str(dumper: yaml.SafeDumper, data: str):
-    # Multiline strings (SQL, HTML, cell_view) as literal blocks for readable
+    # Multiline strings (SQL, HTML) as literal blocks for readable
     # files and diffs.
     style = "|" if "\n" in data else None
     return dumper.represent_scalar("tag:yaml.org,2002:str", data, style=style)
@@ -68,45 +67,11 @@ def slug(name: str) -> str:
 # --- Entity <-> mapping codec (shared with gitsync) -------------------------
 
 
-def query_to_data(row: dict[str, Any]) -> dict[str, Any]:
-    """One predefined-query row (list_predefined_queries shape: order_by/fields
-    as JSON text) as its exported mapping. None/empty keys are omitted."""
-    data: dict[str, Any] = {"query_name": row["query_name"], "query": row["query"]}
-    if row.get("cell_view"):
-        data["cell_view"] = row["cell_view"]
-    if row.get("order_by"):
-        data["order_by"] = json.loads(row["order_by"])
-    if row.get("fields"):
-        data["fields"] = json.loads(row["fields"])
-    return data
-
-
 def _require_str(data: dict[str, Any], key: str, where: str) -> str:
     value = data.get(key)
     if not isinstance(value, str) or not value.strip():
         raise YamlIOError(f"malformed {where}: {key} must be a non-empty string")
     return value
-
-
-def query_from_data(data: Any, where: str = "query file") -> dict[str, Any]:
-    """Validate a query mapping back to the DB row shape save_predefined_query
-    takes (order_by/fields re-serialized to JSON text or None)."""
-    if not isinstance(data, dict):
-        raise YamlIOError(f"malformed {where}: expected a mapping")
-    query_name = _require_str(data, "query_name", where)
-    query = _require_str(data, "query", where)
-    cell_view = data.get("cell_view")
-    ob, fl = data.get("order_by"), data.get("fields")
-    perr = cell_view_error(cell_view) or presentation_error(ob, fl)
-    if perr is not None:
-        raise YamlIOError(f"malformed {where}: {perr}")
-    return {
-        "query_name": query_name,
-        "query": query,
-        "cell_view": cell_view or None,
-        "order_by": json.dumps(ob) if ob else None,
-        "fields": json.dumps(fl) if fl else None,
-    }
 
 
 def dashboard_to_data(d: dict[str, Any]) -> dict[str, Any]:
@@ -145,18 +110,14 @@ def dashboard_from_data(data: Any, where: str = "dashboard file", require_html: 
 # --- Import documents -------------------------------------------------------
 
 
-def _parse_query_entry(data: Any, where: str = "query document") -> dict[str, Any]:
-    """A query import entry: the shared codec row plus the `type` key export
-    documents carry (gitsync files get it from the repo path instead)."""
-    if not isinstance(data, dict):
-        raise YamlIOError(f"malformed {where}: expected a mapping")
-    return {"type": _require_str(data, "type", where), **query_from_data(data, where)}
+# Saved queries were removed; refuse their documents rather than drop them silently.
+_NO_QUERIES = "saved queries are no longer supported"
 
 
 def parse_document(text: str) -> tuple[str, Any]:
     """Parse + validate an import document. Returns (kind, payload): for
-    kind 'query'/'dashboard' the payload is one parsed entry; for 'workspace'
-    a {'queries': [...], 'dashboards': [...]} pair of parsed entries."""
+    kind 'dashboard' the payload is one parsed entry; for 'workspace' a
+    {'dashboards': [...]} list of parsed entries."""
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError as e:
@@ -165,46 +126,35 @@ def parse_document(text: str) -> tuple[str, Any]:
         raise YamlIOError("malformed document: expected a YAML mapping")
     kind = data.get("kind")
     if kind == "query":
-        return "query", _parse_query_entry(data)
+        raise YamlIOError(_NO_QUERIES)
     if kind == "dashboard":
         return "dashboard", dashboard_from_data(data, "dashboard document")
     if kind == "workspace":
-        raw_queries = data.get("queries") or []
+        if data.get("queries"):
+            raise YamlIOError(f"{_NO_QUERIES}: remove `queries` from the workspace document")
         raw_dashboards = data.get("dashboards") or []
-        if not isinstance(raw_queries, list) or not isinstance(raw_dashboards, list):
-            raise YamlIOError("malformed workspace document: queries and dashboards must be lists")
+        if not isinstance(raw_dashboards, list):
+            raise YamlIOError("malformed workspace document: dashboards must be a list")
         return "workspace", {
-            "queries": [_parse_query_entry(q, f"workspace queries[{i}]") for i, q in enumerate(raw_queries)],
             "dashboards": [dashboard_from_data(d, f"workspace dashboards[{i}]") for i, d in enumerate(raw_dashboards)],
         }
-    raise YamlIOError("malformed document: kind must be 'query', 'dashboard' or 'workspace'")
+    raise YamlIOError("malformed document: kind must be 'dashboard' or 'workspace'")
 
 
 # --- Services ---------------------------------------------------------------
 
 
-async def export(kind: str, name: str, conn_type: str, ws: WorkspaceRec) -> tuple[str, str]:
+async def export(kind: str, name: str, ws: WorkspaceRec) -> tuple[str, str]:
     """Export dispatch shared by every caller (REST today, MCP/CLI tomorrow):
-    validates kind/name/conn_type, loads the document, and owns the
-    `{slug}.{kind}.yaml` download-filename convention. Returns (filename, text)."""
-    if kind not in ("query", "dashboard", "workspace") or (kind != "workspace" and not name):
-        raise YamlIOError("kind ('query'|'dashboard'|'workspace') and (for entities) name are required")
+    validates kind/name, loads the document, and owns the `{slug}.{kind}.yaml`
+    download-filename convention. Returns (filename, text)."""
     if kind == "query":
-        if not conn_type:
-            raise YamlIOError("conn_type is required for queries")
-        return f"{slug(name)}.query.yaml", await export_query(conn_type, name, ws.id)
+        raise YamlIOError(_NO_QUERIES)
+    if kind not in ("dashboard", "workspace") or (kind == "dashboard" and not name):
+        raise YamlIOError("kind ('dashboard'|'workspace') and (for a dashboard) name are required")
     if kind == "dashboard":
         return f"{slug(name)}.dashboard.yaml", await export_dashboard(name, ws.id)
     return f"{slug(ws.name)}.workspace.yaml", await export_workspace(ws.id)
-
-
-async def export_query(conn_type: str, name: str, workspace_id: int) -> str:
-    from .queries import get_predefined_query
-
-    row = await get_predefined_query(conn_type, name, workspace_id)
-    if row is None:
-        raise YamlIOError(f"query {name!r} not found", status=404)
-    return dump_yaml({"kind": "query", "type": conn_type, **query_to_data(row)})
 
 
 async def export_dashboard(name: str, workspace_id: int) -> str:
@@ -217,35 +167,23 @@ async def export_dashboard(name: str, workspace_id: int) -> str:
 
 
 async def export_workspace(workspace_id: int) -> str:
-    """The whole workspace (every predefined query and dashboard) as one
-    bundle. Empty workspaces export a valid, importable empty bundle."""
+    """The whole workspace (every dashboard) as one bundle. Empty workspaces
+    export a valid, importable empty bundle."""
     from .dashboards import list_dashboards_full
-    from .queries import list_all_predefined_queries
 
-    queries = await list_all_predefined_queries(workspace_id)
     dashboards = await list_dashboards_full(workspace_id)
-    return dump_yaml(
-        {
-            "kind": "workspace",
-            "queries": [{"type": r["type"], **query_to_data(r)} for r in queries],
-            "dashboards": [dashboard_to_data(d) for d in dashboards],
-        }
-    )
+    return dump_yaml({"kind": "workspace", "dashboards": [dashboard_to_data(d) for d in dashboards]})
 
 
 async def import_text(text: str, workspace_id: int) -> dict[str, Any]:
     """Import a document into a workspace, upserting by name. The whole
     document is validated before the first write, so a malformed file changes
-    nothing; each entity family then writes in a single transaction. Returns
-    {'kind', 'queries', 'dashboards'} counts."""
+    nothing; the dashboards then write in a single transaction. Returns
+    {'kind', 'dashboards'}, the latter a count."""
     from .dashboards import upsert_dashboards
-    from .queries import save_predefined_queries
 
     kind, payload = parse_document(text)
-    queries = payload["queries"] if kind == "workspace" else [payload] if kind == "query" else []
-    dashboards = payload["dashboards"] if kind == "workspace" else [payload] if kind == "dashboard" else []
-    if queries:
-        await save_predefined_queries(queries, workspace_id=workspace_id)
+    dashboards = payload["dashboards"] if kind == "workspace" else [payload]
     if dashboards:
         await upsert_dashboards(dashboards, workspace_id=workspace_id)
-    return {"kind": kind, "queries": len(queries), "dashboards": len(dashboards)}
+    return {"kind": kind, "dashboards": len(dashboards)}

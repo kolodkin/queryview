@@ -135,7 +135,8 @@ test("reopening a connection goes back to its last folder and file", async ({ pa
   await tableRow(page, "nested.csv.gz").click();
   await expect(page.getByTestId("explorer-panel")).toContainText("gamma");
   // Visiting another page and coming back through the nav keeps the memory.
-  await page.getByTestId("nav-studio").click();
+  await page.getByTestId("nav-dashboard").click();
+  await expect(page.getByTestId("dashboard-view")).toBeVisible();
   await page.getByTestId("nav-explorer").click();
   await expect(page.getByTestId("explorer-tables")).toBeVisible();
 

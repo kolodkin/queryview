@@ -1,5 +1,5 @@
-"""Alembic owns the schema: a fresh DB must be migrated to head (all three
-tables present and stamped in alembic_version), not built by create_all."""
+"""Alembic owns the schema: a fresh DB must be migrated to head (the
+application tables present and stamped in alembic_version), not built by create_all."""
 
 from __future__ import annotations
 
@@ -20,10 +20,9 @@ def test_fresh_db_is_migrated_to_head():
     try:
         names = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         # Alembic ran (not create_all): the version table exists alongside the
-        # three application tables.
+        # application tables.
         assert {
             "connections",
-            "predefined_queries",
             "dashboards",
             "workspaces",
             "alembic_version",
@@ -87,14 +86,41 @@ def test_config_blob_migration_backfills_existing_clickhouse_row(tmp_path, monke
     assert data == {"host": "h", "port": 8123, "username": "u", "password": "pw"}
 
 
-def test_predefined_queries_has_presentation_columns():
-    _run(_ensure_schema())
-    con = sqlite3.connect(_db_path())
-    try:
-        cols = {r[1] for r in con.execute("PRAGMA table_info(predefined_queries)")}
-    finally:
-        con.close()
-    assert {"order_by", "fields"} <= cols, f"missing columns, got {sorted(cols)}"
+def test_predefined_queries_table_is_dropped_and_downgrade_restores_it(tmp_path, monkeypatch):
+    """Head has no predefined_queries; one step down recreates it with its
+    final schema. Runs on a private DB so the shared one stays at head."""
+    from alembic import command
+
+    import queryview.connect as _c
+    from queryview.connect import _alembic_config
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(_c, "_engine", None)
+    monkeypatch.setattr(_c, "_schema_ready", False)
+
+    def table() -> tuple[set[str], set[str]]:
+        con = sqlite3.connect(_db_path())
+        try:
+            cols = {r[1] for r in con.execute("PRAGMA table_info(predefined_queries)")}
+            indexes = {r[1] for r in con.execute("PRAGMA index_list(predefined_queries)")}
+        finally:
+            con.close()
+        return cols, indexes
+
+    cfg = _alembic_config()
+    command.upgrade(cfg, "c6d7e8f9a0b1")
+    before = table()
+    assert {"order_by", "fields", "deleted_at", "workspace_id"} <= before[0]
+
+    command.upgrade(cfg, "head")
+    assert table() == (set(), set())
+
+    command.downgrade(cfg, "c6d7e8f9a0b1")
+    restored = table()
+    assert restored[0] == before[0]
+    # Same named indexes; the unique constraint's is auto-named by SQLite either way.
+    assert {i for i in restored[1] if i.startswith("ix_")} == {i for i in before[1] if i.startswith("ix_")}
+    assert len(restored[1]) == len(before[1])
 
 
 def test_workspaces_autosave_column_is_dropped():
@@ -105,16 +131,6 @@ def test_workspaces_autosave_column_is_dropped():
     finally:
         con.close()
     assert "autosave" not in cols
-
-
-def test_predefined_queries_has_deleted_at_column():
-    _run(_ensure_schema())
-    con = sqlite3.connect(_db_path())
-    try:
-        cols = {r[1] for r in con.execute("PRAGMA table_info(predefined_queries)")}
-    finally:
-        con.close()
-    assert "deleted_at" in cols, f"missing column, got {sorted(cols)}"
 
 
 def test_sessions_queries_to_scripts_migration(tmp_path, monkeypatch):

@@ -1,6 +1,5 @@
 // Dashboard-level selectors, declared in a dashboard's `params` and substituted
-// into its queries via `{name}` placeholders — the vocabulary predefined query
-// params use (see ../params/queryParams.ts), extended for dashboards:
+// into its queries via `{name}` placeholders:
 //
 //   value       a literal: {region} -> 'eu'
 //   identifier  a table/column: {field} -> "city" (a literal would make
@@ -10,8 +9,6 @@
 // An options_sql may itself reference another param ({table}), so field lists
 // can depend on the selected table; resolveOrder sequences those. See
 // docs/dashboard.md, "Dashboard parameters".
-
-import { quoteLiteral } from '../params/queryParams'
 
 export type ParamKind = 'value' | 'identifier' | 'dimension'
 
@@ -85,6 +82,13 @@ export function placeholdersIn(sql: string): string[] {
 
 // How the connection's dialect quotes: its identifier quote and whether
 // backslash escapes (see /api/session's ident_quote and backslash_escapes).
+// A quoted SQL string literal: single quotes doubled, and backslashes too where
+// the dialect reads them as escapes (the connection's backslashEscapes).
+function quoteLiteral(value: string, backslashEscapes: boolean): string {
+  const v = backslashEscapes ? value.replaceAll('\\', '\\\\') : value
+  return `'${v.replaceAll("'", "''")}'`
+}
+
 export type Dialect = { quote: string; backslashEscapes: boolean }
 
 // A quote character (or a backslash that would escape it) can't be trusted

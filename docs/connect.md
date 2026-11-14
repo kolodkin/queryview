@@ -125,7 +125,7 @@ shows "No databases match". Each row has a copy icon for its name. Selecting a d
 - sets the session's selected database,
 - persists it on the saved connection (`POST /api/db/database`),
 - collapses the picker and shows the top-left indicator `🟢 <connection> · <database>`,
-- makes the query panel available on Studio (see [query.md](./query.md)),
+- makes the [Scripts](./scripts.md) page available,
 - and lands on the explorer (see
   [queryview.md](./queryview.md#landing-page)).
 
@@ -287,8 +287,6 @@ session.
 | GET    | `/api/db/databases`   | —                                      | `{ok, name, databases}` \| `{ok:false, message}`; re-lists the connection's databases; no session → `409` |
 | POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database (a name not in the cached list is re-listed once) |
 | POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |
-| GET    | `/api/predefined-queries`     | `?type=<connType>`                     | `{queries:[{query_name, query}]}`; global predefined queries by connection type |
-| POST   | `/api/predefined-queries`     | `{query_name, type, query}`            | `{ok}`; upserts a global predefined query |
 | GET    | `/api/session`                | —                                      | `{connected, name?, type?, databases?, database?}` for the calling session |
 
 `test`/`connect` resolve the driver from `type` and validate per driver

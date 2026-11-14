@@ -46,7 +46,7 @@ Without a copied id the agent works in a [tab](#tabs) of its own.
 
 The server publishes one skill over the MCP Skills extension,
 `skill://queryview/SKILL.md` ([source](../backend/queryview/skills/queryview/SKILL.md)):
-the default workflow for tabs, connections, SQL, Studio results and dashboards.
+the default workflow for tabs, connections, SQL and dashboards.
 Naming a tool overrides it.
 
 ## Tools
@@ -54,17 +54,6 @@ Naming a tool overrides it.
 Every tool acts on a browser session: a [tab](#tabs) of the agent's own, or one
 you [armed](#arming-a-session).
 
-- `push_studio(session_id, query, limit?=100, offset?=0, order_by?, fields?, cell_view?, name?)` —
-  push a query. `order_by` is `[{name, dir}]`; `fields` are the columns to show
-  (omit for all); `cell_view` is raw YAML for this push only (not persisted);
-  `name` selects a saved query to [edit](#naming-and-saving). Returns
-  `{ok, message, database}` (`database` is the session's selected DB) —
-  `ok:false` for
-  an unknown id, a held lock (`"blocked, user editing"`), or malformed
-  `order_by`/`fields` (`"invalid …"`).
-- `list_queries(conn_type?="clickhouse")` — list saved queries:
-  `{queries: [{query_name, query, cell_view, order_by, fields}]}`. Pass a
-  `query_name` back as `push_studio`'s `name`.
 - `session_info(session_id)` — what the session is on: `{ok, connected,
   connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
@@ -117,32 +106,29 @@ you [armed](#arming-a-session).
 - `new_tab(name)` — a session of the agent's own; see [Tabs](#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
 - `git_store` / `git_history` / `git_restore` — back up, list and restore a
-  saved query or dashboard through [workspace git](./gitsync.md).
+  saved dashboard through [workspace git](./gitsync.md).
 
-The pushed query runs through the normal `POST /api/db/query`, so all of
-that path's pagination and order-by safety applies; the push layer never talks
-to ClickHouse directly.
+A pushed dashboard's queries run through the browser's own `/api/runqueries`
+and `/api/db/query` calls; the push layer never talks to a database.
 
 ## Naming and saving
 
 The agent drafts and edits; the user names and saves. No tool saves.
 
-- **New work is unnamed.** `push_studio` and `push_dashboard` without `name`
-  push a draft. The user names it: **+ New name…** in the Studio, the prompt
-  of the dashboard's **Save**, which refuses a name already taken.
-- **`name` only edits.** It must be a saved query (`list_queries`) or dashboard
-  (`list_dashboards`); any other is refused with `no saved query named "…"`.
-- **A push persists nothing.** The user's **Save** does. An unnamed query push
-  also deselects the open query, so Save cannot write the draft over it.
+- **New work is unnamed.** `push_dashboard` without `name` pushes a draft. The
+  user names it at the prompt of the dashboard's **Save**, which refuses a name
+  already taken.
+- **`name` only edits.** It must be a saved dashboard (`list_dashboards`); any
+  other is refused.
+- **A push persists nothing.** The user's **Save** does.
 
 ## How it works
 
 When armed, the browser opens an SSE stream
 (`GET /api/remote/events?session=<id>`); the backend registers an in-memory
 channel **keyed by that session's id** (see [session.md](./session.md)).
-`push_studio` (and the test-only `POST /api/remote/push_studio`) enqueue onto that
-channel; the SSE stream delivers the payload and the panel fills `query` /
-`limit` / `offset` / `order_by` / selected `fields` and runs.
+The push tools enqueue onto that channel; the SSE stream delivers the payload
+and the page renders it.
 
 Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
@@ -173,5 +159,5 @@ new id.
 - [api.md](./api.md) — backend JSON API.
 - [session.md](./session.md) — sessions and agent tabs.
 - [dashboard.md](./dashboard.md) — how agents author dashboards.
-- [query.md](./query.md) — running queries: pagination, fields, order-by, CSV.
+- [query.md](./query.md) — querying: pagination, the results grid, CSV.
 - [docker.md](./docker.md) — port mapping when running the container.

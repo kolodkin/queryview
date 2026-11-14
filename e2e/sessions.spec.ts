@@ -1,6 +1,6 @@
 // Sessions survive a refresh, are one-per-tab, and are switchable. Uses DuckDB
 // throughout: it needs no server, so these run anywhere the SPA does.
-import { DUCK, api, connect, expect, openQueryPanel, sessionId, test as base } from "./fixtures";
+import { DUCK, api, connect, expect, sessionId, test as base } from "./fixtures";
 
 /** An earlier test's session: named, state saved, then released by its closing
  * tab, so it is the most recently active unheld named session — what a new tab
@@ -10,23 +10,11 @@ const test = base.extend<{ leftBehind: string }>({
     const tab = `e2e-${crypto.randomUUID()}`;
     const sid = (await api(`${baseURL}/api/sessions/attach`, { json: { tab } })).body.session.id;
     await api(`${baseURL}/api/sessions/${sid}`, { method: "PATCH", json: { label: "left behind" } });
-    const ui = { query: { sql: "SELECT 'left behind'" } };
+    const ui = { scripts: { sql: "SELECT 'left behind'" } };
     await api(`${baseURL}/api/sessions/release`, { json: { tab, session_id: sid, ui } });
     await use(sid);
     await api(`${baseURL}/api/sessions/${sid}`, { method: "DELETE", ok: false });
   },
-});
-
-test("refresh keeps the query and the connection", async ({ page, seeds }) => {
-  await connect(page, DUCK, await seeds.duckdb());
-  await openQueryPanel(page);
-  await page.getByTestId("query-input").fill("SELECT 1 -- remembered");
-
-  // No focus-out happened, so the reload's pagehide beacon is what carries it.
-  await page.reload({ waitUntil: "networkidle" });
-
-  await expect(page.getByTestId("query-input")).toHaveValue("SELECT 1 -- remembered");
-  await expect(page.getByTestId("connection-status")).toContainText("duckdb");
 });
 
 test("refresh keeps the page you were on", async ({ page, seeds }) => {
@@ -136,32 +124,9 @@ test("inline rename: Escape cancels, a reserved name is refused, focus-out saves
   await expect(switcher).toContainText("blurred name");
 });
 
-test("a restored panel does not page a new query into nothing", async ({ page, seeds }) => {
-  // The page you were on is not restored: an offset is a cursor into a result
-  // set, and results are not restored either (docs/session.md).
-  await connect(page, DUCK, await seeds.duckdb());
-  await openQueryPanel(page);
-  await page.getByTestId("query-input").fill("SELECT name FROM items ORDER BY id");
-  await page.getByTestId("query-limit").fill("1");
-  await page.getByTestId("query-run").click();
-  await expect(page.getByTestId("query-output")).toContainText("alpha");
-  await page.getByTestId("query-next").click();
-  await expect(page.getByTestId("query-output")).toContainText("beta");
-
-  await page.reload({ waitUntil: "networkidle" });
-
-  // The SQL comes back; the cursor does not...
-  await expect(page.getByTestId("query-input")).toHaveValue("SELECT name FROM items ORDER BY id");
-  await expect(page.getByTestId("query-offset")).toHaveValue("0");
-  // ...so a re-run starts at the first page rather than past the end of a
-  // fresh result set.
-  await page.getByTestId("query-run").click();
-  await expect(page.getByTestId("query-output")).toContainText("alpha");
-});
-
 test("each test starts on a fresh session", async ({ leftBehind, page }) => {
   // `context` must seed a brand-new session, not resume the last one another
-  // test released along with its saved panel state.
+  // test released along with its saved script.
   await page.goto("/", { waitUntil: "networkidle" });
   expect(await sessionId(page)).not.toBe(leftBehind);
 });

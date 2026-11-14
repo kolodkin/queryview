@@ -1,17 +1,17 @@
 # Explorer — the classical table navigator
 
 The landing page for a live connection (`/explorer`, next to
-[Studio](./query.md) and [dashboards](./dashboard.md) in the corner nav —
+[Scripts](./scripts.md) and [dashboards](./dashboard.md) in the corner nav —
 see [queryview.md](./queryview.md#landing-page)): a sidebar lists the active
 database's tables; clicking one browses its rows. No SQL is typed — the page generates
 `SELECT * FROM "<table>"` and drives it with the same field select and
-order-by select the query panel uses.
+order-by select the [dashboard widget](./query.md#fields-selection--ordering) uses.
 
 ## Layout
 
 ```
 +------------------------------------------------------------+
-| (o) test                        Studio Explorer Dashboard  |
+| (o) test                       Dashboard Explorer Scripts  |
 |                                                            |
 | +--------+ +---------------------------------------------+ |
 | | Tables | | items (refresh) Limit [100] < Prev Next >   | |
@@ -44,7 +44,7 @@ order-by select the query panel uses.
 - **Rows panel** — the selected table's rows. The selection lives in the URL
   (`/explorer?table=<name>`), so reloads and links land on the same table.
 - **Viewport height** — the page fills the window (min 30rem, then the page
-  scrolls), as the Studio page does; the table list and rows grid scroll
+  scrolls); the table list and rows grid scroll
   internally, keeping the grid's horizontal scrollbar on screen.
 - **Loading** — panels show *Loading tables…* / *Loading rows…* rather than
   sitting empty. Re-running a loaded table (paging, a new order-by) keeps its
@@ -135,7 +135,7 @@ root; reopening the connection does too.
   the listed files), "More than N folders" in the pill menu. It only trims
   what a level shows: a folder past it stays reachable by path. Remembered with
   the sidebar width; the server reads it from the session.
-- **Selecting by path** — a saved query, an agent or a backend restart can
+- **Selecting by path** — a saved dashboard, an agent or a backend restart can
   select any folder under the root, checked one step at a time: a step that is
   hidden, `.`/`..` or empty refuses the path; one that is missing or a symlink
   ends it there, so a folder that is gone falls back to its nearest parent.
@@ -156,7 +156,7 @@ scanned across the whole tree at connect:
 
 - **The limit trims a view, not reachability.** With a whole-tree scan, a cap
   hides deep folders whenever the tree grows or the cap drops, and a restart
-  or a saved query then loses the selected folder. Per level, the selected
+  or a saved dashboard then loses the selected folder. Per level, the selected
   folder is reached by its path, so neither can drop it.
 - **Connect costs one directory read** on any root size, instead of a scan
   bounded only by the cap.

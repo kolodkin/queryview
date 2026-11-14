@@ -3,7 +3,7 @@
 // a local copy so the UI renders from it synchronously and a patch in flight is
 // never something the user waits on. See docs/session.md.
 
-import { apiFetch } from './api'
+import { apiFetch, postJson } from './api'
 import { SESSION_KEY, TAB_KEY, tabRead, tabWrite } from './tabStorage'
 
 export type SessionState = {
@@ -39,7 +39,7 @@ export type SessionPatch = { url?: string; workspace?: string; table?: string }
 // tests that wait on a beat don't idle for the full interval.
 const HEARTBEAT_MS = Number(import.meta.env.VITE_HEARTBEAT_MS) || 10_000
 // Flushes queued view state after a pause in editing. A backstop, not the main
-// mechanism — the query panel flushes on focus-out and `pagehide` beacons what
+// mechanism — an editor flushes on focus-out and `pagehide` beacons what
 // is still pending — so a tab that dies mid-edit loses at most what was typed
 // since its last pause.
 const IDLE_MS = 5_000
@@ -101,7 +101,7 @@ export function sessionId(): string | null {
 }
 
 // The workspace the attached session is on. Call sites that only need the name
-// — scoping predefined queries, dashboards, export/import — read it here rather
+// — scoping dashboards, export/import — read it here rather
 // than threading it through props.
 export function activeWorkspace(): string {
   // Empty before attach: the backend then uses its fallback workspace.
@@ -146,11 +146,7 @@ export async function attachSession(keep = false): Promise<SessionState> {
   if (known) body.session_id = known
   if (keep) body.keep = true
   const gen = localGen
-  const res = await apiFetch('/api/sessions/attach', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  const res = await postJson('/api/sessions/attach', body)
   if (keep && res.status === 409) throw new SessionTakenError()
   const data = await res.json()
   if (!data?.session) throw new Error('attach returned no session')
@@ -243,11 +239,7 @@ async function sendPatch(
   sid: string,
   body: object,
 ): Promise<{ message?: string; session?: SessionState }> {
-  const res = await apiFetch(`/api/sessions/${encodeURIComponent(sid)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  const res = await postJson(`/api/sessions/${encodeURIComponent(sid)}`, body, 'PATCH')
   return res.json().catch(() => ({ message: `HTTP ${res.status}` }))
 }
 
@@ -317,11 +309,7 @@ export async function listSessions(): Promise<SessionSummary[]> {
 export function selectSession(id: string | null, force = false): Promise<SessionState | null> {
   return withoutHeartbeat(async () => {
     await flushPatches()
-    const res = await apiFetch('/api/sessions/select', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tab: tabToken(), id, force }),
-    })
+    const res = await postJson('/api/sessions/select', { tab: tabToken(), id, force })
     const data = await res.json()
     if (!data.ok) return null
     taken = false

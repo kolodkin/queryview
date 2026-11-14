@@ -1,5 +1,5 @@
-// Dashboards run their queries through the same path as Studio, which
-// drivers.spec.ts covers per driver, so these run once on DuckDB (no service).
+// Dashboards run their queries through the path drivers.spec.ts covers per
+// driver, so these run once on DuckDB (no service).
 import { DUCK, api, armRemote, connect, expect, test } from "./fixtures";
 
 // Reads window.queries and writes a value into the DOM, so the test can

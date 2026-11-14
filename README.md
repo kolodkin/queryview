@@ -43,14 +43,14 @@ http://localhost:8000. Or do it by hand on that page:
 |---|---|---|
 | *Use queryview to add a Postgres connection to db.example.internal:5432 as readonly user* | **Connect** → *New connection* card | Create a ClickHouse, Postgres, DuckDB or SQLite connection — host, port and credentials, or a file path for DuckDB and SQLite. Passwords are encrypted at rest. |
 | *Use queryview to switch to the sales_reporting database* | **Connect** → a saved card | Open a saved connection and pick a database — that opens the explorer. The last one reconnects automatically next time. |
-| *Use queryview to show me the top 10 customers by revenue this month, revenue in bold and each name linked to its CRM page* | **Studio** | Run SQL: paginated results, column picker, save/load reusable queries, download the page as CSV. |
-| *Use queryview to create a staging table and copy last week's orders into it* | **Scripts** | A flat SQL scratchpad: run the statement under the cursor or the whole `;`-separated script as written — writes and DDL included, stopping at the first error — see the last statement's rows, hand it to Studio. |
+| *Use queryview to show me the top 10 customers by revenue this month, revenue in bold and each name linked to its CRM page* | **Dashboard** → *New query* | Run SQL: paginated results, column picker, per-column cell design, download the page as CSV; save it as a dashboard. |
+| *Use queryview to create a staging table and copy last week's orders into it* | **Scripts** | A flat SQL scratchpad: run the statement under the cursor or the whole `;`-separated script as written — writes and DDL included, stopping at the first error — see the last statement's rows, open it as a dashboard query. |
 | *Use queryview to open the orders table in the explorer* | **Explorer** | Browse tables without typing SQL — a sidebar of tables with row/size estimates, click to page through rows. |
 | *Use queryview to build a dashboard of daily signups and revenue for the last 30 days* | **Dashboard** | Open a saved dashboard: an HTML layout that re-runs its queries against live data every time you open it. |
 
 Beyond those pages:
 
-- **Workspaces** group your saved queries and dashboards, and each can sync to
+- **Workspaces** group your saved dashboards, and each can sync to
   its own git remote for backup, history and restore —
   [workspace.md](docs/workspace.md), [gitsync.md](docs/gitsync.md).
 - **YAML export/import** moves a single query, a dashboard, or a whole
@@ -73,7 +73,7 @@ and let [git sync](docs/gitsync.md) do it.
 - [connect.md](docs/connect.md) — connections, drivers, storage.
 - [session.md](docs/session.md) — sessions: what a tab remembers, refresh and
   new-tab behaviour, the session switcher.
-- [query.md](docs/query.md) — the query panel: pagination, predefined queries, CSV.
+- [query.md](docs/query.md) — querying: pagination, the results grid, CSV.
 - [explorer.md](docs/explorer.md) — the table navigator.
 - [dashboard.md](docs/dashboard.md) — dashboards and how agents author them.
 - [workspace.md](docs/workspace.md) — workspaces.

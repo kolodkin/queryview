@@ -26,7 +26,6 @@ import {
   unlockConnection,
   type Connection,
 } from './connection'
-import StudioView, { type StudioPush } from './StudioView'
 import ScriptsView, { type ScriptPush } from './ScriptsView'
 import ConnectView from './ConnectView'
 import DashboardView, { type DashboardPush } from './DashboardView'
@@ -204,7 +203,7 @@ function DatabaseMenu({
 
 // App shell: routing, shared connection state, the connection pill + agent
 // popover, and the armed/SSE remote-control channel. Pages: /connect,
-// /studio, /scripts, /explorer, /dashboard.
+// /scripts, /explorer, /dashboard.
 function Shell() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -213,7 +212,6 @@ function Shell() {
   const [armed, setArmed] = useState(false)
   const [channelOpen, setChannelOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
-  const [studioPush, setStudioPush] = useState<StudioPush | null>(null)
   const [dashboardPush, setDashboardPush] = useState<DashboardPush | null>(null)
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
@@ -418,11 +416,6 @@ function Shell() {
       })
     }
     on('connections', () => setConnectionsNonce((n) => n + 1))
-    on<StudioPush>('studio', (payload) => {
-      setStudioPush(payload)
-      setToast('Agent updated the query')
-      navigate('/studio')
-    })
     on<ScriptPush>('script', (payload) => {
       setScriptPush(payload)
       setToast('Agent updated the script')
@@ -638,16 +631,6 @@ function Shell() {
             >
               Explorer
             </Link>
-            {/* Straight to Connect until there's a database: a round trip
-                through the /studio redirect would remount it. */}
-            <Link
-              to={ready ? '/studio' : '/connect'}
-              data-testid="nav-studio"
-              onClick={() => setNavOpen(false)}
-              className={navLinkClass('/studio')}
-            >
-              Studio
-            </Link>
             <Link
               to={ready ? '/scripts' : '/connect'}
               data-testid="nav-scripts"
@@ -673,22 +656,8 @@ function Shell() {
           attach has answered. */}
       {sessionChecked ? (
         <Routes>
-          <Route
-            path="/studio"
-            element={withDatabase(
-              connection && (
-                <StudioView
-                  key={`${sessionKey}:${workspace}`}
-                  connectionType={connection.type}
-                  backslashEscapes={connection.backslashEscapes}
-                  runOn={connectionKey(connection)}
-                  pushed={studioPush}
-                  onPushConsumed={() => setStudioPush(null)}
-                  remoteId={remoteId}
-                />
-              ),
-            )}
-          />
+          {/* Studio's successor: an ad-hoc query is a New query draft. */}
+          <Route path="/studio" element={<Navigate to="/dashboard?new" replace />} />
           {/* Keyed by the connection too: a database switch remounts the page,
               which drops the rows on screen (they came from somewhere else
               now) and brings the text back from the session. */}
@@ -735,6 +704,7 @@ function Shell() {
                 runOn={connectionKey(connection)}
                 identQuote={connection?.identQuote}
                 backslashEscapes={connection?.backslashEscapes}
+                remoteId={remoteId}
               />
             }
           />
@@ -810,7 +780,6 @@ const NAV_ROW =
   'md:static md:mt-0 md:flex md:w-auto md:min-w-0 md:flex-row md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-filter-none'
 
 function pageTitle(path: string): string {
-  if (path.startsWith('/studio')) return 'Studio'
   if (path.startsWith('/scripts')) return 'Scripts'
   if (path.startsWith('/explorer')) return 'Explorer'
   if (path.startsWith('/dashboard')) return 'Dashboard'

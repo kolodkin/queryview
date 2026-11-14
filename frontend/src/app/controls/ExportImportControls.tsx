@@ -6,7 +6,6 @@ type Props = {
   kind: ExportKind
   // Entity name; unused for kind="workspace" (the whole workspace exports).
   name?: string
-  connType?: string
   disabled?: boolean
   // Smaller buttons for tight hosts (the workspace manage panel).
   compact?: boolean
@@ -14,17 +13,10 @@ type Props = {
   onImported: () => void
 }
 
-// Export / Import pair for one entity (query or dashboard) or a whole
+// Export / Import pair for one dashboard or a whole
 // workspace. Export downloads the *saved* DB state as a YAML file; Import
 // reads a picked YAML file and upserts whatever the file's `kind` declares.
-export default function ExportImportControls({
-  kind,
-  name,
-  connType,
-  disabled,
-  compact,
-  onImported,
-}: Props) {
+export default function ExportImportControls({ kind, name, disabled, compact, onImported }: Props) {
   const fileInput = useRef<HTMLInputElement>(null)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
@@ -39,7 +31,7 @@ export default function ExportImportControls({
 
   async function doExport() {
     setError('')
-    const r = await fetchExport(kind, { name, connType, workspace: activeWorkspace() })
+    const r = await fetchExport(kind, { name, workspace: activeWorkspace() })
     if (!r.ok) {
       setError(r.message ?? 'export failed')
       return

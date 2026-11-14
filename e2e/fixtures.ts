@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type FrameLocator, type Page } from "@playwright/test";
 
 export { expect };
 
@@ -158,23 +158,31 @@ export async function openClickhousePicker(page: Page): Promise<void> {
   await expect(page.getByTestId("db-picker")).toBeVisible();
 }
 
-/** Fill the SQL, name the query, and author a `params:` block via the
- * cell-view modal, then Save. */
-export async function authorParamsYaml(page: Page, name: string, sql: string, paramsYaml: string): Promise<void> {
-  await page.getByTestId("query-input").fill(sql);
-  page.once("dialog", (d) => d.accept(name));
-  await page.getByTestId("query-predefined-select").selectOption("::new::");
-  await page.getByTestId("cell-view-toggle").click();
-  await expect(page.getByTestId("cell-view-modal")).toBeVisible();
-  await page.getByTestId("cell-view-input").fill(paramsYaml);
-  await page.getByTestId("cell-view-save").click();
-  await expect(page.getByTestId("cell-view-modal")).not.toBeVisible();
+export const dashboardFrame = (page: Page): FrameLocator => page.frameLocator('[data-testid="dashboard-frame"]');
+
+export type Dash = { name: string; html: string; queries: Record<string, string>; params?: unknown[] };
+
+/** Save a dashboard through the REST mirror and open it; returns its frame. */
+export async function openDashboard(page: Page, baseURL: string | undefined, dash: Dash): Promise<FrameLocator> {
+  await api(`${baseURL}/api/dashboards`, { json: dash });
+  await page.getByTestId("nav-dashboard").click();
+  await page.getByTestId("dashboard-select").selectOption(dash.name);
+  return dashboardFrame(page);
 }
 
-/** Open the query panel from wherever the test is, via the Studio page. */
-export async function openQueryPanel(page: Page): Promise<void> {
-  await page.getByTestId("nav-studio").click();
-  await expect(page.getByTestId("query-panel")).toBeVisible();
+/** Open a New query draft (ad-hoc SQL: one `<qv-select-view>` under the SQL
+ * panel) from wherever the test is; returns the draft's frame. */
+export async function openNewQuery(page: Page): Promise<FrameLocator> {
+  await page.getByTestId("nav-dashboard").click();
+  await page.getByTestId("dashboard-new-query").click();
+  await expect(page.getByTestId("dash-sql")).toBeVisible();
+  return dashboardFrame(page);
+}
+
+/** Type SQL into the dashboard's SQL panel and Execute it. */
+export async function executeSql(page: Page, sql: string): Promise<void> {
+  await page.getByTestId("dash-sql").fill(sql);
+  await page.getByTestId("dash-sql-execute").click();
 }
 
 /** Arm remote control via the agent popover and return the session id the
@@ -416,7 +424,7 @@ export const test = base.extend<
 
   /** Give every test its own session. Session state lives on the server, so a
    * fresh browser context is not fresh state: without this a test would resume
-   * the previous one's remembered SQL, sidebar width and workspace. Seeds
+   * the previous one's remembered script, sidebar width and workspace. Seeds
    * `qv_session` but never `qv_tab`, so each page still mints its own tab token
    * and a second tab opened inside a test starts its own session. */
   context: async ({ context, baseURL }, use) => {

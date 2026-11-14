@@ -30,7 +30,7 @@ import {
 import { NumberInput } from './NumberInput'
 import { useNumberSetting } from './useNumberSetting'
 import { isFolderNav } from './folderNav'
-import { apiFetch } from './api'
+import { apiFetch, postJson } from './api'
 import { patchSession } from './session'
 
 // Sidebar entry from /api/db/tables. rows/bytes are engine estimates — null
@@ -163,15 +163,11 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     setBusy(true)
     setError(null)
     try {
-      const res = await apiFetch('/api/db/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: sql,
-          limit: lim,
-          offset: off,
-          order_by: ord,
-        }),
+      const res = await postJson('/api/db/query', {
+        query: sql,
+        limit: lim,
+        offset: off,
+        order_by: ord,
       })
       const data = await res.json()
       if (ticket !== runSeq.current) return
@@ -207,11 +203,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     /* eslint-enable react-hooks/set-state-in-effect */
     void (async () => {
       try {
-        const res = await apiFetch('/api/db/describe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: sql }),
-        })
+        const res = await postJson('/api/db/describe', { query: sql })
         const data = await res.json()
         if (!cancelled && data.ok) {
           const next = (data.fields ?? []) as Field[]
