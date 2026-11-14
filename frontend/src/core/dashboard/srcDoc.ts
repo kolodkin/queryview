@@ -6,14 +6,16 @@ import type { ResolvedParam } from './params'
 export type DashboardResults = Record<string, Record<string, unknown[]>>
 
 // The kernel's theme tokens (core/kernel.css), each a --qv-<token> variable.
-export type QvToken = 'accent' | 'accent-soft' | 'accent-text' | 'accent-ink'
+const QV_TOKENS = ['accent', 'accent-soft', 'accent-text', 'accent-ink'] as const
+export type QvToken = (typeof QV_TOKENS)[number]
 export type QvTheme = Partial<Record<QvToken, string>>
 
 // Variables don't cross into the sandboxed frame, so the host's theme is
-// written into it; the widgets' shadow roots inherit it from there.
+// written into it; the widgets' shadow roots inherit it from there. Unknown
+// keys and values that could leave the style block are dropped.
 function themeStyle(theme: QvTheme): string {
-  const vars = Object.entries(theme)
-    .map(([k, v]) => `--qv-${k}:${String(v).replace(/[<;{}]/g, '')};`)
+  const vars = QV_TOKENS.filter((k) => typeof theme[k] === 'string' && !/[<;{}]/.test(theme[k]))
+    .map((k) => `--qv-${k}:${theme[k]};`)
     .join('')
   return vars ? `<style>:root{${vars}}</style>\n` : ''
 }
