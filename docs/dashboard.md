@@ -38,18 +38,17 @@ agent-authored HTML, which renders inside an isolated iframe.
 +--------------------------------------------------------+
 ```
 
-Open it from the corner nav (just the dropdown), or by URL — `?name=<name>`
-jumps straight to one. Reopening
-re-fetches the dashboard and re-runs its queries, so a reloaded or shared link
-always shows live data.
+Open it from the corner nav, or by URL: `?name=<name>` jumps straight to one.
+Reopening re-fetches the dashboard and re-runs its queries, so a reloaded or
+shared link always shows live data.
 
 ## The SQL panel
 
-**Edit queries** opens an editor for the dashboard's queries, in the app and
-outside the frame: pick a query, edit its SQL, and **Execute** re-runs the
-dashboard with the edit. The frame is not reloaded, so the page keeps its
-state; a failing query shows its error above the page. Until **Execute**, the
-page and its widgets keep running the SQL as last executed. **Save** persists the edited dashboard.
+**Edit queries** opens an editor for the dashboard's queries, outside the
+frame: pick a query, edit its SQL, and **Execute** re-runs the dashboard with
+the edit. The frame is not reloaded, so the page keeps its state; a failing
+query shows its error above it. Until **Execute**, the page and its widgets
+run the SQL as last executed. **Save** persists the edited dashboard.
 
 Focus in the panel holds the human [edit lock](./query.md#co-edit--edit-lock):
 an agent push is refused with `blocked, user editing` while you type.
@@ -112,7 +111,7 @@ Load any chart library from a CDN inside the HTML. A minimal dashboard:
 ## Widgets
 
 Dashboard HTML may use two tags anywhere in its own layout. They render in the
-frame like the rest of the page, and are loaded only by dashboards that use one.
+frame with the rest of the page; only dashboards that use one load them.
 
 ```html
 <qv-param name="region"></qv-param>
