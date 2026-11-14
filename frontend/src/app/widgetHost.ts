@@ -2,7 +2,7 @@
 // <qv-select-view> named, on the session's connection. The frame sent a name
 // and values only; the SQL is the dashboard's own, resolved by the caller.
 
-import type { WidgetReply, WidgetRequest } from '../core'
+import { failureReply, type WidgetReply, type WidgetRequest } from '../core'
 import { apiFetch } from './api'
 import { downloadText } from './yamlio'
 
@@ -35,12 +35,7 @@ export async function answerWidget(
       onCsvError(message)
       return null
     }
-    return {
-      type: req.type === 'widget-query' ? 'widget-result' : 'widget-fields',
-      id: req.id,
-      ok: false,
-      message,
-    }
+    return failureReply(req.type, req.id, message)
   }
   if ('message' in resolved) return failed(resolved.message)
   const query = resolved.sql

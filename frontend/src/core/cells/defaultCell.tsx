@@ -3,15 +3,16 @@
 // rest is plain text.
 
 import { ComplexCell } from './ComplexCell'
-import { parseComplexType } from './complexCells'
+import type { ComplexType } from './complexCells'
 import { cellText, isContainer, type Cell } from '../results/rows'
 
+// `complex` is the column's parsed type (parseComplexType), worked out once
+// per column rather than per cell.
 export function renderDefaultCell(
   colName: string,
   value: Cell,
-  colTypes: Record<string, string>,
+  complex: ComplexType | null,
 ): React.ReactNode {
-  const complex = parseComplexType(colTypes[colName] ?? '')
   if (complex || isContainer(value))
     return <ComplexCell type={complex} value={value} col={colName} />
   return cellText(value)

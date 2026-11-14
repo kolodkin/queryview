@@ -21,7 +21,7 @@ describe('buildSrcDoc', () => {
 
   test('loads the widget bundle only for dashboards that use a tag', () => {
     expect(buildSrcDoc('<qv-param name="r"></qv-param>', {})).toContain(
-      '<script src="/widgets.js"></script>',
+      '<script defer src="/widgets.js"></script>',
     )
     expect(buildSrcDoc('<canvas></canvas>', {})).not.toContain('widgets.js')
   })

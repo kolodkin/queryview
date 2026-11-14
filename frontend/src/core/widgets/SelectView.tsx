@@ -2,18 +2,24 @@
 // queries, with field and order-by pickers and CSV. It never holds SQL: every
 // run asks the host by query name. See docs/dashboard.md, "Widgets".
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { renderCellTemplate } from '../cells/cellTemplate'
+import { compileCellTemplate } from '../cells/cellTemplate'
+import { parseComplexType } from '../cells/complexCells'
 import { renderDefaultCell } from '../cells/defaultCell'
-import type { WidgetReply } from '../dashboard/widgetChannel'
+import { MAX_LIMIT, type WidgetReply } from '../dashboard/widgetChannel'
 import { FieldPickers, type Field, type OrderCol } from '../presentation/FieldPickers'
 import { shownColumnIndices } from '../presentation/presentation'
 import { ResultsTable } from '../results/ResultsTable'
-import { cellText, columnNames, columnTypes, type QueryRows } from '../results/rows'
+import { cellText, columnNames, columnTypes, type Cell, type QueryRows } from '../results/rows'
 import { onParamsResults, requestHost, tellHost } from './frameChannel'
 
 type Page = { limit: number; offset: number; orderBy: OrderCol[] }
+
+// The page part of a request, shared by a run and a CSV download.
+function pageMessage(type: 'widget-query' | 'widget-csv', query: string, p: Page) {
+  return { type, query, limit: p.limit, offset: p.offset, order_by: p.orderBy }
+}
 
 const inputClass = 'glass-input ml-1 w-20 px-2 py-1 text-sm'
 
@@ -89,13 +95,9 @@ export function SelectView({
     async (p: Page) => {
       const ticket = ++runSeq.current
       setBusy(true)
-      const reply = await requestHost<Extract<WidgetReply, { type: 'widget-result' }>>({
-        type: 'widget-query',
-        query,
-        limit: p.limit,
-        offset: p.offset,
-        order_by: p.orderBy,
-      })
+      const reply = await requestHost<Extract<WidgetReply, { type: 'widget-result' }>>(
+        pageMessage('widget-query', query, p),
+      )
       if (ticket !== runSeq.current) return
       setBusy(false)
       if (!reply.ok) {
@@ -143,6 +145,28 @@ export function SelectView({
 
   const columns = result ? columnNames(result) : []
   const colTypes = result ? columnTypes(result) : {}
+  // Per-render work kept out of the per-cell path: a page holds up to
+  // MAX_LIMIT rows.
+  const compiled = useMemo(
+    () =>
+      Object.fromEntries(Object.entries(templates).map(([c, t]) => [c, compileCellTemplate(t)])),
+    [templates],
+  )
+  const complexTypes = useMemo(
+    () => Object.fromEntries((result?.meta ?? []).map((m) => [m.name, parseComplexType(m.type)])),
+    [result],
+  )
+  // Each row's cells as text, made once per result (only when a template needs
+  // them), not once per templated cell.
+  const rowText = useMemo(
+    () =>
+      new Map<Cell[], string[]>(
+        Object.keys(templates).length && result
+          ? result.data.map((row) => [row, row.map(cellText)])
+          : [],
+      ),
+    [result, templates],
+  )
 
   return (
     <section
@@ -164,7 +188,7 @@ export function SelectView({
           key={`l${page.limit}`}
           value={page.limit}
           min={1}
-          max={1000}
+          max={MAX_LIMIT}
           onCommit={(n) => setPage({ ...page, limit: n })}
         />
         <NumberBox
@@ -195,15 +219,7 @@ export function SelectView({
         </button>
         <button
           type="button"
-          onClick={() =>
-            tellHost({
-              type: 'widget-csv',
-              query,
-              limit: page.limit,
-              offset: page.offset,
-              order_by: page.orderBy,
-            })
-          }
+          onClick={() => tellHost(pageMessage('widget-csv', query, page))}
           data-testid="qv-csv"
           className="glass-btn px-3 py-1 font-medium text-emerald-300"
         >
@@ -235,20 +251,15 @@ export function SelectView({
           testid="qv-results"
           dimmed={busy}
           renderCell={(col, value, row) =>
-            templates[col] !== undefined ? (
+            compiled[col] ? (
               <span
                 data-testid={`cell-${col}`}
                 dangerouslySetInnerHTML={{
-                  __html: renderCellTemplate(
-                    templates[col],
-                    cellText(value),
-                    row.map(cellText),
-                    columns,
-                  ),
+                  __html: compiled[col](cellText(value), rowText.get(row) ?? [], columns),
                 }}
               />
             ) : (
-              renderDefaultCell(col, value, colTypes)
+              renderDefaultCell(col, value, complexTypes[col] ?? null)
             )
           }
         />

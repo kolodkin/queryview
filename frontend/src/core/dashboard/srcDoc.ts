@@ -31,15 +31,14 @@ export function buildSrcDoc(
   html: string,
   results: DashboardResults,
   params: ResolvedParam[] = [],
-  widgetsSrc = '/widgets.js',
 ): string {
   const safe = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c')
   return (
     `<script>window.queries = ${safe(results)};\nwindow.params = ${safe(params)};` +
     `${SET_PARAMS_HELPER}\n</script>\n` +
-    // The <qv-*> tags: loaded only by dashboards that use one, and before the
-    // HTML so the tags upgrade as they parse.
-    (/<qv-/i.test(html) ? `<script src="${widgetsSrc}"></script>\n` : '') +
+    // The <qv-*> tags: loaded only by dashboards that use one, deferred so the
+    // tags upgrade once the HTML, their <template> children included, is parsed.
+    (/<qv-/i.test(html) ? '<script defer src="/widgets.js"></script>\n' : '') +
     html
   )
 }

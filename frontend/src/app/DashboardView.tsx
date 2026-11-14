@@ -10,6 +10,7 @@ import {
   rejectedWidgetReply,
   resolveParams,
   widgetQueryNames,
+  type DashboardParam,
   type DashboardResults,
   type QueryRunner,
   type ResolvedParam,
@@ -67,8 +68,7 @@ const NEW_QUERY_HTML =
 const VIEW = 'dashboard'
 
 // The draft the session remembers, when the page opens without a dashboard.
-function restoredDraft(): DashboardPush | null {
-  const params = new URLSearchParams(window.location.search)
+function restoredDraft(params: URLSearchParams): DashboardPush | null {
   if (params.has('name') || params.has('new')) return null
   const d = viewState(VIEW).draft as { html?: unknown; queries?: unknown } | null | undefined
   if (!d || typeof d.html !== 'string' || !d.queries || typeof d.queries !== 'object') return null
@@ -83,6 +83,25 @@ function withoutWidgetQueries(
 ): Record<string, string> {
   const owned = new Set(widgetQueryNames(html))
   return Object.fromEntries(Object.entries(queries).filter(([name]) => !owned.has(name)))
+}
+
+// Run a dashboard's own (non-widget) queries with the selections applied. A
+// query still waiting on an unchosen selector (`default: none`) is held back;
+// the page gets it once it calls setParams.
+async function runOwnQueries(
+  queries: Record<string, string>,
+  html: string,
+  declared: DashboardParam[],
+  resolved: ResolvedParam[],
+  identQuote: string,
+): ReturnType<QueryRunner> {
+  const runnable = applyToQueries(
+    withoutWidgetQueries(queries, html),
+    declared,
+    resolved,
+    identQuote,
+  )
+  return Object.keys(runnable).length ? runQueries(runnable) : { ok: true, results: {} }
 }
 
 // The dashboard page (`/dashboard?name=x`). Picks a saved dashboard (dropdown or
@@ -111,7 +130,9 @@ function DashboardView({
 
   const [dashboards, setDashboards] = useState<DashboardSummary[]>([])
   // Captured locally so consuming the shell push doesn't re-trigger resolve.
-  const [localPush, setLocalPush] = useState<DashboardPush | null>(() => restoredDraft())
+  const [localPush, setLocalPush] = useState<DashboardPush | null>(() =>
+    restoredDraft(searchParams),
+  )
   const [active, setActive] = useState<DashboardPush | null>(null)
   const [results, setResults] = useState<DashboardResults | null>(null)
   // Resolved selectors at load; later changes live in the frame (window.params).
@@ -226,9 +247,7 @@ function DashboardView({
   // Capture a pushed dashboard and release it from the shell.
   useEffect(() => {
     if (pushed) {
-      editedRef.current = null
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLocalPush(pushed)
+      reopen(pushed)
       onPushConsumed?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -282,17 +301,7 @@ function DashboardView({
         if (cancelled) return
         setParams(resolved)
         resolvedRef.current = resolved
-        // Queries still waiting on an unchosen selector (`default: none`) are
-        // held back; the page gets them once it calls setParams.
-        const runnable = applyToQueries(
-          withoutWidgetQueries(executed, dash.html),
-          declared,
-          resolved,
-          identQuote,
-        )
-        const r = Object.keys(runnable).length
-          ? await runQueries(runnable)
-          : { ok: true as const, results: {} }
+        const r = await runOwnQueries(executed, dash.html, declared, resolved, identQuote)
         if (cancelled) return
         if (r.ok) {
           setResults(r.results)
@@ -311,9 +320,9 @@ function DashboardView({
     }
   }, [name, localPush, runOn, reloadNonce, identQuote])
 
-  // Re-run a dashboard's own (non-widget) queries and build the message the
-  // frame expects. `values` are fresh selections to resolve; null keeps the
-  // current ones (the SQL changed, not the params).
+  // Re-run the open dashboard's own queries, as last executed, and build the
+  // message the frame expects. `values` are fresh selections to resolve; null
+  // keeps the current ones (the SQL changed, not the params).
   async function rerun(
     dash: DashboardPush,
     values: Record<string, string> | null,
@@ -325,15 +334,7 @@ function DashboardView({
         resolved = await resolveParams(declared, values, runQueries, identQuote)
         resolvedRef.current = resolved
       }
-      const runnable = applyToQueries(
-        withoutWidgetQueries(dash.queries, dash.html),
-        declared,
-        resolved,
-        identQuote,
-      )
-      const r = Object.keys(runnable).length
-        ? await runQueries(runnable)
-        : { ok: true as const, results: {} }
+      const r = await runOwnQueries(executedRef.current, dash.html, declared, resolved, identQuote)
       return r.ok
         ? { type: 'params-results', ok: true, results: r.results, params: resolved }
         : { type: 'params-results', ok: false, message: r.message, params: resolved }
@@ -344,7 +345,7 @@ function DashboardView({
   }
 
   // An edit in the SQL panel. Kept in a ref too, so a reload (a database
-  // switch, Execute with no frame yet) runs the edited SQL, not the stored one.
+  // switch) keeps it in the editor; nothing runs it until Execute.
   function editQuery(query: string, sql: string) {
     if (!active) return
     const next = { ...active, queries: { ...active.queries, [query]: sql } }
@@ -370,10 +371,16 @@ function DashboardView({
     frame.contentWindow?.postMessage(answer, '*')
   }
 
+  // Open `push` in place of the current dashboard (null: the store's copy of
+  // the selected one), dropping unsaved edits and the remembered draft.
+  function reopen(push: DashboardPush | null) {
+    editedRef.current = null
+    setLocalPush(push)
+  }
+
   // Unsaved scratch: one widget over one query, the SQL panel open.
   function newQuery(sql = '', replace = false) {
-    editedRef.current = null
-    setLocalPush({
+    reopen({
       name: '',
       html: NEW_QUERY_HTML,
       queries: { main: sql },
@@ -419,7 +426,7 @@ function DashboardView({
       }
       const values = parseParamsRequest(e.data)
       if (!values) return
-      const answer = await rerun({ ...active, queries: executedRef.current }, values)
+      const answer = await rerun(active, values)
       frame.contentWindow?.postMessage(answer, '*')
     }
     window.addEventListener('message', onMessage)
@@ -443,8 +450,7 @@ function DashboardView({
             const next = e.target.value
             // Leaving a dashboard drops its unsaved state: the store is what
             // a pick opens.
-            editedRef.current = null
-            setLocalPush(null)
+            reopen(null)
             patchView(VIEW, { draft: null })
             if (next) setSearchParams({ name: next })
             else setSearchParams({})
@@ -492,8 +498,7 @@ function DashboardView({
           name={name}
           disabled={!name}
           onRestored={() => {
-            editedRef.current = null
-            setLocalPush(null)
+            reopen(null)
             setReloadNonce((n) => n + 1)
           }}
         />
@@ -504,8 +509,7 @@ function DashboardView({
             // The imported file may carry any dashboard name: refresh the
             // dropdown, and re-load the open one in case it was overwritten.
             void loadDashboards()
-            editedRef.current = null
-            setLocalPush(null)
+            reopen(null)
             setReloadNonce((n) => n + 1)
           }}
         />

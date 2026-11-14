@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 
 import type { ResolvedParam } from '../dashboard/params'
+import { onParamsResults } from './frameChannel'
 
 type FrameWindow = Window & {
   params?: ResolvedParam[]
@@ -18,13 +19,7 @@ export function ParamSelect({ name }: { name: string }) {
 
   // The prologue's listener was added first, so window.params is already
   // updated when this one runs.
-  useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      if (e.data?.type === 'params-results') setParams([...(frame().params ?? [])])
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [])
+  useEffect(() => onParamsResults(() => setParams([...(frame().params ?? [])])), [])
 
   const param = params.find((p) => p.name === name)
   if (!param) return null

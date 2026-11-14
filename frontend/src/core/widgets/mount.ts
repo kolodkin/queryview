@@ -18,37 +18,37 @@ function registerProperties(): void {
   document.head.append(style)
 }
 
+// One parsed copy of the stylesheet, adopted by every widget's shadow root.
+let shared: CSSStyleSheet | null = null
+function sheets(display: string): CSSStyleSheet[] {
+  if (!shared) {
+    registerProperties()
+    shared = new CSSStyleSheet()
+    shared.replaceSync(css)
+  }
+  const host = new CSSStyleSheet()
+  host.replaceSync(`:host{display:${display};color-scheme:dark}`)
+  return [shared, host]
+}
+
 export function defineWidget(
   tag: string,
   render: (host: HTMLElement) => ReactNode,
   display: 'block' | 'inline-block' = 'block',
 ): void {
+  // The bundle is deferred (see ../dashboard/srcDoc.ts), so a tag in the HTML
+  // upgrades with its <template> children already parsed.
   class Widget extends HTMLElement {
     private root: Root | null = null
-    private queued = false
     connectedCallback() {
-      if (this.root || this.queued) return
-      this.queued = true
-      const mount = () => {
-        this.queued = false
-        if (!this.isConnected) return
-        registerProperties()
-        // Re-attached after a removal: the shadow root is still there.
-        const shadow = this.shadowRoot ?? this.attachShadow({ mode: 'open' })
-        const style = document.createElement('style')
-        style.textContent = `${css}\n:host{display:${display};color-scheme:dark}`
-        const el = document.createElement('div')
-        shadow.replaceChildren(style, el)
-        this.root = createRoot(el)
-        this.root.render(render(this))
-      }
-      // The bundle loads before the page's HTML, so the tag upgrades before its
-      // children (the <template>s) are parsed: wait for the document.
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', mount, { once: true })
-      } else {
-        mount()
-      }
+      if (this.root) return
+      // Re-attached after a removal: the shadow root is still there.
+      const shadow = this.shadowRoot ?? this.attachShadow({ mode: 'open' })
+      shadow.adoptedStyleSheets = sheets(display)
+      const el = document.createElement('div')
+      shadow.replaceChildren(el)
+      this.root = createRoot(el)
+      this.root.render(render(this))
     }
     // A page that re-renders its HTML must not leave the old widget querying.
     disconnectedCallback() {

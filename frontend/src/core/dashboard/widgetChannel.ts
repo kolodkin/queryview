@@ -23,9 +23,9 @@ export type WidgetReply =
   | { type: 'widget-fields'; id: string; ok: true; fields: Field[] }
   | { type: 'widget-fields'; id: string; ok: false; message: string }
 
-// The backend clamps to this too; rejecting here keeps a forged message from
-// reaching it at all.
-const MAX_LIMIT = 1000
+// The largest page a widget asks for. The backend clamps to this too;
+// rejecting here keeps a forged message from reaching it at all.
+export const MAX_LIMIT = 1000
 
 function parseOrderBy(raw: unknown): OrderCol[] | null {
   if (!Array.isArray(raw)) return null
@@ -68,11 +68,22 @@ export function rejectedWidgetReply(data: unknown): WidgetReply | null {
   if (typeof data !== 'object' || data === null) return null
   const { type, id } = data as Record<string, unknown>
   if (typeof id !== 'string') return null
-  if (type === 'widget-query')
-    return { type: 'widget-result', id, ok: false, message: 'Bad request' }
-  if (type === 'widget-describe')
-    return { type: 'widget-fields', id, ok: false, message: 'Bad request' }
-  return null
+  if (type !== 'widget-query' && type !== 'widget-describe') return null
+  return failureReply(type, id, 'Bad request')
+}
+
+// The failed answer to a widget request that expects one.
+export function failureReply(
+  type: 'widget-query' | 'widget-describe',
+  id: string,
+  message: string,
+): WidgetReply {
+  return {
+    type: type === 'widget-query' ? 'widget-result' : 'widget-fields',
+    id,
+    ok: false,
+    message,
+  }
 }
 
 // The queries `<qv-select-view>` tags own, distinct and in order. The host
