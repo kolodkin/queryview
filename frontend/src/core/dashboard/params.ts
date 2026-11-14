@@ -81,29 +81,29 @@ export function placeholdersIn(sql: string): string[] {
   return [...seen]
 }
 
-// Backslash is an escape character only in backtick dialects (ClickHouse,
-// MySQL); in the standard-SQL ones it is literal, and doubling it would change
-// the value.
+// Backslash escapes only in backtick dialects (ClickHouse); elsewhere it is literal.
 // shortcut: the dialect is inferred from the identifier quote, pass an explicit flag if a driver breaks that pairing
+const backslashEscapes = (quote: string) => quote === '`'
+
 function quoteLiteral(value: string, quote: string): string {
-  const escaped = quote === '`' ? value.replaceAll('\\', '\\\\') : value
+  const escaped = backslashEscapes(quote) ? value.replaceAll('\\', '\\\\') : value
   return `'${escaped.replaceAll("'", "''")}'`
 }
 
 // A quote character in the name (or a backslash, where it escapes) can't be
 // trusted through string assembly, and no real table or column carries one.
 function quoteIdentifier(name: string, param: string, quote: string): string {
-  if (name.includes(quote) || (quote === '`' && name.includes('\\')))
+  if (name.includes(quote) || (backslashEscapes(quote) && name.includes('\\')))
     throw new Error(`invalid identifier for {${param}}: ${name}`)
   return `${quote}${name}${quote}`
 }
 
+// A dimension's checkbox state; a page may send 0 for unchecked.
+const isChecked = (v?: string): v is string => !!v && v !== '0'
+
 // Replace every declared `{name}`; placeholders with no matching param are left
 // alone (they may be literal braces in the SQL). `quote` is the connection's
 // identifier quote (see /api/session's ident_quote).
-// A dimension's checkbox state; a page may send 0 for unchecked.
-const isChecked = (v: string | undefined) => !!v && v !== '0'
-
 export function substituteParams(
   sql: string,
   params: DashboardParam[],
@@ -192,7 +192,7 @@ export async function resolveParams(
     const value =
       p.kind === 'dimension'
         ? isChecked(want)
-          ? want!
+          ? want
           : ''
         : want && options.includes(want)
           ? want

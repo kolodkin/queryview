@@ -160,7 +160,7 @@
   }
 
   /* Accent border of a static chip (an order-by column); hosts theme it here. */
-  .glass-chip {
+  .accent-chip {
     border-color: rgba(129, 140, 248, 0.4); /* indigo-400/40 */
   }
 
