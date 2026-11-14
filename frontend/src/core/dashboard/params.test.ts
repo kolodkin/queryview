@@ -293,7 +293,40 @@ describe('parseParamsRequest', () => {
       d: 'on',
       e: '',
     })
+    expect(
+      parseParamsRequest({ type: 'set-params', values: { n: null, u: undefined, z: 0 } }),
+    ).toEqual({ n: '', u: '', z: '0' })
     expect(parseParamsRequest({ type: 'run-queries', queries: {} })).toBeNull()
     expect(parseParamsRequest({ type: 'set-params', values: ['x'] })).toBeNull()
+  })
+})
+
+describe('backslashes', () => {
+  const params = parseDashboardParams([
+    { name: 'path', options: ['x'] },
+    { name: 'field', kind: 'identifier', options: ['x'] },
+  ])
+  test('are escaped in a literal where the dialect escapes with them', () => {
+    const sql = 'SELECT {path}'
+    expect(substituteParams(sql, params, { path: "C:\\temp\\' OR 1=1 --" }, '`')).toBe(
+      "SELECT 'C:\\\\temp\\\\'' OR 1=1 --'",
+    )
+    expect(substituteParams(sql, params, { path: 'C:\\temp' }, '"')).toBe("SELECT 'C:\\temp'")
+  })
+  test('are rejected in an identifier', () => {
+    expect(() => substituteParams('SELECT {field}', params, { field: 'a\\' }, '`')).toThrow(
+      /invalid identifier/,
+    )
+  })
+})
+
+describe('an unchecked dimension', () => {
+  test("stays unchecked for '' and 0", async () => {
+    const params = parseDashboardParams([{ name: 'by_city', kind: 'dimension' }])
+    const run = async () => ({ ok: true as const, results: {} })
+    for (const v of ['', '0']) {
+      const resolved = await resolveParams(params, { by_city: v }, run, '"')
+      expect(resolved[0].value).toBe('')
+    }
   })
 })

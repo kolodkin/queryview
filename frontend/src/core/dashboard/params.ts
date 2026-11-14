@@ -81,14 +81,20 @@ export function placeholdersIn(sql: string): string[] {
   return [...seen]
 }
 
-function quoteLiteral(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`
+// Backslash is an escape character only in backtick dialects (ClickHouse,
+// MySQL); in the standard-SQL ones it is literal, and doubling it would change
+// the value.
+// shortcut: the dialect is inferred from the identifier quote, pass an explicit flag if a driver breaks that pairing
+function quoteLiteral(value: string, quote: string): string {
+  const escaped = quote === '`' ? value.replaceAll('\\', '\\\\') : value
+  return `'${escaped.replaceAll("'", "''")}'`
 }
 
-// A quote character in the name can't be trusted through string assembly, and
-// no real table or column carries one, so reject it.
+// A quote character or backslash in the name can't be trusted through string
+// assembly, and no real table or column carries one, so reject it.
 function quoteIdentifier(name: string, param: string, quote: string): string {
-  if (name.includes(quote)) throw new Error(`invalid identifier for {${param}}: ${name}`)
+  if (name.includes(quote) || name.includes('\\'))
+    throw new Error(`invalid identifier for {${param}}: ${name}`)
   return `${quote}${name}${quote}`
 }
 
@@ -114,7 +120,7 @@ export function substituteParams(
     }
     if (raw === undefined || raw === '') throw new Error(`no value selected for {${name}}`)
     const asIdentifier = cast ? cast === 'identifier' : p.kind === 'identifier'
-    return asIdentifier ? quoteIdentifier(raw, name, quote) : quoteLiteral(raw)
+    return asIdentifier ? quoteIdentifier(raw, name, quote) : quoteLiteral(raw, quote)
   })
 }
 
@@ -182,7 +188,9 @@ export async function resolveParams(
     const want = values[p.name]
     const value =
       p.kind === 'dimension'
-        ? (want ?? '')
+        ? want && want !== '0' // a page may send 0 for unchecked
+          ? want
+          : ''
         : want && options.includes(want)
           ? want
           : p.autoSelect
@@ -220,8 +228,8 @@ export function parseParamsRequest(data: unknown): Record<string, string> | null
   if (typeof values !== 'object' || values === null || Array.isArray(values)) return null
   const out: Record<string, string> = {}
   for (const [k, v] of Object.entries(values as Record<string, unknown>)) {
-    // Checkboxes arrive as booleans; '' reads as unset / unchecked.
-    out[k] = typeof v === 'boolean' ? (v ? 'on' : '') : String(v)
+    // Checkboxes arrive as booleans; '' (also from null) reads as unset / unchecked.
+    out[k] = typeof v === 'boolean' ? (v ? 'on' : '') : String(v ?? '')
   }
   return out
 }

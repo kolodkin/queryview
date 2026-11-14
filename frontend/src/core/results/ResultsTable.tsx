@@ -76,6 +76,7 @@ export function ResultsTable({
   renderCell,
   dimmed = false,
   types = {},
+  className = 'min-h-0 flex-[1_1_12rem]',
 }: {
   columns: string[]
   rows: Cell[][]
@@ -87,12 +88,14 @@ export function ResultsTable({
   renderCell?: RenderCell
   // Faded while a re-run is in flight.
   dimmed?: boolean
+  // Sizing in the parent; the default fills a height-bounded flex column.
+  className?: string
 }) {
   const [open, setOpen] = useState<Opened | null>(null)
   return (
     <div
       data-testid={testid}
-      className={`min-h-0 flex-[1_1_12rem] overflow-auto rounded-xl border border-white/10 ${
+      className={`${className} overflow-auto rounded-xl border border-white/10 ${
         dimmed ? 'opacity-50 transition-opacity' : ''
       }`}
     >
