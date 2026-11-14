@@ -46,7 +46,7 @@ def test_validation_400():
         c.get("/api/git/history", params=query),
     ):
         assert r.status_code == 400
-        assert r.json() == {"ok": False, "message": "kind ('dashboard') and name are required"}
+        assert r.json() == {"ok": False, "message": "unknown kind 'query' (expected 'dashboard')"}
 
 
 def test_store_history_restore_round_trip(git_env):

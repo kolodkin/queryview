@@ -623,12 +623,12 @@ async def dashboards_get(name: str, request: Request):
 
 
 def _gitsync_args(kind: Any, name: Any) -> tuple[str, str] | JSONResponse:
-    """Validated (kind, name), or the 400 response to return, mirroring
-    _driver_and_config's convention."""
+    """Present (kind, name), or the 400 response to return, mirroring
+    _driver_and_config's convention. Which kinds exist is gitsync's call."""
     kind = _clean_str(kind)
     name = _clean_str(name)
-    if kind != "dashboard" or not name:
-        return JSONResponse({"ok": False, "message": "kind ('dashboard') and name are required"}, status_code=400)
+    if not kind or not name:
+        return JSONResponse({"ok": False, "message": "kind and name are required"}, status_code=400)
     return kind, name
 
 
@@ -827,21 +827,25 @@ async def api_not_found(rest: str):
     return JSONResponse({"error": "not found"}, status_code=404)
 
 
-if SERVE_STATIC:
+async def _serve_static(full_path: str):
+    """A built file, or index.html for a client-side route. A missing path with
+    a file extension is a missing file, not a route: 404, so a broken build
+    fails loudly instead of handing a script the app's HTML."""
+    root = _static_root()
+    candidate = (root / full_path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    if candidate.is_file():
+        return FileResponse(candidate)
+    if candidate.suffix:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(root / "index.html")
 
-    @app.get("/{full_path:path}")
-    async def spa(full_path: str):
-        root = _static_root()
-        candidate = (root / full_path).resolve()
-        try:
-            candidate.relative_to(root)
-        except ValueError:
-            candidate = None
-        if candidate is not None and candidate.is_file():
-            return FileResponse(candidate)
-        # SPA fallback: serve index.html (200) for any unknown path so
-        # client-side routing works.
-        return FileResponse(root / "index.html")
+
+if SERVE_STATIC:
+    app.get("/{full_path:path}")(_serve_static)
 
 else:
 
