@@ -97,10 +97,10 @@ export default function WorkspaceSwitcher({ workspace, onSwitch }: Props) {
       return
     }
     const n = r.imported?.length ?? 0
-    const d = r.deleted?.length ?? 0
     const c = r.conflicts?.length ?? 0
-    const changes = [n ? `imported ${n}` : '', d ? `deleted ${d}` : ''].filter(Boolean).join(' · ')
-    setSyncNote(`Synced: ${changes || 'nothing new'}${c ? ` · ${c} differ (see ⚠)` : ''}.`)
+    setSyncNote(
+      `Synced: ${n ? `imported ${n}` : 'nothing new'}${c ? ` · ${c} differ (see ⚠)` : ''}.`,
+    )
   }
 
   async function saveSettings() {
