@@ -36,6 +36,7 @@ class _FakeDriver:
     type = "fake"
     requires_database = False  # no picker
     ident_quote = '"'
+    backslash_escapes = False
 
     def parse_config(self, body):
         return {"v": 1}, None

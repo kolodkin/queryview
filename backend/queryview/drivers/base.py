@@ -140,6 +140,9 @@ class Driver(Protocol):
     # The dialect's identifier-quote character, for SQL generated server-side
     # (select_all_sql). Same convention as the build_order_by `quote` argument.
     ident_quote: str
+    # Whether backslash is an escape inside string literals and quoted
+    # identifiers (ClickHouse); dashboard params escape or reject it then.
+    backslash_escapes: bool
 
     def parse_config(self, body: Any) -> tuple[DriverConfig | None, str | None]: ...
     def config_to_dict(self, config: DriverConfig) -> dict[str, Any]: ...

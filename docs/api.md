@@ -22,7 +22,7 @@ shared (SQLite). See [session.md](./session.md).
 | Method | Path                        | Body                                   | Description |
 | ------ | --------------------------- | -------------------------------------- | ----------- |
 | GET    | `/api/health`               | —                                      | Service health check. |
-| GET    | `/api/session`              | —                                      | This session's connection state `{connected, name?, type?, databases?, database?, root?, ident_quote?, locked?, unlocked?}` (`root` only for a DuckDB folder), reconnecting the connection the session is on; `unlocked` says whether this request's `X-QV-Token` opens a locked one. |
+| GET    | `/api/session`              | —                                      | This session's connection state `{connected, name?, type?, databases?, database?, root?, ident_quote?, backslash_escapes?, locked?, unlocked?}` (`root` only for a DuckDB folder), reconnecting the connection the session is on; `unlocked` says whether this request's `X-QV-Token` opens a locked one. |
 | POST   | `/api/db/test`      | `{host,port,username,password}`        | Test a connection (test only — no save, no activation). `{ok, message}`. |
 | POST   | `/api/db/connect`   | `{name,host,port,username,password}`   | Create: open + save + activate for this session; lists databases (new-connection form). `{ok, name, type, databases, database, root?}` \| `{ok:false, message}`. |
 | GET    | `/api/db/connections` | —                                    | Saved connections, most recent first: `{connections:[{name, type, database, last_active_at}]}` — metadata only, never the config. |

@@ -195,6 +195,7 @@ class ClickHouseDriver:
     type: str = "clickhouse"
     requires_database: bool = True
     ident_quote: str = "`"
+    backslash_escapes: bool = True
 
     def parse_config(self, body: Any) -> tuple[ChConfig | None, str | None]:
         return parse_ch_config(body)

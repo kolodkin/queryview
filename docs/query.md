@@ -256,7 +256,7 @@ select * from events where source = {source}
 a labelled dropdown appears above the SQL textarea, one per param, populated with
 the declared options. The placeholder **`{source}`** is replaced with the selected
 value as a **quoted SQL string** (`source = 'b'`), with embedded single quotes
-doubled — write the placeholder where a value goes, no quotes of your own. A
+doubled (and backslashes on ClickHouse, where they escape) — write the placeholder where a value goes, no quotes of your own. A
 `{name}` with no matching param is left untouched; a param whose `{name}` never
 appears in the query is harmless.
 

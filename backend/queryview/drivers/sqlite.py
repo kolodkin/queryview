@@ -115,6 +115,7 @@ class SqliteDriver:
     type: str = "sqlite"
     requires_database: bool = False
     ident_quote: str = '"'
+    backslash_escapes: bool = False
 
     def parse_config(self, body: Any) -> tuple[SqliteConfig | None, str | None]:
         return parse_sqlite_config(body)
