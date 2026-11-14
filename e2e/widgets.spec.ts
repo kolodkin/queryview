@@ -1,17 +1,6 @@
-// Dashboard widgets: the <qv-*> tags an agent drops into dashboard HTML. They
-// run through the same query path as Studio, so once on DuckDB (no service).
-import { DUCK, api, armRemote, connect, expect, mcpCall, test } from "./fixtures";
-import type { Page } from "@playwright/test";
-
-type Dash = { name: string; html: string; queries: Record<string, string>; params?: unknown[] };
-
-// Save a dashboard through the REST mirror and open it; returns its frame.
-async function openDashboard(page: Page, baseURL: string | undefined, dash: Dash) {
-  await api(`${baseURL}/api/dashboards`, { json: dash });
-  await page.getByTestId("nav-dashboard").click();
-  await page.getByTestId("dashboard-select").selectOption(dash.name);
-  return page.frameLocator('[data-testid="dashboard-frame"]');
-}
+// Dashboard widgets: the <qv-*> tags an agent drops into dashboard HTML. Once
+// on DuckDB (no service); drivers.spec.ts runs the widget's query path per driver.
+import { DUCK, armRemote, connect, expect, mcpCall, openDashboard, openNewQuery, test } from "./fixtures";
 
 test("qv-param reruns the dashboard", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
@@ -111,9 +100,7 @@ test("a widget query is not in window.queries", async ({ page, seeds, baseURL })
 
 test("New query runs ad-hoc SQL and saves as a dashboard", async ({ page, seeds, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
-  await page.getByTestId("nav-dashboard").click();
-  await page.getByTestId("dashboard-new-query").click();
-  const frame = page.frameLocator('[data-testid="dashboard-frame"]');
+  const frame = await openNewQuery(page);
   await expect(frame.getByTestId("qv-error")).toHaveText("Enter a query.");
 
   await page.getByTestId("dash-sql").fill("SELECT name FROM items ORDER BY id");

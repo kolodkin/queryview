@@ -8,15 +8,16 @@ import {
   CH_USER,
   DUCK,
   api,
-  authorParamsYaml,
   chDb,
   chExec,
   connCard,
   connect,
+  executeSql,
   expect,
   openClickhousePicker,
   openConnect,
-  openQueryPanel,
+  openDashboard,
+  openNewQuery,
   sessionId,
   startNewConnection,
   tableRow,
@@ -126,60 +127,40 @@ for (const c of PICKER) {
   test(`a database switch reruns the query on screen [${c.id}]`, async ({ page, seeds }) => {
     await connect(page, c, await seeds[c.seed]());
     const other = OTHER_DB[c.id];
-    await openQueryPanel(page);
-    await page.getByTestId("query-input").fill(`SELECT ${CURRENT_DB[c.id]} AS db`);
-    await page.getByTestId("query-run").click();
-    const output = page.getByTestId("query-output");
+    const frame = await openNewQuery(page);
+    await executeSql(page, `SELECT ${CURRENT_DB[c.id]} AS db`);
+    const output = frame.getByTestId("qv-results");
     await expect(output).toContainText(chDb());
 
     // An edit since the run is not what produced the results: the re-run is of
-    // the run's own query, and the edit stays in the editor.
-    await page.getByTestId("query-input").fill("SELECT 'edited'");
+    // the SQL as last executed, and the edit stays in the editor.
+    await page.getByTestId("dash-sql").fill("SELECT 'edited'");
     await switchDatabaseFromPill(page, other);
     await expect(output).toContainText(other);
     await expect(output).not.toContainText(chDb());
     await expect(output).not.toContainText("edited");
-    await expect(page.getByTestId("query-input")).toHaveValue("SELECT 'edited'");
+    await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT 'edited'");
   });
 
-  test(`a database switch refreshes param options [${c.id}]`, async ({ page, seeds }) => {
-    // `options_sql` choices are resolved on the session, so they follow its
-    // database like the results do.
+  test(`a database switch refreshes dashboard param options [${c.id}]`, async ({ page, seeds, baseURL }) => {
+    // `options_sql` choices are resolved on the viewing session, so they follow
+    // its database, and the re-run the switch triggers substitutes the new ones.
     await connect(page, c, await seeds[c.seed]());
     const other = OTHER_DB[c.id];
-    await openQueryPanel(page);
-    await authorParamsYaml(
-      page,
-      "by-database",
-      "SELECT {db} AS picked",
-      `params:\n  - name: db\n    options_sql: SELECT ${CURRENT_DB[c.id]}\n`,
-    );
-    const sel = page.locator('[data-testid="param-select"][data-param="db"]');
-    await expect(sel.locator("option").first()).toHaveText(chDb());
+    const frame = await openDashboard(page, baseURL, {
+      name: `by-database-${c.id}`,
+      html: '<qv-param name="db"></qv-param><qv-select-view query="q"></qv-select-view>',
+      queries: { q: "SELECT {db} AS picked" },
+      params: [{ name: "db", options_sql: `SELECT ${CURRENT_DB[c.id]}` }],
+    });
+    const options = frame.getByTestId("qv-param").locator("option");
+    const output = frame.getByTestId("qv-results");
+    await expect(options).toHaveText([chDb()]);
+    await expect(output.locator("tbody tr")).toHaveText([chDb()]);
 
     await switchDatabaseFromPill(page, other);
-    await expect(sel.locator("option").first()).toHaveText(other);
-  });
-
-  test(`a database switch reruns with the new database param options [${c.id}]`, async ({ page, seeds }) => {
-    // The re-run a database switch triggers substitutes `options_sql` values
-    // resolved on the new database, not the ones the old database produced.
-    await connect(page, c, await seeds[c.seed]());
-    const other = OTHER_DB[c.id];
-    await openQueryPanel(page);
-    await authorParamsYaml(
-      page,
-      "by-database-run",
-      "SELECT {db} AS picked",
-      `params:\n  - name: db\n    options_sql: SELECT ${CURRENT_DB[c.id]}\n`,
-    );
-    await page.getByTestId("query-run").click();
-    const output = page.getByTestId("query-output");
-    await expect(output).toContainText(chDb());
-
-    await switchDatabaseFromPill(page, other);
-    await expect(output).toContainText(other);
-    await expect(output).not.toContainText(chDb());
+    await expect(options).toHaveText([other]);
+    await expect(output.locator("tbody tr")).toHaveText([other]);
   });
 }
 
@@ -237,20 +218,21 @@ test("a database switched elsewhere reaches the tab on its heartbeat", async ({ 
   await expect(tableRow(page, "databases")).toBeVisible();
 });
 
-test("ready connection shows query panel", async ({ page, seeds }) => {
-  // A ready connection never needs the `query` command: connecting lands on
-  // the explorer, and Studio puts the panel up — first visit and after a
-  // detour alike.
+test("ready connection opens a New query draft", async ({ page, seeds }) => {
+  // Connecting lands on the explorer; ad-hoc SQL is a New query draft on the
+  // Dashboard page, which the old /studio URL still opens.
   await connect(page, DUCK, await seeds.duckdb());
   await expect(page.getByTestId("explorer-tables")).toBeVisible();
 
-  await page.getByTestId("nav-studio").click();
-  await expect(page.getByTestId("query-panel")).toBeVisible();
+  const frame = await openNewQuery(page);
+  await expect(frame.getByTestId("qv-error")).toHaveText("Enter a query.");
 
   await page.getByTestId("nav-explorer").click();
   await expect(page.getByTestId("explorer-tables")).toBeVisible();
-  await page.getByTestId("nav-studio").click();
-  await expect(page.getByTestId("query-panel")).toBeVisible();
+  await page.goto("/studio");
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByTestId("dash-sql")).toHaveValue("");
+  await expect(frame.getByTestId("qv-error")).toHaveText("Enter a query.");
 });
 
 test("connect page and disconnect", async ({ page, seeds }) => {
@@ -261,7 +243,7 @@ test("connect page and disconnect", async ({ page, seeds }) => {
   await page.getByTestId("nav-connect").click();
   await expect(page).toHaveURL(/\/connect/);
   await expect(connCard(page, "duckdb")).toHaveAttribute("data-active", "true");
-  await expect(page.getByTestId("query-panel")).toHaveCount(0);
+  await expect(page.getByTestId("dash-sql-panel")).toHaveCount(0);
 
   await page.getByTestId("connection-status").click();
   await page.getByTestId("disconnect").click();
