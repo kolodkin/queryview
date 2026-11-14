@@ -313,10 +313,11 @@ describe('backslashes', () => {
     )
     expect(substituteParams(sql, params, { path: 'C:\\temp' }, '"')).toBe("SELECT 'C:\\temp'")
   })
-  test('are rejected in an identifier', () => {
+  test('are rejected in an identifier where they escape', () => {
     expect(() => substituteParams('SELECT {field}', params, { field: 'a\\' }, '`')).toThrow(
       /invalid identifier/,
     )
+    expect(substituteParams('SELECT {field}', params, { field: 'a\\' }, '"')).toBe('SELECT "a\\"')
   })
 })
 
@@ -328,5 +329,8 @@ describe('an unchecked dimension', () => {
       const resolved = await resolveParams(params, { by_city: v }, run, '"')
       expect(resolved[0].value).toBe('')
     }
+    expect(substituteParams('GROUP BY {by_city}', params, { by_city: '0' }, '"')).toBe(
+      "GROUP BY ''",
+    )
   })
 })

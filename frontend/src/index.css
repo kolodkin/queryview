@@ -159,6 +159,11 @@
       inset 0 1px 0 0 rgba(255, 255, 255, 0.18);
   }
 
+  /* Accent border of a static chip (an order-by column); hosts theme it here. */
+  .glass-chip {
+    border-color: rgba(129, 140, 248, 0.4); /* indigo-400/40 */
+  }
+
   /* Toggle buttons (size, db option, field, order-by). */
   .glass-toggle {
     border-radius: 0.6rem;

@@ -90,10 +90,10 @@ function quoteLiteral(value: string, quote: string): string {
   return `'${escaped.replaceAll("'", "''")}'`
 }
 
-// A quote character or backslash in the name can't be trusted through string
-// assembly, and no real table or column carries one, so reject it.
+// A quote character in the name (or a backslash, where it escapes) can't be
+// trusted through string assembly, and no real table or column carries one.
 function quoteIdentifier(name: string, param: string, quote: string): string {
-  if (name.includes(quote) || name.includes('\\'))
+  if (name.includes(quote) || (quote === '`' && name.includes('\\')))
     throw new Error(`invalid identifier for {${param}}: ${name}`)
   return `${quote}${name}${quote}`
 }
@@ -101,6 +101,9 @@ function quoteIdentifier(name: string, param: string, quote: string): string {
 // Replace every declared `{name}`; placeholders with no matching param are left
 // alone (they may be literal braces in the SQL). `quote` is the connection's
 // identifier quote (see /api/session's ident_quote).
+// A dimension's checkbox state; a page may send 0 for unchecked.
+const isChecked = (v: string | undefined) => !!v && v !== '0'
+
 export function substituteParams(
   sql: string,
   params: DashboardParam[],
@@ -116,7 +119,7 @@ export function substituteParams(
     if (p.kind === 'dimension') {
       // Unchecked: an empty literal keeps the query's shape; the column just
       // contributes nothing to the grouping.
-      return raw ? quoteIdentifier(name, name, quote) : "''"
+      return isChecked(raw) ? quoteIdentifier(name, name, quote) : "''"
     }
     if (raw === undefined || raw === '') throw new Error(`no value selected for {${name}}`)
     const asIdentifier = cast ? cast === 'identifier' : p.kind === 'identifier'
@@ -188,8 +191,8 @@ export async function resolveParams(
     const want = values[p.name]
     const value =
       p.kind === 'dimension'
-        ? want && want !== '0' // a page may send 0 for unchecked
-          ? want
+        ? isChecked(want)
+          ? want!
           : ''
         : want && options.includes(want)
           ? want
