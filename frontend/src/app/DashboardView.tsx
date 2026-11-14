@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 
 import {
@@ -11,6 +11,7 @@ import {
   resolveParams,
   widgetQueryNames,
   type DashboardParam,
+  type Dialect,
   type DashboardResults,
   type QueryRunner,
   type ResolvedParam,
@@ -89,14 +90,9 @@ async function runOwnQueries(
   html: string,
   declared: DashboardParam[],
   resolved: ResolvedParam[],
-  identQuote: string,
+  dialect: Dialect,
 ): ReturnType<QueryRunner> {
-  const runnable = applyToQueries(
-    withoutWidgetQueries(queries, html),
-    declared,
-    resolved,
-    identQuote,
-  )
+  const runnable = applyToQueries(withoutWidgetQueries(queries, html), declared, resolved, dialect)
   return Object.keys(runnable).length ? runQueries(runnable) : { ok: true, results: {} }
 }
 
@@ -110,6 +106,7 @@ function DashboardView({
   onPushConsumed,
   runOn,
   identQuote = '"',
+  backslashEscapes = false,
   remoteId = null,
 }: {
   pushed?: DashboardPush | null
@@ -118,10 +115,17 @@ function DashboardView({
   runOn?: string | null
   // The connection's identifier quote, for `identifier` params.
   identQuote?: string
+  // Whether backslash escapes in the connection's dialect.
+  backslashEscapes?: boolean
   // The armed remote session, for the SQL panel's edit lock.
   remoteId?: string | null
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
+  // How the connection quotes identifiers and string literals.
+  const dialect = useMemo<Dialect>(
+    () => ({ quote: identQuote, backslashEscapes }),
+    [identQuote, backslashEscapes],
+  )
   const name = searchParams.get('name') ?? ''
 
   const [dashboards, setDashboards] = useState<DashboardSummary[]>([])
@@ -291,11 +295,11 @@ function DashboardView({
       setLoading(true)
       try {
         const declared = parseDashboardParams(dash.params)
-        const resolved = await resolveParams(declared, {}, runQueries, identQuote)
+        const resolved = await resolveParams(declared, {}, runQueries, dialect)
         if (cancelled) return
         setParams(resolved)
         resolvedRef.current = resolved
-        const r = await runOwnQueries(executed, dash.html, declared, resolved, identQuote)
+        const r = await runOwnQueries(executed, dash.html, declared, resolved, dialect)
         if (cancelled) return
         if (r.ok) {
           setResults(r.results)
@@ -313,7 +317,7 @@ function DashboardView({
     return () => {
       cancelled = true
     }
-  }, [name, localPush, runOn, reloadNonce, identQuote])
+  }, [name, localPush, runOn, reloadNonce, dialect])
 
   // Re-run the open dashboard's own queries, as last executed, and build the
   // message the frame expects. `values` are fresh selections to resolve; null
@@ -329,12 +333,12 @@ function DashboardView({
     let resolved = resolvedRef.current
     try {
       if (values) {
-        resolved = await resolveParams(declared, values, runQueries, identQuote)
+        resolved = await resolveParams(declared, values, runQueries, dialect)
         resolvedRef.current = resolved
       }
       const executed = executedRef.current
       const queries = only ? Object.fromEntries(only.map((n) => [n, executed[n]])) : executed
-      const r = await runOwnQueries(queries, dash.html, declared, resolved, identQuote)
+      const r = await runOwnQueries(queries, dash.html, declared, resolved, dialect)
       if (!r.ok) return { type: 'params-results', ok: false, message: r.message, params: resolved }
       // window.queries is replaced whole: keep what this run left alone.
       shownRef.current = only ? { ...shownRef.current, ...r.results } : r.results
@@ -414,7 +418,7 @@ function DashboardView({
       if (!Object.hasOwn(executedRef.current, query)) return { message: `Unknown query “${query}”` }
       const sql = executedRef.current[query]
       if (!sql.trim()) return { message: 'Enter a query.' }
-      const applied = applyToQueries({ [query]: sql }, declared, resolvedRef.current, identQuote)
+      const applied = applyToQueries({ [query]: sql }, declared, resolvedRef.current, dialect)
       return query in applied
         ? { sql: applied[query] }
         : { message: 'Waiting for a parameter choice.' }
@@ -441,9 +445,9 @@ function DashboardView({
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-    // rerun reads only refs and identQuote beyond its arguments.
+    // rerun reads only refs and the dialect beyond its arguments.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, identQuote])
+  }, [active, dialect])
 
   return (
     // mt clears the floating header when the page is taller than the window.

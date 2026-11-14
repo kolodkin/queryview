@@ -127,6 +127,7 @@ class PostgresDriver:
     type: str = "postgres"
     requires_database: bool = True
     ident_quote: str = '"'
+    backslash_escapes: bool = False
 
     def parse_config(self, body: Any) -> tuple[PgConfig | None, str | None]:
         return parse_pg_config(body)

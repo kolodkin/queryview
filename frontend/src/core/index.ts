@@ -37,6 +37,7 @@ export {
   parseParamsRequest,
   resolveParams,
   type DashboardParam,
+  type Dialect,
   type QueryRunner,
   type ResolvedParam,
 } from './dashboard/params'

@@ -227,6 +227,7 @@ class DuckDBDriver:
     type: str = "duckdb"
     requires_database: bool = False
     ident_quote: str = '"'
+    backslash_escapes: bool = False
 
     def parse_config(self, body: Any) -> tuple[DuckConfig | None, str | None]:
         return parse_duck_config(body)

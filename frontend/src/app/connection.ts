@@ -13,6 +13,8 @@ export type Connection = {
   database: string | null
   // The dialect's identifier quote (`"` or a backtick), for dashboard params.
   identQuote?: string
+  // Whether the dialect reads backslash as an escape (ClickHouse).
+  backslashEscapes?: boolean
   // The directory a DuckDB folder-mode connection browses (absolute).
   root?: string
   // The folder list was cut at the Explorer's Max entries.
@@ -44,6 +46,7 @@ export function toConnection(data: Record<string, unknown>): Connection {
     databases: (data.databases ?? []) as string[],
     database: (data.database ?? null) as string | null,
     identQuote: data.ident_quote as string | undefined,
+    backslashEscapes: data.backslash_escapes === true,
     root: data.root as string | undefined,
     foldersTruncated: data.databases_truncated === true,
     unlocked: data.unlocked as boolean | undefined,
