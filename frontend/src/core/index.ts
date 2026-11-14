@@ -1,9 +1,8 @@
 // The backend-agnostic kernel: result parsing, cell rendering, presentation
 // pickers, and the dashboard sandbox and its widgets. Nothing here fetches, routes,
-// or reads app state, and it imports nothing outside itself (both enforced by
-// eslint.config.js), so this folder is what another app reuses; it brings its
-// own styles (kernel.css), themed through the --qv-* variables. The app
-// imports it only through this file.
+// reads app state or imports outside src/core (enforced by eslint.config.js), so
+// another app reuses this folder as is, styles included (kernel.css, themed
+// through --qv-* variables). The app imports it only through this file.
 
 export {
   EMPTY_ROWS,

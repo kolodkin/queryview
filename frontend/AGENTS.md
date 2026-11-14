@@ -11,8 +11,7 @@ src/
   main.tsx
 ```
 
-`src/core` never fetches, routes, reads app state, or imports outside itself;
-`npm run lint` enforces that. It brings its own stylesheet (`core/kernel.css`,
-which the app's `index.css` imports); never hardcode an accent colour in core
-markup, read a `--qv-*` token (`text-[var(--qv-accent-text)]`) so hosts can
-theme it.
+`src/core` never fetches, routes, reads app state, imports outside itself, or
+hardcodes an accent colour (use a `--qv-*` token, e.g.
+`text-[var(--qv-accent-text)]`); `npm run lint` enforces this. Its styles live
+in `core/kernel.css`, which the app's `index.css` imports.
