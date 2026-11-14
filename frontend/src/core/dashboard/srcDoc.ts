@@ -31,10 +31,15 @@ export function buildSrcDoc(
   html: string,
   results: DashboardResults,
   params: ResolvedParam[] = [],
+  widgetsSrc = '/widgets.js',
 ): string {
   const safe = (v: unknown) => JSON.stringify(v).replace(/</g, '\\u003c')
   return (
     `<script>window.queries = ${safe(results)};\nwindow.params = ${safe(params)};` +
-    `${SET_PARAMS_HELPER}\n</script>\n${html}`
+    `${SET_PARAMS_HELPER}\n</script>\n` +
+    // The <qv-*> tags: loaded only by dashboards that use one, and before the
+    // HTML so the tags upgrade as they parse.
+    (html.includes('<qv-') ? `<script src="${widgetsSrc}"></script>\n` : '') +
+    html
   )
 }

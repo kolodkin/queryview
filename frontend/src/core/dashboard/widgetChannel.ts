@@ -51,7 +51,8 @@ export function parseWidgetRequest(data: unknown): WidgetRequest | null {
   }
   if (m.type !== 'widget-query' && m.type !== 'widget-csv') return null
   const { limit, offset } = m
-  if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > MAX_LIMIT) return null
+  if (!Number.isInteger(limit) || (limit as number) < 1 || (limit as number) > MAX_LIMIT)
+    return null
   if (!Number.isInteger(offset) || (offset as number) < 0) return null
   const orderBy = parseOrderBy(m.order_by)
   if (!orderBy) return null

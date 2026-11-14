@@ -12,6 +12,9 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // The widget bundle is a separate build (vite.widgets.config.ts) the
+      // backend serves from dist/.
+      '/widgets.js': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
 })
