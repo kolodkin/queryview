@@ -827,3 +827,29 @@ def test_delete_unconfigured_only_touches_db():
     _save("ua local del", "<p>x</p>")
     assert _run(gitsync.delete(_default_ws(), "ua local del"))["committed"] is False
     assert _html("ua local del") is None
+
+
+def test_save_retries_when_the_remote_cannot_lock_the_ref(git_env):
+    """A concurrent push can also surface as the remote failing to lock the
+    branch ('[remote rejected] … failed to update ref'): that is the same race."""
+    marker = Path(git_env) / "refused-once"
+    hook = Path(git_env) / "hooks" / "pre-receive"
+    hook.write_text(
+        f"#!/bin/sh\n[ -e '{marker}' ] && exit 0\ntouch '{marker}'\n"
+        "echo \"error: cannot lock ref 'refs/heads/main': is at 1 but expected 2\" >&2\nexit 1\n"
+    )
+    hook.chmod(0o755)
+    r = _run(gitsync.save(_default_ws(), _dash("ua lock", "<p>l</p>")))
+    assert r["committed"] is True
+    assert "store dashboard ua lock" in _remote_log(git_env)
+
+
+def test_save_outlasts_several_racing_pushes(git_env):
+    count = Path(git_env) / "refusals"
+    hook = Path(git_env) / "hooks" / "pre-receive"
+    hook.write_text(
+        f"#!/bin/sh\nn=$(cat '{count}' 2>/dev/null || echo 0)\n[ \"$n\" -ge 3 ] && exit 0\n"
+        f"echo $((n+1)) > '{count}'\necho \"error: cannot lock ref 'refs/heads/main'\" >&2\nexit 1\n"
+    )
+    hook.chmod(0o755)
+    assert _run(gitsync.save(_default_ws(), _dash("ua busy", "<p>b</p>")))["committed"] is True

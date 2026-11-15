@@ -7,13 +7,6 @@ export type GitKind = 'dashboard'
 
 export type GitRevision = { sha: string; date: number; message: string }
 
-export type GitStoreResult = {
-  ok: boolean
-  committed?: boolean
-  sha?: string | null
-  message?: string
-}
-
 export type GitHistoryResult = {
   ok: boolean
   revisions?: GitRevision[]
@@ -88,17 +81,6 @@ export function announceGitSync(): void {
 export function onGitSync(f: () => void): () => void {
   window.addEventListener(GIT_SYNCED, f)
   return () => window.removeEventListener(GIT_SYNCED, f)
-}
-
-export async function gitStore(
-  kind: GitKind,
-  name: string,
-  workspace?: string,
-): Promise<GitStoreResult> {
-  const res = await postJson('/api/git/store', { kind, name, workspace })
-  const data = await res.json()
-  announceGitSync()
-  return data
 }
 
 export async function gitHistory(

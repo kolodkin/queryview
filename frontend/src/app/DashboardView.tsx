@@ -20,7 +20,7 @@ import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch, postJson } from './api'
 import DashboardSqlPanel from './DashboardSqlPanel'
-import { onGitSync } from './gitsync'
+import { announceGitSync, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
 import { answerWidget, type WidgetSql } from './widgetHost'
 
@@ -198,6 +198,7 @@ function DashboardView({
         setError(data.message ?? 'Failed to save dashboard.')
         return
       }
+      if (data.committed) announceGitSync()
       await loadDashboards()
       if (!active.name) {
         // Same object in both: the reload under the new name keeps running
@@ -210,6 +211,65 @@ function DashboardView({
       }
     } catch {
       setError('Failed to save dashboard.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Rename the open saved dashboard; unsaved SQL-panel edits move with it.
+  async function rename() {
+    if (!active?.name) return
+    const newName = window.prompt('Rename dashboard to:', active.name)?.trim()
+    if (!newName || newName === active.name) return
+    if (dashboards.some((d) => d.name === newName)) {
+      setError(`A dashboard named “${newName}” already exists.`)
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await postJson(`/api/dashboards/${encodeURIComponent(active.name)}/rename`, {
+        new_name: newName,
+        workspace: activeWorkspace(),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) {
+        setError(data.message ?? 'Failed to rename dashboard.')
+        return
+      }
+      if (data.committed) announceGitSync()
+      await loadDashboards()
+      const renamed = { ...active, name: newName }
+      if (editedRef.current) editedRef.current = renamed
+      setLocalPush(renamed)
+      setSearchParams({ name: newName })
+    } catch {
+      setError('Failed to rename dashboard.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function remove() {
+    if (!active?.name || !window.confirm(`Delete dashboard “${active.name}”?`)) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await apiFetch(
+        `/api/dashboards/${encodeURIComponent(active.name)}?workspace=${encodeURIComponent(activeWorkspace())}`,
+        { method: 'DELETE' },
+      )
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) {
+        setError(data.message ?? 'Failed to delete dashboard.')
+        return
+      }
+      if (data.committed) announceGitSync()
+      await loadDashboards()
+      reopen(null)
+      setSearchParams({})
+    } catch {
+      setError('Failed to delete dashboard.')
     } finally {
       setSaving(false)
     }
@@ -497,6 +557,24 @@ function DashboardView({
           className="glass-btn min-w-[5rem] px-3 py-2 text-center text-sm font-medium"
         >
           {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          data-testid="dashboard-rename"
+          onClick={() => void rename()}
+          disabled={!active?.name || saving}
+          className="glass-btn px-3 py-2 text-sm font-medium"
+        >
+          Rename
+        </button>
+        <button
+          type="button"
+          data-testid="dashboard-delete"
+          onClick={() => void remove()}
+          disabled={!active?.name || saving}
+          className="glass-btn px-3 py-2 text-sm font-medium"
+        >
+          Delete
         </button>
         <button
           type="button"

@@ -173,7 +173,9 @@ async def _git(*args: str, cwd: Path | None = None, credential: tuple[str, str] 
         raise GitSyncError(f"git {args[0]} timed out after {_GIT_TIMEOUT_S}s") from e
     if proc.returncode != 0:
         tail = err.decode("utf-8", "replace").strip()[-500:]
-        rejected = args[0] == "push" and b"! [rejected]" in err
+        # The remote moved under us: a non-fast-forward, or (a push racing
+        # ours on the server) the remote failing to lock the branch.
+        rejected = args[0] == "push" and (b"! [rejected]" in err or b"cannot lock ref" in err)
         raise GitSyncError(f"git {args[0]} failed: {tail}", rejected=rejected)
     return out.decode("utf-8", "replace")
 
@@ -406,14 +408,18 @@ async def store(ws: WorkspaceRec, kind: str, name: str, message: str | None = No
         return await _retry_if_rejected(lambda: _store_once(ws, name, message))
 
 
+_PUSH_ATTEMPTS = 5
+
+
 async def _retry_if_rejected(op: Callable[[], Awaitable[Any]]) -> Any:
-    """Run `op`; if its push was rejected because another instance pushed
-    between our fetch and push, run it once more from the new head."""
-    try:
-        return await op()
-    except GitSyncError as e:
-        if not e.rejected:
-            raise
+    """Run `op`; while its push is rejected because another instance pushed
+    between our fetch and push, run it again from the new head (bounded)."""
+    for _ in range(_PUSH_ATTEMPTS - 1):
+        try:
+            return await op()
+        except GitSyncError as e:
+            if not e.rejected:
+                raise
     return await op()
 
 

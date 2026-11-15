@@ -1,6 +1,6 @@
 // Dashboards run their queries through the path drivers.spec.ts covers per
 // driver, so these run once on DuckDB (no service).
-import { DUCK, api, armRemote, connect, expect, test } from "./fixtures";
+import { DUCK, api, armRemote, connect, dashboardFrame, expect, openDashboard, test } from "./fixtures";
 
 // Reads window.queries and writes a value into the DOM, so the test can
 // assert the injected results reached the agent HTML. Styled as large,
@@ -123,4 +123,34 @@ test("dashboard params resolve and rerun through setParams", async ({ page, seed
 
   await frame.locator("#go").click(); // the page calls setParams({n: 'beta'})
   await expect(frame.locator("#out")).toHaveText("beta");
+});
+
+test("rename and delete a saved dashboard", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const tag = crypto.randomUUID().slice(0, 6);
+  const [name, renamed] = [`ren ${tag}`, `ren ${tag} 2026`];
+  await openDashboard(page, baseURL, { name, html: DASHBOARD_HTML, queries: { items: "SELECT name FROM items ORDER BY id" } });
+  await expect(dashboardFrame(page).locator("#out")).toHaveText("alpha,beta,gamma");
+
+  // An unsaved SQL-panel edit survives the rename.
+  await page.getByTestId("dashboard-edit-queries").click();
+  await page.getByTestId("dash-sql").fill("SELECT name FROM items WHERE id = 1");
+  page.once("dialog", (d) => d.accept(renamed));
+  await page.getByTestId("dashboard-rename").click();
+  const options = page.getByTestId("dashboard-select").locator("option");
+  await expect.poll(() => new URL(page.url()).searchParams.get("name")).toBe(renamed);
+  await expect.poll(() => options.allTextContents()).toContain(renamed);
+  expect(await options.allTextContents()).not.toContain(name);
+  await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 1");
+  expect((await api(`${baseURL}/api/dashboards/${encodeURIComponent(name)}`, { ok: false })).status).toBe(404);
+
+  // Reloading opens the renamed dashboard from the store.
+  await page.goto(`/dashboard?name=${encodeURIComponent(renamed)}`);
+  await expect(dashboardFrame(page).locator("#out")).toHaveText("alpha,beta,gamma");
+
+  page.once("dialog", (d) => d.accept());
+  await page.getByTestId("dashboard-delete").click();
+  await expect(page.getByTestId("dashboard-empty")).toBeVisible();
+  expect(await options.allTextContents()).not.toContain(renamed);
+  expect((await api(`${baseURL}/api/dashboards/${encodeURIComponent(renamed)}`, { ok: false })).status).toBe(404);
 });
