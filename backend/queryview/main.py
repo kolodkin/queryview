@@ -574,8 +574,8 @@ async def run_queries(request: Request):
     return {"ok": True, "results": r["results"]}
 
 
-# Upsert a dashboard and (with a session_id) push it to a live browser session.
-# REST mirror of the upsert_dashboard MCP tool.
+# The user's Save: upsert a dashboard (in a synced workspace also one commit,
+# docs/gitsync.md) and, with a session_id, push it to a live browser session.
 @app.post("/api/dashboards")
 async def dashboards_upsert(request: Request):
     body = await _read_json(request)
