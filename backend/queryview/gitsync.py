@@ -470,7 +470,9 @@ async def _commit_once(
         await _git("reset", "--hard", head, cwd=wd)
         merged = await _merge(ws, wd, head)
     sha = None
-    if await stage(wd, head) and (await _git("status", "--porcelain", cwd=wd)).strip():
+    # The index, not the work tree: a stray untracked file (a killed run, a
+    # hand edit) is not a change to commit.
+    if await stage(wd, head) and (await _git("diff", "--cached", "--name-only", cwd=wd)).strip():
         try:
             await _git("commit", "-m", message, cwd=wd)
             await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))

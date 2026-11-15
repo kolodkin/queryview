@@ -853,3 +853,11 @@ def test_save_outlasts_several_racing_pushes(git_env):
     )
     hook.chmod(0o755)
     assert _run(gitsync.save(_default_ws(), _dash("ua busy", "<p>b</p>")))["committed"] is True
+
+
+def test_unchanged_save_ignores_a_stray_file_in_the_clone(git_env):
+    _run(gitsync.save(_default_ws(), _dash("ua stray", "<p>s</p>")))
+    (gitsync._workdir(_default_ws()) / "stray.txt").write_text("left by a killed process")
+    r = _run(gitsync.save(_default_ws(), _dash("ua stray", "<p>s</p>")))
+    assert r["committed"] is False
+    assert "stray.txt" not in _repo_files(git_env)
