@@ -232,12 +232,15 @@ test("a saved edit is what reopens, not the draft it was saved from", async ({ p
   page.once("dialog", (d) => d.accept("first"));
   await page.getByTestId("dashboard-save").click();
   await expect(page.getByTestId("dashboard-select")).toHaveValue("first");
+  await expect(page.getByTestId("dashboard-save")).toBeDisabled(); // nothing unsaved
 
   await executeSql(page, "SELECT name FROM items WHERE id = 2");
   await expect(frame.getByTestId("qv-results")).toContainText("beta");
+  await expect(page.getByTestId("dashboard-save")).toBeEnabled();
   const saved = page.waitForResponse((r) => r.url().endsWith("/api/dashboards") && r.request().method() === "POST");
   await page.getByTestId("dashboard-save").click();
   await saved;
+  await expect(page.getByTestId("dashboard-save")).toHaveText("Saved");
 
   await page.getByTestId("dashboard-new-query").click(); // leave, then come back
   await page.getByTestId("dashboard-select").selectOption("first");
