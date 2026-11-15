@@ -270,6 +270,14 @@ def test_commit_sha_of_an_imported_or_renamed_dashboard(other_instance):
     assert r["committed"] and _sha("gs sha moved") == r["sha"]
 
 
+def test_renaming_a_locally_changed_dashboard_keeps_it_not_in_git(git_env):
+    """The rename commit moves the repo's copy, not the row's changed content."""
+    _store_versions("gs sha drift", ["<p>1</p>"])
+    _save("gs sha drift", "<p>local</p>")
+    r = _run(gitsync.rename(_default_ws(), "gs sha drift", "gs sha drift2"))
+    assert r["committed"] and _sha("gs sha drift2") is None
+
+
 def test_restore_missing_at_ref_is_404(git_env):
     _store_versions("gs exists", ["<p>1</p>"])
     with pytest.raises(GitSyncError) as e:

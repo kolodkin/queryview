@@ -111,7 +111,9 @@ local copy with the picked revision after confirmation. It is disabled when
 the active workspace has no remote configured.
 
 With a remote, the dashboard picker marks a dashboard no commit holds
-(`commit_sha` is `NULL`) as `<name> · not in git`.
+(`commit_sha` is `NULL`) as `<name> · not in git`. A row whose content
+matches the repo but has no `commit_sha` recorded yet gets one on the next
+[merge-in](#merge-in), e.g. **Sync**.
 
 ## API
 

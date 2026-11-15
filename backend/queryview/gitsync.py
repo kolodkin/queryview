@@ -540,10 +540,12 @@ async def save_and_push(
 async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
     """A user's Rename: `git mv` the folder (when the repo has it) and rename the row."""
     src, dst = dashboard_reldir(old), dashboard_reldir(new)
+    moved_matches_row = False  # set by `stage`: the moved repo copy equals the row
 
     # Checked here, inside the lock and after the merge, because git goes first.
     async def stage(wd: Path, head: str | None) -> bool:
-        await _load_entity(ws, old)
+        nonlocal moved_matches_row
+        local = await _load_entity(ws, old)
         if await get_dashboard(new, ws.id) is not None:
             raise GitSyncError(f"dashboard {new!r} already exists", status=409)
         if head and await _tree_files(wd, head, dst):
@@ -551,6 +553,7 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
         if not (head and await _repo_entities(wd, head, src)):
             return False  # never committed: nothing for git to move
         repo = await _read_repo_entity(wd, head, src)
+        moved_matches_row = dashboard_to_files(local) == dashboard_to_files(repo)
         (wd / dst).parent.mkdir(parents=True, exist_ok=True)
         await _git("mv", src, dst, cwd=wd)
         meta = dashboard_to_files({**repo, "name": new})["meta.yaml"]  # the canonical name lives here
@@ -559,7 +562,8 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
         return True
 
     async def after(wd: Path | None, committed: bool) -> None:
-        sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip() if wd is not None and committed else None
+        holds_row = wd is not None and committed and moved_matches_row
+        sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip() if holds_row else None
         await _db_or_status(rename_dashboard(old, new, workspace_id=ws.id, commit_sha=sha))
         # A conflict stays one: leaving `new` unagreed makes the next merge report it again.
         if wd is not None and not _forget(ws, old, rename_to=new) and committed:
