@@ -45,15 +45,17 @@ shared (SQLite). See [session.md](./session.md).
 | GET    | `/api/remote/events`        | `?session=<id>`                        | SSE stream a browser opens when "remote control" is armed; the channel is keyed by that session id (`EventSource` cannot send the header). Emits a `ready` event (`{id}`) then `script`, `dashboard` and `explorer` events with pushed payloads (each emitted under the SSE event named by the payload's `type`). |
 | POST   | `/api/remote/lock`          | `{session_id, action:"acquire"\|"release"}` | The browser's [edit lock](./query.md#co-edit--edit-lock) on a live session: acquired on editor focus with a ~10s heartbeat, released on blur. `{ok, message}`; bad action → `400`. |
 | POST   | `/api/runqueries`           | `{queries:{name:SQL}}`                 | Run a dashboard's named queries on this session's connection and selected database. Fail-fast: `{ok, results:{name:{col:[…]}}, meta:{name:[{name, type}]}}` (column-oriented, values typed as the driver returns them) on full success; on any failure an HTTP error with `{ok:false, message, reason}` — `409` not connected / no database selected, `400` bad body / a failing query (message prefixed with the panel name). See [dashboard.md](./dashboard.md). |
-| POST   | `/api/dashboards`           | `{name, html, queries, params?, session_id?, workspace?}` | Upsert a dashboard by name within a workspace; with `session_id`, also pushes it to that live session. `{ok, persisted, pushed, message}`. Missing `name`/`html` or malformed `params` → `400`. |
+| POST   | `/api/dashboards`           | `{name, html, queries, params?, session_id?, workspace?}` | Upsert a dashboard by name within a workspace; with `session_id`, also pushes it to that live session. In a workspace with a git remote, also one commit (see [gitsync.md](./gitsync.md#committing)); a failed push → `502`, nothing saved. `{ok, persisted, pushed, committed, message}`. Missing `name`/`html` or malformed `params` → `400`. |
 | GET    | `/api/dashboards`           | `?workspace=`                          | List a workspace's dashboards (no payload): `{dashboards:[{name, updated_at}]}`, ordered by name. |
 | GET    | `/api/dashboards/{name}`    | `?workspace=`                          | A saved dashboard `{name, html, queries}` (`queries` parsed to a dict), or `404 {error:"not found"}`. |
+| POST   | `/api/dashboards/{name}/rename` | `{new_name, workspace?}`           | Rename a dashboard, committing when synced. `{ok, committed, sha, imported, conflicts}`; blank `new_name` → `400`, unknown → `404`, taken → `409`. |
+| DELETE | `/api/dashboards/{name}`    | `?workspace=`                          | Delete a dashboard, committing when synced. `{ok, committed, sha, imported, conflicts}`; unknown → `404`. |
 
 **MCP:** an MCP server is mounted at `/mcp/` (Streamable HTTP) exposing
 `push_script` (push a script to a session's Scripts editor), `push_dashboard`
 (push a dashboard draft to a session), `session_info`, `run_sql`, `run_script`,
 `list_dashboards`
-and `git_store` / `git_history` / `git_restore`. They delegate to the in-process
+and `git_history` / `git_restore`. They delegate to the in-process
 hubs the matching REST endpoints call. See [mcp.md](./mcp.md) and
 [dashboard.md](./dashboard.md).
 
@@ -97,12 +99,11 @@ the UI.
 | ------ | ----------------- | ------------------------------------------------ | ----------- |
 | GET    | `/api/git/status`  | `?workspace=`                                    | Whether the workspace has a git remote configured, and the conflicts the last sync recorded. `{configured, conflicts: [{kind, name}]}`. |
 | POST   | `/api/git/sync`    | `{workspace?}`                                   | Merge the repo in (see [gitsync.md](./gitsync.md#merge-in)). `{ok, imported, conflicts}`; no remote → `409`. |
-| POST   | `/api/git/store`   | `{kind, name, message?, workspace?}`            | Commit the entity's saved DB state and push. `{ok, committed, sha, message}`. |
 | GET    | `/api/git/history` | `?kind=&name=&before=&limit=10&workspace=` | The entity's revisions, newest first. `{ok, revisions: [{sha, date, message}], has_more}`. |
 | POST   | `/api/git/restore` | `{kind, name, ref?, workspace?}`                | Overwrite the local DB row with the entity's content at `ref`. `{ok, restored, sha}`. |
 
 `kind` is `"dashboard"`;
-`workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_store`, `git_history`,
+`workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_history` and
 `git_restore` mirror the same surface, resolving the workspace from an
 optional `session_id` (see [workspace.md](./workspace.md)).
 

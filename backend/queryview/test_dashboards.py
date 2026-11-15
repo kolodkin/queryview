@@ -7,16 +7,20 @@ from __future__ import annotations
 import asyncio
 import uuid
 
+import pytest
 from fastapi.testclient import TestClient
 
 from queryview import remote, sessions
 from queryview.dashboards import (
-    _upsert_and_push,
+    delete_dashboard,
     get_dashboard,
     list_dashboards,
+    rename_dashboard,
     upsert_dashboard,
 )
+from queryview.gitsync import save_and_push
 from queryview.main import app
+from queryview.workspaces import DEFAULT_WORKSPACE, resolve
 
 
 def _run(coro):
@@ -49,6 +53,40 @@ def test_get_missing_dashboard_is_none(default_ws_id):
     assert _run(get_dashboard("does-not-exist", default_ws_id)) is None
 
 
+def test_rename_dashboard_moves_the_row(default_ws_id):
+    old, new = f"sales {uuid.uuid4().hex}", f"sales 2026 {uuid.uuid4().hex}"
+    _run(upsert_dashboard(old, "<p>s</p>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
+    _run(rename_dashboard(old, new, workspace_id=default_ws_id))
+    assert _run(get_dashboard(old, default_ws_id)) is None
+    got = _run(get_dashboard(new, default_ws_id))
+    assert got is not None and got["queries"] == {"q": "SELECT 1"}
+
+
+def test_rename_dashboard_to_taken_name_raises(default_ws_id):
+    a, b = f"a {uuid.uuid4().hex}", f"b {uuid.uuid4().hex}"
+    _run(upsert_dashboard(a, "<p>a</p>", {}, workspace_id=default_ws_id))
+    _run(upsert_dashboard(b, "<p>b</p>", {}, workspace_id=default_ws_id))
+    with pytest.raises(ValueError):
+        _run(rename_dashboard(a, b, workspace_id=default_ws_id))
+    got_a, got_b = _run(get_dashboard(a, default_ws_id)), _run(get_dashboard(b, default_ws_id))
+    assert got_a is not None and got_a["html"] == "<p>a</p>"
+    assert got_b is not None and got_b["html"] == "<p>b</p>"
+
+
+def test_rename_missing_dashboard_raises(default_ws_id):
+    with pytest.raises(KeyError):
+        _run(rename_dashboard(f"nope {uuid.uuid4().hex}", "x", workspace_id=default_ws_id))
+
+
+def test_delete_dashboard(default_ws_id):
+    name = f"ops {uuid.uuid4().hex}"
+    _run(upsert_dashboard(name, "<p>o</p>", {}, workspace_id=default_ws_id))
+    _run(delete_dashboard(name, workspace_id=default_ws_id))
+    assert _run(get_dashboard(name, default_ws_id)) is None
+    with pytest.raises(KeyError):
+        _run(delete_dashboard(name, workspace_id=default_ws_id))
+
+
 def test_list_dashboards_orders_by_name_and_omits_payload(default_ws_id):
     _run(upsert_dashboard("zeta", "<i></i>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
     _run(upsert_dashboard("alpha", "<i></i>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
@@ -58,19 +96,21 @@ def test_list_dashboards_orders_by_name_and_omits_payload(default_ws_id):
     assert set(row) == {"name", "updated_at"}
 
 
-def test_upsert_and_push_persists_without_session(default_ws_id):
-    persisted, pushed, _ = _run(_upsert_and_push("np", "<p></p>", {"q": "SELECT 1"}, None, workspace_id=default_ws_id))
-    assert persisted is True and pushed is False
+def _default_ws():
+    return _run(resolve(DEFAULT_WORKSPACE))
+
+
+def test_save_and_push_persists_without_session(default_ws_id):
+    pushed, _, _ = _run(save_and_push(_default_ws(), "np", "<p></p>", {"q": "SELECT 1"}, None))
+    assert pushed is False
     assert _run(get_dashboard("np", default_ws_id)) is not None
 
 
-def test_upsert_and_push_delivers_to_registered_session(default_ws_id):
+def test_save_and_push_delivers_to_registered_session(default_ws_id):
     rid = remote.register(uuid.uuid4().hex)
     try:
-        persisted, pushed, _ = _run(
-            _upsert_and_push("pushed", "<p>x</p>", {"q": "SELECT 1"}, rid, workspace_id=default_ws_id)
-        )
-        assert persisted is True and pushed is True
+        pushed, _, _ = _run(save_and_push(_default_ws(), "pushed", "<p>x</p>", {"q": "SELECT 1"}, rid))
+        assert pushed is True
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None
         assert msg["type"] == "dashboard"
@@ -82,6 +122,34 @@ def test_upsert_and_push_delivers_to_registered_session(default_ws_id):
 
 
 # --- REST surface ---------------------------------------------------------
+
+
+def _post_dash(client, name: str) -> None:
+    assert client.post("/api/dashboards", json={"name": name, "html": "<p>x</p>", "queries": {}}).status_code == 200
+
+
+def test_dashboards_rename_route():
+    client = TestClient(app)
+    old, new, taken = (f"{p} {uuid.uuid4().hex}" for p in ("ren", "ren new", "ren taken"))
+    _post_dash(client, old)
+    _post_dash(client, taken)
+    assert client.post(f"/api/dashboards/{old}/rename", json={"new_name": " "}).status_code == 400
+    assert client.post(f"/api/dashboards/{old}/rename", json={"new_name": taken}).status_code == 409
+    r = client.post(f"/api/dashboards/{old}/rename", json={"new_name": new})
+    assert r.status_code == 200 and (r.json()["ok"], r.json()["committed"]) == (True, False)
+    assert client.get(f"/api/dashboards/{old}").status_code == 404
+    assert client.get(f"/api/dashboards/{new}").status_code == 200
+    assert client.post(f"/api/dashboards/{old}/rename", json={"new_name": "x"}).status_code == 404
+
+
+def test_dashboards_delete_route():
+    client = TestClient(app)
+    name = f"del {uuid.uuid4().hex}"
+    _post_dash(client, name)
+    r = client.delete(f"/api/dashboards/{name}")
+    assert r.status_code == 200 and (r.json()["ok"], r.json()["committed"]) == (True, False)
+    assert client.get(f"/api/dashboards/{name}").status_code == 404
+    assert client.delete(f"/api/dashboards/{name}").status_code == 404
 
 
 def test_runqueries_requires_queries():
@@ -215,3 +283,17 @@ def test_mcp_list_dashboards_scopes_by_session_workspace(default_ws_id):
         assert names == ["mcp ld"]
     finally:
         remote.unregister(rec.id)
+
+
+def test_dashboards_with_a_slash_rename_and_delete():
+    client = TestClient(app)
+    name = f"ops/latency {uuid.uuid4().hex}"
+    _post_dash(client, name)
+    assert client.get(f"/api/dashboards/{name}").status_code == 200
+    assert client.post(f"/api/dashboards/{name}/rename", json={"new_name": f"{name} 2"}).status_code == 200
+    assert client.delete(f"/api/dashboards/{name} 2").status_code == 200
+
+
+def test_save_reports_no_commit_without_a_remote():
+    r = TestClient(app).post("/api/dashboards", json={"name": f"nc {uuid.uuid4().hex}", "html": "<p/>", "queries": {}})
+    assert r.json()["committed"] is False

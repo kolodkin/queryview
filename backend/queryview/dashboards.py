@@ -9,10 +9,9 @@ import json
 from typing import Any, ClassVar
 
 from sqlalchemy import UniqueConstraint
-from sqlmodel import Field, SQLModel, select
+from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from . import connect
 from .connect import _engine_for_db, _ensure_schema, _now_ms
 
 
@@ -63,6 +62,40 @@ async def upsert_dashboard(
     await upsert_dashboards(
         [{"name": name, "html": html, "queries": queries, "params": params or []}], workspace_id=workspace_id
     )
+
+
+async def rename_dashboard(old: str, new: str, *, workspace_id: int) -> None:
+    """Rename a dashboard; KeyError when `old` is missing, ValueError when `new` is taken."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        rows = (
+            await s.exec(
+                select(Dashboard).where(col(Dashboard.name).in_([old, new]), Dashboard.workspace_id == workspace_id)
+            )
+        ).all()
+        by_name = {r.name: r for r in rows}
+        if old not in by_name:
+            raise KeyError(old)
+        if new in by_name:
+            raise ValueError(f"dashboard {new!r} already exists")
+        row = by_name[old]
+        row.name = new
+        row.updated_at = _now_ms()
+        s.add(row)
+        await s.commit()
+
+
+async def delete_dashboard(name: str, *, workspace_id: int) -> None:
+    """Delete a dashboard; KeyError when it doesn't exist."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = (
+            await s.exec(select(Dashboard).where(Dashboard.name == name, Dashboard.workspace_id == workspace_id))
+        ).first()
+        if row is None:
+            raise KeyError(name)
+        await s.delete(row)
+        await s.commit()
 
 
 def _payload(row: Dashboard) -> dict[str, Any]:
@@ -127,23 +160,3 @@ def _dashboard_event(
         "queries": queries,
         "params": params or [],
     }
-
-
-async def _upsert_and_push(
-    name: str,
-    html: str,
-    queries: dict[str, str],
-    session_id: str | None,
-    params: list[dict[str, Any]] | None = None,
-    *,
-    workspace_id: int,
-) -> tuple[bool, bool, str]:
-    """Persist a dashboard, then (if `session_id` given) push it to that live
-    browser session. Returns (persisted, pushed, message). Push is best-effort:
-    an unknown/inactive session leaves it saved with pushed=False, per
-    remote.push's contract. Used by the REST endpoint (the user-Save path)."""
-    await upsert_dashboard(name, html, queries, params, workspace_id=workspace_id)
-    if session_id:
-        ok, message = await connect.push(session_id, _dashboard_event(name, html, queries, params))
-        return True, ok, message
-    return True, False, "persisted"

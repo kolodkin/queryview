@@ -16,9 +16,6 @@ no picker and lists only what `SHOW TABLES` returns.
 
 ## Dashboards
 
-- **Rename and delete.** A saved dashboard can only be overwritten. Add
-  **Rename** and a soft **Delete** / **Undelete** / **Purge**, with git sync
-  following a deletion.
 - **Unsaved edits survive a reload.** A **New query** draft is kept in the
   [session](./session.md); [SQL panel](./dashboard.md#the-sql-panel) edits to
   a saved dashboard are not, and are lost on leaving it.
@@ -30,6 +27,16 @@ no picker and lists only what `SHOW TABLES` returns.
 - **Script-created widgets.** The widget bundle loads, and a widget's query is
   kept out of the up-front run, only when the tag is written in the HTML: one
   a script creates is not seen.
+
+## Git sync
+
+- **Local vs git status.** Show, per dashboard on the dashboard page, how the
+  local copy stands against the repo: in sync, local changes, behind (the
+  repo's copy changed since they last agreed) or conflict. The
+  [merge-in](./gitsync.md#merge-in) already tracks this per entity.
+- **No Save while behind.** Today a Save pushes the local copy over a newer
+  one in the repo. Refuse Save when the dashboard is behind, until the user
+  takes the repo's copy with **Restore**.
 
 ## Deferred
 

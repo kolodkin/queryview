@@ -20,7 +20,7 @@ import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch, postJson } from './api'
 import DashboardSqlPanel from './DashboardSqlPanel'
-import { onGitSync } from './gitsync'
+import { announceGitSync, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
 import { answerWidget, type WidgetSql } from './widgetHost'
 
@@ -172,6 +172,28 @@ function DashboardView({
     }
   }
 
+  // One Save / Rename / Delete request: errors go to the banner; on success
+  // the dropdown refreshes (and the git badge, when it committed), then `done`.
+  async function runAction(request: () => Promise<Response>, failure: string, done: () => void) {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await request()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) {
+        setError(data.message ?? failure)
+        return
+      }
+      if (data.committed) announceGitSync()
+      await loadDashboards()
+      done()
+    } catch {
+      setError(failure)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // User-only persist: an agent push renders a draft; this Save writes the
   // currently-active dashboard (draft or loaded) to the store.
   async function save() {
@@ -183,36 +205,56 @@ function DashboardView({
       setError(`A dashboard named “${saveAs}” already exists.`)
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
-      const res = await postJson('/api/dashboards', {
+    const request = () =>
+      postJson('/api/dashboards', {
         name: saveAs,
         html: active.html,
         queries: active.queries,
         params: active.params ?? [],
         workspace: activeWorkspace(),
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.ok) {
-        setError(data.message ?? 'Failed to save dashboard.')
-        return
-      }
-      await loadDashboards()
-      if (!active.name) {
-        // Same object in both: the reload under the new name keeps running
-        // the SQL as last executed, not an unexecuted edit just saved.
-        const saved = { ...active, name: saveAs }
-        editedRef.current = saved
-        setLocalPush(saved)
-        patchView(VIEW, { draft: null })
-        setSearchParams({ name: saveAs })
-      }
-    } catch {
-      setError('Failed to save dashboard.')
-    } finally {
-      setSaving(false)
-    }
+    await runAction(request, 'Failed to save dashboard.', () => {
+      if (active.name) return
+      // Same object in both: the reload under the new name keeps running
+      // the SQL as last executed, not an unexecuted edit just saved.
+      const saved = { ...active, name: saveAs }
+      editedRef.current = saved
+      setLocalPush(saved)
+      patchView(VIEW, { draft: null })
+      setSearchParams({ name: saveAs })
+    })
+  }
+
+  // Rename the open saved dashboard; unsaved SQL-panel edits move with it.
+  // A taken name is the server's 409.
+  async function rename() {
+    if (!active?.name) return
+    const newName = window.prompt('Rename dashboard to:', active.name)?.trim()
+    if (!newName || newName === active.name) return
+    const request = () =>
+      postJson(`/api/dashboards/${encodeURIComponent(active.name)}/rename`, {
+        new_name: newName,
+        workspace: activeWorkspace(),
+      })
+    await runAction(request, 'Failed to rename dashboard.', () => {
+      const renamed = { ...active, name: newName }
+      if (editedRef.current) editedRef.current = renamed
+      setLocalPush(renamed)
+      setSearchParams({ name: newName })
+    })
+  }
+
+  async function remove() {
+    if (!active?.name || !window.confirm(`Delete dashboard “${active.name}”?`)) return
+    const url = `/api/dashboards/${encodeURIComponent(active.name)}?workspace=${encodeURIComponent(activeWorkspace())}`
+    await runAction(
+      () => apiFetch(url, { method: 'DELETE' }),
+      'Failed to delete dashboard.',
+      () => {
+        reopen(null)
+        setSearchParams({})
+      },
+    )
   }
 
   // `/dashboard?new` opens a New query draft: where /studio redirects, and how
@@ -497,6 +539,24 @@ function DashboardView({
           className="glass-btn min-w-[5rem] px-3 py-2 text-center text-sm font-medium"
         >
           {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          data-testid="dashboard-rename"
+          onClick={() => void rename()}
+          disabled={!active?.name || saving}
+          className="glass-btn px-3 py-2 text-sm font-medium"
+        >
+          Rename
+        </button>
+        <button
+          type="button"
+          data-testid="dashboard-delete"
+          onClick={() => void remove()}
+          disabled={!active?.name || saving}
+          className="glass-btn px-3 py-2 text-sm font-medium"
+        >
+          Delete
         </button>
         <button
           type="button"

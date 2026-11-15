@@ -33,6 +33,9 @@ which layer a test belongs in, where it lives, and which fixtures to reuse.
 
 ## Python
 
+- **Imports at the top of the file.** No imports inside functions or tests;
+  break an import cycle by moving the code that needs both modules, not by
+  importing lazily.
 - **Avoid `__all__`.** Don't declare `__all__` in modules or packages. Keep the
   public surface implicit: import a name where it's defined (e.g.
   `from queryview.drivers.base import DriverConfig`) rather than re-exporting it
