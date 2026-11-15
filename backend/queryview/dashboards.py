@@ -14,6 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from . import connect
 from .connect import _engine_for_db, _ensure_schema, _now_ms
+from .workspaces import WorkspaceRec
 
 
 class Dashboard(SQLModel, table=True):
@@ -171,13 +172,16 @@ async def _upsert_and_push(
     session_id: str | None,
     params: list[dict[str, Any]] | None = None,
     *,
-    workspace_id: int,
+    ws: WorkspaceRec,
 ) -> tuple[bool, bool, str]:
-    """Persist a dashboard, then (if `session_id` given) push it to that live
-    browser session. Returns (persisted, pushed, message). Push is best-effort:
-    an unknown/inactive session leaves it saved with pushed=False, per
-    remote.push's contract. Used by the REST endpoint (the user-Save path)."""
-    await upsert_dashboard(name, html, queries, params, workspace_id=workspace_id)
+    """Persist a dashboard (the user's Save: in a synced workspace also one
+    commit, raising gitsync.GitSyncError on failure), then (if `session_id`
+    given) push it to that live browser session. Returns (persisted, pushed,
+    message). Push is best-effort: an unknown/inactive session leaves it saved
+    with pushed=False, per remote.push's contract."""
+    from . import gitsync
+
+    await gitsync.save(ws, {"name": name, "html": html, "queries": queries, "params": params or []})
     if session_id:
         ok, message = await connect.push(session_id, _dashboard_event(name, html, queries, params))
         return True, ok, message

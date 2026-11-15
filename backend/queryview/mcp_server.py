@@ -359,7 +359,7 @@ async def list_dashboards(session_id: str | None = None) -> dict[str, Any]:
     """List the saved dashboards (names + metadata, no HTML/queries payload).
 
     Use this to discover dashboard names — e.g. to pick a `name` for
-    git_store/git_history/git_restore with kind="dashboard", or to edit one
+    git_history/git_restore with kind="dashboard", or to edit one
     with push_dashboard.
 
     Args:
@@ -501,33 +501,6 @@ async def _git_tool(coro) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def git_store(
-    kind: str,
-    name: str,
-    message: str | None = None,
-    session_id: str | None = None,
-) -> dict[str, Any]:
-    """Back up one dashboard to its workspace's git remote.
-
-    Exports the entity's saved DB state as files, makes one commit, and pushes.
-    Requires the target workspace to have a git remote configured. Versions are
-    git commits — use git_history to list them and git_restore to roll back.
-
-    Args:
-        kind: "dashboard" (the only kind).
-        name: The entity's name.
-        message: Optional commit message (default: "store dashboard {name}").
-        session_id: Optional armed-session id; the operation runs in that
-            session's workspace (default workspace otherwise).
-
-    Returns {ok, committed, sha, message}; committed=False with "no changes"
-    when the repo already matches the DB.
-    """
-    ws = await _session_workspace_rec(session_id)
-    return await _git_tool(gitsync.store(ws, kind, name, message))
-
-
-@mcp.tool()
 async def git_history(
     kind: str,
     name: str,
@@ -563,7 +536,7 @@ async def git_restore(
 
     Reads the entity's files at `ref` (default: the remote branch head) and
     upserts them into the store. Git history is untouched — HEAD never moves;
-    a later git_store simply commits on top.
+    the user's next Save simply commits on top.
 
     Args:
         kind: "dashboard" (the only kind).

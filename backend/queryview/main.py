@@ -594,10 +594,12 @@ async def dashboards_upsert(request: Request):
     if isinstance(ws, JSONResponse):
         return ws
     session_id = _clean_str(b.get("session_id"))
-    persisted, pushed, message = await _upsert_and_push(
-        name, html, queries, session_id or None, params, workspace_id=ws.id
-    )
-    return {"ok": persisted, "persisted": persisted, "pushed": pushed, "message": message}
+    try:
+        persisted, pushed, message = await _upsert_and_push(name, html, queries, session_id or None, params, ws=ws)
+    except gitsync.GitSyncError as e:
+        return _status_error(e)
+    committed = gitsync.configured(ws)  # a synced Save either committed or raised
+    return {"ok": persisted, "persisted": persisted, "pushed": pushed, "committed": committed, "message": message}
 
 
 @app.get("/api/dashboards")
@@ -617,6 +619,36 @@ async def dashboards_get(name: str, request: Request):
     if d is None:
         return JSONResponse({"error": "not found"}, status_code=404)
     return d
+
+
+# Rename / Delete: a user action, one commit in a synced workspace (docs/gitsync.md).
+@app.post("/api/dashboards/{name}/rename")
+async def dashboards_rename(name: str, request: Request):
+    body = await _read_json(request)
+    b = body if isinstance(body, dict) else {}
+    new_name = _clean_str(b.get("new_name"))
+    if not new_name:
+        return JSONResponse({"ok": False, "message": "new_name is required"}, status_code=400)
+    ws = await _resolve_workspace(b.get("workspace"))
+    if isinstance(ws, JSONResponse):
+        return ws
+    try:
+        r = await gitsync.rename(ws, name, new_name)
+    except gitsync.GitSyncError as e:
+        return _status_error(e)
+    return {"ok": True, "committed": r["committed"]}
+
+
+@app.delete("/api/dashboards/{name}")
+async def dashboards_delete(name: str, request: Request):
+    ws = await _resolve_workspace(request.query_params.get("workspace"))
+    if isinstance(ws, JSONResponse):
+        return ws
+    try:
+        r = await gitsync.delete(ws, name)
+    except gitsync.GitSyncError as e:
+        return _status_error(e)
+    return {"ok": True, "committed": r["committed"]}
 
 
 # --- Git sync: per-entity backup/restore (see docs/gitsync.md) -------------
@@ -668,21 +700,6 @@ async def _sync_attached(name: str) -> dict[str, Any]:
         return {"sync": await gitsync.sync(await workspaces.resolve(name))}
     except (gitsync.GitSyncError, workspaces.WorkspaceError) as e:
         return {"sync_error": str(e)}
-
-
-@app.post("/api/git/store")
-async def git_store(request: Request):
-    body = await _read_json(request)
-    b = body if isinstance(body, dict) else {}
-    args = _gitsync_args(b.get("kind"), b.get("name"))
-    if isinstance(args, JSONResponse):
-        return args
-    kind, name = args
-    ws = await _resolve_workspace(b.get("workspace"))
-    if isinstance(ws, JSONResponse):
-        return ws
-    message = _clean_str(b.get("message")) or None
-    return await _gitsync_json(gitsync.store(ws, kind, name, message))
 
 
 @app.get("/api/git/history")

@@ -35,13 +35,12 @@ def test_status_reports_configured(git_env):
 
 def test_validation_400():
     c = TestClient(app)
-    assert c.post("/api/git/store", json={}).status_code == 400
-    assert c.post("/api/git/store", json={"kind": "nope", "name": "x"}).status_code == 400
-    assert c.post("/api/git/store", json={"kind": "dashboard"}).status_code == 400  # name required
+    assert c.post("/api/git/restore", json={}).status_code == 400
+    assert c.post("/api/git/restore", json={"kind": "nope", "name": "x"}).status_code == 400
+    assert c.post("/api/git/restore", json={"kind": "dashboard"}).status_code == 400  # name required
     # The removed query kind is a bad request on every endpoint, conn_type or not.
     query = {"kind": "query", "name": "x", "conn_type": "clickhouse"}
     for r in (
-        c.post("/api/git/store", json=query),
         c.post("/api/git/restore", json=query),
         c.get("/api/git/history", params=query),
     ):
@@ -49,16 +48,18 @@ def test_validation_400():
         assert r.json() == {"ok": False, "message": "unknown kind 'query' (expected 'dashboard')"}
 
 
-def test_store_history_restore_round_trip(git_env):
-    from queryview.dashboards import get_dashboard, upsert_dashboard
+def test_git_store_endpoint_is_gone():
+    assert TestClient(app).post("/api/git/store", json={"kind": "dashboard", "name": "x"}).status_code in (404, 405)
+
+
+def test_save_history_restore_round_trip(git_env):
+    from queryview.dashboards import get_dashboard
 
     c = TestClient(app)
     entity = {"kind": "dashboard", "name": "api rt"}
-    _run(upsert_dashboard("api rt", "<p>v1</p>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
-    r1 = c.post("/api/git/store", json=entity).json()
+    r1 = c.post("/api/dashboards", json={"name": "api rt", "html": "<p>v1</p>", "queries": {"q": "SELECT 1"}}).json()
     assert r1["ok"] is True and r1["committed"] is True
-    _run(upsert_dashboard("api rt", "<p>v2</p>", {"q": "SELECT 2"}, workspace_id=_default_ws_id()))
-    c.post("/api/git/store", json=entity)
+    c.post("/api/dashboards", json={"name": "api rt", "html": "<p>v2</p>", "queries": {"q": "SELECT 2"}})
 
     h = c.get("/api/git/history", params=entity).json()
     assert h["ok"] is True and len(h["revisions"]) == 2 and h["has_more"] is False
