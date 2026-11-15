@@ -154,7 +154,7 @@ async def list_dashboards(workspace_id: int) -> list[dict[str, Any]]:
         rows = (
             await s.exec(select(Dashboard).where(Dashboard.workspace_id == workspace_id).order_by(Dashboard.name))
         ).all()
-    return [{"name": r.name, "updated_at": r.updated_at} for r in rows]
+    return [{"name": r.name, "updated_at": r.updated_at, "commit_sha": r.commit_sha} for r in rows]
 
 
 async def list_dashboards_full(workspace_id: int) -> list[dict[str, Any]]:
