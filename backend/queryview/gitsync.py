@@ -417,31 +417,170 @@ async def _retry_if_rejected(op: Callable[[], Awaitable[Any]]) -> Any:
     return await op()
 
 
-async def _store_once(ws: WorkspaceRec, name: str, message: str | None) -> dict[str, Any]:
-    """One store attempt; a retry reports only its own merge."""
+async def _store_once(
+    ws: WorkspaceRec, name: str, message: str | None, entity: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """One store attempt; a retry reports only its own merge. Exports `entity`
+    when given (Save: the DB is written after the push), else the saved row."""
+
+    async def stage(wd: Path, head: str | None) -> bool:
+        d = entity if entity is not None else await _load_entity(ws, name)
+        relpath = dashboard_reldir(name)
+        ddir = wd / relpath
+        if ddir.exists():
+            shutil.rmtree(ddir)
+        ddir.mkdir(parents=True, exist_ok=True)
+        for fname, content in dashboard_to_files(d).items():
+            (ddir / fname).write_text(content, encoding="utf-8")
+        await _git("add", "-A", "--", relpath, cwd=wd)
+        return True
+
+    async def after(wd: Path, committed: bool) -> None:
+        if entity is not None:
+            from .dashboards import upsert_dashboard
+
+            await upsert_dashboard(name, entity["html"], entity["queries"], entity.get("params"), workspace_id=ws.id)
+        if committed:
+            await _agree(ws, wd, "HEAD", name)  # the repo now holds exactly the local copy
+
+    r = await _commit_once(ws, stage, message or f"store dashboard {name}", after)
+    return {**r, "message": "stored" if r["committed"] else "no changes"}
+
+
+async def _commit_once(
+    ws: WorkspaceRec,
+    stage: Callable[[Path, str | None], Awaitable[bool]],
+    message: str,
+    after: Callable[[Path, bool], Awaitable[None]],
+) -> dict[str, Any]:
+    """Reset the clone to the remote head and merge, `stage` a change (False:
+    nothing to commit), commit and push, then `after` (the DB side). A failed
+    commit or push resets the clone and raises before `after` runs, so the DB
+    is only changed once the remote holds the commit. Caller holds the lock."""
     wd = await _ensure_repo(ws)
     head = await _origin_head(wd, ws)
     merged = _empty_merge()
     if head:
         await _git("reset", "--hard", head, cwd=wd)
         merged = await _merge(ws, wd, head)
-    entity = await _load_entity(ws, name)
-    relpath = dashboard_reldir(name)
-    ddir = wd / relpath
-    if ddir.exists():
-        shutil.rmtree(ddir)
-    ddir.mkdir(parents=True, exist_ok=True)
-    for fname, content in dashboard_to_files(entity).items():
-        (ddir / fname).write_text(content, encoding="utf-8")
-    await _git("add", "-A", "--", relpath, cwd=wd)
-    if not (await _git("status", "--porcelain", "--", relpath, cwd=wd)).strip():
-        return {"committed": False, "sha": None, "message": "no changes", **merged, "conflicts": conflicts(ws)}
-    await _git("commit", "-m", message or f"store dashboard {name}", cwd=wd)
-    await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
-    sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
-    # The repo now holds exactly the local copy.
-    await _agree(ws, wd, "HEAD", name)
-    return {"committed": True, "sha": sha, "message": "stored", **merged, "conflicts": conflicts(ws)}
+    sha = None
+    if await stage(wd, head) and (await _git("status", "--porcelain", cwd=wd)).strip():
+        try:
+            await _git("commit", "-m", message, cwd=wd)
+            await _git("push", "origin", ws.branch, cwd=wd, credential=_credential(ws))
+        except GitSyncError:
+            if head:
+                await _git("reset", "--hard", head, cwd=wd)
+            else:  # empty remote: drop the clone's unpushed first commit
+                shutil.rmtree(wd)
+            raise
+        sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip()
+    await after(wd, sha is not None)
+    return {"committed": sha is not None, "sha": sha, **merged, "conflicts": conflicts(ws)}
+
+
+# --- User actions ----------------------------------------------------------
+# A user's Save, Rename or Delete is itself the commit when the workspace is
+# synced: one commit and push, the DB changed only after the push succeeds.
+# Unsynced workspaces only change the DB. Agent pushes never come through here.
+
+
+def _local_only() -> dict[str, Any]:
+    return {"committed": False, "sha": None, **_empty_merge()}
+
+
+async def save(ws: WorkspaceRec, d: dict[str, Any]) -> dict[str, Any]:
+    """A user's Save of dashboard `d` (get_dashboard's shape)."""
+    if not configured(ws):
+        from .dashboards import upsert_dashboard
+
+        await upsert_dashboard(d["name"], d["html"], d["queries"], d.get("params"), workspace_id=ws.id)
+        return _local_only()
+    async with _lock(ws):
+        return await _retry_if_rejected(lambda: _store_once(ws, d["name"], None, d))
+
+
+async def _db_or_status(op: Awaitable[Any]) -> Any:
+    """Map the DB layer's KeyError/ValueError to 404/409."""
+    try:
+        return await op
+    except KeyError as e:
+        raise GitSyncError(f"dashboard {e.args[0]!r} not found", status=404) from e
+    except ValueError as e:
+        raise GitSyncError(str(e), status=409) from e
+
+
+async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
+    """A user's Rename: `git mv` the folder (when the repo has it) and rename the row."""
+    from .dashboards import get_dashboard, rename_dashboard
+
+    if not configured(ws):
+        await _db_or_status(rename_dashboard(old, new, workspace_id=ws.id))
+        return _local_only()
+
+    async def stage(wd: Path, head: str | None) -> bool:
+        if await get_dashboard(old, ws.id) is None:
+            raise GitSyncError(f"dashboard {old!r} not found", status=404)
+        if await get_dashboard(new, ws.id) is not None:
+            raise GitSyncError(f"dashboard {new!r} already exists", status=409)
+        src, dst = dashboard_reldir(old), dashboard_reldir(new)
+        if head and await _tree_files(wd, head, dst):
+            raise GitSyncError(f"dashboard {new!r} already exists in git", status=409)
+        if not (head and await _repo_entities(wd, head, src)):
+            return False  # never committed: nothing for git to move
+        repo = await _read_repo_entity(wd, head, src)
+        (wd / dst).parent.mkdir(parents=True, exist_ok=True)
+        await _git("mv", src, dst, cwd=wd)
+        meta = dashboard_to_files({**repo, "name": new})["meta.yaml"]  # the canonical name lives here
+        (wd / dst / "meta.yaml").write_text(meta, encoding="utf-8")
+        await _git("add", "-A", "--", dst, cwd=wd)
+        return True
+
+    async def after(wd: Path, committed: bool) -> None:
+        await _db_or_status(rename_dashboard(old, new, workspace_id=ws.id))
+        state = _load_state(ws)
+        was_conflict = any(c["name"] == old for c in state["conflicts"])
+        state["agreed"].pop(_key(old), None)
+        state["conflicts"] = [{**c, "name": new} if c["name"] == old else c for c in state["conflicts"]]
+        _save_state(ws, state)
+        # A conflict stays one: leaving `new` unagreed makes the next merge report it again.
+        if committed and not was_conflict:
+            await _agree(ws, wd, "HEAD", new)
+
+    async with _lock(ws):
+        return await _retry_if_rejected(lambda: _commit_once(ws, stage, f"rename dashboard {old} → {new}", after))
+
+
+async def delete(ws: WorkspaceRec, name: str) -> dict[str, Any]:
+    """A user's Delete: `git rm` the folder (when the repo has it) and remove the row."""
+    from .dashboards import delete_dashboard, get_dashboard
+
+    async def drop_row() -> None:
+        if not await delete_dashboard(name, workspace_id=ws.id):
+            raise GitSyncError(f"dashboard {name!r} not found", status=404)
+
+    if not configured(ws):
+        await drop_row()
+        return _local_only()
+
+    async def stage(wd: Path, head: str | None) -> bool:
+        if await get_dashboard(name, ws.id) is None:
+            raise GitSyncError(f"dashboard {name!r} not found", status=404)
+        relpath = dashboard_reldir(name)
+        if not (head and await _tree_files(wd, head, relpath)):
+            return False
+        await _git("rm", "-r", "-q", "--", relpath, cwd=wd)
+        return True
+
+    async def after(wd: Path, committed: bool) -> None:
+        await drop_row()
+        state = _load_state(ws)
+        state["agreed"].pop(_key(name), None)
+        state["conflicts"] = [c for c in state["conflicts"] if c["name"] != name]
+        _save_state(ws, state)
+
+    async with _lock(ws):
+        return await _retry_if_rejected(lambda: _commit_once(ws, stage, f"delete dashboard {name}", after))
 
 
 async def history(

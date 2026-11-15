@@ -669,3 +669,161 @@ def test_conflicts_of_a_kind_that_no_longer_exists_are_not_reported(git_env):
         },
     )
     assert gitsync.conflicts(ws) == [{"kind": "dashboard", "name": "sales overview"}]
+
+
+# --- User actions: Save / Rename / Delete commit in one step ----------------
+
+
+def _refuse_pushes(remote) -> None:
+    hook = Path(remote) / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+
+
+def _clone_matches_origin() -> bool:
+    wd = gitsync._workdir(_default_ws())
+
+    def rev(ref: str) -> str:
+        return subprocess.run(["git", "rev-parse", ref], cwd=wd, capture_output=True, text=True).stdout
+
+    return rev("HEAD") == rev("origin/main")
+
+
+def _repo_files(remote) -> list[str]:
+    return subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", "main"], cwd=remote, capture_output=True, text=True
+    ).stdout.splitlines()
+
+
+def _dash(name: str, html: str) -> dict:
+    return {"name": name, "html": html, "queries": {"q": "SELECT 1"}, "params": []}
+
+
+def test_save_commits_current_content(git_env):
+    r = _run(gitsync.save(_default_ws(), _dash("ua save", "<p>v1</p>")))
+    assert r["committed"] is True
+    assert "store dashboard ua save" in _remote_log(git_env)
+    assert _html("ua save") == "<p>v1</p>"
+
+
+def test_save_unconfigured_only_writes_db():
+    r = _run(gitsync.save(_default_ws(), _dash("ua local", "<p>l</p>")))
+    assert r["committed"] is False
+    assert _html("ua local") == "<p>l</p>"
+
+
+def test_save_push_refused_leaves_db_and_clone(git_env):
+    _run(gitsync.save(_default_ws(), _dash("ua refused", "<p>old</p>")))
+    _refuse_pushes(git_env)
+    with pytest.raises(GitSyncError):
+        _run(gitsync.save(_default_ws(), _dash("ua refused", "<p>new</p>")))
+    assert _html("ua refused") == "<p>old</p>"
+    assert _clone_matches_origin()
+
+
+def test_rename_moves_folder_in_one_commit(git_env):
+    _run(gitsync.save(_default_ws(), _dash("ua sales", "<p>s</p>")))
+    before = _remote_log(git_env).count("\n")
+    r = _run(gitsync.rename(_default_ws(), "ua sales", "ua sales 2026"))
+    log = _remote_log(git_env)
+    assert r["committed"] is True and log.count("\n") == before + 1
+    assert "rename dashboard ua sales → ua sales 2026" in log
+    files = _repo_files(git_env)
+    assert f"{dashboard_reldir('ua sales 2026')}/meta.yaml" in files
+    assert not any(f.startswith(dashboard_reldir("ua sales") + "/") for f in files)
+    meta = subprocess.run(
+        ["git", "show", f"main:{dashboard_reldir('ua sales 2026')}/meta.yaml"],
+        cwd=git_env,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "name: ua sales 2026" in meta
+    assert _html("ua sales") is None and _html("ua sales 2026") == "<p>s</p>"
+
+
+def test_rename_never_committed_makes_no_commit(git_env):
+    _save("ua draft", "<p>d</p>")
+    r = _run(gitsync.rename(_default_ws(), "ua draft", "ua draft 2"))
+    assert r["committed"] is False
+    assert _repo_files(git_env) == []
+    assert _html("ua draft 2") == "<p>d</p>"
+
+
+def test_rename_to_taken_name_is_409(git_env):
+    _run(gitsync.save(_default_ws(), _dash("ua a", "<p>a</p>")))
+    _save("ua b", "<p>b</p>")
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.rename(_default_ws(), "ua a", "ua b"))
+    assert e.value.status == 409
+    # A folder the repo holds without a local row (a hand edit) clashes too.
+    _run(gitsync.save(_default_ws(), _dash("ua c", "<p>c</p>")))
+    from queryview.dashboards import delete_dashboard
+
+    _run(delete_dashboard("ua c", workspace_id=_default_ws_id()))
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.rename(_default_ws(), "ua a", "ua c"))
+    assert e.value.status == 409
+    assert _html("ua a") == "<p>a</p>" and _html("ua b") == "<p>b</p>"
+
+
+def test_rename_missing_is_404(git_env):
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.rename(_default_ws(), "ua none", "ua none 2"))
+    assert e.value.status == 404
+
+
+def test_rename_push_refused_rolls_back(git_env):
+    _run(gitsync.save(_default_ws(), _dash("ua rb", "<p>r</p>")))
+    _refuse_pushes(git_env)
+    with pytest.raises(GitSyncError):
+        _run(gitsync.rename(_default_ws(), "ua rb", "ua rb 2"))
+    assert _html("ua rb") == "<p>r</p>" and _html("ua rb 2") is None
+    assert _clone_matches_origin()
+
+
+def test_rename_moves_conflict(other_instance):
+    from queryview.dashboards import upsert_dashboard
+
+    _run(gitsync.save(_default_ws(), _dash("ua clash", "<p>mine</p>")))
+    _run(gitsync.sync(other_instance))
+    _run(upsert_dashboard("ua clash", "<p>theirs</p>", {"q": "SELECT 1"}, workspace_id=other_instance.id))
+    _run(gitsync.store(other_instance, "dashboard", "ua clash"))
+    _save("ua clash", "<p>mine 2</p>")
+    assert {"kind": "dashboard", "name": "ua clash"} in _run(gitsync.sync(_default_ws()))["conflicts"]
+
+    _run(gitsync.rename(_default_ws(), "ua clash", "ua clash 2"))
+    names = [c["name"] for c in gitsync.conflicts(_default_ws())]
+    assert names == ["ua clash 2"]
+    assert [c["name"] for c in _run(gitsync.sync(_default_ws()))["conflicts"]] == ["ua clash 2"]
+
+
+def test_delete_removes_folder_in_one_commit(git_env):
+    _run(gitsync.save(_default_ws(), _dash("ua gone", "<p>g</p>")))
+    r = _run(gitsync.delete(_default_ws(), "ua gone"))
+    assert r["committed"] is True
+    assert "delete dashboard ua gone" in _remote_log(git_env)
+    assert not any(f.startswith(dashboard_reldir("ua gone") + "/") for f in _repo_files(git_env))
+    assert _html("ua gone") is None
+    _run(gitsync.sync(_default_ws()))
+    assert _html("ua gone") is None
+
+
+def test_delete_push_refused_keeps_row(git_env):
+    _run(gitsync.save(_default_ws(), _dash("ua keep", "<p>k</p>")))
+    _refuse_pushes(git_env)
+    with pytest.raises(GitSyncError):
+        _run(gitsync.delete(_default_ws(), "ua keep"))
+    assert _html("ua keep") == "<p>k</p>"
+    assert _clone_matches_origin()
+
+
+def test_delete_missing_is_404(git_env):
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.delete(_default_ws(), "ua none"))
+    assert e.value.status == 404
+
+
+def test_delete_unconfigured_only_touches_db():
+    _save("ua local del", "<p>x</p>")
+    assert _run(gitsync.delete(_default_ws(), "ua local del"))["committed"] is False
+    assert _html("ua local del") is None
