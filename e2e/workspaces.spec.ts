@@ -104,6 +104,7 @@ test("git save and restore dashboard round trip", async ({ page, baseURL, shot }
   // The picker closes on a successful restore; only then check the store.
   await expect(page.getByTestId("git-revisions")).toBeHidden();
   await expect(option).toHaveText(name);
+  await shot("restored dashboard no longer marked");
   const { body } = await api(`${baseURL}/api/dashboards/${encodeURIComponent(name)}`);
   expect(body.html).toContain("v1");
   expect(body.queries).toEqual({ q: "SELECT 1" });
