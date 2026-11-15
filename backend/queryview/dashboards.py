@@ -65,6 +65,41 @@ async def upsert_dashboard(
     )
 
 
+async def rename_dashboard(old: str, new: str, *, workspace_id: int) -> None:
+    """Rename a dashboard; KeyError when `old` is missing, ValueError when `new` is taken."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        rows = (
+            await s.exec(
+                select(Dashboard).where(Dashboard.name.in_([old, new]), Dashboard.workspace_id == workspace_id)
+            )
+        ).all()
+        by_name = {r.name: r for r in rows}
+        if old not in by_name:
+            raise KeyError(old)
+        if new in by_name:
+            raise ValueError(f"dashboard {new!r} already exists")
+        row = by_name[old]
+        row.name = new
+        row.updated_at = _now_ms()
+        s.add(row)
+        await s.commit()
+
+
+async def delete_dashboard(name: str, *, workspace_id: int) -> bool:
+    """Delete a dashboard; False when it doesn't exist."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = (
+            await s.exec(select(Dashboard).where(Dashboard.name == name, Dashboard.workspace_id == workspace_id))
+        ).first()
+        if row is None:
+            return False
+        await s.delete(row)
+        await s.commit()
+    return True
+
+
 def _payload(row: Dashboard) -> dict[str, Any]:
     """A row's full payload with `queries`/`params` parsed back (leniently —
     unparsable stored text degrades to empty)."""

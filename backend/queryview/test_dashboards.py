@@ -7,13 +7,17 @@ from __future__ import annotations
 import asyncio
 import uuid
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from queryview import remote, sessions
 from queryview.dashboards import (
     _upsert_and_push,
+    delete_dashboard,
     get_dashboard,
     list_dashboards,
+    rename_dashboard,
     upsert_dashboard,
 )
 from queryview.main import app
@@ -47,6 +51,37 @@ def test_get_dashboard_round_trips_queries_dict(default_ws_id):
 
 def test_get_missing_dashboard_is_none(default_ws_id):
     assert _run(get_dashboard("does-not-exist", default_ws_id)) is None
+
+
+def test_rename_dashboard_moves_the_row(default_ws_id):
+    old, new = f"sales {uuid.uuid4().hex}", f"sales 2026 {uuid.uuid4().hex}"
+    _run(upsert_dashboard(old, "<p>s</p>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
+    _run(rename_dashboard(old, new, workspace_id=default_ws_id))
+    assert _run(get_dashboard(old, default_ws_id)) is None
+    assert _run(get_dashboard(new, default_ws_id))["queries"] == {"q": "SELECT 1"}
+
+
+def test_rename_dashboard_to_taken_name_raises(default_ws_id):
+    a, b = f"a {uuid.uuid4().hex}", f"b {uuid.uuid4().hex}"
+    _run(upsert_dashboard(a, "<p>a</p>", {}, workspace_id=default_ws_id))
+    _run(upsert_dashboard(b, "<p>b</p>", {}, workspace_id=default_ws_id))
+    with pytest.raises(ValueError):
+        _run(rename_dashboard(a, b, workspace_id=default_ws_id))
+    assert _run(get_dashboard(a, default_ws_id))["html"] == "<p>a</p>"
+    assert _run(get_dashboard(b, default_ws_id))["html"] == "<p>b</p>"
+
+
+def test_rename_missing_dashboard_raises(default_ws_id):
+    with pytest.raises(KeyError):
+        _run(rename_dashboard(f"nope {uuid.uuid4().hex}", "x", workspace_id=default_ws_id))
+
+
+def test_delete_dashboard(default_ws_id):
+    name = f"ops {uuid.uuid4().hex}"
+    _run(upsert_dashboard(name, "<p>o</p>", {}, workspace_id=default_ws_id))
+    assert _run(delete_dashboard(name, workspace_id=default_ws_id)) is True
+    assert _run(get_dashboard(name, default_ws_id)) is None
+    assert _run(delete_dashboard(name, workspace_id=default_ws_id)) is False
 
 
 def test_list_dashboards_orders_by_name_and_omits_payload(default_ws_id):
