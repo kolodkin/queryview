@@ -99,7 +99,7 @@ def _default_ws():
 
 
 def test_upsert_and_push_persists_without_session(default_ws_id):
-    persisted, pushed, _ = _run(_upsert_and_push("np", "<p></p>", {"q": "SELECT 1"}, None, ws=_default_ws()))
+    persisted, pushed, _, _ = _run(_upsert_and_push("np", "<p></p>", {"q": "SELECT 1"}, None, ws=_default_ws()))
     assert persisted is True and pushed is False
     assert _run(get_dashboard("np", default_ws_id)) is not None
 
@@ -107,7 +107,7 @@ def test_upsert_and_push_persists_without_session(default_ws_id):
 def test_upsert_and_push_delivers_to_registered_session(default_ws_id):
     rid = remote.register(uuid.uuid4().hex)
     try:
-        persisted, pushed, _ = _run(_upsert_and_push("pushed", "<p>x</p>", {"q": "SELECT 1"}, rid, ws=_default_ws()))
+        persisted, pushed, _, _ = _run(_upsert_and_push("pushed", "<p>x</p>", {"q": "SELECT 1"}, rid, ws=_default_ws()))
         assert persisted is True and pushed is True
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None
@@ -281,3 +281,17 @@ def test_mcp_list_dashboards_scopes_by_session_workspace(default_ws_id):
         assert names == ["mcp ld"]
     finally:
         remote.unregister(rec.id)
+
+
+def test_dashboards_with_a_slash_rename_and_delete():
+    client = TestClient(app)
+    name = f"ops/latency {uuid.uuid4().hex}"
+    _post_dash(client, name)
+    assert client.get(f"/api/dashboards/{name}").status_code == 200
+    assert client.post(f"/api/dashboards/{name}/rename", json={"new_name": f"{name} 2"}).status_code == 200
+    assert client.delete(f"/api/dashboards/{name} 2").status_code == 200
+
+
+def test_save_reports_no_commit_without_a_remote():
+    r = TestClient(app).post("/api/dashboards", json={"name": f"nc {uuid.uuid4().hex}", "html": "<p/>", "queries": {}})
+    assert r.json()["committed"] is False

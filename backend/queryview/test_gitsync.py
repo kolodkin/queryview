@@ -861,3 +861,13 @@ def test_unchanged_save_ignores_a_stray_file_in_the_clone(git_env):
     r = _run(gitsync.save(_default_ws(), _dash("ua stray", "<p>s</p>")))
     assert r["committed"] is False
     assert "stray.txt" not in _repo_files(git_env)
+
+
+def test_rename_ignores_a_stray_target_dir_in_the_clone(git_env):
+    _run(gitsync.save(_default_ws(), _dash("ua src", "<p>s</p>")))
+    stray = gitsync._workdir(_default_ws()) / dashboard_reldir("ua dst")
+    stray.mkdir(parents=True)
+    (stray / "leftover.txt").write_text("x")
+    _run(gitsync.rename(_default_ws(), "ua src", "ua dst"))
+    files = [f for f in _repo_files(git_env) if f.startswith(dashboard_reldir("ua dst") + "/")]
+    assert sorted(f.rsplit("/", 1)[1] for f in files) == sorted(DASHBOARD_FILES)

@@ -81,3 +81,10 @@ def test_sync_merges_on_demand_and_needs_a_remote():
     c = TestClient(app)
     r = c.post("/api/git/sync", json={})
     assert r.status_code == 409  # the default workspace has no remote here
+
+
+def test_unchanged_save_reports_no_commit(git_env):
+    c = TestClient(app)
+    body = {"name": "api same", "html": "<p>s</p>", "queries": {}}
+    assert c.post("/api/dashboards", json=body).json()["committed"] is True
+    assert c.post("/api/dashboards", json=body).json()["committed"] is False

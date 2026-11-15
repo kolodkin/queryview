@@ -468,6 +468,7 @@ async def _commit_once(
     merged = _empty_merge()
     if head:
         await _git("reset", "--hard", head, cwd=wd)
+        await _git("clean", "-fdq", cwd=wd)  # strays (a killed run, a hand edit) must not join a commit
         merged = await _merge(ws, wd, head)
     sha = None
     # The index, not the work tree: a stray untracked file (a killed run, a

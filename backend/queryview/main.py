@@ -595,10 +595,11 @@ async def dashboards_upsert(request: Request):
         return ws
     session_id = _clean_str(b.get("session_id"))
     try:
-        persisted, pushed, message = await _upsert_and_push(name, html, queries, session_id or None, params, ws=ws)
+        persisted, pushed, committed, message = await _upsert_and_push(
+            name, html, queries, session_id or None, params, ws=ws
+        )
     except gitsync.GitSyncError as e:
         return _status_error(e)
-    committed = gitsync.configured(ws)  # a synced Save either committed or raised
     return {"ok": persisted, "persisted": persisted, "pushed": pushed, "committed": committed, "message": message}
 
 
@@ -610,7 +611,7 @@ async def dashboards_list(request: Request):
     return {"dashboards": await list_dashboards(ws.id)}
 
 
-@app.get("/api/dashboards/{name}")
+@app.get("/api/dashboards/{name:path}")
 async def dashboards_get(name: str, request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
@@ -622,7 +623,8 @@ async def dashboards_get(name: str, request: Request):
 
 
 # Rename / Delete: a user action, one commit in a synced workspace (docs/gitsync.md).
-@app.post("/api/dashboards/{name}/rename")
+# `:path`: a name may contain "/", which arrives decoded.
+@app.post("/api/dashboards/{name:path}/rename")
 async def dashboards_rename(name: str, request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
@@ -639,7 +641,7 @@ async def dashboards_rename(name: str, request: Request):
     return {"ok": True, "committed": r["committed"]}
 
 
-@app.delete("/api/dashboards/{name}")
+@app.delete("/api/dashboards/{name:path}")
 async def dashboards_delete(name: str, request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
