@@ -78,6 +78,11 @@ one entity, so an entity's history is `git log -- <its path>`. Restore reads
 files at a chosen commit (`git show`) and overwrites the local DB row; HEAD
 never moves and history is append-only.
 
+Each dashboard row records `commit_sha`: the last commit that touched its
+folder and holds exactly the row's content. **Save**, **Rename**, **Restore**
+and a merge-in import or match set it. It is `NULL` in a workspace without a
+remote, and a YAML import clears it, since no commit holds that content.
+
 ## Committing
 
 Only a user's action on the [dashboard page](./dashboard.md#the-page-dashboard)
