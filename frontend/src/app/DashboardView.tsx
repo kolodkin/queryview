@@ -20,7 +20,7 @@ import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch, postJson } from './api'
 import DashboardSqlPanel from './DashboardSqlPanel'
-import { announceGitSync, onGitSync } from './gitsync'
+import { announceGitSync, gitStatus, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
 import { answerWidget, type WidgetSql } from './widgetHost'
 
@@ -33,7 +33,7 @@ export type DashboardPush = {
   params?: unknown[]
 }
 
-type DashboardSummary = { name: string; updated_at: number }
+type DashboardSummary = { name: string; updated_at: number; commit_sha: string | null }
 
 // Not connected / no database: say what to do, not what went wrong.
 function runError(data: { reason?: string; message?: string }): string {
@@ -129,6 +129,11 @@ function DashboardView({
   const name = searchParams.get('name') ?? ''
 
   const [dashboards, setDashboards] = useState<DashboardSummary[]>([])
+  // With a remote, a dashboard no commit holds is marked in the picker (docs/gitsync.md#ui).
+  const [gitOn, setGitOn] = useState(false)
+  useEffect(() => {
+    void gitStatus(activeWorkspace()).then(setGitOn)
+  }, [])
   // Captured locally so consuming the shell push doesn't re-trigger resolve.
   const [localPush, setLocalPush] = useState<DashboardPush | null>(() =>
     restoredDraft(searchParams),
@@ -520,6 +525,7 @@ function DashboardView({
           {dashboards.map((d) => (
             <option key={d.name} value={d.name}>
               {d.name}
+              {gitOn && d.commit_sha === null ? ' · not in git' : ''}
             </option>
           ))}
         </select>
@@ -572,6 +578,7 @@ function DashboardView({
           name={name}
           disabled={!name}
           onRestored={() => {
+            void loadDashboards()
             reopen(null)
             setReloadNonce((n) => n + 1)
           }}

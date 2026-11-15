@@ -110,6 +110,9 @@ revision list (newest first, 10 at a time, scroll for more) and overwrites the
 local copy with the picked revision after confirmation. It is disabled when
 the active workspace has no remote configured.
 
+With a remote, the dashboard picker marks a dashboard no commit holds
+(`commit_sha` is `NULL`) as `<name> · not in git`.
+
 ## API
 
 - `GET /api/git/status?workspace=` → `{configured, conflicts}`

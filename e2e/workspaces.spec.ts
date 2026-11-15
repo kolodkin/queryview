@@ -102,6 +102,25 @@ test("git save and restore dashboard round trip", async ({ page, baseURL }) => {
   expect(body.queries).toEqual({ q: "SELECT 1" });
 });
 
+test("git: a YAML-imported dashboard reads not in git until restored", async ({ page, baseURL, shot }) => {
+  test.skip(!(await gitConfigured(baseURL!)), "git sync is not configured for this stack");
+  const name = `gs mark ${crypto.randomUUID().slice(0, 6)}`;
+  await api(`${baseURL}/api/dashboards`, { json: { name, html: "<p>v1</p>", queries: { q: "SELECT 1" } } });
+  // An import overwrites the row outside git: no commit holds that content.
+  const doc = `kind: dashboard\nname: ${name}\nhtml: <p>v2</p>\nqueries:\n  q: SELECT 2\n`;
+  expect((await fetch(`${baseURL}/api/import`, { method: "POST", body: doc })).ok).toBe(true);
+
+  await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
+  const option = page.getByTestId("dashboard-select").locator("option", { hasText: name });
+  await expect(option).toHaveText(`${name} · not in git`);
+  await shot("imported dashboard marked not in git");
+
+  page.on("dialog", (d) => d.accept());
+  await page.getByTestId("git-restore-toggle").click();
+  await page.getByTestId("git-revision-row").first().getByTestId("git-revision-restore").click();
+  await expect(option).toHaveText(name);
+});
+
 test("popovers close on outside click and escape", async ({ page }) => {
   // The header dropdowns close when the click (or Escape) lands outside them,
   // not only on their own trigger.
