@@ -48,8 +48,8 @@ shared (SQLite). See [session.md](./session.md).
 | POST   | `/api/dashboards`           | `{name, html, queries, params?, session_id?, workspace?}` | Upsert a dashboard by name within a workspace; with `session_id`, also pushes it to that live session. In a workspace with a git remote, also one commit (see [gitsync.md](./gitsync.md#committing)); a failed push → `502`, nothing saved. `{ok, persisted, pushed, committed, message}`. Missing `name`/`html` or malformed `params` → `400`. |
 | GET    | `/api/dashboards`           | `?workspace=`                          | List a workspace's dashboards (no payload): `{dashboards:[{name, updated_at}]}`, ordered by name. |
 | GET    | `/api/dashboards/{name}`    | `?workspace=`                          | A saved dashboard `{name, html, queries}` (`queries` parsed to a dict), or `404 {error:"not found"}`. |
-| POST   | `/api/dashboards/{name}/rename` | `{new_name, workspace?}`           | Rename a dashboard, committing when synced. `{ok, committed}`; blank `new_name` → `400`, unknown → `404`, taken → `409`. |
-| DELETE | `/api/dashboards/{name}`    | `?workspace=`                          | Delete a dashboard, committing when synced. `{ok, committed}`; unknown → `404`. |
+| POST   | `/api/dashboards/{name}/rename` | `{new_name, workspace?}`           | Rename a dashboard, committing when synced. `{ok, committed, sha, imported, conflicts}`; blank `new_name` → `400`, unknown → `404`, taken → `409`. |
+| DELETE | `/api/dashboards/{name}`    | `?workspace=`                          | Delete a dashboard, committing when synced. `{ok, committed, sha, imported, conflicts}`; unknown → `404`. |
 
 **MCP:** an MCP server is mounted at `/mcp/` (Streamable HTTP) exposing
 `push_script` (push a script to a session's Scripts editor), `push_dashboard`

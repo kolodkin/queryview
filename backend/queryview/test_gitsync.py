@@ -80,6 +80,13 @@ def _save(name: str, html: str, ws_id: int | None = None) -> None:
     _run(upsert_dashboard(name, html, {"q": "SELECT 1"}, workspace_id=ws_id or _default_ws_id()))
 
 
+async def _astore(ws, name: str) -> dict:
+    """Commit the saved row the way a user's Save does."""
+    from queryview.dashboards import get_dashboard
+
+    return await gitsync.save(ws, await get_dashboard(name, ws.id))
+
+
 def _html(name: str, ws_id: int | None = None) -> str | None:
     from queryview.dashboards import get_dashboard
 
@@ -87,33 +94,19 @@ def _html(name: str, ws_id: int | None = None) -> str | None:
     return d["html"] if d else None
 
 
-def test_store_unconfigured_is_409():
-    # Outside git_env the default workspace has no remote configured.
-    with pytest.raises(GitSyncError) as e:
-        _run(gitsync.store(_default_ws(), "dashboard", "anything"))
-    assert e.value.status == 409
-    assert "no git remote" in str(e.value)
-
-
 @pytest.mark.parametrize("kind", ["dashbord", "query"])
 def test_unknown_kind_is_400(kind):
     """Dashboards are the only kind; the removed 'query' kind is refused too."""
-    for op in (gitsync.store, gitsync.history, gitsync.restore):
+    for op in (gitsync.history, gitsync.restore):
         with pytest.raises(GitSyncError) as e:
             _run(op(_default_ws(), kind, "x"))
         assert e.value.status == 400
         assert "kind" in str(e.value)
 
 
-def test_store_missing_entity_is_404(git_env):
-    with pytest.raises(GitSyncError) as e:
-        _run(gitsync.store(_default_ws(), "dashboard", "no such dashboard xyz"))
-    assert e.value.status == 404
-
-
 def test_store_commits_and_pushes(git_env):
     _save("gs top", "<html>1</html>")
-    r = _run(gitsync.store(_default_ws(), "dashboard", "gs top"))
+    r = _run(_astore(_default_ws(), "gs top"))
     assert r["committed"] is True and r["sha"]
     log = _remote_log(git_env)
     assert r["sha"] in log
@@ -122,14 +115,10 @@ def test_store_commits_and_pushes(git_env):
 
 def test_store_no_change_makes_no_commit(git_env):
     _save("gs same", "<html>2</html>")
-    r1 = _run(gitsync.store(_default_ws(), "dashboard", "gs same"))
-    r2 = _run(gitsync.store(_default_ws(), "dashboard", "gs same"))
+    r1 = _run(_astore(_default_ws(), "gs same"))
+    r2 = _run(_astore(_default_ws(), "gs same"))
     assert r1["committed"] is True
-    assert {k: r2[k] for k in ("committed", "sha", "message")} == {
-        "committed": False,
-        "sha": None,
-        "message": "no changes",
-    }
+    assert (r2["committed"], r2["sha"]) == (False, None)
     assert _remote_log(git_env).count("\n") == 1  # exactly one commit
 
 
@@ -137,7 +126,7 @@ def test_store_dashboard_touches_only_its_dir(git_env):
     from queryview.dashboards import upsert_dashboard
 
     _run(upsert_dashboard("gs dash", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
-    r = _run(gitsync.store(_default_ws(), "dashboard", "gs dash"))
+    r = _run(_astore(_default_ws(), "gs dash"))
     assert r["committed"] is True
     out = subprocess.run(
         ["git", "show", "--name-only", "--format=", r["sha"]],
@@ -155,12 +144,6 @@ def test_store_dashboard_touches_only_its_dir(git_env):
     }
 
 
-def test_store_custom_message(git_env):
-    _save("gs msg", "<html>3</html>")
-    _run(gitsync.store(_default_ws(), "dashboard", "gs msg", message="before migration"))
-    assert "before migration" in _remote_log(git_env)
-
-
 def test_store_unreachable_remote_raises_without_init(tmp_path, clone_base):
     from queryview.workspaces import DEFAULT_WORKSPACE, update_workspace
 
@@ -169,7 +152,7 @@ def test_store_unreachable_remote_raises_without_init(tmp_path, clone_base):
         _save("gs unreachable", "<html>1</html>")
         ws = _default_ws()
         with pytest.raises(GitSyncError) as e:
-            _run(gitsync.store(ws, "dashboard", "gs unreachable"))
+            _run(_astore(ws, "gs unreachable"))
         assert e.value.status == 502
         # No spurious local repo in this workspace's clone dir.
         assert not (clone_base / str(ws.id) / ".git").exists()
@@ -193,7 +176,7 @@ def _store_versions(name: str, htmls: list[str]) -> list[str]:
     shas = []
     for html in htmls:
         _save(name, html)
-        shas.append(_run(gitsync.store(_default_ws(), "dashboard", name))["sha"])
+        shas.append(_run(_astore(_default_ws(), name))["sha"])
     return shas
 
 
@@ -245,7 +228,7 @@ def test_restore_dashboard_round_trip(git_env):
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
     _run(upsert_dashboard("gs rdash", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
-    _run(gitsync.store(_default_ws(), "dashboard", "gs rdash"))
+    _run(_astore(_default_ws(), "gs rdash"))
     _run(upsert_dashboard("gs rdash", "<html>v2</html>", {"q": "SELECT 2"}, workspace_id=_default_ws_id()))
     _run(gitsync.restore(_default_ws(), "dashboard", "gs rdash"))
     d = _run(get_dashboard("gs rdash", _default_ws_id()))
@@ -286,7 +269,7 @@ def test_store_is_isolated_per_workspace(tmp_path, clone_base):
     wa, wb = _run(resolve("t5-a")), _run(resolve("t5-b"))
 
     _save("iso", "<p>1</p>", wa.id)
-    r = _run(gitsync.store(wa, "dashboard", "iso"))
+    r = _run(_astore(wa, "iso"))
     assert r["committed"] is True
     assert "store dashboard iso" in _remote_log(ra)
     # B's remote has no commits at all (git log fails on an empty bare repo).
@@ -300,7 +283,7 @@ def test_store_is_isolated_per_workspace(tmp_path, clone_base):
 
     wn = _run(resolve("t5-none"))
     with pytest.raises(GitSyncError) as e:
-        _run(gitsync.store(wn, "dashboard", "iso"))
+        _run(gitsync.history(wn, "dashboard", "iso"))
     assert e.value.status == 409
     assert "no git remote" in str(e.value)
 
@@ -434,11 +417,11 @@ def test_store_retries_once_when_another_instance_pushes_first(other_instance, m
         if args[0] == "push":
             pushes.append(cwd)
             if len(pushes) == 1:  # between our fetch and push, the other instance lands a commit
-                await gitsync.store(other_instance, "dashboard", "gs racer")
+                await _astore(other_instance, "gs racer")
         return await real_git(*args, cwd=cwd, credential=credential)
 
     monkeypatch.setattr(gitsync, "_git", racing_git)
-    r = _run(gitsync.store(_default_ws(), "dashboard", "gs mine"))
+    r = _run(_astore(_default_ws(), "gs mine"))
 
     assert r["committed"] is True
     assert {"kind": "dashboard", "name": "gs racer"} in r["imported"]
@@ -451,7 +434,7 @@ def test_sync_imports_what_the_repo_has(other_instance):
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
     _run(upsert_dashboard("gs incoming", "<html>x</html>", {"q": "SELECT 1"}, workspace_id=other_instance.id))
-    _run(gitsync.store(other_instance, "dashboard", "gs incoming"))
+    _run(_astore(other_instance, "gs incoming"))
 
     r = _run(gitsync.sync(_default_ws()))
 
@@ -480,7 +463,7 @@ def test_sync_never_overwrites_and_reports_the_conflict(other_instance):
 
     _run(upsert_dashboard("gs clash", "<html>mine</html>", {}, workspace_id=_default_ws_id()))
     _run(upsert_dashboard("gs clash", "<html>theirs</html>", {}, workspace_id=other_instance.id))
-    _run(gitsync.store(other_instance, "dashboard", "gs clash"))
+    _run(_astore(other_instance, "gs clash"))
 
     r = _run(gitsync.sync(_default_ws()))
 
@@ -491,7 +474,7 @@ def test_sync_never_overwrites_and_reports_the_conflict(other_instance):
     assert local is not None and local["html"] == "<html>mine</html>"
 
     # Committing the local copy settles it.
-    _run(gitsync.store(_default_ws(), "dashboard", "gs clash"))
+    _run(_astore(_default_ws(), "gs clash"))
     assert clash not in gitsync.conflicts(_default_ws())
 
 
@@ -500,7 +483,7 @@ def test_restoring_settles_a_conflict(other_instance):
 
     _run(upsert_dashboard("gs clash2", "<html>mine</html>", {}, workspace_id=_default_ws_id()))
     _run(upsert_dashboard("gs clash2", "<html>theirs</html>", {}, workspace_id=other_instance.id))
-    _run(gitsync.store(other_instance, "dashboard", "gs clash2"))
+    _run(_astore(other_instance, "gs clash2"))
     _run(gitsync.sync(_default_ws()))
 
     _run(gitsync.restore(_default_ws(), "dashboard", "gs clash2"))
@@ -514,7 +497,7 @@ def test_a_local_edit_on_an_unchanged_repo_copy_is_not_a_conflict(git_env):
     from queryview.dashboards import upsert_dashboard
 
     _run(upsert_dashboard("gs edited", "<html>v1</html>", {}, workspace_id=_default_ws_id()))
-    _run(gitsync.store(_default_ws(), "dashboard", "gs edited"))
+    _run(_astore(_default_ws(), "gs edited"))
     _run(upsert_dashboard("gs edited", "<html>v2, not committed</html>", {}, workspace_id=_default_ws_id()))
 
     r = _run(gitsync.sync(_default_ws()))
@@ -609,7 +592,7 @@ def test_restore_of_a_dashboard_missing_a_file_is_404(git_env, tmp_path):
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
     _run(upsert_dashboard("gs partial", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
-    _run(gitsync.store(_default_ws(), "dashboard", "gs partial"))
+    _run(_astore(_default_ws(), "gs partial"))
     _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs partial')}/queries.yaml")
     _run(upsert_dashboard("gs partial", "<html>v2</html>", {"q": "SELECT 2"}, workspace_id=_default_ws_id()))
 
@@ -626,7 +609,7 @@ def test_sync_skips_a_dashboard_missing_a_file(git_env, other_instance, tmp_path
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
     _run(upsert_dashboard("gs halfdash", "<html>x</html>", {"q": "SELECT 1"}, workspace_id=other_instance.id))
-    _run(gitsync.store(other_instance, "dashboard", "gs halfdash"))
+    _run(_astore(other_instance, "gs halfdash"))
     _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs halfdash')}/dashboard.html")
 
     r = _run(gitsync.sync(_default_ws()))
@@ -639,7 +622,7 @@ def test_restore_of_a_dashboard_missing_meta_names_the_file(git_env, tmp_path):
     from queryview.dashboards import upsert_dashboard
 
     _run(upsert_dashboard("gs nometa", "<html/>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
-    _run(gitsync.store(_default_ws(), "dashboard", "gs nometa"))
+    _run(_astore(_default_ws(), "gs nometa"))
     _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs nometa')}/meta.yaml")
 
     with pytest.raises(GitSyncError) as e:
@@ -787,7 +770,7 @@ def test_rename_moves_conflict(other_instance):
     _run(gitsync.save(_default_ws(), _dash("ua clash", "<p>mine</p>")))
     _run(gitsync.sync(other_instance))
     _run(upsert_dashboard("ua clash", "<p>theirs</p>", {"q": "SELECT 1"}, workspace_id=other_instance.id))
-    _run(gitsync.store(other_instance, "dashboard", "ua clash"))
+    _run(_astore(other_instance, "ua clash"))
     _save("ua clash", "<p>mine 2</p>")
     assert {"kind": "dashboard", "name": "ua clash"} in _run(gitsync.sync(_default_ws()))["conflicts"]
 

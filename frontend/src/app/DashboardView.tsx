@@ -172,6 +172,28 @@ function DashboardView({
     }
   }
 
+  // One Save / Rename / Delete request: errors go to the banner; on success
+  // the dropdown refreshes (and the git badge, when it committed), then `done`.
+  async function runAction(request: () => Promise<Response>, failure: string, done: () => void) {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await request()
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) {
+        setError(data.message ?? failure)
+        return
+      }
+      if (data.committed) announceGitSync()
+      await loadDashboards()
+      done()
+    } catch {
+      setError(failure)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // User-only persist: an agent push renders a draft; this Save writes the
   // currently-active dashboard (draft or loaded) to the store.
   async function save() {
@@ -183,96 +205,52 @@ function DashboardView({
       setError(`A dashboard named “${saveAs}” already exists.`)
       return
     }
-    setSaving(true)
-    setError(null)
-    try {
-      const res = await postJson('/api/dashboards', {
+    const request = () =>
+      postJson('/api/dashboards', {
         name: saveAs,
         html: active.html,
         queries: active.queries,
         params: active.params ?? [],
         workspace: activeWorkspace(),
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.ok) {
-        setError(data.message ?? 'Failed to save dashboard.')
-        return
-      }
-      if (data.committed) announceGitSync()
-      await loadDashboards()
-      if (!active.name) {
-        // Same object in both: the reload under the new name keeps running
-        // the SQL as last executed, not an unexecuted edit just saved.
-        const saved = { ...active, name: saveAs }
-        editedRef.current = saved
-        setLocalPush(saved)
-        patchView(VIEW, { draft: null })
-        setSearchParams({ name: saveAs })
-      }
-    } catch {
-      setError('Failed to save dashboard.')
-    } finally {
-      setSaving(false)
-    }
+    await runAction(request, 'Failed to save dashboard.', () => {
+      if (active.name) return
+      // Same object in both: the reload under the new name keeps running
+      // the SQL as last executed, not an unexecuted edit just saved.
+      const saved = { ...active, name: saveAs }
+      editedRef.current = saved
+      setLocalPush(saved)
+      patchView(VIEW, { draft: null })
+      setSearchParams({ name: saveAs })
+    })
   }
 
   // Rename the open saved dashboard; unsaved SQL-panel edits move with it.
+  // A taken name is the server's 409.
   async function rename() {
     if (!active?.name) return
     const newName = window.prompt('Rename dashboard to:', active.name)?.trim()
     if (!newName || newName === active.name) return
-    if (dashboards.some((d) => d.name === newName)) {
-      setError(`A dashboard named “${newName}” already exists.`)
-      return
-    }
-    setSaving(true)
-    setError(null)
-    try {
-      const res = await postJson(`/api/dashboards/${encodeURIComponent(active.name)}/rename`, {
+    const request = () =>
+      postJson(`/api/dashboards/${encodeURIComponent(active.name)}/rename`, {
         new_name: newName,
         workspace: activeWorkspace(),
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.ok) {
-        setError(data.message ?? 'Failed to rename dashboard.')
-        return
-      }
-      if (data.committed) announceGitSync()
-      await loadDashboards()
+    await runAction(request, 'Failed to rename dashboard.', () => {
       const renamed = { ...active, name: newName }
       if (editedRef.current) editedRef.current = renamed
       setLocalPush(renamed)
       setSearchParams({ name: newName })
-    } catch {
-      setError('Failed to rename dashboard.')
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   async function remove() {
     if (!active?.name || !window.confirm(`Delete dashboard “${active.name}”?`)) return
-    setSaving(true)
-    setError(null)
-    try {
-      const res = await apiFetch(
-        `/api/dashboards/${encodeURIComponent(active.name)}?workspace=${encodeURIComponent(activeWorkspace())}`,
-        { method: 'DELETE' },
-      )
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.ok) {
-        setError(data.message ?? 'Failed to delete dashboard.')
-        return
-      }
-      if (data.committed) announceGitSync()
-      await loadDashboards()
+    const url = `/api/dashboards/${encodeURIComponent(active.name)}?workspace=${encodeURIComponent(activeWorkspace())}`
+    await runAction(() => apiFetch(url, { method: 'DELETE' }), 'Failed to delete dashboard.', () => {
       reopen(null)
       setSearchParams({})
-    } catch {
-      setError('Failed to delete dashboard.')
-    } finally {
-      setSaving(false)
-    }
+    })
   }
 
   // `/dashboard?new` opens a New query draft: where /studio redirects, and how

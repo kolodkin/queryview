@@ -634,11 +634,7 @@ async def dashboards_rename(name: str, request: Request):
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    try:
-        r = await gitsync.rename(ws, name, new_name)
-    except gitsync.GitSyncError as e:
-        return _status_error(e)
-    return {"ok": True, "committed": r["committed"]}
+    return await _gitsync_json(gitsync.rename(ws, name, new_name))
 
 
 @app.delete("/api/dashboards/{name:path}")
@@ -646,11 +642,7 @@ async def dashboards_delete(name: str, request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws
-    try:
-        r = await gitsync.delete(ws, name)
-    except gitsync.GitSyncError as e:
-        return _status_error(e)
-    return {"ok": True, "committed": r["committed"]}
+    return await _gitsync_json(gitsync.delete(ws, name))
 
 
 # --- Git sync: per-entity backup/restore (see docs/gitsync.md) -------------

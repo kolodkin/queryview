@@ -78,9 +78,10 @@ def test_rename_missing_dashboard_raises(default_ws_id):
 def test_delete_dashboard(default_ws_id):
     name = f"ops {uuid.uuid4().hex}"
     _run(upsert_dashboard(name, "<p>o</p>", {}, workspace_id=default_ws_id))
-    assert _run(delete_dashboard(name, workspace_id=default_ws_id)) is True
+    _run(delete_dashboard(name, workspace_id=default_ws_id))
     assert _run(get_dashboard(name, default_ws_id)) is None
-    assert _run(delete_dashboard(name, workspace_id=default_ws_id)) is False
+    with pytest.raises(KeyError):
+        _run(delete_dashboard(name, workspace_id=default_ws_id))
 
 
 def test_list_dashboards_orders_by_name_and_omits_payload(default_ws_id):
@@ -134,7 +135,7 @@ def test_dashboards_rename_route():
     assert client.post(f"/api/dashboards/{old}/rename", json={"new_name": " "}).status_code == 400
     assert client.post(f"/api/dashboards/{old}/rename", json={"new_name": taken}).status_code == 409
     r = client.post(f"/api/dashboards/{old}/rename", json={"new_name": new})
-    assert r.status_code == 200 and r.json() == {"ok": True, "committed": False}
+    assert r.status_code == 200 and (r.json()["ok"], r.json()["committed"]) == (True, False)
     assert client.get(f"/api/dashboards/{old}").status_code == 404
     assert client.get(f"/api/dashboards/{new}").status_code == 200
     assert client.post(f"/api/dashboards/{old}/rename", json={"new_name": "x"}).status_code == 404
@@ -145,7 +146,7 @@ def test_dashboards_delete_route():
     name = f"del {uuid.uuid4().hex}"
     _post_dash(client, name)
     r = client.delete(f"/api/dashboards/{name}")
-    assert r.status_code == 200 and r.json() == {"ok": True, "committed": False}
+    assert r.status_code == 200 and (r.json()["ok"], r.json()["committed"]) == (True, False)
     assert client.get(f"/api/dashboards/{name}").status_code == 404
     assert client.delete(f"/api/dashboards/{name}").status_code == 404
 

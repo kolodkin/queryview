@@ -87,18 +87,17 @@ async def rename_dashboard(old: str, new: str, *, workspace_id: int) -> None:
         await s.commit()
 
 
-async def delete_dashboard(name: str, *, workspace_id: int) -> bool:
-    """Delete a dashboard; False when it doesn't exist."""
+async def delete_dashboard(name: str, *, workspace_id: int) -> None:
+    """Delete a dashboard; KeyError when it doesn't exist."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         row = (
             await s.exec(select(Dashboard).where(Dashboard.name == name, Dashboard.workspace_id == workspace_id))
         ).first()
         if row is None:
-            return False
+            raise KeyError(name)
         await s.delete(row)
         await s.commit()
-    return True
 
 
 def _payload(row: Dashboard) -> dict[str, Any]:
