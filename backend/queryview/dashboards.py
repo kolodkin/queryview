@@ -9,7 +9,7 @@ import json
 from typing import Any, ClassVar
 
 from sqlalchemy import UniqueConstraint
-from sqlmodel import Field, SQLModel, select
+from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .connect import _engine_for_db, _ensure_schema, _now_ms
@@ -70,7 +70,7 @@ async def rename_dashboard(old: str, new: str, *, workspace_id: int) -> None:
     async with AsyncSession(_engine_for_db()) as s:
         rows = (
             await s.exec(
-                select(Dashboard).where(Dashboard.name.in_([old, new]), Dashboard.workspace_id == workspace_id)
+                select(Dashboard).where(col(Dashboard.name).in_([old, new]), Dashboard.workspace_id == workspace_id)
             )
         ).all()
         by_name = {r.name: r for r in rows}

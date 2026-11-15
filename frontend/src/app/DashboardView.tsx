@@ -247,10 +247,14 @@ function DashboardView({
   async function remove() {
     if (!active?.name || !window.confirm(`Delete dashboard “${active.name}”?`)) return
     const url = `/api/dashboards/${encodeURIComponent(active.name)}?workspace=${encodeURIComponent(activeWorkspace())}`
-    await runAction(() => apiFetch(url, { method: 'DELETE' }), 'Failed to delete dashboard.', () => {
-      reopen(null)
-      setSearchParams({})
-    })
+    await runAction(
+      () => apiFetch(url, { method: 'DELETE' }),
+      'Failed to delete dashboard.',
+      () => {
+        reopen(null)
+        setSearchParams({})
+      },
+    )
   }
 
   // `/dashboard?new` opens a New query draft: where /studio redirects, and how

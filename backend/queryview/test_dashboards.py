@@ -58,7 +58,8 @@ def test_rename_dashboard_moves_the_row(default_ws_id):
     _run(upsert_dashboard(old, "<p>s</p>", {"q": "SELECT 1"}, workspace_id=default_ws_id))
     _run(rename_dashboard(old, new, workspace_id=default_ws_id))
     assert _run(get_dashboard(old, default_ws_id)) is None
-    assert _run(get_dashboard(new, default_ws_id))["queries"] == {"q": "SELECT 1"}
+    got = _run(get_dashboard(new, default_ws_id))
+    assert got is not None and got["queries"] == {"q": "SELECT 1"}
 
 
 def test_rename_dashboard_to_taken_name_raises(default_ws_id):
@@ -67,8 +68,9 @@ def test_rename_dashboard_to_taken_name_raises(default_ws_id):
     _run(upsert_dashboard(b, "<p>b</p>", {}, workspace_id=default_ws_id))
     with pytest.raises(ValueError):
         _run(rename_dashboard(a, b, workspace_id=default_ws_id))
-    assert _run(get_dashboard(a, default_ws_id))["html"] == "<p>a</p>"
-    assert _run(get_dashboard(b, default_ws_id))["html"] == "<p>b</p>"
+    got_a, got_b = _run(get_dashboard(a, default_ws_id)), _run(get_dashboard(b, default_ws_id))
+    assert got_a is not None and got_a["html"] == "<p>a</p>"
+    assert got_b is not None and got_b["html"] == "<p>b</p>"
 
 
 def test_rename_missing_dashboard_raises(default_ws_id):

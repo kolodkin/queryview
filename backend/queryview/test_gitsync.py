@@ -83,7 +83,9 @@ def _save(name: str, html: str, ws_id: int | None = None) -> None:
 
 async def _astore(ws, name: str) -> dict:
     """Commit the saved row the way a user's Save does."""
-    return await gitsync.save(ws, await get_dashboard(name, ws.id))
+    d = await get_dashboard(name, ws.id)
+    assert d is not None
+    return await gitsync.save(ws, d)
 
 
 def _html(name: str, ws_id: int | None = None) -> str | None:

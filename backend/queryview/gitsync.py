@@ -494,7 +494,7 @@ async def save(ws: WorkspaceRec, d: dict[str, Any]) -> dict[str, Any]:
 
     async def after(wd: Path | None, committed: bool) -> None:
         await upsert_dashboard(name, d["html"], d["queries"], d.get("params"), workspace_id=ws.id)
-        if committed:
+        if wd is not None and committed:
             await _agree(ws, wd, "HEAD", name)  # the repo now holds exactly the local copy
 
     return await _user_action(ws, stage, f"store dashboard {name}", after)
