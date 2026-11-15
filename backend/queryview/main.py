@@ -44,7 +44,7 @@ from .connect import (
     unlock_connection,
 )
 from .dashboard_queries import run_dashboard_queries
-from .dashboards import _upsert_and_push, get_dashboard, list_dashboards
+from .dashboards import get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
 from .validation import dashboard_params_error
@@ -595,12 +595,10 @@ async def dashboards_upsert(request: Request):
         return ws
     session_id = _clean_str(b.get("session_id"))
     try:
-        persisted, pushed, committed, message = await _upsert_and_push(
-            name, html, queries, session_id or None, params, ws=ws
-        )
+        pushed, committed, message = await gitsync.save_and_push(ws, name, html, queries, session_id or None, params)
     except gitsync.GitSyncError as e:
         return _status_error(e)
-    return {"ok": persisted, "persisted": persisted, "pushed": pushed, "committed": committed, "message": message}
+    return {"ok": True, "persisted": True, "pushed": pushed, "committed": committed, "message": message}
 
 
 @app.get("/api/dashboards")

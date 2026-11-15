@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from queryview import gitsync, workspaces
+from queryview.dashboards import delete_dashboard, get_dashboard, upsert_dashboard
 from queryview.gitsync import (
     DASHBOARD_FILES,
     GitSyncError,
@@ -82,8 +83,6 @@ def _save(name: str, html: str, ws_id: int | None = None) -> None:
 
 async def _astore(ws, name: str) -> dict:
     """Commit the saved row the way a user's Save does."""
-    from queryview.dashboards import get_dashboard
-
     return await gitsync.save(ws, await get_dashboard(name, ws.id))
 
 
@@ -740,8 +739,6 @@ def test_rename_to_taken_name_is_409(git_env):
     assert e.value.status == 409
     # A folder the repo holds without a local row (a hand edit) clashes too.
     _run(gitsync.save(_default_ws(), _dash("ua c", "<p>c</p>")))
-    from queryview.dashboards import delete_dashboard
-
     _run(delete_dashboard("ua c", workspace_id=_default_ws_id()))
     with pytest.raises(GitSyncError) as e:
         _run(gitsync.rename(_default_ws(), "ua a", "ua c"))
@@ -765,8 +762,6 @@ def test_rename_push_refused_rolls_back(git_env):
 
 
 def test_rename_moves_conflict(other_instance):
-    from queryview.dashboards import upsert_dashboard
-
     _run(gitsync.save(_default_ws(), _dash("ua clash", "<p>mine</p>")))
     _run(gitsync.sync(other_instance))
     _run(upsert_dashboard("ua clash", "<p>theirs</p>", {"q": "SELECT 1"}, workspace_id=other_instance.id))

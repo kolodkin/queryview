@@ -12,14 +12,15 @@ from fastapi.testclient import TestClient
 
 from queryview import remote, sessions
 from queryview.dashboards import (
-    _upsert_and_push,
     delete_dashboard,
     get_dashboard,
     list_dashboards,
     rename_dashboard,
     upsert_dashboard,
 )
+from queryview.gitsync import save_and_push
 from queryview.main import app
+from queryview.workspaces import DEFAULT_WORKSPACE, resolve
 
 
 def _run(coro):
@@ -94,22 +95,20 @@ def test_list_dashboards_orders_by_name_and_omits_payload(default_ws_id):
 
 
 def _default_ws():
-    from queryview.workspaces import DEFAULT_WORKSPACE, resolve
-
     return _run(resolve(DEFAULT_WORKSPACE))
 
 
-def test_upsert_and_push_persists_without_session(default_ws_id):
-    persisted, pushed, _, _ = _run(_upsert_and_push("np", "<p></p>", {"q": "SELECT 1"}, None, ws=_default_ws()))
-    assert persisted is True and pushed is False
+def test_save_and_push_persists_without_session(default_ws_id):
+    pushed, _, _ = _run(save_and_push(_default_ws(), "np", "<p></p>", {"q": "SELECT 1"}, None))
+    assert pushed is False
     assert _run(get_dashboard("np", default_ws_id)) is not None
 
 
-def test_upsert_and_push_delivers_to_registered_session(default_ws_id):
+def test_save_and_push_delivers_to_registered_session(default_ws_id):
     rid = remote.register(uuid.uuid4().hex)
     try:
-        persisted, pushed, _, _ = _run(_upsert_and_push("pushed", "<p>x</p>", {"q": "SELECT 1"}, rid, ws=_default_ws()))
-        assert persisted is True and pushed is True
+        pushed, _, _ = _run(save_and_push(_default_ws(), "pushed", "<p>x</p>", {"q": "SELECT 1"}, rid))
+        assert pushed is True
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None
         assert msg["type"] == "dashboard"

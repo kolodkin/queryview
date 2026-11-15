@@ -16,7 +16,9 @@ from typing import Any
 
 import yaml
 
+from . import connect
 from .connect import _data_dir
+from .dashboards import _dashboard_event, delete_dashboard, get_dashboard, rename_dashboard, upsert_dashboard
 from .workspaces import WorkspaceRec, split_credential
 from .yamlio import YamlIOError, dashboard_from_data, dump_yaml, slug
 
@@ -249,8 +251,6 @@ def _check_kind(kind: str) -> None:
 
 
 async def _load_entity(ws: WorkspaceRec, name: str) -> dict[str, Any]:
-    from .dashboards import get_dashboard
-
     d = await get_dashboard(name, ws.id)
     if d is None:
         raise GitSyncError(f"dashboard {name!r} not found", status=404)
@@ -338,8 +338,6 @@ def _empty_merge() -> dict[str, Any]:
 async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
     """Import what the repo has and the DB lacks; record conflicts. Caller
     holds the lock and has fetched."""
-    from .dashboards import get_dashboard, upsert_dashboard
-
     state = _load_state(ws)
     agreed: dict[str, str] = state["agreed"]
     imported: list[dict[str, Any]] = []
@@ -482,8 +480,6 @@ def _forget(ws: WorkspaceRec, name: str, rename_to: str | None = None) -> bool:
 
 async def save(ws: WorkspaceRec, d: dict[str, Any]) -> dict[str, Any]:
     """A user's Save of dashboard `d` (get_dashboard's shape)."""
-    from .dashboards import upsert_dashboard
-
     name, relpath = d["name"], dashboard_reldir(d["name"])
 
     async def stage(wd: Path, head: str | None) -> bool:
@@ -504,10 +500,26 @@ async def save(ws: WorkspaceRec, d: dict[str, Any]) -> dict[str, Any]:
     return await _user_action(ws, stage, f"store dashboard {name}", after)
 
 
+async def save_and_push(
+    ws: WorkspaceRec,
+    name: str,
+    html: str,
+    queries: dict[str, str],
+    session_id: str | None,
+    params: list[dict[str, Any]] | None = None,
+) -> tuple[bool, bool, str]:
+    """The user's Save, then (with `session_id`) a push to that live browser
+    session. Returns (pushed, committed, message). The push is best-effort: an
+    unknown/inactive session leaves it saved with pushed=False."""
+    saved = await save(ws, {"name": name, "html": html, "queries": queries, "params": params or []})
+    if session_id:
+        ok, message = await connect.push(session_id, _dashboard_event(name, html, queries, params))
+        return ok, saved["committed"], message
+    return False, saved["committed"], "persisted"
+
+
 async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
     """A user's Rename: `git mv` the folder (when the repo has it) and rename the row."""
-    from .dashboards import get_dashboard, rename_dashboard
-
     src, dst = dashboard_reldir(old), dashboard_reldir(new)
 
     # Checked here, inside the lock and after the merge, because git goes first.
@@ -538,8 +550,6 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
 
 async def delete(ws: WorkspaceRec, name: str) -> dict[str, Any]:
     """A user's Delete: `git rm` the folder (when the repo has it) and remove the row."""
-    from .dashboards import delete_dashboard
-
     relpath = dashboard_reldir(name)
 
     async def stage(wd: Path, head: str | None) -> bool:
@@ -607,8 +617,6 @@ async def restore(ws: WorkspaceRec, kind: str, name: str, ref: str | None = None
     the remote branch head). Reads via `git show` — HEAD never moves, history
     is never rewritten. Parses fully before writing, so the DB row is either
     untouched or fully replaced."""
-    from .dashboards import upsert_dashboard
-
     _check_kind(kind)
     _require_remote(ws)
     relpath = dashboard_reldir(name)
