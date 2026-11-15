@@ -90,8 +90,9 @@ remote, each is one commit and push:
 | **Rename** | `rename dashboard <old> → <new>`: `git mv` of its folder |
 | **Delete** | `delete dashboard <name>`: `git rm` of its folder |
 
-The local change happens only once the push succeeds; a failed commit or push
-leaves the workspace as it was and shows the error. A push rejected because
+The local change happens only once the push succeeds. An unreachable remote,
+or a failed commit or push, leaves the workspace as it was and shows the error:
+nothing is saved locally until the remote takes the commit. A push rejected because
 another instance pushed first is retried from the new head, up to five times.
 Rename and Delete of a dashboard the repo doesn't hold make no commit; a
 Rename onto a name the repo already holds is refused. Without a remote, the
