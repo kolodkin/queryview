@@ -105,8 +105,8 @@ you [armed](#arming-a-session).
   `not connected`. See [dashboard.md](./dashboard.md).
 - `new_tab(name)` — a session of the agent's own; see [Tabs](#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
-- `git_store` / `git_history` / `git_restore` — back up, list and restore a
-  saved dashboard through [workspace git](./gitsync.md).
+- `git_history` / `git_restore` — list and restore a saved dashboard's
+  versions in [workspace git](./gitsync.md); only the user's Save commits.
 
 A pushed dashboard's queries run through the browser's own `/api/runqueries`
 and `/api/db/query` calls; the push layer never talks to a database.

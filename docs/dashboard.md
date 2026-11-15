@@ -21,12 +21,14 @@ agent-authored HTML, which renders inside an isolated iframe.
   over one query, for ad-hoc SQL; **Save** asks for its name. The
   [session](./session.md) remembers the draft's SQL, so it survives leaving
   the page and a reload; picking a dashboard discards it;
+- **Rename** and **Delete** — for a saved dashboard; Rename asks for the new
+  name and keeps unsaved SQL-panel edits, Delete asks to confirm;
 - **Edit queries** — the [SQL panel](#the-sql-panel);
 - a **sandboxed iframe** that renders the selected dashboard.
 
 ```
 +-- /dashboard ------------------------------------------+
-| [ dashboard v ] [New query] [Save] [Edit queries] ...  |
+| [dashboard v] [New query] [Save] [Rename] [Delete] ... |
 | +- SQL panel (Edit queries) -------------------------+ |
 | | [ sales v ]                    [Min][S][M][L][XL]  | |
 | | SELECT ...                                         | |

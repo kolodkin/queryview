@@ -47,7 +47,7 @@ the file and a sync skips it.
 A sync fetches the repo and merges its head into the workspace. It runs:
 
 - when a remote is saved (re-entering the same URL counts);
-- on **Commit**, **Restore**, and opening an entity's revision list;
+- on **Save**, **Rename**, **Delete**, **Restore**, and opening an entity's revision list;
 - on **Sync** in the workspace panel (header dropdown → *Manage workspaces…*),
   to pick up what was committed elsewhere.
 
@@ -60,7 +60,7 @@ The merge only adds, never overwrites:
 - the same on both sides → nothing to do;
 - different, and the repo's copy changed since this workspace last agreed with
   it → a **conflict**: the local copy is kept and the entity is listed under a
-  ⚠ next to the workspace switcher until you **Commit** (push yours) or
+  ⚠ next to the workspace switcher until you **Save** (push yours) or
   **Restore** (take the repo's);
 - different, but only because you edited it locally → just an uncommitted
   change, not a conflict.
@@ -73,31 +73,47 @@ Changing a workspace's remote or branch drops its clone and that file.
 
 ## Versioning
 
-Git commits are the versions — each Commit makes exactly one commit touching
+Git commits are the versions — each [user action](#committing) makes exactly one commit touching
 one entity, so an entity's history is `git log -- <its path>`. Restore reads
 files at a chosen commit (`git show`) and overwrites the local DB row; HEAD
 never moves and history is append-only.
 
+## Committing
+
+Only a user's action on the [dashboard page](./dashboard.md#the-page-dashboard)
+commits; agent pushes, Import and Restore never do. In a workspace with a
+remote, each is one commit and push:
+
+| Action | Commit |
+| --- | --- |
+| **Save** | `store dashboard <name>`: the dashboard as saved |
+| **Rename** | `rename dashboard <old> → <new>`: `git mv` of its folder |
+| **Delete** | `delete dashboard <name>`: `git rm` of its folder |
+
+The local change happens only once the push succeeds; a failed commit or push
+leaves the workspace as it was and shows the error. A push rejected because
+another instance pushed first is retried from the new head, up to five times.
+Rename and Delete of a dashboard the repo doesn't hold make no commit; a
+Rename onto a name the repo already holds is refused. Without a remote, the
+three only change the workspace.
+
 ## UI
 
-Next to the dashboard page's **Save** button:
-**Commit** pushes the saved DB state to the remote (retried once if another
-instance pushed first); **Restore** opens
-the entity's revision list (newest first, 10 at a time, scroll for more) and
-overwrites the local copy with the picked revision after confirmation. Both
-are disabled when the active workspace has no remote configured.
+**Restore**, next to the dashboard page's **Save**, opens the entity's
+revision list (newest first, 10 at a time, scroll for more) and overwrites the
+local copy with the picked revision after confirmation. It is disabled when
+the active workspace has no remote configured.
 
 ## API
 
 - `GET /api/git/status?workspace=` → `{configured, conflicts}`
 - `POST /api/git/sync` `{workspace?}` → `{ok, imported, conflicts}`
-- `POST /api/git/store` `{kind, name, message?, workspace?}` → `{ok, committed, sha, message, imported, conflicts}`
 - `GET /api/git/history?kind=&name=&before=&limit=10&workspace=` → `{ok, revisions: [{sha, date, message}], has_more}`
 - `POST /api/git/restore` `{kind, name, ref?, workspace?}` → `{ok, restored, sha, imported, conflicts}`
   `ref` is a sha from history or a branch name (read as `origin/<name>`); default: the remote branch head.
 
 `kind` is `"dashboard"`;
-`workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_store`, `git_history`,
+`workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_history` and
 `git_restore` mirror the same surface, resolving the workspace from an
 optional `session_id` (see [workspace.md](./workspace.md)).
 

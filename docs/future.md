@@ -16,9 +16,6 @@ no picker and lists only what `SHOW TABLES` returns.
 
 ## Dashboards
 
-- **Rename and delete.** A saved dashboard can only be overwritten. Add
-  **Rename** and a soft **Delete** / **Undelete** / **Purge**, with git sync
-  following a deletion.
 - **Unsaved edits survive a reload.** A **New query** draft is kept in the
   [session](./session.md); [SQL panel](./dashboard.md#the-sql-panel) edits to
   a saved dashboard are not, and are lost on leaving it.
