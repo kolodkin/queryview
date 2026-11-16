@@ -31,6 +31,7 @@ function own(o, k) { return o != null && Object.prototype.hasOwnProperty.call(o,
 // Fill each [data-qv-query] element with row 1 of its data-qv-column
 // (default: the query's first column). A query with no results here (held back
 // for an unchosen param, failed, or a widget's) reads as a dash, not an error.
+// The text mirrors cellText (core/results/rows.ts), with null as a dash.
 function bind() {
   document.querySelectorAll('[data-qv-query]').forEach(function (el) {
     var q = el.getAttribute('data-qv-query');
