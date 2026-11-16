@@ -137,7 +137,8 @@ class PostgresDriver:
         return asdict(config)
 
     def config_from_dict(self, data: dict[str, Any]) -> PgConfig:
-        return PgConfig(**data)
+        # Keys it no longer has (a dropped option) are ignored, not an error.
+        return PgConfig(**{k: v for k, v in data.items() if k in PgConfig.__dataclass_fields__})
 
     async def test(self, config: PgConfig) -> dict[str, Any]:
         try:

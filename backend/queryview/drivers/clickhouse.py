@@ -205,7 +205,8 @@ class ClickHouseDriver:
         return asdict(config)
 
     def config_from_dict(self, data: dict[str, Any]) -> ChConfig:
-        return ChConfig(**data)
+        # Keys it no longer has (a dropped option) are ignored, not an error.
+        return ChConfig(**{k: v for k, v in data.items() if k in ChConfig.__dataclass_fields__})
 
     async def test(self, config: ChConfig) -> dict[str, Any]:
         r = await ch_query(config, "SELECT 1", ChText, database=config.database)

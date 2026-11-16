@@ -220,8 +220,7 @@ def parse_host_port_config(body: Any) -> tuple[dict[str, Any] | None, str | None
         return None, "host required"
     if port is None:
         return None, "valid port required"
-    fields = {"host": host, "port": port, "username": username, "password": password}
-    return {**fields, "database": database}, None
+    return {"host": host, "port": port, "username": username, "password": password, "database": database}, None
 
 
 def select_all_sql(table: str, quote: str) -> str:

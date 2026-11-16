@@ -370,3 +370,8 @@ def test_a_named_database_is_the_only_one_tested_and_listed(monkeypatch):
     assert asyncio.run(d.test(cfg))["ok"] is True
     assert asyncio.run(d.list_databases(cfg)) == DatabasesResult(["sales_reporting"], current="sales_reporting")
     assert attempts == ["sales_reporting", "sales_reporting"]
+
+
+def test_a_saved_config_with_a_dropped_key_still_loads():
+    data = {"host": "h", "port": 5432, "username": "u", "password": "", "show_all_databases": True}
+    assert PostgresDriver().config_from_dict(data) == PgConfig("h", 5432, "u", "")
