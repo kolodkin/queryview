@@ -350,10 +350,13 @@ def test_bootstrap_stops_at_the_first_connect_timeout(monkeypatch):
     assert attempts == ["u"]
 
 
-def test_configured_database_is_tried_first_and_can_be_the_only_one_listed(monkeypatch):
+def test_a_named_database_is_the_only_one_tested_and_listed(monkeypatch):
     attempts = []
 
     class FakeConn:
+        async def fetchval(self, sql):
+            return 1
+
         async def close(self):
             pass
 
@@ -362,8 +365,8 @@ def test_configured_database_is_tried_first_and_can_be_the_only_one_listed(monke
         return FakeConn()
 
     monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
+    d = PostgresDriver()
     cfg = PgConfig("h", 5432, "u", "", "sales_reporting", False)
-    asyncio.run(_raw_connect_bootstrap(cfg))
-    r = asyncio.run(PostgresDriver().list_databases(cfg))
-    assert r == DatabasesResult(["sales_reporting"])
+    assert asyncio.run(d.test(cfg))["ok"] is True
+    assert asyncio.run(d.list_databases(cfg)) == DatabasesResult(["sales_reporting"])
     assert attempts == ["sales_reporting", "sales_reporting"]

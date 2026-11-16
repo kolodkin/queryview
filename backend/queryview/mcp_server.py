@@ -246,7 +246,8 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
         session_id: The session id shown in the QueryView popover.
         name: A name no saved or session connection uses yet.
         type: "clickhouse" or "postgres" (DuckDB and SQLite are refused: they read local files).
-        config: {host, port, username, password}.
+        config: {host, port, username, password}; add `"show_all_databases": false`
+            and a `database` to list and open only that database.
 
     Returns {"ok": True, "name", "type", "databases"} or {"ok": False, "message"}.
     """

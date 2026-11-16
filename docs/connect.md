@@ -31,8 +31,8 @@ commit it; the app applies it on next start.
 
 ## Drivers
 
- ClickHouse and Postgres take host/port/username/password and present
-a database picker — for ClickHouse the picker lists `SHOW DATABASES`, for Postgres
+ClickHouse and Postgres take host/port/username/password and present
+a database picker (only the named **Database** when **Show all** is off) — for ClickHouse the picker lists `SHOW DATABASES`, for Postgres
 it lists real databases (`pg_database`) and the chosen one is where queries run.
 DuckDB takes a **path** (or `:memory:`) and has no network. A `.duckdb` file
 has **no picker** — connecting goes straight to the explorer; schema-qualify

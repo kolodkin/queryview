@@ -71,7 +71,7 @@ async def _raw_connect(c: PgConfig, database: str | None, command_timeout: float
 
 async def _raw_connect_bootstrap(c: PgConfig):
     """Connect to *some* database so we can enumerate the rest."""
-    candidates = [db for db in (c.database, c.username) if db] + list(_BOOTSTRAP_DBS)
+    candidates = ([c.username] if c.username else []) + list(_BOOTSTRAP_DBS)
     last: Exception | None = None
     for db in candidates:
         try:
@@ -142,7 +142,9 @@ class PostgresDriver:
 
     async def test(self, config: PgConfig) -> dict[str, Any]:
         try:
-            async with _connect_bootstrap(config) as conn:
+            # A named database is the one to check: no fallback to a maintenance one.
+            opened = _connect(config, config.database) if config.database else _connect_bootstrap(config)
+            async with opened as conn:
                 val = await conn.fetchval("SELECT 1")
                 return {"ok": True, "message": f"Connected — SELECT 1 returned {val}"}
         except Exception as e:  # noqa: BLE001
@@ -152,7 +154,7 @@ class PostgresDriver:
         self, config: PgConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
     ) -> DatabasesResult | Err:
         try:
-            if not config.show_all_databases:  # connecting still checks it is reachable
+            if not config.show_all_databases:  # connecting checks it is reachable
                 async with _connect(config, config.database):
                     return DatabasesResult([config.database])
             async with _connect_bootstrap(config) as conn:
