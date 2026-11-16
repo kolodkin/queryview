@@ -79,7 +79,7 @@ A **New connection** card shows its driver's form in place of the cards
 | Username | `default`   | ClickHouse user.                               |
 | Password | *(empty)*   | ClickHouse password.                           |
 | Database | *(empty)*   | Selected on connect; blank opens the picker.   |
-| Show all databases | on | Off: the picker lists only **Database**.       |
+| Show all | on       | Off: the picker lists only **Database**.       |
 
 Two actions:
 

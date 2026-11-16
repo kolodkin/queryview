@@ -50,7 +50,7 @@ export const DRIVERS: Record<string, DriverMeta> = {
       { key: 'database', label: 'Database', testid: 'ch-database', type: 'text', default: '' },
       {
         key: 'show_all_databases',
-        label: 'Show all databases',
+        label: 'Show all',
         testid: 'ch-show-all-dbs',
         type: 'checkbox',
         default: 'true',
@@ -82,7 +82,7 @@ export const DRIVERS: Record<string, DriverMeta> = {
       { key: 'database', label: 'Database', testid: 'pg-database', type: 'text', default: '' },
       {
         key: 'show_all_databases',
-        label: 'Show all databases',
+        label: 'Show all',
         testid: 'pg-show-all-dbs',
         type: 'checkbox',
         default: 'true',
