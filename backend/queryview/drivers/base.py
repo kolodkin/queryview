@@ -208,8 +208,7 @@ def _parse_port(raw: Any) -> int | None:
 def parse_host_port_config(body: Any) -> tuple[dict[str, Any] | None, str | None]:
     """Validate the fields shared by network drivers (ClickHouse, Postgres):
     host/port/username/password, plus an optional default `database` and
-    `show_all_databases` (off: the picker lists only that database, or the
-    server's default one when blank). Returns
+    `show_all_databases` (off: the picker lists only that database). Returns
     (fields, None) or (None, message)."""
     b = body if isinstance(body, dict) else {}
     raw_host = b.get("host")
@@ -223,6 +222,8 @@ def parse_host_port_config(body: Any) -> tuple[dict[str, Any] | None, str | None
         return None, "host required"
     if port is None:
         return None, "valid port required"
+    if not database and not show_all:
+        return None, "database required unless all databases are shown"
     fields = {"host": host, "port": port, "username": username, "password": password}
     return {**fields, "database": database, "show_all_databases": show_all}, None
 

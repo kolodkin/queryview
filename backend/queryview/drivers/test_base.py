@@ -171,5 +171,5 @@ def test_parse_host_port_config_takes_a_default_database():
     assert err is None and fields["database"] == "sales_reporting" and fields["show_all_databases"] is True
     fields, _ = parse_host_port_config({"host": "h", "port": "1", "database": "d", "show_all_databases": False})
     assert fields["show_all_databases"] is False
-    # Blank with show-all off is fine: the picker lists the server's default database.
-    assert parse_host_port_config({"host": "h", "port": "1", "show_all_databases": False})[1] is None
+    # Hiding the other databases needs one to show.
+    assert parse_host_port_config({"host": "h", "port": "1", "show_all_databases": False})[0] is None

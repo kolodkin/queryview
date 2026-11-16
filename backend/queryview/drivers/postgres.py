@@ -152,9 +152,9 @@ class PostgresDriver:
         self, config: PgConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
     ) -> DatabasesResult | Err:
         try:
-            if not config.show_all_databases:  # the one it connects to: the configured or default database
-                async with _connect_bootstrap(config) as conn:
-                    return DatabasesResult([await conn.fetchval("SELECT current_database()")])
+            if not config.show_all_databases:  # connecting still checks it is reachable
+                async with _connect(config, config.database):
+                    return DatabasesResult([config.database])
             async with _connect_bootstrap(config) as conn:
                 rows = await conn.fetch(
                     "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate ORDER BY datname"

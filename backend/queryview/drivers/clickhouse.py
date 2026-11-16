@@ -217,8 +217,8 @@ class ClickHouseDriver:
     async def list_databases(
         self, config: ChConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
     ) -> DatabasesResult | Err:
-        if not config.show_all_databases:  # the configured database, else the user's default
-            r = await ch_rows(config, "SELECT currentDatabase()", 1, database=config.database or None)
+        if not config.show_all_databases:  # still checks the server and the database answer
+            r = await ch_rows(config, "SELECT currentDatabase()", 1, database=config.database)
         else:
             r = await ch_rows(config, "SHOW DATABASES", 1)
         if isinstance(r, Err):
