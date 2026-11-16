@@ -26,12 +26,14 @@ class Dashboard(SQLModel, table=True):
     queries: str  # JSON text: {query_name: SQL}
     params: str = Field(default="[]")  # JSON text: selector specs (docs/dashboard.md)
     updated_at: int  # unix ms
+    commit_sha: str | None = None  # git commit whose content this row holds; None when unsynced or edited since
 
 
 async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -> None:
     """Upsert many dashboards — each a dict with `name`, `html`, a `queries`
-    dict and an optional `params` list — in one transaction, keyed by
-    (workspace, name). `queries` and `params` are serialized to JSON text."""
+    dict, an optional `params` list and an optional `commit_sha` — in one
+    transaction, keyed by (workspace, name). `queries` and `params` are
+    serialized to JSON text. A write without `commit_sha` clears it."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
         for d in items:
@@ -45,6 +47,7 @@ async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -
             row.html = d["html"]
             row.queries = json.dumps(d["queries"])
             row.params = json.dumps(d.get("params") or [])
+            row.commit_sha = d.get("commit_sha")
             row.updated_at = _now_ms()
             s.add(row)
         await s.commit()
@@ -57,14 +60,29 @@ async def upsert_dashboard(
     params: list[dict[str, Any]] | None = None,
     *,
     workspace_id: int,
+    commit_sha: str | None = None,
 ) -> None:
     """Upsert a dashboard by (workspace, name); `queries`/`params` are serialized to JSON text."""
     await upsert_dashboards(
-        [{"name": name, "html": html, "queries": queries, "params": params or []}], workspace_id=workspace_id
+        [{"name": name, "html": html, "queries": queries, "params": params or [], "commit_sha": commit_sha}],
+        workspace_id=workspace_id,
     )
 
 
-async def rename_dashboard(old: str, new: str, *, workspace_id: int) -> None:
+async def set_commit_sha(name: str, commit_sha: str | None, *, workspace_id: int) -> None:
+    """Record the git commit a dashboard's unchanged content matches (no-op when missing)."""
+    await _ensure_schema()
+    async with AsyncSession(_engine_for_db()) as s:
+        row = (
+            await s.exec(select(Dashboard).where(Dashboard.name == name, Dashboard.workspace_id == workspace_id))
+        ).first()
+        if row is not None:
+            row.commit_sha = commit_sha
+            s.add(row)
+            await s.commit()
+
+
+async def rename_dashboard(old: str, new: str, *, workspace_id: int, commit_sha: str | None = None) -> None:
     """Rename a dashboard; KeyError when `old` is missing, ValueError when `new` is taken."""
     await _ensure_schema()
     async with AsyncSession(_engine_for_db()) as s:
@@ -80,6 +98,7 @@ async def rename_dashboard(old: str, new: str, *, workspace_id: int) -> None:
             raise ValueError(f"dashboard {new!r} already exists")
         row = by_name[old]
         row.name = new
+        row.commit_sha = commit_sha
         row.updated_at = _now_ms()
         s.add(row)
         await s.commit()
@@ -106,6 +125,7 @@ def _payload(row: Dashboard) -> dict[str, Any]:
         "html": row.html,
         "queries": _loads(row.queries, {}),
         "params": _loads(row.params, []),
+        "commit_sha": row.commit_sha,
     }
 
 
@@ -134,7 +154,7 @@ async def list_dashboards(workspace_id: int) -> list[dict[str, Any]]:
         rows = (
             await s.exec(select(Dashboard).where(Dashboard.workspace_id == workspace_id).order_by(Dashboard.name))
         ).all()
-    return [{"name": r.name, "updated_at": r.updated_at} for r in rows]
+    return [{"name": r.name, "updated_at": r.updated_at, "commit_sha": r.commit_sha} for r in rows]
 
 
 async def list_dashboards_full(workspace_id: int) -> list[dict[str, Any]]:

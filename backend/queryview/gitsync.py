@@ -18,7 +18,14 @@ import yaml
 
 from . import connect
 from .connect import _data_dir
-from .dashboards import _dashboard_event, delete_dashboard, get_dashboard, rename_dashboard, upsert_dashboard
+from .dashboards import (
+    _dashboard_event,
+    delete_dashboard,
+    get_dashboard,
+    rename_dashboard,
+    set_commit_sha,
+    upsert_dashboard,
+)
 from .workspaces import WorkspaceRec, split_credential
 from .yamlio import YamlIOError, dashboard_from_data, dump_yaml, slug
 
@@ -331,6 +338,11 @@ async def _read_repo_entity(wd: Path, ref: str, relpath: str) -> dict[str, Any]:
     return dashboard_from_files({f: await _git("show", f"{ref}:{relpath}/{f}", cwd=wd) for f in DASHBOARD_FILES})
 
 
+async def _last_commit(wd: Path, ref: str, relpath: str) -> str:
+    """The commit at or before `ref` that last touched `relpath`."""
+    return (await _git("log", "-1", "--format=%H", ref, "--", relpath, cwd=wd)).strip()
+
+
 def _empty_merge() -> dict[str, Any]:
     return {"imported": [], "conflicts": []}
 
@@ -354,10 +366,15 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
         if local is None and agreed.get(key) == e["oid"]:
             continue  # deleted or renamed here since we last agreed: a local change
         if local is None:
-            await upsert_dashboard(name, repo["html"], repo["queries"], repo["params"], workspace_id=ws.id)
+            sha = await _last_commit(wd, head, e["relpath"])
+            await upsert_dashboard(
+                name, repo["html"], repo["queries"], repo["params"], workspace_id=ws.id, commit_sha=sha
+            )
             imported.append(entry)
             agreed[key] = e["oid"]
         elif dashboard_to_files(local) == dashboard_to_files(repo):
+            if local["commit_sha"] is None or agreed.get(key) != e["oid"]:
+                await set_commit_sha(name, await _last_commit(wd, head, e["relpath"]), workspace_id=ws.id)
             agreed[key] = e["oid"]
         elif agreed.get(key) == e["oid"]:
             pass  # only changed here: an uncommitted local change
@@ -493,7 +510,9 @@ async def save(ws: WorkspaceRec, d: dict[str, Any]) -> dict[str, Any]:
         return True
 
     async def after(wd: Path | None, committed: bool) -> None:
-        await upsert_dashboard(name, d["html"], d["queries"], d.get("params"), workspace_id=ws.id)
+        # Synced, the repo now holds exactly this content: a new commit or, unchanged, an older one.
+        sha = await _last_commit(wd, "HEAD", relpath) if wd is not None else None
+        await upsert_dashboard(name, d["html"], d["queries"], d.get("params"), workspace_id=ws.id, commit_sha=sha)
         if wd is not None and committed:
             await _agree(ws, wd, "HEAD", name)  # the repo now holds exactly the local copy
 
@@ -521,10 +540,12 @@ async def save_and_push(
 async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
     """A user's Rename: `git mv` the folder (when the repo has it) and rename the row."""
     src, dst = dashboard_reldir(old), dashboard_reldir(new)
+    moved_matches_row = False  # set by `stage`: the moved repo copy equals the row
 
     # Checked here, inside the lock and after the merge, because git goes first.
     async def stage(wd: Path, head: str | None) -> bool:
-        await _load_entity(ws, old)
+        nonlocal moved_matches_row
+        local = await _load_entity(ws, old)
         if await get_dashboard(new, ws.id) is not None:
             raise GitSyncError(f"dashboard {new!r} already exists", status=409)
         if head and await _tree_files(wd, head, dst):
@@ -532,6 +553,7 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
         if not (head and await _repo_entities(wd, head, src)):
             return False  # never committed: nothing for git to move
         repo = await _read_repo_entity(wd, head, src)
+        moved_matches_row = dashboard_to_files(local) == dashboard_to_files(repo)
         (wd / dst).parent.mkdir(parents=True, exist_ok=True)
         await _git("mv", src, dst, cwd=wd)
         meta = dashboard_to_files({**repo, "name": new})["meta.yaml"]  # the canonical name lives here
@@ -540,7 +562,9 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
         return True
 
     async def after(wd: Path | None, committed: bool) -> None:
-        await _db_or_status(rename_dashboard(old, new, workspace_id=ws.id))
+        holds_row = wd is not None and committed and moved_matches_row
+        sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip() if holds_row else None
+        await _db_or_status(rename_dashboard(old, new, workspace_id=ws.id, commit_sha=sha))
         # A conflict stays one: leaving `new` unagreed makes the next merge report it again.
         if wd is not None and not _forget(ws, old, rename_to=new) and committed:
             await _agree(ws, wd, "HEAD", new)
@@ -638,6 +662,7 @@ async def restore(ws: WorkspaceRec, kind: str, name: str, ref: str | None = None
             what = f"is missing {missing[0]}" if tree else "not found"
             raise GitSyncError(f"dashboard {name!r} {what} at {resolved}", status=404)
         data = await _read_repo_entity(wd, resolved, relpath)
+        sha = await _last_commit(wd, resolved, relpath)
 
     # DB upsert happens outside the git lock — it doesn't touch the workdir.
     await upsert_dashboard(
@@ -646,6 +671,7 @@ async def restore(ws: WorkspaceRec, kind: str, name: str, ref: str | None = None
         data["queries"],
         data["params"],
         workspace_id=ws.id,
+        commit_sha=sha,
     )
     # Taking a revision on purpose settles any conflict with the repo's head.
     if head:

@@ -93,7 +93,8 @@ def test_list_dashboards_orders_by_name_and_omits_payload(default_ws_id):
     names = [d["name"] for d in _run(list_dashboards(default_ws_id))]
     assert names.index("alpha") < names.index("zeta")
     row = next(d for d in _run(list_dashboards(default_ws_id)) if d["name"] == "alpha")
-    assert set(row) == {"name", "updated_at"}
+    assert set(row) == {"name", "updated_at", "commit_sha"}
+    assert row["commit_sha"] is None
 
 
 def _default_ws():

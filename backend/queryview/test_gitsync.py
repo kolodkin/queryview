@@ -229,7 +229,7 @@ def test_restore_dashboard_round_trip(git_env):
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
     _run(upsert_dashboard("gs rdash", "<html>v1</html>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
-    _run(_astore(_default_ws(), "gs rdash"))
+    sha = _run(_astore(_default_ws(), "gs rdash"))["sha"]
     _run(upsert_dashboard("gs rdash", "<html>v2</html>", {"q": "SELECT 2"}, workspace_id=_default_ws_id()))
     _run(gitsync.restore(_default_ws(), "dashboard", "gs rdash"))
     d = _run(get_dashboard("gs rdash", _default_ws_id()))
@@ -238,7 +238,44 @@ def test_restore_dashboard_round_trip(git_env):
         "html": "<html>v1</html>",
         "queries": {"q": "SELECT 1"},
         "params": [],
+        "commit_sha": sha,
     }
+
+
+def _sha(name: str, ws_id: int | None = None) -> str | None:
+    d = _run(get_dashboard(name, ws_id or _default_ws_id()))
+    assert d is not None
+    return d["commit_sha"]
+
+
+def test_commit_sha_follows_the_content_the_row_holds(git_env):
+    """Save, a no-op Save, Restore and a plain edit each leave the row's commit_sha right."""
+    shas = _store_versions("gs sha", ["<p>1</p>", "<p>2</p>"])
+    assert _sha("gs sha") == shas[1]
+    _store_versions("gs sha other", ["<p>x</p>"])  # an unrelated commit doesn't move it
+    assert _run(_astore(_default_ws(), "gs sha"))["committed"] is False
+    assert _sha("gs sha") == shas[1]
+    _run(gitsync.restore(_default_ws(), "dashboard", "gs sha", ref=shas[0]))
+    assert _sha("gs sha") == shas[0]
+    _save("gs sha", "<p>local</p>")  # edited outside git: no commit holds it
+    assert _sha("gs sha") is None
+
+
+def test_commit_sha_of_an_imported_or_renamed_dashboard(other_instance):
+    _save("gs sha in", "<p>1</p>", other_instance.id)
+    sha = _run(_astore(other_instance, "gs sha in"))["sha"]
+    _run(gitsync.sync(_default_ws()))
+    assert _sha("gs sha in") == sha
+    r = _run(gitsync.rename(_default_ws(), "gs sha in", "gs sha moved"))
+    assert r["committed"] and _sha("gs sha moved") == r["sha"]
+
+
+def test_renaming_a_locally_changed_dashboard_keeps_it_not_in_git(git_env):
+    """The rename commit moves the repo's copy, not the row's changed content."""
+    _store_versions("gs sha drift", ["<p>1</p>"])
+    _save("gs sha drift", "<p>local</p>")
+    r = _run(gitsync.rename(_default_ws(), "gs sha drift", "gs sha drift2"))
+    assert r["committed"] and _sha("gs sha drift2") is None
 
 
 def test_restore_missing_at_ref_is_404(git_env):

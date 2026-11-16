@@ -1,6 +1,6 @@
 // Workspaces, YAML export/import, git sync and popovers: none needs a database.
 import { readFileSync } from "node:fs";
-import { api, expect, sessionId, switchWorkspace, test } from "./fixtures";
+import { DUCK, api, connect, dashboardFrame, expect, sessionId, switchWorkspace, test } from "./fixtures";
 
 test("switcher isolates dashboards", async ({ page, baseURL }) => {
   // Uses a uniquely-named workspace and cleans it up so reruns are idempotent.
@@ -75,7 +75,7 @@ test("git controls disabled when unconfigured", async ({ page, baseURL }) => {
   await expect(page.getByTestId("git-commit")).toHaveCount(0); // Save commits
 });
 
-test("git save and restore dashboard round trip", async ({ page, baseURL }) => {
+test("git save and restore dashboard round trip", async ({ page, baseURL, seeds, shot }) => {
   test.skip(!(await gitConfigured(baseURL!)), "git sync is not configured for this stack");
   // Unique per attempt: a CI retry shares the remote, which keeps the first
   // attempt's commit.
@@ -88,7 +88,16 @@ test("git save and restore dashboard round trip", async ({ page, baseURL }) => {
   // Each Save is one commit; restore v1 from the revision list.
   expect((await save(1)).body.committed).toBe(true);
   await save(2);
+  // A YAML import overwrites the row outside git: the picker marks it until a restore.
+  const doc = `kind: dashboard\nname: ${name}\nhtml: <p>v3</p>\nqueries:\n  q: SELECT 3\n`;
+  expect((await fetch(`${baseURL}/api/import`, { method: "POST", body: doc })).ok).toBe(true);
+  // Connected, so the dashboard renders instead of asking for a database.
+  await connect(page, DUCK, await seeds.duckdb());
   await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
+  await expect(dashboardFrame(page).locator("body")).toContainText("v3");
+  const option = page.getByTestId("dashboard-select").locator("option", { hasText: name });
+  await expect(option).toHaveText(`${name} · not in git`);
+  await shot("imported dashboard marked not in git");
   page.on("dialog", (d) => d.accept());
   await page.getByTestId("git-restore-toggle").click();
   const rows = page.getByTestId("git-revision-row");
@@ -97,6 +106,9 @@ test("git save and restore dashboard round trip", async ({ page, baseURL }) => {
   await rows.last().getByTestId("git-revision-restore").click();
   // The picker closes on a successful restore; only then check the store.
   await expect(page.getByTestId("git-revisions")).toBeHidden();
+  await expect(option).toHaveText(name);
+  await expect(dashboardFrame(page).locator("body")).toContainText("v1");
+  await shot("restored dashboard no longer marked");
   const { body } = await api(`${baseURL}/api/dashboards/${encodeURIComponent(name)}`);
   expect(body.html).toContain("v1");
   expect(body.queries).toEqual({ q: "SELECT 1" });

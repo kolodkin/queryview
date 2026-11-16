@@ -78,6 +78,11 @@ one entity, so an entity's history is `git log -- <its path>`. Restore reads
 files at a chosen commit (`git show`) and overwrites the local DB row; HEAD
 never moves and history is append-only.
 
+Each dashboard row records `commit_sha`: the last commit that touched its
+folder and holds exactly the row's content. **Save**, **Rename**, **Restore**
+and a merge-in import or match set it. It is `NULL` in a workspace without a
+remote, and a YAML import clears it, since no commit holds that content.
+
 ## Committing
 
 Only a user's action on the [dashboard page](./dashboard.md#the-page-dashboard)
@@ -104,6 +109,11 @@ three only change the workspace.
 revision list (newest first, 10 at a time, scroll for more) and overwrites the
 local copy with the picked revision after confirmation. It is disabled when
 the active workspace has no remote configured.
+
+With a remote, the dashboard picker marks a dashboard no commit holds
+(`commit_sha` is `NULL`) as `<name> · not in git`. A row whose content
+matches the repo but has no `commit_sha` recorded yet gets one on the next
+[merge-in](#merge-in), e.g. **Sync**.
 
 ## API
 
