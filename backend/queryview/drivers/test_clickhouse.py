@@ -134,6 +134,9 @@ def test_list_databases_lists_only_the_configured_one_unless_show_all(monkeypatc
     r = asyncio.run(ClickHouseDriver().list_databases(cfg))
     assert isinstance(r, DatabasesResult) and r.databases == ["sales_reporting"]
     assert seen["database"] == "sales_reporting"
+    # Blank: the user's default database, by not naming one.
+    asyncio.run(ClickHouseDriver().list_databases(ChConfig("h", 1, "u", "", "", False)))
+    assert seen["database"] is None
 
 
 def test_list_tables_parses_rows_and_bytes_with_nulls(monkeypatch):
