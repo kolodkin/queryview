@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import struct
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from decimal import Decimal
 from typing import Any
 
 import aiomysql
-from pymysql.constants import FIELD_TYPE
+from pymysql.constants import COMMAND, FIELD_TYPE
+from pymysql.converters import conversions
 
 from .base import (
     DEFAULT_LIST_LIMIT,
@@ -108,8 +110,13 @@ def _to_rows(description: Any, records: Any, decode_json: bool = True) -> QueryR
     )
 
 
+# TIME as the server's text (`25:00:00`), not a timedelta; BIT as its integer value.
+_CONV = {**conversions, FIELD_TYPE.TIME: str, FIELD_TYPE.BIT: lambda b: int.from_bytes(b, "big")}
+_MULTI_STATEMENTS_OFF = struct.pack("<H", 1)
+
+
 async def _raw_connect(c: MySqlConfig, database: str | None):
-    return await aiomysql.connect(
+    conn = await aiomysql.connect(
         host=c.host,
         port=c.port,
         user=c.username or None,
@@ -120,7 +127,17 @@ async def _raw_connect(c: MySqlConfig, database: str | None):
         connect_timeout=query_timeout.get(),
         # Unbuffered: only the rows a caller fetches cross the wire.
         cursorclass=aiomysql.SSCursor,
+        conv=_CONV,
     )
+    # aiomysql always negotiates multi-statements; one call must run one statement,
+    # or `SET SESSION TRANSACTION READ WRITE; DELETE ...` escapes run_sql's read-only session.
+    try:
+        await conn._execute_command(COMMAND.COM_SET_OPTION, _MULTI_STATEMENTS_OFF)
+        await conn._read_packet()
+    except BaseException:
+        conn.close()
+        raise
+    return conn
 
 
 @asynccontextmanager
@@ -238,8 +255,9 @@ class MySqlDriver:
     async def run_sql(self, config: MySqlConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
         try:
             async with _connect(config, database) as conn:
-                # Unwrapped SQL could otherwise write; DDL still commits implicitly in MySQL.
-                await _fetch(conn, "START TRANSACTION READ ONLY", None, RUN_SQL_TIMEOUT_SECONDS)
+                # Unwrapped SQL could otherwise write. A session (not transaction) setting
+                # also refuses DDL and survives a COMMIT.
+                await _fetch(conn, "SET SESSION TRANSACTION READ ONLY", None, RUN_SQL_TIMEOUT_SECONDS)
                 description, rows, _ = await _fetch(conn, sql, max_rows, RUN_SQL_TIMEOUT_SECONDS)
                 return RowsResult(_to_rows(description or (), rows))
         except Exception as e:  # noqa: BLE001

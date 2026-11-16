@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import asyncio
 
-from pymysql.constants import FIELD_TYPE
+from pymysql.constants import COMMAND, FIELD_TYPE
 
 from queryview.drivers.base import SCRIPT_ROW_CAP, Column, Err, RowsResult, TablesResult, TextResult
-from queryview.drivers.mysql import MySqlConfig, MySqlDriver
+from queryview.drivers.mysql import MySqlConfig, MySqlDriver, _raw_connect
 
 CFG = MySqlConfig("h", 3306, "u", "")
 
@@ -77,10 +77,10 @@ def test_list_tables_reads_information_schema(monkeypatch):
 
 
 def test_run_sql_is_read_only_and_capped(monkeypatch):
-    log = _fake(monkeypatch, lambda sql: None if sql.startswith("START") else (ID, [(1,), (2,), (3,)]))
+    log = _fake(monkeypatch, lambda sql: None if sql.startswith("SET") else (ID, [(1,), (2,), (3,)]))
     r = asyncio.run(MySqlDriver().run_sql(CFG, "SHOW TABLES", "shop", 2))
     assert isinstance(r, RowsResult) and r.rows.data == [[1], [2]]
-    assert log["sql"] == ["START TRANSACTION READ ONLY", "SHOW TABLES"]
+    assert log["sql"] == ["SET SESSION TRANSACTION READ ONLY", "SHOW TABLES"]
 
 
 def test_execute_script_drains_rows_and_stops_at_the_first_error(monkeypatch):
@@ -109,3 +109,23 @@ def test_errors_become_err(monkeypatch):
     assert isinstance(asyncio.run(MySqlDriver().list_databases(CFG)), Err)
     assert asyncio.run(MySqlDriver().test(CFG))["ok"] is False
     assert not asyncio.run(MySqlDriver().execute_script(CFG, "SELECT 1", "shop"))[0].ok
+
+
+def test_connections_turn_multi_statements_off(monkeypatch):
+    # aiomysql always negotiates multi-statements; without this a single run_sql
+    # call could switch its session back to READ WRITE and then write.
+    sent = []
+
+    class _Conn:
+        async def _execute_command(self, command, arg):
+            sent.append((command, arg))
+
+        async def _read_packet(self):
+            pass
+
+    async def fake_connect(**kwargs):
+        return _Conn()
+
+    monkeypatch.setattr("queryview.drivers.mysql.aiomysql.connect", fake_connect)
+    asyncio.run(_raw_connect(CFG, "shop"))
+    assert sent == [(COMMAND.COM_SET_OPTION, b"\x01\x00")]  # MYSQL_OPTION_MULTI_STATEMENTS_OFF
