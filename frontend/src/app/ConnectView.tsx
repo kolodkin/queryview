@@ -630,7 +630,10 @@ function ConnectionForm({
   const [sessionOnly, setSessionOnly] = useState(false)
 
   function body() {
-    return { type: meta.type, ...values, session: sessionOnly }
+    const checks = meta.fields
+      .filter((f) => f.type === 'checkbox')
+      .map((f) => [f.key, values[f.key] === 'true'])
+    return { type: meta.type, ...values, ...Object.fromEntries(checks), session: sessionOnly }
   }
 
   async function testConnection() {
@@ -683,22 +686,34 @@ function ConnectionForm({
         <BackButton testid="form-back" onClick={onBack} />
       </div>
 
-      {meta.fields.map((f, i) => (
-        <label key={f.key} className="block text-sm font-medium text-slate-300">
-          {f.label}
-          <input
-            type={f.type}
-            value={values[f.key]}
-            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-            aria-label={f.label}
-            data-testid={f.testid}
-            autoFocus={i === 0}
-            readOnly={!!editing && f.key === 'name'}
-            placeholder={editing && f.type === 'password' ? 'unchanged' : undefined}
-            className={`mt-1 ${fieldClass} ${editing && f.key === 'name' ? 'opacity-60' : ''}`}
-          />
-        </label>
-      ))}
+      {meta.fields.map((f, i) =>
+        f.type === 'checkbox' ? (
+          <label key={f.key} className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={values[f.key] === 'true'}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: String(e.target.checked) }))}
+              data-testid={f.testid}
+            />
+            {f.label}
+          </label>
+        ) : (
+          <label key={f.key} className="block text-sm font-medium text-slate-300">
+            {f.label}
+            <input
+              type={f.type}
+              value={values[f.key]}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              aria-label={f.label}
+              data-testid={f.testid}
+              autoFocus={i === 0}
+              readOnly={!!editing && f.key === 'name'}
+              placeholder={editing && f.type === 'password' ? 'unchanged' : undefined}
+              className={`mt-1 ${fieldClass} ${editing && f.key === 'name' ? 'opacity-60' : ''}`}
+            />
+          </label>
+        ),
+      )}
 
       {!editing && (
         <label className="flex items-center gap-2 text-sm text-slate-300">

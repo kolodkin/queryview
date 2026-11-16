@@ -534,7 +534,9 @@ async def _build_session(
         # (the root "." at worst), so a folder connection never lands on a picker.
         database = listed.current
     elif not (database and database in databases):
-        database = None
+        # The connection's own default database (Postgres/ClickHouse), else the picker.
+        default = getattr(config, "database", None)
+        database = default if default in databases else None
     return (
         _SessionState(
             name=name,

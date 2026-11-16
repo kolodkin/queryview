@@ -127,6 +127,15 @@ def test_list_databases_reads_json_compact_rows(monkeypatch):
     assert seen["settings"] == JSON_COMPACT_SETTINGS
 
 
+def test_list_databases_lists_only_the_configured_one_unless_show_all(monkeypatch):
+    seen = {}
+    _capture(monkeypatch, seen, _json_compact(["currentDatabase()"], [["sales_reporting"]]))
+    cfg = ChConfig("h", 1, "u", "", "sales_reporting", False)
+    r = asyncio.run(ClickHouseDriver().list_databases(cfg))
+    assert isinstance(r, DatabasesResult) and r.databases == ["sales_reporting"]
+    assert seen["database"] == "sales_reporting"
+
+
 def test_list_tables_parses_rows_and_bytes_with_nulls(monkeypatch):
     d = ClickHouseDriver()
     seen = {}

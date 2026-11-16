@@ -223,7 +223,7 @@ def test_edit_reads_the_config_back_without_the_password_and_a_blank_one_keeps_i
     body = {"type": "clickhouse", "name": "edit-ch", "host": "h", "port": 8123, "username": "u", "password": "p"}
     assert c.post("/api/db/connect", json=body).json()["ok"]
     r = c.get("/api/db/connections/edit-ch").json()
-    config = {"host": "h", "port": 8123, "username": "u", "password": ""}
+    config = {"host": "h", "port": 8123, "username": "u", "password": "", "database": "", "show_all_databases": True}
     assert r == {"ok": True, "name": "edit-ch", "type": "clickhouse", "config": config}
     # A re-save with a blank password keeps the saved one; a new one replaces it.
     assert c.post("/api/db/connect", json={**body, "host": "h2", "password": ""}).json()["ok"]

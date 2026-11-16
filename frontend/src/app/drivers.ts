@@ -4,7 +4,8 @@ export type DriverField = {
   key: string
   label: string
   testid: string
-  type: 'text' | 'password'
+  // A checkbox holds 'true' / 'false', as the edit form's values arrive as text.
+  type: 'text' | 'password' | 'checkbox'
   default: string
 }
 
@@ -46,6 +47,14 @@ export const DRIVERS: Record<string, DriverMeta> = {
         default: 'default',
       },
       { key: 'password', label: 'Password', testid: 'ch-password', type: 'password', default: '' },
+      { key: 'database', label: 'Database', testid: 'ch-database', type: 'text', default: '' },
+      {
+        key: 'show_all_databases',
+        label: 'Show all databases',
+        testid: 'ch-show-all-dbs',
+        type: 'checkbox',
+        default: 'true',
+      },
     ],
   },
   postgres: {
@@ -70,6 +79,14 @@ export const DRIVERS: Record<string, DriverMeta> = {
         default: 'postgres',
       },
       { key: 'password', label: 'Password', testid: 'pg-password', type: 'password', default: '' },
+      { key: 'database', label: 'Database', testid: 'pg-database', type: 'text', default: '' },
+      {
+        key: 'show_all_databases',
+        label: 'Show all databases',
+        testid: 'pg-show-all-dbs',
+        type: 'checkbox',
+        default: 'true',
+      },
     ],
   },
   duckdb: {

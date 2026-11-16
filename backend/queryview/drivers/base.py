@@ -206,20 +206,26 @@ def _parse_port(raw: Any) -> int | None:
 
 
 def parse_host_port_config(body: Any) -> tuple[dict[str, Any] | None, str | None]:
-    """Validate the host/port/username/password fields shared by network drivers
-    (ClickHouse, Postgres). Returns ({host,port,username,password}, None) or
-    (None, message)."""
+    """Validate the fields shared by network drivers (ClickHouse, Postgres):
+    host/port/username/password, plus an optional default `database` and
+    `show_all_databases` (off: the picker lists only that database). Returns
+    (fields, None) or (None, message)."""
     b = body if isinstance(body, dict) else {}
     raw_host = b.get("host")
     host = raw_host.strip() if isinstance(raw_host, str) else ""
     port = _parse_port(b.get("port"))
     username = b.get("username") if isinstance(b.get("username"), str) else ""
     password = b.get("password") if isinstance(b.get("password"), str) else ""
+    database = b.get("database").strip() if isinstance(b.get("database"), str) else ""
+    show_all = b.get("show_all_databases") is not False
     if not host:
         return None, "host required"
     if port is None:
         return None, "valid port required"
-    return {"host": host, "port": port, "username": username, "password": password}, None
+    if not database and not show_all:
+        return None, "database required unless all databases are shown"
+    fields = {"host": host, "port": port, "username": username, "password": password}
+    return {**fields, "database": database, "show_all_databases": show_all}, None
 
 
 def select_all_sql(table: str, quote: str) -> str:

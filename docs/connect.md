@@ -78,6 +78,8 @@ A **New connection** card shows its driver's form in place of the cards
 | Port     | `8123`      | ClickHouse HTTP interface port.                |
 | Username | `default`   | ClickHouse user.                               |
 | Password | *(empty)*   | ClickHouse password.                           |
+| Database | *(empty)*   | Selected on connect; blank opens the picker.   |
+| Show all databases | on | Off: the picker lists only **Database**.       |
 
 Two actions:
 
@@ -290,7 +292,8 @@ session.
 | GET    | `/api/session`                | —                                      | `{connected, name?, type?, databases?, database?}` for the calling session |
 
 `test`/`connect` resolve the driver from `type` and validate per driver
-(ClickHouse/Postgres require `host` + `port` `1..65535`; DuckDB takes an optional
+(ClickHouse/Postgres require `host` + `port` `1..65535` and take an optional
+`database` and `show_all_databases`, default `true`, `false` needing a `database`; DuckDB takes an optional
 `path`, SQLite a required file path); validation errors return `400`. ClickHouse queries run over the HTTP
 interface with HTTP Basic auth, within the session's
 [query timeout](./queryview.md#query-timeout).
