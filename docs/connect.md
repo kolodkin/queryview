@@ -32,8 +32,9 @@ commit it; the app applies it on next start.
 ## Drivers
 
 ClickHouse and Postgres take host/port/username/password and present
-a database picker (only the named **Database** when **Show all** is off) — for ClickHouse the picker lists `SHOW DATABASES`, for Postgres
+a database picker — for ClickHouse the picker lists `SHOW DATABASES`, for Postgres
 it lists real databases (`pg_database`) and the chosen one is where queries run.
+A named **Database** narrows the picker to that one and opens on it.
 DuckDB takes a **path** (or `:memory:`) and has no network. A `.duckdb` file
 has **no picker** — connecting goes straight to the explorer; schema-qualify
 tables in SQL as needed. A **folder** gets the folder picker instead: its
@@ -292,8 +293,8 @@ session.
 | GET    | `/api/session`                | —                                      | `{connected, name?, type?, databases?, database?}` for the calling session |
 
 `test`/`connect` resolve the driver from `type` and validate per driver
-(ClickHouse/Postgres require `host` + `port` `1..65535` and take
-an optional `database`, the only one listed; DuckDB takes an optional
+(ClickHouse/Postgres require `host` + `port` `1..65535`, `database` optional;
+DuckDB takes an optional
 `path`, SQLite a required file path); validation errors return `400`. ClickHouse queries run over the HTTP
 interface with HTTP Basic auth, within the session's
 [query timeout](./queryview.md#query-timeout).
