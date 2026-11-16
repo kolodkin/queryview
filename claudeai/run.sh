@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Start (or stop) the e2e backing services that claudeai/setup.sh installed:
-# ClickHouse on :8123, Postgres on :5432, MySQL (MariaDB) on :3306 and a loopback git daemon on :9418
+# ClickHouse on :8123, Postgres on :5432, MySQL on :3306 and a loopback git daemon on :9418
 # serving a fresh bare repo for the git-sync e2e. Idempotent — reuses anything
 # already listening. Only starts what is installed; a missing binary or
 # cluster is an error that points at the matching setup_<svc>.sh.

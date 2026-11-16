@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Ensure a local MySQL-compatible server (MariaDB) is available for the e2e suite.
+# Ensure a local MySQL server is available for the e2e suite.
 #
-# Reuses one already answering on $MYSQL_PORT. Otherwise installs mariadb-server
+# Reuses one already answering on $MYSQL_PORT. Otherwise installs mysql-server
 # via apt when missing, initializes a data dir in .cache/mysqldata and starts
 # the server in the background as the `mysql` user. root logs in over TCP with
 # no password (local dev only), what CI's mysql service provides.
@@ -42,11 +42,12 @@ if command -v mysqladmin >/dev/null 2>&1 && up; then
   exit 0
 fi
 
-if ! command -v mariadbd >/dev/null 2>&1; then
-  [ "$(id -u)" = "0" ] || die "mariadbd not found (install mariadb-server)"
-  log "installing mariadb-server"
-  (apt-get install -y -q mariadb-server || { apt-get update -q && apt-get install -y -q mariadb-server; }) >/dev/null \
-    || die "apt-get install mariadb-server failed"
+if ! command -v mysqld >/dev/null 2>&1; then
+  [ "$(id -u)" = "0" ] || die "mysqld not found (install mysql-server)"
+  log "installing mysql-server"
+  export DEBIAN_FRONTEND=noninteractive
+  (apt-get install -y -q mysql-server || { apt-get update -q && apt-get install -y -q mysql-server; }) >/dev/null \
+    || die "apt-get install mysql-server failed"
 fi
 
 mkdir -p "$CACHE"
@@ -55,14 +56,14 @@ if [ ! -d "$DATA/mysql" ]; then
   rm -rf "$DATA"
   mkdir -p "$DATA"
   chown mysql:mysql "$DATA"
-  mariadb-install-db --user=mysql --datadir="$DATA" --auth-root-authentication-method=normal >/dev/null \
-    || die "mariadb-install-db failed"
+  # root@localhost with an empty password
+  mysqld --initialize-insecure --user=mysql --datadir="$DATA" 2>>"$LOG" || die "mysqld --initialize failed (see $LOG)"
 fi
 
 : > "$LOG"
 chown mysql:mysql "$LOG"
 log "starting server on :$PORT"
-mariadbd --user=mysql --datadir="$DATA" --port="$PORT" --bind-address=127.0.0.1 \
+mysqld --user=mysql --datadir="$DATA" --port="$PORT" --bind-address=127.0.0.1 --mysqlx=OFF --secure-file-priv=NULL \
   --socket="$SOCK" --pid-file="$PIDFILE" --log-error="$LOG" >/dev/null 2>&1 &
 
 for _ in $(seq 1 60); do

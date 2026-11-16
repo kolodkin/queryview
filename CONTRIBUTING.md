@@ -103,7 +103,7 @@ runs on one worker.
 
 The suite needs a real ClickHouse (`:8123`), Postgres (`:5432`) and MySQL (`:3306`), the way CI
 has them. The scripts under `claudeai/` install and run them locally (standalone
-ClickHouse binary, a Postgres cluster and a MariaDB data dir under `.cache/`); they are written for
+ClickHouse binary, a Postgres cluster and a MySQL data dir under `.cache/`); they are written for
 the Claude Code web container and refuse to run elsewhere unless you opt in:
 
 ```bash
