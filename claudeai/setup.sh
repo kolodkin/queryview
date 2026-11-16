@@ -8,8 +8,8 @@
 #                                start a server on :8123
 #   4. setup_postgres.sh       — initdb a cluster in .cache/pgdata, start a
 #                                server on :5432
-#   5. setup_mysql.sh         — install MySQL, init .cache/mysqldata, start a
-#                                server on :3306 (root, no password)
+#   5. setup_mysql.sh         — download MySQL 8.4 into .cache/mysql, init
+#                                .cache/mysqldata, start a server on :3306
 #   6. setup_git_daemon.sh     — a loopback git daemon on :9418 serving a bare
 #                                repo in .cache/gitsrv for the git-sync e2e
 #
