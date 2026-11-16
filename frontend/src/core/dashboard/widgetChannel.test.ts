@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  chipValue,
   parseFieldsAttr,
   parseOrderByAttr,
   parseWidgetRequest,
@@ -112,5 +113,25 @@ describe('rejectedWidgetReply', () => {
     expect(rejectedWidgetReply({ type: 'set-params', id: 'a' })).toBeNull()
     expect(rejectedWidgetReply({ type: 'widget-query' })).toBeNull()
     expect(rejectedWidgetReply(null)).toBeNull()
+  })
+})
+
+const queries = { totals: { revenue: ['1234567890123', 5], orders: [42] }, none: { n: [] } }
+
+describe('chipValue', () => {
+  it('takes row 1 of the named column, unrounded', () => {
+    expect(chipValue(queries, 'totals', 'revenue')).toEqual({ value: '1234567890123' })
+  })
+  it('defaults to the first column', () => {
+    expect(chipValue(queries, 'totals', null)).toEqual({ value: '1234567890123' })
+  })
+  it('shows a dash for no rows or a null', () => {
+    expect(chipValue(queries, 'none', null)).toEqual({ value: '—' })
+    expect(chipValue({ q: { v: [null] } }, 'q', 'v')).toEqual({ value: '—' })
+  })
+  it('names an unknown query or column', () => {
+    expect(chipValue(queries, 'missing', null)).toEqual({ error: 'Unknown query “missing”' })
+    expect(chipValue(queries, 'totals', 'cost')).toEqual({ error: 'Unknown column “cost”' })
+    expect(chipValue(undefined, 'totals', null)).toEqual({ error: 'Unknown query “totals”' })
   })
 })

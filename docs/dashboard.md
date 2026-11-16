@@ -112,11 +112,12 @@ Load any chart library from a CDN inside the HTML. A minimal dashboard:
 
 ## Widgets
 
-Dashboard HTML may use two tags anywhere in its own layout. They render in the
+Dashboard HTML may use three tags anywhere in its own layout. They render in the
 frame with the rest of the page; only dashboards that use one load them.
 
 ```html
 <qv-param name="region"></qv-param>
+<qv-chip query="totals" column="revenue" label="Revenue"></qv-chip>
 <qv-select-view query="sales" limit="100" order-by="day desc" fields="day,revenue">
   <template column="revenue"><strong>{cell}</strong></template>
   <template column="name">
@@ -143,6 +144,11 @@ frame with the rest of the page; only dashboards that use one load them.
 - **`<qv-param name>`** — the selector for one
   [dashboard parameter](#dashboard-parameters): a dropdown, or a checkbox for a
   `dimension`. A change re-runs the dashboard.
+- **`<qv-chip query>`** — one value as a pill: row 1 of `column` (default: the
+  query's first column), after an optional `label`. It reads
+  `window.queries`, so the query stays there for the page's own script, and
+  follows each re-run. No rows shows `—`; a bad name shows
+  `Unknown query “…”` or `Unknown column “…”`.
 
 A query a `<qv-select-view>` names belongs to that widget: it runs per page
 through `/api/db/query`, is **not** in `window.queries`, and a failure shows in

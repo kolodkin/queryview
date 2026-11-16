@@ -3,7 +3,8 @@
 // sends values only; the host substitutes and runs the dashboard's own SQL.
 
 import type { Field, OrderCol } from '../presentation/FieldPickers'
-import type { Cell, ColumnMeta } from '../results/rows'
+import { type Cell, type ColumnMeta, cellText } from '../results/rows'
+import type { DashboardResults } from './srcDoc'
 
 export type WidgetRequest =
   | {
@@ -113,4 +114,18 @@ export function parseFieldsAttr(attr: string | null): string[] {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean)
+}
+
+// `<qv-chip>`: row 1 of `column` (default: the first column), or the reason there is none.
+export function chipValue(
+  queries: DashboardResults | undefined,
+  query: string,
+  column: string | null,
+): { value: string } | { error: string } {
+  const cols = queries?.[query]
+  if (!cols) return { error: `Unknown query “${query}”` }
+  const name = column ?? Object.keys(cols)[0]
+  const values = name === undefined ? [] : cols[name]
+  if (!values) return { error: `Unknown column “${name}”` }
+  return { value: values.length ? cellText(values[0] as Cell) || '—' : '—' }
 }

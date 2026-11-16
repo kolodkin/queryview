@@ -35,17 +35,19 @@ Use `push_dashboard` only when the user asks for it.
 `push_dashboard` renders HTML fed by named queries as an unsaved draft; re-push to revise
 it. See the tool's description for the `window.queries` and `params` contract.
 
-Two tags save hand-drawing a table or a selector; place them anywhere in the HTML:
+Three tags save hand-drawing a table, a selector or a KPI; place them anywhere in the HTML:
 
 ```html
 <qv-param name="region"></qv-param>
+<qv-chip query="totals" column="revenue" label="Revenue"></qv-chip>
 <qv-select-view query="sales" limit="100" order-by="day desc">
   <template column="revenue"><strong>{cell}</strong></template>
 </qv-select-view>
 ```
 
 `<qv-select-view>` pages the named query (it is then not in `window.queries`);
-a `<template column>` designs a column with `{cell}` and `{row.<column>}`. Put
+`<qv-chip>` shows row 1 of `column` (the query stays in
+`window.queries`); a `<template column>` designs a column with `{cell}` and `{row.<column>}`. Put
 placeholders in text or inside `href` / `src` only.
 
 Never name a new dashboard: push it unnamed and the user names it on Save.

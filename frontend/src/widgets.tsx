@@ -3,6 +3,7 @@
 // sandboxed dashboard frame, never in the app. See docs/dashboard.md.
 
 import { MAX_LIMIT, parseFieldsAttr, parseOrderByAttr } from './core/dashboard/widgetChannel'
+import { Chip } from './core/widgets/Chip'
 import { ParamSelect } from './core/widgets/ParamSelect'
 import { SelectView } from './core/widgets/SelectView'
 import { defineWidget } from './core/widgets/mount'
@@ -10,6 +11,18 @@ import { defineWidget } from './core/widgets/mount'
 defineWidget(
   'qv-param',
   (host) => <ParamSelect name={host.getAttribute('name') ?? ''} />,
+  'inline-block',
+)
+
+defineWidget(
+  'qv-chip',
+  (host) => (
+    <Chip
+      query={host.getAttribute('query') ?? ''}
+      column={host.getAttribute('column')}
+      label={host.getAttribute('label')}
+    />
+  ),
   'inline-block',
 )
 

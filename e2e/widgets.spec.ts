@@ -18,6 +18,23 @@ test("qv-param reruns the dashboard", async ({ page, seeds, baseURL }) => {
   await expect(frame.locator("#out")).toHaveText("beta");
 });
 
+test("qv-chip shows a value and follows a param", async ({ page, seeds, baseURL, shot }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "chip-widget",
+    html:
+      '<qv-param name="pick"></qv-param> <qv-chip query="q" column="name" label="Item"></qv-chip>' +
+      ' <qv-chip query="q" column="cost"></qv-chip>',
+    queries: { q: "SELECT id, name FROM items WHERE name = {pick}" },
+    params: [{ name: "pick", options_sql: "SELECT name FROM items ORDER BY id" }],
+  });
+  await expect(frame.getByTestId("qv-chip")).toHaveText("alpha");
+  await expect(frame.getByTestId("qv-error")).toHaveText("Unknown column “cost”");
+  await frame.getByTestId("qv-param").selectOption("beta");
+  await expect(frame.getByTestId("qv-chip")).toHaveText("beta");
+  await shot("chip after a param change");
+});
+
 const VIEW = '<qv-select-view query="q" limit="2" order-by="id"></qv-select-view>';
 const ITEMS = { q: "SELECT id, name FROM items" };
 
