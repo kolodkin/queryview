@@ -42,7 +42,7 @@ const uniqueTable = (prefix: string) => `${prefix}_${crypto.randomUUID().replace
 async function dropTable(c: DriverCase, seed: string, table: string): Promise<void> {
   const sql = `DROP TABLE IF EXISTS ${table}`;
   if (c.id === "clickhouse") await chExec(`DROP TABLE IF EXISTS ${chDb()}.${table}`);
-  else await dbExec(c.id === "postgres" ? "pg" : c.id === "mysql" ? "my" : (c.id as "duckdb" | "sqlite"), seed, sql);
+  else await dbExec(c.id as "postgres" | "mysql" | "duckdb" | "sqlite", seed, sql);
 }
 
 async function openScriptsPage(page: Page): Promise<void> {

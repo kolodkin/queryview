@@ -4,11 +4,9 @@ picker lists the server's databases and the selected one is where queries run.""
 from __future__ import annotations
 
 import asyncio
-import json
 import struct
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
-from decimal import Decimal
 from typing import Any
 
 import aiomysql
@@ -32,6 +30,7 @@ from .base import (
     build_order_by,
     error_message,
     parse_host_port_config,
+    parse_json_text,
     query_timeout,
     run_script,
     to_csv,
@@ -100,13 +99,7 @@ def _to_rows(description: Any, records: Any, decode_json: bool = True) -> QueryR
     is_json = [decode_json and c.type == "json" for c in meta]
     return QueryRows(
         meta,
-        [
-            [
-                to_json_value(json.loads(v, parse_float=Decimal) if j and isinstance(v, str) else v)
-                for v, j in zip(r, is_json, strict=True)
-            ]
-            for r in records
-        ],
+        [[to_json_value(parse_json_text(v) if j else v) for v, j in zip(r, is_json, strict=True)] for r in records],
     )
 
 
@@ -125,8 +118,6 @@ async def _raw_connect(c: MySqlConfig, database: str | None):
         charset="utf8mb4",
         autocommit=True,
         connect_timeout=query_timeout.get(),
-        # Unbuffered: only the rows a caller fetches cross the wire.
-        cursorclass=aiomysql.SSCursor,
         conv=_CONV,
     )
     # aiomysql always negotiates multi-statements; one call must run one statement,
@@ -159,7 +150,8 @@ async def _fetch(
     unfetched rest so the connection can run another statement."""
 
     async def go():
-        cur = await conn.cursor()
+        # Unbuffered when capped, so only the rows fetched cross the wire.
+        cur = await conn.cursor(aiomysql.Cursor if max_rows is None else aiomysql.SSCursor)
         await cur.execute(sql)
         if cur.description is None:
             return None, [], cur.rowcount

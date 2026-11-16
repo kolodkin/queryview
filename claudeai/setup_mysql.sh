@@ -47,7 +47,7 @@ fi
 # The tarball links libaio.so.1, symlinked into its lib/ below when the system names it differently.
 export LD_LIBRARY_PATH="$MY/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 mkdir -p "$CACHE"
-if [ ! -x "$MY/bin/mysqld" ] || ! "$MY/bin/mysqld" --version 2>/dev/null | grep -q " $VERSION "; then
+if [ ! -x "$MY/bin/mysqld" ] || ! "$MY/bin/mysqladmin" --version 2>/dev/null | grep -q " $VERSION "; then
   name="mysql-$VERSION-linux-glibc2.28-x86_64-minimal"
   log "downloading $name"
   curl -fsSL --retry 3 -o "$CACHE/$name.tar.xz" "https://dev.mysql.com/get/Downloads/MySQL-${VERSION%.*}/$name.tar.xz" \
@@ -59,15 +59,11 @@ if [ ! -x "$MY/bin/mysqld" ] || ! "$MY/bin/mysqld" --version 2>/dev/null | grep 
 fi
 
 # Ubuntu 24.04 ships libaio.so.1 as libaio.so.1t64.
-if ! ldconfig -p | grep -q 'libaio\.so\.1 '; then
-  aio=$(ldconfig -p | awk '/libaio\.so\.1t64 /{print $NF; exit}')
-  if [ -z "$aio" ]; then
-    command -v apt-get >/dev/null 2>&1 || die "libaio missing (install libaio1)"
-    apt-get install -y -q libaio1t64 >/dev/null 2>&1 || apt-get install -y -q libaio1 >/dev/null || die "libaio install failed"
-    aio=$(ldconfig -p | awk '/libaio\.so\.1(t64)? /{print $NF; exit}')
-  fi
-  ln -sf "$aio" "$MY/lib/libaio.so.1"
+aio() { ldconfig -p | awk '/libaio\.so\.1(t64)? /{print $NF; exit}'; }
+if [ -z "$(aio)" ]; then
+  apt-get install -y -q libaio1t64 >/dev/null 2>&1 || apt-get install -y -q libaio1 >/dev/null || die "libaio missing (install libaio1)"
 fi
+[ -e "$MY/lib/libaio.so.1" ] || ln -s "$(aio)" "$MY/lib/libaio.so.1"
 
 # mysqld refuses to run as root.
 id mysql >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin mysql

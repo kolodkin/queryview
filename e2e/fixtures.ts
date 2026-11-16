@@ -99,7 +99,7 @@ export async function chExec(sql: string): Promise<void> {
 const PY_EXEC = `
 import sys
 kind, target, *stmts = sys.argv[1:]
-if kind == "pg":
+if kind == "postgres":
     import asyncio, os, asyncpg
     async def go():
         c = await asyncpg.connect(host=os.environ["PG_HOST"], port=int(os.environ["PG_PORT"]),
@@ -110,7 +110,7 @@ if kind == "pg":
         finally:
             await c.close()
     asyncio.run(go())
-elif kind == "my":
+elif kind == "mysql":
     import os, pymysql
     c = pymysql.connect(host=os.environ["MY_HOST"], port=int(os.environ["MY_PORT"]), user=os.environ["MY_USER"],
         password=os.environ["MY_PASSWORD"], database=target or None, autocommit=True)
@@ -128,7 +128,7 @@ else:
 `;
 
 /** Run statements on Postgres/MySQL database `target` ("" for none), or a DuckDB/SQLite file. */
-export async function dbExec(kind: "pg" | "my" | "duckdb" | "sqlite", target: string, ...stmts: string[]): Promise<void> {
+export async function dbExec(kind: "postgres" | "mysql" | "duckdb" | "sqlite", target: string, ...stmts: string[]): Promise<void> {
   await promisify(execFile)(join(VENV_BIN, "python"), ["-c", PY_EXEC, kind, target, ...stmts], {
     env: { ...process.env, PG_HOST, PG_PORT, PG_USER, PG_PASSWORD, MY_HOST, MY_PORT, MY_USER, MY_PASSWORD },
   });
@@ -397,13 +397,13 @@ export const test = base.extend<
           return db;
         }),
         pgDb: once("pgDb", async () => {
-          await dbExec("pg", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`, `CREATE DATABASE ${db}`);
-          await dbExec("pg", db, ITEMS_DDL("items"), ITEMS_ROWS("items"));
+          await dbExec("postgres", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`, `CREATE DATABASE ${db}`);
+          await dbExec("postgres", db, ITEMS_DDL("items"), ITEMS_ROWS("items"));
           return db;
         }),
         myDb: once("myDb", async () => {
-          await dbExec("my", "", `DROP DATABASE IF EXISTS ${db}`, `CREATE DATABASE ${db}`);
-          await dbExec("my", db, ITEMS_DDL("items"), ITEMS_ROWS("items"));
+          await dbExec("mysql", "", `DROP DATABASE IF EXISTS ${db}`, `CREATE DATABASE ${db}`);
+          await dbExec("mysql", db, ITEMS_DDL("items"), ITEMS_ROWS("items"));
           return db;
         }),
         duckdb: once("duckdb", () => duck("qv", "items")),
@@ -437,8 +437,8 @@ export const test = base.extend<
       };
       await use(seeds);
       if (memo.has("testDb")) await chExec(`DROP DATABASE IF EXISTS ${db}`);
-      if (memo.has("pgDb")) await dbExec("pg", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`);
-      if (memo.has("myDb")) await dbExec("my", "", `DROP DATABASE IF EXISTS ${db}`);
+      if (memo.has("pgDb")) await dbExec("postgres", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`);
+      if (memo.has("myDb")) await dbExec("mysql", "", `DROP DATABASE IF EXISTS ${db}`);
       rmSync(tmp, { recursive: true, force: true });
     },
     { scope: "worker" },

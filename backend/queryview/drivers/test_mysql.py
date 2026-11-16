@@ -37,7 +37,8 @@ def _fake(monkeypatch, results):
             log["drained"] += 1
 
     class _Conn:
-        async def cursor(self):
+        async def cursor(self, cls):
+            log.setdefault("cursors", []).append(cls.__name__)
             return _Cursor()
 
         def close(self):
@@ -62,6 +63,7 @@ def test_run_query_builds_aliased_backtick_sql_and_decodes_json(monkeypatch):
     assert r.rows.meta == [Column("id", "bigint"), Column("doc", "json")]
     assert r.rows.data == [[str(2**60), {"a": "1.5"}]]
     assert log["database"] == "shop" and log.get("closed")
+    assert log["cursors"] == ["Cursor"]  # a LIMIT-bounded page is buffered
     assert log["sql"] == ["SELECT * FROM (\nSELECT * FROM t\n) AS _qv ORDER BY `a``b` DESC LIMIT 50 OFFSET 10"]
 
     csv = asyncio.run(MySqlDriver().export_csv(CFG, "SELECT 1", "shop", 50, 0, None))
@@ -98,6 +100,7 @@ def test_execute_script_drains_rows_and_stops_at_the_first_error(monkeypatch):
     assert [(r.ok, r.status) for r in out] == [(True, "OK, 2 rows affected"), (True, ""), (False, "")]
     assert out[1].truncated and len(out[1].rows.data) == SCRIPT_ROW_CAP
     assert log["fetchmany"] == SCRIPT_ROW_CAP + 1 and log["drained"] == 1
+    assert set(log["cursors"]) == {"SSCursor"}  # capped: unbuffered
     assert "missing" in out[2].message and len(log["sql"]) == 3
 
 
