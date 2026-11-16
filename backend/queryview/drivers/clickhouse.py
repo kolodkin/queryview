@@ -39,8 +39,7 @@ class ChConfig:
     port: int
     username: str
     password: str
-    database: str = ""  # with show_all_databases off, the only database listed (and selected)
-    show_all_databases: bool = True
+    database: str = ""  # the only database listed and opened; blank lists them all
 
 
 # JSONCompact output settings: values a JS number would mangle are quoted by
@@ -209,7 +208,7 @@ class ClickHouseDriver:
         return ChConfig(**data)
 
     async def test(self, config: ChConfig) -> dict[str, Any]:
-        r = await ch_query(config, "SELECT 1", ChText, database=config.database or None)
+        r = await ch_query(config, "SELECT 1", ChText, database=config.database)
         if isinstance(r, Err):
             return {"ok": False, "message": r.message}
         return {"ok": True, "message": f"Connected — SELECT 1 returned {r.text}"}
@@ -217,10 +216,10 @@ class ClickHouseDriver:
     async def list_databases(
         self, config: ChConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
     ) -> DatabasesResult | Err:
-        if not config.show_all_databases:  # still checks the server and the database answer
-            r = await ch_rows(config, "SELECT currentDatabase()", 1, database=config.database)
-        else:
-            r = await ch_rows(config, "SHOW DATABASES", 1)
+        if config.database:  # still checks the server and the database answer
+            r = await ch_rows(config, "SELECT 1", 1, database=config.database)
+            return r if isinstance(r, Err) else DatabasesResult([config.database], current=config.database)
+        r = await ch_rows(config, "SHOW DATABASES", 1)
         if isinstance(r, Err):
             return r
         return DatabasesResult([row[0] for row in r.data])

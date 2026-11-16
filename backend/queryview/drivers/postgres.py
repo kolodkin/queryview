@@ -44,8 +44,7 @@ class PgConfig:
     port: int
     username: str
     password: str
-    database: str = ""  # with show_all_databases off, the only database listed (and selected)
-    show_all_databases: bool = True
+    database: str = ""  # the only database listed and opened; blank lists them all
 
 
 def parse_pg_config(body: Any) -> tuple[PgConfig | None, str | None]:
@@ -154,9 +153,9 @@ class PostgresDriver:
         self, config: PgConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
     ) -> DatabasesResult | Err:
         try:
-            if not config.show_all_databases:  # connecting checks it is reachable
+            if config.database:  # connecting checks it is reachable
                 async with _connect(config, config.database):
-                    return DatabasesResult([config.database])
+                    return DatabasesResult([config.database], current=config.database)
             async with _connect_bootstrap(config) as conn:
                 rows = await conn.fetch(
                     "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate ORDER BY datname"

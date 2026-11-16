@@ -4,9 +4,11 @@ export type DriverField = {
   key: string
   label: string
   testid: string
-  // A checkbox holds 'true' / 'false', as the edit form's values arrive as text.
-  type: 'text' | 'password' | 'checkbox'
+  type: 'text' | 'password'
   default: string
+  // A "Show all" checkbox above the field: checked while it is blank, and
+  // checking it clears the field.
+  showAll?: boolean
 }
 
 export type DriverMeta = {
@@ -48,13 +50,13 @@ export const DRIVERS: Record<string, DriverMeta> = {
       },
       { key: 'password', label: 'Password', testid: 'ch-password', type: 'password', default: '' },
       {
-        key: 'show_all_databases',
-        label: 'Show all',
-        testid: 'ch-show-all-dbs',
-        type: 'checkbox',
-        default: 'true',
+        key: 'database',
+        label: 'Database',
+        testid: 'ch-database',
+        type: 'text',
+        default: '',
+        showAll: true,
       },
-      { key: 'database', label: 'Database', testid: 'ch-database', type: 'text', default: '' },
     ],
   },
   postgres: {
@@ -80,13 +82,13 @@ export const DRIVERS: Record<string, DriverMeta> = {
       },
       { key: 'password', label: 'Password', testid: 'pg-password', type: 'password', default: '' },
       {
-        key: 'show_all_databases',
-        label: 'Show all',
-        testid: 'pg-show-all-dbs',
-        type: 'checkbox',
-        default: 'true',
+        key: 'database',
+        label: 'Database',
+        testid: 'pg-database',
+        type: 'text',
+        default: '',
+        showAll: true,
       },
-      { key: 'database', label: 'Database', testid: 'pg-database', type: 'text', default: '' },
     ],
   },
   duckdb: {

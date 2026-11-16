@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { filterNames, useDismiss } from '../core'
@@ -629,23 +629,8 @@ function ConnectionForm({
   // Session only: kept in this session's memory, never saved.
   const [sessionOnly, setSessionOnly] = useState(false)
 
-  // Show all and Database are mutually exclusive: naming a database unchecks
-  // Show all, clearing it checks it again, and checking it clears the name.
-  function setField(key: string, value: string) {
-    setValues((v) => {
-      const next = { ...v, [key]: value }
-      if (key === 'database' && 'show_all_databases' in v)
-        next.show_all_databases = String(!value.trim())
-      if (key === 'show_all_databases' && value === 'true') next.database = ''
-      return next
-    })
-  }
-
   function body() {
-    const checks = meta.fields
-      .filter((f) => f.type === 'checkbox')
-      .map((f) => [f.key, values[f.key] === 'true'])
-    return { type: meta.type, ...values, ...Object.fromEntries(checks), session: sessionOnly }
+    return { type: meta.type, ...values, session: sessionOnly }
   }
 
   async function testConnection() {
@@ -698,25 +683,32 @@ function ConnectionForm({
         <BackButton testid="form-back" onClick={onBack} />
       </div>
 
-      {meta.fields.map((f, i) =>
-        f.type === 'checkbox' ? (
-          <label key={f.key} className="flex items-center gap-2 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              checked={values[f.key] === 'true'}
-              onChange={(e) => setField(f.key, String(e.target.checked))}
-              data-testid={f.testid}
-            />
-            {f.label}
-          </label>
-        ) : (
-          <label key={f.key} className="block text-sm font-medium text-slate-300">
+      {meta.fields.map((f, i) => (
+        <Fragment key={f.key}>
+          {f.showAll && (
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={!values[f.key].trim()}
+                // Unchecking only makes sense with a name: it moves to the field.
+                onChange={(e) =>
+                  e.target.checked
+                    ? setValues((v) => ({ ...v, [f.key]: '' }))
+                    : document.getElementById(f.testid)?.focus()
+                }
+                data-testid={`${f.testid}-show-all`}
+              />
+              Show all
+            </label>
+          )}
+          <label className="block text-sm font-medium text-slate-300">
             {f.label}
             <input
               type={f.type}
               value={values[f.key]}
-              onChange={(e) => setField(f.key, e.target.value)}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
               aria-label={f.label}
+              id={f.testid}
               data-testid={f.testid}
               autoFocus={i === 0}
               readOnly={!!editing && f.key === 'name'}
@@ -724,8 +716,8 @@ function ConnectionForm({
               className={`mt-1 ${fieldClass} ${editing && f.key === 'name' ? 'opacity-60' : ''}`}
             />
           </label>
-        ),
-      )}
+        </Fragment>
+      ))}
 
       {!editing && (
         <label className="flex items-center gap-2 text-sm text-slate-300">

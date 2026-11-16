@@ -166,12 +166,7 @@ def test_error_message_names_the_exception_type():
     assert error_message(TimeoutError()) == "TimeoutError"
 
 
-def test_parse_host_port_config_takes_a_database_or_show_all():
-    body = {"host": "h", "port": "1", "database": " sales_reporting ", "show_all_databases": False}
-    fields, err = parse_host_port_config(body)
-    assert err is None and fields["database"] == "sales_reporting" and fields["show_all_databases"] is False
-    # Show all drops the database: the two are mutually exclusive.
-    fields, _ = parse_host_port_config({**body, "show_all_databases": True})
-    assert fields["database"] == "" and fields["show_all_databases"] is True
-    # Hiding the other databases needs one to show.
-    assert parse_host_port_config({"host": "h", "port": "1", "show_all_databases": False})[0] is None
+def test_parse_host_port_config_takes_an_optional_database():
+    fields, err = parse_host_port_config({"host": "h", "port": "1", "database": " sales_reporting "})
+    assert err is None and fields["database"] == "sales_reporting"
+    assert parse_host_port_config({"host": "h", "port": "1"})[0]["database"] == ""

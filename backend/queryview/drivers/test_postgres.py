@@ -366,7 +366,7 @@ def test_a_named_database_is_the_only_one_tested_and_listed(monkeypatch):
 
     monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
     d = PostgresDriver()
-    cfg = PgConfig("h", 5432, "u", "", "sales_reporting", False)
+    cfg = PgConfig("h", 5432, "u", "", "sales_reporting")
     assert asyncio.run(d.test(cfg))["ok"] is True
-    assert asyncio.run(d.list_databases(cfg)) == DatabasesResult(["sales_reporting"])
+    assert asyncio.run(d.list_databases(cfg)) == DatabasesResult(["sales_reporting"], current="sales_reporting")
     assert attempts == ["sales_reporting", "sales_reporting"]

@@ -257,13 +257,6 @@ def test_refresh_databases_relists_and_keeps_the_selected_database(monkeypatch):
     assert state["database"] == "beta"
 
 
-def test_connect_selects_the_connections_default_database(monkeypatch):
-    monkeypatch.setitem(DRIVERS, "growing", _GrowingDriver())
-    rec = _run(sessions.create_session())
-    out = _run(connect.connect_new(rec.id, "defaulted", SimpleNamespace(database="beta"), "growing", True))
-    assert out["database"] == "beta"
-
-
 def test_refresh_databases_keeps_the_old_list_when_listing_fails(monkeypatch):
     driver = _GrowingDriver()
     monkeypatch.setitem(DRIVERS, "growing", driver)
