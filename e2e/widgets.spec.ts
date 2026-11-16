@@ -43,9 +43,7 @@ test("data-qv-query binds an element to a value and follows a param", async ({
   await expect(frame.locator("#first")).toHaveText("1");
   await expect(frame.locator("#bad")).toHaveText("Unknown column “cost”");
   await expect(frame.locator("#none")).toHaveText("—");
-  await expect(frame.locator("#missing")).toHaveText(
-    "Unknown query “toString”",
-  );
+  await expect(frame.locator("#missing")).toHaveText("—");
   await frame.getByTestId("qv-param").selectOption("beta");
   await expect(frame.locator("#v")).toHaveText("beta");
   await shot("bound value after a param change");

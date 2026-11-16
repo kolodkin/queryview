@@ -120,10 +120,11 @@ re-run, so a KPI needs no script:
 <span class="chip">Revenue <b data-qv-query="totals" data-qv-column="revenue"></b></span>
 ```
 
-Styling is the page's own. No rows shows `—`; a bad name shows
-`Unknown query “…”` or `Unknown column “…”`. A query a
-[`<qv-select-view>`](#widgets) names is not in `window.queries`, so it can't be
-bound.
+Styling is the page's own. `—` stands for no rows, a NULL, or a query with no
+results in `window.queries`: one held back for an unchosen parameter, one
+that failed, a misspelt name, or one a [`<qv-select-view>`](#widgets) owns. A
+column the query lacks shows `Unknown column “…”`. An element a script adds
+later is filled on the next re-run.
 
 ## Widgets
 

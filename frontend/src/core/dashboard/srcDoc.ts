@@ -21,26 +21,28 @@ function themeStyle(theme: QvTheme): string {
   return vars ? `<style>:root{${vars}}</style>\n` : ''
 }
 
-// The in-iframe half of the params channel. The page sends values only; the
-// host substitutes them into the dashboard's own SQL and posts results back, so
-// the page re-renders without a reload and never handles SQL.
+// The in-iframe half of the params channel, plus the bound values. The page
+// sends values only; the host substitutes them into the dashboard's own SQL and
+// posts results back, so the page re-renders without a reload and never handles
+// SQL. Wrapped so a page script can't replace the binder by reusing a name.
 const SET_PARAMS_HELPER = `
-function qvOwn(o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); }
+(function () {
+function own(o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); }
 // Fill each [data-qv-query] element with row 1 of its data-qv-column
-// (default: the query's first column).
-function qvBind() {
+// (default: the query's first column). A query with no results here (held back
+// for an unchosen param, failed, or a widget's) reads as a dash, not an error.
+function bind() {
   document.querySelectorAll('[data-qv-query]').forEach(function (el) {
     var q = el.getAttribute('data-qv-query');
-    var cols = qvOwn(window.queries, q) ? window.queries[q] : null;
+    var cols = own(window.queries, q) ? window.queries[q] : null;
     var c = el.getAttribute('data-qv-column') || (cols && Object.keys(cols)[0]) || '';
-    var vals = qvOwn(cols, c) ? cols[c] : null;
+    var vals = own(cols, c) ? cols[c] : null;
     var v = vals && vals.length ? vals[0] : null;
-    el.textContent = !cols ? 'Unknown query \u201c' + q + '\u201d'
-      : !vals ? 'Unknown column \u201c' + c + '\u201d'
-      : v === null ? '\u2014' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+    el.textContent = cols && !vals ? 'Unknown column \\u201c' + c + '\\u201d'
+      : v === null ? '\\u2014' : typeof v === 'object' ? JSON.stringify(v) : String(v);
   });
 }
-document.addEventListener('DOMContentLoaded', qvBind);
+document.addEventListener('DOMContentLoaded', bind);
 window.setParams = function (values) {
   parent.postMessage({ type: 'set-params', values: values }, '*');
 };
@@ -48,13 +50,13 @@ window.addEventListener('message', function (e) {
   var d = e.data;
   if (!d || d.type !== 'params-results') return;
   // A failed run keeps the previous results on screen and reports the message.
-  if (d.results) window.queries = d.results;
+  if (d.results) { window.queries = d.results; bind(); }
   if (d.params && d.params.length) window.params = d.params;
-  qvBind();
   if (typeof window.onQueryResults === 'function') {
     window.onQueryResults(window.queries, window.params, d.ok ? null : d.message);
   }
-});`
+});
+})();`
 
 // Build the iframe document: a prologue exposing results as `window.queries`,
 // the resolved selectors as `window.params` and `window.setParams`, then the
