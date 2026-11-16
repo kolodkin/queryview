@@ -14,7 +14,7 @@ reused when revising it.
 
 ## Connections
 
-`use_connection` any ClickHouse/Postgres connection `list_connections` shows, or
+`use_connection` any ClickHouse/Postgres/MySQL connection `list_connections` shows, or
 `add_connection` your own. A locked connection (see `session_info`) refuses every push and
 query with "connection is locked"; use another one.
 

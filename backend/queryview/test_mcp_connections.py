@@ -113,7 +113,7 @@ def test_add_connection_refuses_duckdb_and_adds_a_network_one_directly(monkeypat
     monkeypatch.setattr(DRIVERS["clickhouse"], "list_databases", two_dbs)
     sid = _run(sessions.create_session()).id
     out = _run(add_connection(sid, "ag-duck", "duckdb", {"path": "/etc/passwd"}))
-    assert out["ok"] is False and "clickhouse or postgres" in out["message"]
+    assert out["ok"] is False and "clickhouse, postgres, mysql" in out["message"]
     cfg = {"host": "db.example.internal", "port": 8123, "username": "u", "password": "p"}
     out = _run(add_connection(sid, "ag-ch", "clickhouse", cfg))
     assert out == {"ok": True, "name": "ag-ch", "type": "clickhouse", "databases": ["a", "b"]}
@@ -176,7 +176,7 @@ def test_agent_cannot_remove_saved_or_user_connections_nor_switch_to_their_duckd
         out = _run(remove_connection(sid, name))
         assert out["ok"] is False and "ask the user" in out["message"]
         out = _run(use_connection(sid, name))
-        assert out["ok"] is False and "clickhouse or postgres" in out["message"]
+        assert out["ok"] is False and "clickhouse, postgres, mysql" in out["message"]
     assert _run(use_connection(sid, "ag-absent"))["not_found"] is True
 
 

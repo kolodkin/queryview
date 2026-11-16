@@ -63,9 +63,9 @@ you [armed](#arming-a-session).
   `active`, leaving out [locked](./connect.md#locked-connections) ones;
   `list_databases(session_id, connection?)` lists the databases of each listed
   connection, or of `connection` only.
-  `add_connection(session_id, name, type, config)` adds a ClickHouse or
-  Postgres session connection; `use_connection(session_id, name, database?)`
-  works on any unlocked ClickHouse or Postgres one (not DuckDB or SQLite: they
+  `add_connection(session_id, name, type, config)` adds a ClickHouse,
+  Postgres or MySQL session connection; `use_connection(session_id, name, database?)`
+  works on any unlocked ClickHouse, Postgres or MySQL one (not DuckDB or SQLite: they
   read local files), `select_database(session_id, database)` on any unlocked
   active one; `remove_connection(session_id, name)` only on the agent's own.
   In the browser, an add/remove refreshes an armed tab's connection lists
