@@ -1,6 +1,6 @@
 ---
 name: claudeai-run
-description: Start the local backing services (ClickHouse, PostgreSQL) needed for the e2e suite by running claudeai/run.sh. Use at the start of a new session, or whenever the services are down (e.g. after a container suspend/resume) and tests need them up.
+description: Start the local backing services (ClickHouse, PostgreSQL, MySQL) needed for the e2e suite by running claudeai/run.sh. Use at the start of a new session, or whenever the services are down (e.g. after a container suspend/resume) and tests need them up.
 ---
 
 # claudeai-run Skill
@@ -33,7 +33,8 @@ Idempotently starts (reusing anything already up):
 
 1. **ClickHouse** — `:8123` (standalone binary in `.cache/clickhouse`, user `default`, no password)
 2. **PostgreSQL** — `:5432` (cluster in `.cache/pgdata`, trust auth, superuser `postgres`)
-3. **git daemon** — `:9418` (`setup_git_daemon.sh`), serving a bare
+3. **MySQL** — `:3306` (MariaDB, data dir `.cache/mysqldata`, user `root`, no password)
+4. **git daemon** — `:9418` (`setup_git_daemon.sh`), serving a bare
    `queryview.git` under `.cache/gitsrv`, what CI's `start-git-daemon` action
    provides. The repo is recreated empty on every `run.sh`, so rerun it before
    each e2e run.
@@ -63,5 +64,5 @@ claudeai/setup_<svc>.sh first" error means the install is gone (fresh container)
 claudeai/setup.sh   # then re-run claudeai/run.sh
 ```
 
-Per-service logs: `.cache/clickhouse.log`, `.cache/postgres.log`,
+Per-service logs: `.cache/clickhouse.log`, `.cache/postgres.log`, `.cache/mysql.log`,
 `.cache/git-daemon.log`.

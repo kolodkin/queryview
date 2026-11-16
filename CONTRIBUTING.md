@@ -101,13 +101,13 @@ To test a server you started yourself (e.g. `npm run dev`, or a built preview),
 point at it with `BASE_URL=http://localhost:5173 npx playwright test`; it then
 runs on one worker.
 
-The suite needs a real ClickHouse (`:8123`) and Postgres (`:5432`), the way CI
-has them. The scripts under `claudeai/` install and run both locally (standalone
-ClickHouse binary and a Postgres cluster under `.cache/`); they are written for
+The suite needs a real ClickHouse (`:8123`), Postgres (`:5432`) and MySQL (`:3306`), the way CI
+has them. The scripts under `claudeai/` install and run them locally (standalone
+ClickHouse binary, a Postgres cluster and a MariaDB data dir under `.cache/`); they are written for
 the Claude Code web container and refuse to run elsewhere unless you opt in:
 
 ```bash
-CLAUDEAI_ALLOW_LOCAL=1 claudeai/setup.sh    # once: deps, browser, both databases
+CLAUDEAI_ALLOW_LOCAL=1 claudeai/setup.sh    # once: deps, browser, the databases
 CLAUDEAI_ALLOW_LOCAL=1 claudeai/run.sh      # later: restart the databases
 CLAUDEAI_ALLOW_LOCAL=1 claudeai/run.sh stop
 ```

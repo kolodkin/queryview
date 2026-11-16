@@ -34,7 +34,7 @@ privacy rule: invented names only.
 
 ## e2e
 
-- Needs ClickHouse on `:8123`, Postgres on `:5432` and a built SPA
+- Needs ClickHouse on `:8123`, Postgres on `:5432`, MySQL on `:3306` and a built SPA
   (`npm run build:e2e`, a 2s session heartbeat). In the Claude Code web
   container, the `claudeai-run` skill starts the databases.
 - `e2e/fixtures.ts` holds the navigation helpers, seeds and MCP client; extend
@@ -44,7 +44,7 @@ privacy rule: invented names only.
   `ch-connect`). Assert with `expect` (15 s default), not sleeps.
 - Every test gets its own backend session (the `context` fixture). Seed data
   with the worker-scoped `seeds` fixture (`await seeds.duckdb()`); each worker
-  has its own ClickHouse/Postgres database, `chDb()` — never hard-code `qvtest`.
+  has its own ClickHouse/Postgres/MySQL database, `chDb()` — never hard-code `qvtest`.
 - `shot(label)` saves a screenshot only under `E2E_SHOTS=1`.
 - `BASE_URL=http://localhost:5173 npx playwright test` runs against a server
   you started, on one worker.
