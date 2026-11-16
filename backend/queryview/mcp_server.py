@@ -404,9 +404,10 @@ async def push_dashboard(
 
     The HTML may use `<qv-select-view query="name">` (a paged results table
     over that query, with `<template column="col">` children designing cells
-    via `{cell}` / `{row.<column>}`), `<qv-param name="p">` (a selector for
-    a param) and `<qv-chip query="name" column="col" label="…">` (row 1 of a
-    column as a KPI pill). A query a `<qv-select-view>` names is not in `window.queries`.
+    via `{cell}` / `{row.<column>}`) and `<qv-param name="p">` (a selector for
+    a param). A query a `<qv-select-view>` names is not in `window.queries`.
+    Any element with `data-qv-query="name"` (and optional `data-qv-column`)
+    shows row 1 of that column as text and follows re-runs.
 
     Args:
         session_id: The session id shown in the QueryView popover.

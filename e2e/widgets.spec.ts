@@ -18,21 +18,37 @@ test("qv-param reruns the dashboard", async ({ page, seeds, baseURL }) => {
   await expect(frame.locator("#out")).toHaveText("beta");
 });
 
-test("qv-chip shows a value and follows a param", async ({ page, seeds, baseURL, shot }) => {
+test("data-qv-query binds an element to a value and follows a param", async ({
+  page,
+  seeds,
+  baseURL,
+  shot,
+}) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
-    name: "chip-widget",
+    name: "bound-values",
     html:
-      '<qv-param name="pick"></qv-param> <qv-chip query="q" column="name" label="Item"></qv-chip>' +
-      ' <qv-chip query="q" column="cost"></qv-chip>',
-    queries: { q: "SELECT id, name FROM items WHERE name = {pick}" },
-    params: [{ name: "pick", options_sql: "SELECT name FROM items ORDER BY id" }],
+      '<qv-param name="pick"></qv-param> Item <b id="v" data-qv-query="q" data-qv-column="name"></b>' +
+      ' <i id="first" data-qv-query="q"></i> <i id="bad" data-qv-query="q" data-qv-column="cost"></i>' +
+      ' <i id="none" data-qv-query="empty"></i> <i id="missing" data-qv-query="toString"></i>',
+    queries: {
+      q: "SELECT id, name FROM items WHERE name = {pick}",
+      empty: "SELECT id FROM items WHERE false",
+    },
+    params: [
+      { name: "pick", options_sql: "SELECT name FROM items ORDER BY id" },
+    ],
   });
-  await expect(frame.getByTestId("qv-chip")).toHaveText("alpha");
-  await expect(frame.getByTestId("qv-error")).toHaveText("Unknown column “cost”");
+  await expect(frame.locator("#v")).toHaveText("alpha");
+  await expect(frame.locator("#first")).toHaveText("1");
+  await expect(frame.locator("#bad")).toHaveText("Unknown column “cost”");
+  await expect(frame.locator("#none")).toHaveText("—");
+  await expect(frame.locator("#missing")).toHaveText(
+    "Unknown query “toString”",
+  );
   await frame.getByTestId("qv-param").selectOption("beta");
-  await expect(frame.getByTestId("qv-chip")).toHaveText("beta");
-  await shot("chip after a param change");
+  await expect(frame.locator("#v")).toHaveText("beta");
+  await shot("bound value after a param change");
 });
 
 const VIEW = '<qv-select-view query="q" limit="2" order-by="id"></qv-select-view>';
