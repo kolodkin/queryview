@@ -629,6 +629,18 @@ function ConnectionForm({
   // Session only: kept in this session's memory, never saved.
   const [sessionOnly, setSessionOnly] = useState(false)
 
+  // Show all and Database are mutually exclusive: naming a database unchecks
+  // Show all, clearing it checks it again, and checking it clears the name.
+  function setField(key: string, value: string) {
+    setValues((v) => {
+      const next = { ...v, [key]: value }
+      if (key === 'database' && 'show_all_databases' in v)
+        next.show_all_databases = String(!value.trim())
+      if (key === 'show_all_databases' && value === 'true') next.database = ''
+      return next
+    })
+  }
+
   function body() {
     const checks = meta.fields
       .filter((f) => f.type === 'checkbox')
@@ -692,7 +704,7 @@ function ConnectionForm({
             <input
               type="checkbox"
               checked={values[f.key] === 'true'}
-              onChange={(e) => setValues((v) => ({ ...v, [f.key]: String(e.target.checked) }))}
+              onChange={(e) => setField(f.key, String(e.target.checked))}
               data-testid={f.testid}
             />
             {f.label}
@@ -703,15 +715,13 @@ function ConnectionForm({
             <input
               type={f.type}
               value={values[f.key]}
-              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              onChange={(e) => setField(f.key, e.target.value)}
               aria-label={f.label}
               data-testid={f.testid}
               autoFocus={i === 0}
               readOnly={!!editing && f.key === 'name'}
-              // Mutually exclusive with Show all: a database narrows the picker to itself.
-              disabled={f.key === 'database' && values.show_all_databases === 'true'}
               placeholder={editing && f.type === 'password' ? 'unchanged' : undefined}
-              className={`mt-1 ${fieldClass} disabled:opacity-40 ${editing && f.key === 'name' ? 'opacity-60' : ''}`}
+              className={`mt-1 ${fieldClass} ${editing && f.key === 'name' ? 'opacity-60' : ''}`}
             />
           </label>
         ),

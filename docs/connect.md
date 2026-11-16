@@ -78,8 +78,8 @@ A **New connection** card shows its driver's form in place of the cards
 | Port     | `8123`      | ClickHouse HTTP interface port.                |
 | Username | `default`   | ClickHouse user.                               |
 | Password | *(empty)*   | ClickHouse password.                           |
-| Show all | on          | Lists every database; uncheck to name one.     |
-| Database | *(empty)*   | With Show all off: the only database, opened on connect. |
+| Show all | on          | Lists every database; checking it clears **Database**. |
+| Database | *(empty)*   | The only database, opened on connect; naming one unchecks **Show all**. |
 
 Two actions:
 
