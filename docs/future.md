@@ -22,8 +22,6 @@ no picker and lists only what `SHOW TABLES` returns.
 - **Driver scope.** A dashboard's SQL is written for one driver, yet every
   dashboard lists for every connection. An optional driver on the dashboard
   would hide it from sessions on another.
-- **More widgets.** Only `<qv-select-view>` and `<qv-param>` exist; a chip is
-  the next candidate.
 - **Script-created widgets.** The widget bundle loads, and a widget's query is
   kept out of the up-front run, only when the tag is written in the HTML: one
   a script creates is not seen.

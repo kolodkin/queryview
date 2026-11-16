@@ -110,6 +110,22 @@ Load any chart library from a CDN inside the HTML. A minimal dashboard:
 </script>
 ```
 
+## Bound values
+
+Any element with `data-qv-query` shows row 1 of that query's
+`data-qv-column` (default: its first column) as text, and follows each
+re-run, so a KPI needs no script:
+
+```html
+<span class="chip">Revenue <b data-qv-query="totals" data-qv-column="revenue"></b></span>
+```
+
+Styling is the page's own. `—` stands for no rows, a NULL, or a query with no
+results in `window.queries`: one held back for an unchosen parameter, one
+that failed, a misspelt name, or one a [`<qv-select-view>`](#widgets) owns. A
+column the query lacks shows `Unknown column “…”`. An element a script adds
+later is filled on the next re-run.
+
 ## Widgets
 
 Dashboard HTML may use two tags anywhere in its own layout. They render in the

@@ -48,6 +48,12 @@ Two tags save hand-drawing a table or a selector; place them anywhere in the HTM
 a `<template column>` designs a column with `{cell}` and `{row.<column>}`. Put
 placeholders in text or inside `href` / `src` only.
 
+For a KPI, bind any element to row 1 of a column; it updates on every re-run:
+
+```html
+<span class="chip">Revenue <b data-qv-query="totals" data-qv-column="revenue"></b></span>
+```
+
 Never name a new dashboard: push it unnamed and the user names it on Save.
 `name` only takes one that is already saved, to edit it.
 You cannot save: when asked to, push it and tell the user to click **Save**.
@@ -72,8 +78,9 @@ body {
 }
 ```
 
-- **Chips and selectors:** pill-shaped, `border:1px solid rgba(255,255,255,.12);`
-  `background:rgba(255,255,255,.06)`; accent indigo (`#818cf8` / `#4f46e5`).
+- **Chips and selectors:** pill-shaped, e.g. `.chip{display:inline-flex;gap:.5rem;`
+  `padding:.25rem .75rem;border-radius:9999px;border:1px solid rgba(255,255,255,.12);`
+  `background:rgba(255,255,255,.06)}`; accent indigo (`#818cf8` / `#4f46e5`).
 - **Type and charts:** slate text (`#e2e8f0`, muted `#94a3b8`), tabular numbers for KPIs,
   transparent chart backgrounds with faint gridlines (`rgba(255,255,255,.08)`).
 - **Layout:** a responsive grid (`repeat(auto-fit,minmax(280px,1fr))`); KPI tiles first,
