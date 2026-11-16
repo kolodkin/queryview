@@ -708,8 +708,10 @@ function ConnectionForm({
               data-testid={f.testid}
               autoFocus={i === 0}
               readOnly={!!editing && f.key === 'name'}
+              // Mutually exclusive with Show all: a database narrows the picker to itself.
+              disabled={f.key === 'database' && values.show_all_databases === 'true'}
               placeholder={editing && f.type === 'password' ? 'unchanged' : undefined}
-              className={`mt-1 ${fieldClass} ${editing && f.key === 'name' ? 'opacity-60' : ''}`}
+              className={`mt-1 ${fieldClass} disabled:opacity-40 ${editing && f.key === 'name' ? 'opacity-60' : ''}`}
             />
           </label>
         ),

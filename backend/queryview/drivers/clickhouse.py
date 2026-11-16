@@ -39,7 +39,7 @@ class ChConfig:
     port: int
     username: str
     password: str
-    database: str = ""  # selected on connect; with show_all_databases off, the only one listed
+    database: str = ""  # with show_all_databases off, the only database listed (and selected)
     show_all_databases: bool = True
 
 

@@ -47,7 +47,6 @@ export const DRIVERS: Record<string, DriverMeta> = {
         default: 'default',
       },
       { key: 'password', label: 'Password', testid: 'ch-password', type: 'password', default: '' },
-      { key: 'database', label: 'Database', testid: 'ch-database', type: 'text', default: '' },
       {
         key: 'show_all_databases',
         label: 'Show all',
@@ -55,6 +54,7 @@ export const DRIVERS: Record<string, DriverMeta> = {
         type: 'checkbox',
         default: 'true',
       },
+      { key: 'database', label: 'Database', testid: 'ch-database', type: 'text', default: '' },
     ],
   },
   postgres: {
@@ -79,7 +79,6 @@ export const DRIVERS: Record<string, DriverMeta> = {
         default: 'postgres',
       },
       { key: 'password', label: 'Password', testid: 'pg-password', type: 'password', default: '' },
-      { key: 'database', label: 'Database', testid: 'pg-database', type: 'text', default: '' },
       {
         key: 'show_all_databases',
         label: 'Show all',
@@ -87,6 +86,7 @@ export const DRIVERS: Record<string, DriverMeta> = {
         type: 'checkbox',
         default: 'true',
       },
+      { key: 'database', label: 'Database', testid: 'pg-database', type: 'text', default: '' },
     ],
   },
   duckdb: {
