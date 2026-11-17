@@ -22,6 +22,7 @@ import {
 const DDL: Record<string, string> = {
   clickhouse: "CREATE TABLE {t} (id UInt32, name String) ENGINE = MergeTree ORDER BY id",
   postgres: "CREATE TABLE {t} (id integer, name text)",
+  mysql: "CREATE TABLE {t} (id INT, name TEXT)",
   duckdb: "CREATE TABLE {t} (id INTEGER, name TEXT)",
   sqlite: "CREATE TABLE {t} (id INTEGER, name TEXT)",
 };
@@ -29,6 +30,7 @@ const DDL: Record<string, string> = {
 const TEMP_DDL: Record<string, string> = {
   clickhouse: "CREATE TEMPORARY TABLE {t} (x UInt8)",
   postgres: "CREATE TEMP TABLE {t} (x integer)",
+  mysql: "CREATE TEMPORARY TABLE {t} (x INT)",
   duckdb: "CREATE TEMP TABLE {t} (x INTEGER)",
   sqlite: "CREATE TEMP TABLE {t} (x INTEGER)",
 };
@@ -40,7 +42,7 @@ const uniqueTable = (prefix: string) => `${prefix}_${crypto.randomUUID().replace
 async function dropTable(c: DriverCase, seed: string, table: string): Promise<void> {
   const sql = `DROP TABLE IF EXISTS ${table}`;
   if (c.id === "clickhouse") await chExec(`DROP TABLE IF EXISTS ${chDb()}.${table}`);
-  else await dbExec(c.id === "postgres" ? "pg" : (c.id as "duckdb" | "sqlite"), seed, sql);
+  else await dbExec(c.id as "postgres" | "mysql" | "duckdb" | "sqlite", seed, sql);
 }
 
 async function openScriptsPage(page: Page): Promise<void> {

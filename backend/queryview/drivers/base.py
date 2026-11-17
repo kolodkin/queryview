@@ -7,6 +7,7 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import io
+import json
 import math
 import re
 import time
@@ -378,6 +379,14 @@ def to_json_value(v: Any) -> Any:
     if isinstance(v, dict):
         return {str(k): to_json_value(x) for k, x in v.items()}
     return str(v)
+
+
+def parse_json_text(v: Any) -> Any:
+    """A JSON column's text (or array of texts) as structured values, like a
+    ClickHouse JSON column; Decimal keeps every digit."""
+    if isinstance(v, list):
+        return [parse_json_text(x) for x in v]
+    return json.loads(v, parse_float=Decimal) if isinstance(v, str) else v
 
 
 def to_csv(columns: list[str], rows: list[Any]) -> str:

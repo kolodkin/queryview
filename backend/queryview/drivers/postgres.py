@@ -3,10 +3,8 @@ lists real databases and the selected one is where queries run."""
 
 from __future__ import annotations
 
-import json
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
-from decimal import Decimal
 from typing import Any
 
 import asyncpg
@@ -28,6 +26,7 @@ from .base import (
     build_order_by,
     error_message,
     parse_host_port_config,
+    parse_json_text,
     query_timeout,
     run_script,
     to_csv,
@@ -96,13 +95,6 @@ async def _connect(c: PgConfig, database: str | None, command_timeout: float | N
 _JSON_TYPES = {"json", "jsonb", "_json", "_jsonb"}
 
 
-def _decode_json(v: Any) -> Any:
-    """Structured like a ClickHouse JSON column; Decimal keeps every digit."""
-    if isinstance(v, list):
-        return [_decode_json(x) for x in v]
-    return json.loads(v, parse_float=Decimal) if isinstance(v, str) else v
-
-
 def _to_rows(attrs: Any, records: list[Any], decode_json: bool = True) -> QueryRows:
     """asyncpg's statement attributes and records as the shared result shape.
     CSV passes `decode_json=False` to keep json as text."""
@@ -110,7 +102,7 @@ def _to_rows(attrs: Any, records: list[Any], decode_json: bool = True) -> QueryR
     is_json = [decode_json and c.type in _JSON_TYPES for c in meta]
     return QueryRows(
         meta,
-        [[to_json_value(_decode_json(v) if j else v) for v, j in zip(r, is_json, strict=True)] for r in records],
+        [[to_json_value(parse_json_text(v) if j else v) for v, j in zip(r, is_json, strict=True)] for r in records],
     )
 
 

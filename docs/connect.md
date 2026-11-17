@@ -31,9 +31,10 @@ commit it; the app applies it on next start.
 
 ## Drivers
 
-ClickHouse and Postgres take host/port/username/password and present
-a database picker — for ClickHouse the picker lists `SHOW DATABASES`, for Postgres
-it lists real databases (`pg_database`) and the chosen one is where queries run.
+ClickHouse, Postgres and MySQL take host/port/username/password and present
+a database picker — for ClickHouse and MySQL the picker lists
+`SHOW DATABASES`, for Postgres it lists real databases (`pg_database`); the
+chosen one is where queries run.
 A named **Database** narrows the picker to that one and opens on it.
 DuckDB takes a **path** (or `:memory:`) and has no network. A `.duckdb` file
 has **no picker** — connecting goes straight to the explorer; schema-qualify
@@ -148,7 +149,7 @@ Connection details are stored via SQLModel in the SQLite database (see
 CREATE TABLE connections (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   name           TEXT NOT NULL UNIQUE,
-  type           TEXT NOT NULL,   -- selects the driver (clickhouse | postgres | duckdb | sqlite)
+  type           TEXT NOT NULL,   -- selects the driver (clickhouse | postgres | mysql | duckdb | sqlite)
   config         TEXT NOT NULL,   -- base64(AES-GCM(json.dumps(driver config)))
   database       TEXT,            -- last selected database (nullable)
   last_active_at INTEGER NOT NULL -- unix ms; when it was last opened
@@ -159,7 +160,7 @@ CREATE TABLE connections (
 - **Selecting a database** updates `database` for that row.
 - `last_active_at` orders the saved cards, most recent first.
 
-Driver-specific fields (host/port/user/pass for ClickHouse and Postgres, a file
+Driver-specific fields (host/port/user/pass for ClickHouse, Postgres and MySQL, a file
 path for DuckDB) are not columns — each driver serializes its own config to a
 dict that is JSON-encoded and stored encrypted in `config`. Adding a future
 driver needs no schema change.
@@ -195,9 +196,9 @@ restarts (the session then reads as disconnected).
   agent's `use_connection` toasts "Agent switched to <name>", never the user's.
 - You add one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved connections and all sessions' ones.
-- The agent may switch to any unlocked ClickHouse or Postgres connection and
+- The agent may switch to any unlocked ClickHouse, Postgres or MySQL connection and
   pick the database of whichever unlocked one it is on; it may add (also
-  ClickHouse or Postgres only: DuckDB and SQLite read local files) and remove
+  ClickHouse, Postgres or MySQL only: DuckDB and SQLite read local files) and remove
   only its own. See [mcp.md](./mcp.md#tools).
 - This keeps a cooperating agent in its lane; it is not a security boundary.
   For one, lock the connection.
@@ -293,7 +294,7 @@ session.
 | GET    | `/api/session`                | —                                      | `{connected, name?, type?, databases?, database?}` for the calling session |
 
 `test`/`connect` resolve the driver from `type` and validate per driver
-(ClickHouse/Postgres require `host` + `port` `1..65535`, `database` optional;
+(ClickHouse/Postgres/MySQL require `host` + `port` `1..65535`, `database` optional;
 DuckDB takes an optional
 `path`, SQLite a required file path); validation errors return `400`. ClickHouse queries run over the HTTP
 interface with HTTP Basic auth, within the session's
