@@ -142,8 +142,9 @@ async def session_header(request: Request, call_next):
 
 
 @app.get("/api/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "queryview-backend"}
+async def health() -> dict[str, Any]:
+    # `scratch`: the e2e suite refuses a backend on the default data dir.
+    return {"status": "ok", "service": "queryview-backend", "scratch": bool(os.environ.get("DATA_DIR"))}
 
 
 @app.get("/api/session")

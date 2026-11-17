@@ -47,6 +47,7 @@ privacy rule: invented names only.
   has its own ClickHouse/Postgres/MySQL database, `chDb()` — never hard-code `qvtest`.
 - `shot(label)` saves a screenshot only under `E2E_SHOTS=1`.
 - `BASE_URL=http://localhost:5173 npx playwright test` runs against a server
-  you started, on one worker.
+  you started, on one worker. Start that server with `DATA_DIR` set to a
+  scratch folder; the suite refuses one on the default `~/.queryview`.
 
 `CONTRIBUTING.md` covers installing the tooling and the full command set.

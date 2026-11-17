@@ -46,6 +46,7 @@ export const DRIVERS: Record<string, DriverMeta> = {
         default: 'default',
       },
       { key: 'password', label: 'Password', testid: 'ch-password', type: 'password', default: '' },
+      { key: 'database', label: 'Database', testid: 'ch-database', type: 'text', default: '' },
     ],
   },
   postgres: {
@@ -70,6 +71,7 @@ export const DRIVERS: Record<string, DriverMeta> = {
         default: 'postgres',
       },
       { key: 'password', label: 'Password', testid: 'pg-password', type: 'password', default: '' },
+      { key: 'database', label: 'Database', testid: 'pg-database', type: 'text', default: '' },
     ],
   },
   mysql: {
@@ -88,6 +90,7 @@ export const DRIVERS: Record<string, DriverMeta> = {
       { key: 'port', label: 'Port', testid: 'my-port', type: 'text', default: '3306' },
       { key: 'username', label: 'Username', testid: 'my-username', type: 'text', default: 'root' },
       { key: 'password', label: 'Password', testid: 'my-password', type: 'password', default: '' },
+      { key: 'database', label: 'Database', testid: 'my-database', type: 'text', default: '' },
     ],
   },
   duckdb: {

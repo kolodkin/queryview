@@ -9,7 +9,7 @@ import asyncio
 from pymysql.constants import COMMAND, FIELD_TYPE
 from pymysql.err import OperationalError
 
-from queryview.drivers.base import SCRIPT_ROW_CAP, Column, Err, RowsResult, TablesResult, TextResult
+from queryview.drivers.base import SCRIPT_ROW_CAP, Column, DatabasesResult, Err, RowsResult, TablesResult, TextResult
 from queryview.drivers.mysql import _CONV, MySqlConfig, MySqlDriver, _raw_connect
 
 CFG = MySqlConfig("h", 3306, "u", "")
@@ -155,3 +155,18 @@ def test_duplicate_column_names_run_unwrapped(monkeypatch):
 def test_time_and_bit_keep_their_values():
     assert _CONV[FIELD_TYPE.TIME]("25:00:00") == "25:00:00"  # not a timedelta's "1 day, 1:00:00"
     assert _CONV[FIELD_TYPE.BIT](b"\x05") == 5
+
+
+def test_a_named_database_is_the_only_one_tested_and_listed(monkeypatch):
+    log = _fake(monkeypatch, lambda sql: (ID, [(1,)]))
+    cfg = MySqlConfig("h", 3306, "u", "", "sales_reporting")
+    assert asyncio.run(MySqlDriver().test(cfg))["ok"] is True
+    assert log["database"] == "sales_reporting"
+    r = asyncio.run(MySqlDriver().list_databases(cfg))
+    assert r == DatabasesResult(["sales_reporting"], current="sales_reporting")
+    assert log["sql"] == ["SELECT 1"]  # no SHOW DATABASES
+
+
+def test_a_saved_config_with_a_dropped_key_still_loads():
+    data = {"host": "h", "port": 3306, "username": "u", "password": "", "show_all_databases": True}
+    assert MySqlDriver().config_from_dict(data) == MySqlConfig("h", 3306, "u", "")

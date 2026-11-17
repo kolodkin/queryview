@@ -46,6 +46,7 @@ class MySqlConfig:
     port: int
     username: str
     password: str
+    database: str = ""  # the only database listed and opened; blank lists them all
 
 
 def parse_mysql_config(body: Any) -> tuple[MySqlConfig | None, str | None]:
@@ -205,11 +206,12 @@ class MySqlDriver:
         return asdict(config)
 
     def config_from_dict(self, data: dict[str, Any]) -> MySqlConfig:
-        return MySqlConfig(**data)
+        # Keys it no longer has (a dropped option) are ignored, not an error.
+        return MySqlConfig(**{k: v for k, v in data.items() if k in MySqlConfig.__dataclass_fields__})
 
     async def test(self, config: MySqlConfig) -> dict[str, Any]:
         try:
-            async with _connect(config, None) as conn:
+            async with _connect(config, config.database or None) as conn:
                 _, rows, _ = await _fetch(conn, "SELECT 1", None, query_timeout.get())
                 return {"ok": True, "message": f"Connected — SELECT 1 returned {rows[0][0]}"}
         except Exception as e:  # noqa: BLE001
@@ -219,6 +221,9 @@ class MySqlDriver:
         self, config: MySqlConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
     ) -> DatabasesResult | Err:
         try:
+            if config.database:  # connecting checks it is reachable
+                async with _connect(config, config.database):
+                    return DatabasesResult([config.database], current=config.database)
             async with _connect(config, None) as conn:
                 _, rows, _ = await _fetch(conn, "SHOW DATABASES", None, query_timeout.get())
                 return DatabasesResult([r[0] for r in rows])
