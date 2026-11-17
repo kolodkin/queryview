@@ -25,7 +25,8 @@ agent-authored HTML, which renders inside an isolated iframe.
   while the open dashboard is the store's copy (no draft, agent push or
   SQL-panel edit);
 - **Rename** and **Delete** — for a saved dashboard; Rename asks for the new
-  name and keeps unsaved SQL-panel edits, Delete asks to confirm;
+  name and keeps unsaved SQL-panel edits, Delete asks to confirm. Both are
+  the user's: no [MCP tool](./mcp.md#naming-and-saving) does either;
 - **Edit queries** — the [SQL panel](#the-sql-panel);
 - a **sandboxed iframe** that renders the selected dashboard.
 
