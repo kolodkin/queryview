@@ -161,7 +161,7 @@ class PostgresDriver:
     async def list_tables(
         self, config: PgConfig, database: str | None, union: bool = False, limit: int = DEFAULT_LIST_LIMIT
     ) -> TablesResult | Err:
-        # Tables and views of the public schema — what an unqualified name in
+        # Tables and views (plain and materialized) of the public schema — what an unqualified name in
         # the explorer's generated SELECT resolves to under the default
         # search_path. Other schemas need explicit SQL on the query page.
         # Row counts are the planner's reltuples estimate (-1 = never analyzed
@@ -172,12 +172,13 @@ class PostgresDriver:
                     "SELECT c.relname AS name, "
                     "CASE WHEN c.reltuples < 0 THEN NULL "
                     "ELSE c.reltuples::bigint END AS rows, "
-                    "pg_total_relation_size(c.oid) AS bytes "
+                    "pg_total_relation_size(c.oid) AS bytes, "
+                    "c.relkind IN ('v', 'm') AS view "
                     "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
                     "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm') "
                     "ORDER BY c.relname"
                 )
-                return TablesResult([{"name": r["name"], "rows": r["rows"], "bytes": r["bytes"]} for r in rows])
+                return TablesResult([{"name": r["name"], "rows": r["rows"], "bytes": r["bytes"], "view": r["view"]} for r in rows])
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
 
