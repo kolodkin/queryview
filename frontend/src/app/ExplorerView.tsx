@@ -43,6 +43,7 @@ type TableInfo = {
   bytes: number | null
   query: string
   path?: string | null
+  view?: boolean
 }
 
 // The "1.2K rows · 3.4MB" subline, or null when the engine knows neither.
@@ -113,10 +114,11 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   // off this: nothing fires until the table is confirmed present, so a stale
   // selection (e.g. after a database switch) never issues doomed queries.
   const selected = tables.find((t) => t.name === table)
-  const shownTables = useMemo(
-    () => filterNames(tables, tableFilter, (t) => t.name),
-    [tables, tableFilter],
-  )
+  // Tables first, then views (listed under their own heading).
+  const shownTables = useMemo(() => {
+    const shown = filterNames(tables, tableFilter, (t) => t.name)
+    return [...shown.filter((t) => !t.view), ...shown.filter((t) => t.view)]
+  }, [tables, tableFilter])
 
   // Load the sidebar whenever the active database changes; a selected table
   // that vanished (database switch) is dropped from the URL.
@@ -395,36 +397,45 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
           <Loading label="Loading tables…" testid="explorer-tables-loading" />
         ) : (
           <div className="mt-2 min-h-0 grow basis-0 space-y-1 overflow-auto">
-            {shownTables.map((t) => {
+            {shownTables.map((t, i, all) => {
               const meta = tableMeta(t)
               return (
-                <div
-                  key={t.name}
-                  className={`group flex items-center rounded hover:bg-white/10 ${
-                    t.name === table ? 'bg-white/10' : ''
-                  }`}
-                >
-                  <button
-                    type="button"
-                    data-testid="explorer-table"
-                    data-table={t.name}
-                    title={t.name}
-                    onClick={() => setSearchParams({ table: t.name })}
-                    className={`block min-w-0 flex-1 px-2 py-1.5 text-left text-sm ${
-                      t.name === table ? 'font-medium text-indigo-200' : 'text-slate-200'
+                <div key={t.name}>
+                  {t.view && !all[i - 1]?.view && (
+                    <h3
+                      data-testid="explorer-views-heading"
+                      className="px-2 pt-2 text-sm font-semibold text-slate-200"
+                    >
+                      Views
+                    </h3>
+                  )}
+                  <div
+                    className={`group flex items-center rounded hover:bg-white/10 ${
+                      t.name === table ? 'bg-white/10' : ''
                     }`}
                   >
-                    <span className="block truncate">{t.name}</span>
-                    {meta && (
-                      <span
-                        data-testid="explorer-table-meta"
-                        className="block truncate text-xs font-normal text-slate-400"
-                      >
-                        {meta}
-                      </span>
-                    )}
-                  </button>
-                  <CopyName name={t.name} testid="explorer-table-copy" />
+                    <button
+                      type="button"
+                      data-testid="explorer-table"
+                      data-table={t.name}
+                      title={t.name}
+                      onClick={() => setSearchParams({ table: t.name })}
+                      className={`block min-w-0 flex-1 px-2 py-1.5 text-left text-sm ${
+                        t.name === table ? 'font-medium text-indigo-200' : 'text-slate-200'
+                      }`}
+                    >
+                      <span className="block truncate">{t.name}</span>
+                      {meta && (
+                        <span
+                          data-testid="explorer-table-meta"
+                          className="block truncate text-xs font-normal text-slate-400"
+                        >
+                          {meta}
+                        </span>
+                      )}
+                    </button>
+                    <CopyName name={t.name} testid="explorer-table-copy" />
+                  </div>
                 </div>
               )
             })}

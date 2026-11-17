@@ -145,6 +145,30 @@ test("refresh reloads the rows from the database", async ({ page, seeds }) => {
   }
 });
 
+test("ClickHouse views are listed under their own heading", async ({ page, seeds, shot }) => {
+  await seeds.testDb();
+  // "a_" sorts before "items", so the grouping, not the name order, puts it after.
+  const view = `${chDb()}.a_items_view`;
+  await chExec(`CREATE VIEW ${view} AS SELECT * FROM ${chDb()}.items`);
+  try {
+    await connect(page, CH, chDb());
+    await page.getByTestId("nav-explorer").click();
+    const rows = page.getByTestId("explorer-table");
+    await expect(rows.first()).toHaveAttribute("data-table", "items");
+    await expect(rows.last()).toHaveAttribute("data-table", "a_items_view");
+    // The heading sits between the last table and the first view.
+    const heading = page.getByTestId("explorer-views-heading");
+    await expect(heading).toHaveText("Views");
+    await expect(tableRow(page, "items").locator("xpath=following::h3[1]")).toHaveText("Views");
+    await shot("explorer views heading");
+
+    await tableRow(page, "a_items_view").click();
+    await expect(page.getByTestId("explorer-output")).toContainText("alpha");
+  } finally {
+    await chExec(`DROP VIEW IF EXISTS ${view}`);
+  }
+});
+
 test("sidebar width is draggable and remembered", async ({ page, seeds, shot }) => {
   // The Tables sidebar resizes from its right edge so long names need not be
   // truncated. The width is remembered per view and survives a reload; the
