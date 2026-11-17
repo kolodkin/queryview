@@ -7,9 +7,10 @@ from __future__ import annotations
 import asyncio
 
 from pymysql.constants import COMMAND, FIELD_TYPE
+from pymysql.err import OperationalError
 
 from queryview.drivers.base import SCRIPT_ROW_CAP, Column, Err, RowsResult, TablesResult, TextResult
-from queryview.drivers.mysql import MySqlConfig, MySqlDriver, _raw_connect
+from queryview.drivers.mysql import _CONV, MySqlConfig, MySqlDriver, _raw_connect
 
 CFG = MySqlConfig("h", 3306, "u", "")
 
@@ -132,3 +133,24 @@ def test_connections_turn_multi_statements_off(monkeypatch):
     monkeypatch.setattr("queryview.drivers.mysql.aiomysql.connect", fake_connect)
     asyncio.run(_raw_connect(CFG, "shop"))
     assert sent == [(COMMAND.COM_SET_OPTION, b"\x01\x00")]  # MYSQL_OPTION_MULTI_STATEMENTS_OFF
+
+
+def test_duplicate_column_names_run_unwrapped(monkeypatch):
+    # A derived table needs unique names: `a.id, b.id` falls back to the SQL as
+    # written, skipping the rows before the page.
+    def results(sql):
+        if "_qv" in sql:
+            raise OperationalError(1060, "Duplicate column name 'id'")
+        return ((("id", FIELD_TYPE.LONG), ("id", FIELD_TYPE.LONG)), [(1, 10), (2, 20), (3, 30)])
+
+    log = _fake(monkeypatch, results)
+    r = asyncio.run(MySqlDriver().run_query(CFG, "SELECT a.id, b.id FROM a JOIN b;", "shop", 1, 1, None))
+    assert isinstance(r, RowsResult) and r.rows.data == [[2, 20]]
+    assert log["sql"][1] == "SELECT a.id, b.id FROM a JOIN b" and log["fetchmany"] == 2
+    # A column sort needs the wrapper, so the error stands.
+    assert isinstance(asyncio.run(MySqlDriver().run_query(CFG, "SELECT 1", "shop", 1, 0, [{"name": "id"}])), Err)
+
+
+def test_time_and_bit_keep_their_values():
+    assert _CONV[FIELD_TYPE.TIME]("25:00:00") == "25:00:00"  # not a timedelta's "1 day, 1:00:00"
+    assert _CONV[FIELD_TYPE.BIT](b"\x05") == 5
