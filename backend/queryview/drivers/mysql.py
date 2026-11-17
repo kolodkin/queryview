@@ -1,4 +1,4 @@
-"""MySQL / MariaDB driver (aiomysql). Short-lived connections per request; the
+"""MySQL driver (aiomysql). Short-lived connections per request; the
 picker lists the server's databases and the selected one is where queries run."""
 
 from __future__ import annotations
@@ -93,9 +93,8 @@ def _columns(description: Any) -> list[Column]:
 
 
 def _to_rows(description: Any, records: Any, decode_json: bool = True) -> QueryRows:
-    """Cursor description and rows as the shared result shape. JSON columns
-    (MySQL's; MariaDB's are plain text) are decoded like Postgres json, unless
-    CSV asks to keep the text."""
+    """Cursor description and rows as the shared result shape. JSON columns are
+    decoded like Postgres json, unless CSV asks to keep the text."""
     meta = _columns(description)
     is_json = [decode_json and c.type == "json" for c in meta]
     return QueryRows(

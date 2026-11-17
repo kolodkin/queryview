@@ -75,7 +75,7 @@ export const DRIVERS: Record<string, DriverMeta> = {
   mysql: {
     type: 'mysql',
     label: 'MySQL',
-    blurb: 'MySQL or MariaDB server',
+    blurb: 'Open-source SQL server',
     mark: 'MY',
     accent: 'bg-teal-400/15 text-teal-200 ring-teal-300/30',
     formTestid: 'mysql-form',

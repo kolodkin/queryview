@@ -32,7 +32,7 @@ commit it; the app applies it on next start.
 ## Drivers
 
 ClickHouse, Postgres and MySQL take host/port/username/password and present
-a database picker — for ClickHouse and MySQL (or MariaDB) the picker lists
+a database picker — for ClickHouse and MySQL the picker lists
 `SHOW DATABASES`, for Postgres it lists real databases (`pg_database`); the
 chosen one is where queries run.
 DuckDB takes a **path** (or `:memory:`) and has no network. A `.duckdb` file
