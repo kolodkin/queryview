@@ -121,6 +121,9 @@ The agent drafts and edits; the user names and saves. No tool saves.
 - **`name` only edits.** It must be a saved dashboard (`list_dashboards`); any
   other is refused.
 - **A push persists nothing.** The user's **Save** does.
+- **No tool renames or deletes.** The store's names are the user's: **Rename**
+  and **Delete** live on the dashboard page only. An agent asked to rename
+  says so; pushing the same dashboard under a new name is not a rename.
 
 ## How it works
 
