@@ -685,7 +685,8 @@ function ConnectionForm({
 
       {meta.fields.map((f, i) => (
         <Fragment key={f.key}>
-          {f.showAll && (
+          {/* A blank database lists them all: "Show all" mirrors that. */}
+          {f.key === 'database' && (
             <label className="flex items-center gap-2 text-sm text-slate-300">
               <input
                 type="checkbox"
