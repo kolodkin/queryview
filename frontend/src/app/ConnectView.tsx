@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { filterNames, useDismiss } from '../core'
@@ -684,20 +684,40 @@ function ConnectionForm({
       </div>
 
       {meta.fields.map((f, i) => (
-        <label key={f.key} className="block text-sm font-medium text-slate-300">
-          {f.label}
-          <input
-            type={f.type}
-            value={values[f.key]}
-            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-            aria-label={f.label}
-            data-testid={f.testid}
-            autoFocus={i === 0}
-            readOnly={!!editing && f.key === 'name'}
-            placeholder={editing && f.type === 'password' ? 'unchanged' : undefined}
-            className={`mt-1 ${fieldClass} ${editing && f.key === 'name' ? 'opacity-60' : ''}`}
-          />
-        </label>
+        <Fragment key={f.key}>
+          {/* A blank database lists them all: "Show all" mirrors that. */}
+          {f.key === 'database' && (
+            <label className="flex items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={!values[f.key].trim()}
+                // Unchecking only makes sense with a name: it moves to the field.
+                onChange={(e) =>
+                  e.target.checked
+                    ? setValues((v) => ({ ...v, [f.key]: '' }))
+                    : document.getElementById(f.testid)?.focus()
+                }
+                data-testid={`${f.testid}-show-all`}
+              />
+              Show all
+            </label>
+          )}
+          <label className="block text-sm font-medium text-slate-300">
+            {f.label}
+            <input
+              type={f.type}
+              value={values[f.key]}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              aria-label={f.label}
+              id={f.testid}
+              data-testid={f.testid}
+              autoFocus={i === 0}
+              readOnly={!!editing && f.key === 'name'}
+              placeholder={editing && f.type === 'password' ? 'unchanged' : undefined}
+              className={`mt-1 ${fieldClass} ${editing && f.key === 'name' ? 'opacity-60' : ''}`}
+            />
+          </label>
+        </Fragment>
       ))}
 
       {!editing && (

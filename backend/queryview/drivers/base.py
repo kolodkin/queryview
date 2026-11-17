@@ -59,8 +59,8 @@ class DatabasesResult(Result):
     # None for every other driver and for a DuckDB file.
     root: str | None = None
     truncated: bool = False  # the current folder has more subfolders than the list limit
-    # The folder the list is centred on: the requested one, or its nearest
-    # existing parent. None outside DuckDB folder mode.
+    # The database to open on: in DuckDB folder mode the requested folder or its
+    # nearest existing parent; a connection narrowed to one database, that one.
     current: str | None = None
 
 
@@ -206,20 +206,22 @@ def _parse_port(raw: Any) -> int | None:
 
 
 def parse_host_port_config(body: Any) -> tuple[dict[str, Any] | None, str | None]:
-    """Validate the host/port/username/password fields shared by network drivers
-    (ClickHouse, Postgres). Returns ({host,port,username,password}, None) or
-    (None, message)."""
+    """Validate the fields shared by network drivers (ClickHouse, Postgres):
+    host/port/username/password, plus an optional `database`: the only one the
+    picker lists, blank for all. Returns (fields, None) or (None, message)."""
     b = body if isinstance(body, dict) else {}
     raw_host = b.get("host")
     host = raw_host.strip() if isinstance(raw_host, str) else ""
     port = _parse_port(b.get("port"))
     username = b.get("username") if isinstance(b.get("username"), str) else ""
     password = b.get("password") if isinstance(b.get("password"), str) else ""
+    raw_database = b.get("database")
+    database = raw_database.strip() if isinstance(raw_database, str) else ""
     if not host:
         return None, "host required"
     if port is None:
         return None, "valid port required"
-    return {"host": host, "port": port, "username": username, "password": password}, None
+    return {"host": host, "port": port, "username": username, "password": password, "database": database}, None
 
 
 def select_all_sql(table: str, quote: str) -> str:
