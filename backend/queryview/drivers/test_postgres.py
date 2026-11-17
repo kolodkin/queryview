@@ -14,6 +14,7 @@ from queryview.drivers.base import (
     SCRIPT_ROW_CAP,
     SCRIPT_TIMEOUT_SECONDS,
     Column,
+    DatabasesResult,
     Err,
     RowsResult,
     TablesResult,
@@ -349,3 +350,30 @@ def test_bootstrap_stops_at_the_first_connect_timeout(monkeypatch):
     with pytest.raises(TimeoutError):
         asyncio.run(_raw_connect_bootstrap(PgConfig("h", 5432, "u", "")))
     assert attempts == ["u"]
+
+
+def test_a_named_database_is_the_only_one_tested_and_listed(monkeypatch):
+    attempts = []
+
+    class FakeConn:
+        async def fetchval(self, sql):
+            return 1
+
+        async def close(self):
+            pass
+
+    async def fake_connect(c, database, command_timeout=None):
+        attempts.append(database)
+        return FakeConn()
+
+    monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
+    d = PostgresDriver()
+    cfg = PgConfig("h", 5432, "u", "", "sales_reporting")
+    assert asyncio.run(d.test(cfg))["ok"] is True
+    assert asyncio.run(d.list_databases(cfg)) == DatabasesResult(["sales_reporting"], current="sales_reporting")
+    assert attempts == ["sales_reporting", "sales_reporting"]
+
+
+def test_a_saved_config_with_a_dropped_key_still_loads():
+    data = {"host": "h", "port": 5432, "username": "u", "password": "", "show_all_databases": True}
+    assert PostgresDriver().config_from_dict(data) == PgConfig("h", 5432, "u", "")

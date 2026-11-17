@@ -27,10 +27,14 @@ import {
 // Drivers with a database picker switch databases differently (ClickHouse
 // passes the database per request, Postgres reconnects), so switching runs on
 // both: the SQL naming the current database and another database to switch to.
-// Both start on chDb(): the Postgres database has the same name.
+// All start on chDb(): the Postgres and MySQL databases have the same name.
 const PICKER = CASES.filter((c) => !c.pathField);
-const CURRENT_DB: Record<string, string> = { clickhouse: "currentDatabase()", postgres: "current_database()" };
-const OTHER_DB: Record<string, string> = { clickhouse: "system", postgres: "postgres" };
+const CURRENT_DB: Record<string, string> = {
+  clickhouse: "currentDatabase()",
+  postgres: "current_database()",
+  mysql: "DATABASE()",
+};
+const OTHER_DB: Record<string, string> = { clickhouse: "system", postgres: "postgres", mysql: "mysql" };
 
 async function switchDatabaseFromPill(page: Page, database: string): Promise<void> {
   await page.getByTestId("connection-status").click();

@@ -3,10 +3,8 @@ lists real databases and the selected one is where queries run."""
 
 from __future__ import annotations
 
-import json
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
-from decimal import Decimal
 from typing import Any
 
 import asyncpg
@@ -28,6 +26,7 @@ from .base import (
     build_order_by,
     error_message,
     parse_host_port_config,
+    parse_json_text,
     query_timeout,
     run_script,
     to_csv,
@@ -44,6 +43,7 @@ class PgConfig:
     port: int
     username: str
     password: str
+    database: str = ""  # the only database listed and opened; blank lists them all
 
 
 def parse_pg_config(body: Any) -> tuple[PgConfig | None, str | None]:
@@ -95,13 +95,6 @@ async def _connect(c: PgConfig, database: str | None, command_timeout: float | N
 _JSON_TYPES = {"json", "jsonb", "_json", "_jsonb"}
 
 
-def _decode_json(v: Any) -> Any:
-    """Structured like a ClickHouse JSON column; Decimal keeps every digit."""
-    if isinstance(v, list):
-        return [_decode_json(x) for x in v]
-    return json.loads(v, parse_float=Decimal) if isinstance(v, str) else v
-
-
 def _to_rows(attrs: Any, records: list[Any], decode_json: bool = True) -> QueryRows:
     """asyncpg's statement attributes and records as the shared result shape.
     CSV passes `decode_json=False` to keep json as text."""
@@ -109,7 +102,7 @@ def _to_rows(attrs: Any, records: list[Any], decode_json: bool = True) -> QueryR
     is_json = [decode_json and c.type in _JSON_TYPES for c in meta]
     return QueryRows(
         meta,
-        [[to_json_value(_decode_json(v) if j else v) for v, j in zip(r, is_json, strict=True)] for r in records],
+        [[to_json_value(parse_json_text(v) if j else v) for v, j in zip(r, is_json, strict=True)] for r in records],
     )
 
 
@@ -136,11 +129,14 @@ class PostgresDriver:
         return asdict(config)
 
     def config_from_dict(self, data: dict[str, Any]) -> PgConfig:
-        return PgConfig(**data)
+        # Keys it no longer has (a dropped option) are ignored, not an error.
+        return PgConfig(**{k: v for k, v in data.items() if k in PgConfig.__dataclass_fields__})
 
     async def test(self, config: PgConfig) -> dict[str, Any]:
         try:
-            async with _connect_bootstrap(config) as conn:
+            # A named database is the one to check: no fallback to a maintenance one.
+            opened = _connect(config, config.database) if config.database else _connect_bootstrap(config)
+            async with opened as conn:
                 val = await conn.fetchval("SELECT 1")
                 return {"ok": True, "message": f"Connected — SELECT 1 returned {val}"}
         except Exception as e:  # noqa: BLE001
@@ -150,6 +146,9 @@ class PostgresDriver:
         self, config: PgConfig, limit: int = DEFAULT_LIST_LIMIT, current: str | None = None
     ) -> DatabasesResult | Err:
         try:
+            if config.database:  # connecting checks it is reachable
+                async with _connect(config, config.database):
+                    return DatabasesResult([config.database], current=config.database)
             async with _connect_bootstrap(config) as conn:
                 rows = await conn.fetch(
                     "SELECT datname FROM pg_database WHERE datallowconn AND NOT datistemplate ORDER BY datname"

@@ -10,7 +10,7 @@ import { test as base, expect, type FrameLocator, type Page } from "@playwright/
 export { expect };
 
 // The backend's virtualenv (`uv sync`): its server, and the Python that seeds
-// DuckDB/SQLite/Postgres with the drivers the backend already depends on. In
+// DuckDB/SQLite/Postgres/MySQL with the drivers the backend already depends on. In
 // the release gate the installed wheel's server is what lives there.
 const VENV_BIN = resolve(import.meta.dirname, "..", ".venv", "bin");
 
@@ -23,11 +23,15 @@ const PG_HOST = process.env.PG_HOST ?? "localhost";
 const PG_PORT = process.env.PG_PORT ?? "5432";
 const PG_USER = process.env.PG_USER ?? "postgres";
 const PG_PASSWORD = process.env.PG_PASSWORD ?? "";
+const MY_HOST = process.env.MYSQL_HOST ?? "localhost";
+const MY_PORT = process.env.MYSQL_PORT ?? "3306";
+const MY_USER = process.env.MYSQL_USER ?? "root";
+const MY_PASSWORD = process.env.MYSQL_PASSWORD ?? "";
 
 // Not `test`: a name that generic may already hold someone's data, and the
 // seeding drops it. Each worker seeds (and drops) its own database, so one
 // worker's teardown can't pull the table out from under another's test.
-// Postgres uses the same name. Read in a test, never at import time.
+// Postgres and MySQL use the same name. Read in a test, never at import time.
 const dbName = (index: number) => `qvtest_${index}`;
 export const chDb = () => dbName(test.info().parallelIndex);
 
@@ -95,7 +99,7 @@ export async function chExec(sql: string): Promise<void> {
 const PY_EXEC = `
 import sys
 kind, target, *stmts = sys.argv[1:]
-if kind == "pg":
+if kind == "postgres":
     import asyncio, os, asyncpg
     async def go():
         c = await asyncpg.connect(host=os.environ["PG_HOST"], port=int(os.environ["PG_PORT"]),
@@ -106,6 +110,14 @@ if kind == "pg":
         finally:
             await c.close()
     asyncio.run(go())
+elif kind == "mysql":
+    import os, pymysql
+    c = pymysql.connect(host=os.environ["MY_HOST"], port=int(os.environ["MY_PORT"]), user=os.environ["MY_USER"],
+        password=os.environ["MY_PASSWORD"], database=target or None, autocommit=True)
+    with c.cursor() as cur:
+        for s in stmts:
+            cur.execute(s)
+    c.close()
 else:
     import duckdb, sqlite3
     con = (duckdb if kind == "duckdb" else sqlite3).connect(target)
@@ -115,10 +127,10 @@ else:
     con.close()
 `;
 
-/** Run statements on Postgres database `target`, or a DuckDB/SQLite file. */
-export async function dbExec(kind: "pg" | "duckdb" | "sqlite", target: string, ...stmts: string[]): Promise<void> {
+/** Run statements on Postgres/MySQL database `target` ("" for none), or a DuckDB/SQLite file. */
+export async function dbExec(kind: "postgres" | "mysql" | "duckdb" | "sqlite", target: string, ...stmts: string[]): Promise<void> {
   await promisify(execFile)(join(VENV_BIN, "python"), ["-c", PY_EXEC, kind, target, ...stmts], {
-    env: { ...process.env, PG_HOST, PG_PORT, PG_USER, PG_PASSWORD },
+    env: { ...process.env, PG_HOST, PG_PORT, PG_USER, PG_PASSWORD, MY_HOST, MY_PORT, MY_USER, MY_PASSWORD },
   });
 }
 
@@ -145,6 +157,7 @@ export async function startNewConnection(page: Page, driver: string): Promise<vo
   const servers: Record<string, Record<string, string>> = {
     clickhouse: { "ch-host": CH_HOST, "ch-port": CH_PORT, "ch-username": CH_USER, "ch-password": CH_PASSWORD },
     postgres: { "pg-host": PG_HOST, "pg-port": PG_PORT, "pg-username": PG_USER, "pg-password": PG_PASSWORD },
+    mysql: { "my-host": MY_HOST, "my-port": MY_PORT, "my-username": MY_USER, "my-password": MY_PASSWORD },
   };
   for (const [id, value] of Object.entries(servers[driver] ?? {})) await page.getByTestId(id).fill(value);
 }
@@ -224,6 +237,7 @@ export type DriverCase = {
 export const CASES: DriverCase[] = [
   { id: "clickhouse", connectTestid: "ch-connect", seed: "testDb" },
   { id: "postgres", connectTestid: "pg-connect", seed: "pgDb" },
+  { id: "mysql", connectTestid: "my-connect", seed: "myDb" },
   { id: "duckdb", connectTestid: "duck-connect", seed: "duckdb", pathField: "duck-path" },
   { id: "sqlite", connectTestid: "sq-connect", seed: "sqlite", pathField: "sq-path" },
 ];
@@ -306,6 +320,8 @@ type Seeds = {
   testDb(): Promise<string>;
   /** Postgres database `chDb()` with an `items` table; returns its name. */
   pgDb(): Promise<string>;
+  /** MySQL database `chDb()` with an `items` table; returns its name. */
+  myDb(): Promise<string>;
   /** A DuckDB file with an `items` table; returns its path. */
   duckdb(): Promise<string>;
   /** A SQLite file with the same `items` table. */
@@ -386,8 +402,13 @@ export const test = base.extend<
           return db;
         }),
         pgDb: once("pgDb", async () => {
-          await dbExec("pg", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`, `CREATE DATABASE ${db}`);
-          await dbExec("pg", db, ITEMS_DDL("items"), ITEMS_ROWS("items"));
+          await dbExec("postgres", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`, `CREATE DATABASE ${db}`);
+          await dbExec("postgres", db, ITEMS_DDL("items"), ITEMS_ROWS("items"));
+          return db;
+        }),
+        myDb: once("myDb", async () => {
+          await dbExec("mysql", "", `DROP DATABASE IF EXISTS ${db}`, `CREATE DATABASE ${db}`);
+          await dbExec("mysql", db, ITEMS_DDL("items"), ITEMS_ROWS("items"));
           return db;
         }),
         duckdb: once("duckdb", () => duck("qv", "items")),
@@ -421,7 +442,8 @@ export const test = base.extend<
       };
       await use(seeds);
       if (memo.has("testDb")) await chExec(`DROP DATABASE IF EXISTS ${db}`);
-      if (memo.has("pgDb")) await dbExec("pg", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`);
+      if (memo.has("pgDb")) await dbExec("postgres", "postgres", `DROP DATABASE IF EXISTS ${db} WITH (FORCE)`);
+      if (memo.has("myDb")) await dbExec("mysql", "", `DROP DATABASE IF EXISTS ${db}`);
       rmSync(tmp, { recursive: true, force: true });
     },
     { scope: "worker" },
