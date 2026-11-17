@@ -153,6 +153,9 @@ function DashboardView({
   const shownRef = useRef<DashboardResults>({})
   // The open dashboard with unsaved SQL-panel edits, or null.
   const editedRef = useRef<DashboardPush | null>(null)
+  // The object last known to equal the store's copy: Save has nothing to
+  // write while `active` is it.
+  const savedRef = useRef<DashboardPush | null>(null)
   const [showSql, setShowSql] = useState(() => localPush !== null)
   // Bumped per load, keying the frame: a draft reloads from memory with the
   // same HTML and results, which alone would leave the old frame (and its
@@ -219,10 +222,14 @@ function DashboardView({
         workspace: activeWorkspace(),
       })
     await runAction(request, 'Failed to save dashboard.', () => {
-      if (active.name) return
+      if (active.name) {
+        savedRef.current = active
+        return
+      }
       // Same object in both: the reload under the new name keeps running
       // the SQL as last executed, not an unexecuted edit just saved.
       const saved = { ...active, name: saveAs }
+      savedRef.current = saved
       editedRef.current = saved
       setLocalPush(saved)
       patchView(VIEW, { draft: null })
@@ -244,6 +251,7 @@ function DashboardView({
     await runAction(request, 'Failed to rename dashboard.', () => {
       const renamed = { ...active, name: newName }
       if (editedRef.current) editedRef.current = renamed
+      else savedRef.current = renamed
       setLocalPush(renamed)
       setSearchParams({ name: newName })
     })
@@ -318,7 +326,8 @@ function DashboardView({
           if (!cancelled) setError(`Dashboard “${name}” not found.`)
           return null
         }
-        return (await res.json()) as DashboardPush
+        savedRef.current = (await res.json()) as DashboardPush
+        return savedRef.current
       } catch {
         if (!cancelled) setError('Failed to load dashboard.')
         return null
@@ -541,10 +550,10 @@ function DashboardView({
           type="button"
           data-testid="dashboard-save"
           onClick={() => void save()}
-          disabled={!active || saving}
+          disabled={!active || saving || active === savedRef.current}
           className="glass-btn min-w-[5rem] px-3 py-2 text-center text-sm font-medium"
         >
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving…' : active && active === savedRef.current ? 'Saved' : 'Save'}
         </button>
         <button
           type="button"

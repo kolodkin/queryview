@@ -21,6 +21,9 @@ agent-authored HTML, which renders inside an isolated iframe.
   over one query, for ad-hoc SQL; **Save** asks for its name. The
   [session](./session.md) remembers the draft's SQL, so it survives leaving
   the page and a reload; picking a dashboard discards it;
+- **Save** — writes the open dashboard to the store; reads **Saved**, disabled,
+  while the open dashboard is the store's copy (no draft, agent push or
+  SQL-panel edit);
 - **Rename** and **Delete** — for a saved dashboard; Rename asks for the new
   name and keeps unsaved SQL-panel edits, Delete asks to confirm;
 - **Edit queries** — the [SQL panel](#the-sql-panel);

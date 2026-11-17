@@ -332,6 +332,11 @@ export const test = base.extend<
     async ({}, use) => {
       const backend = process.env.BASE_URL ? { url: process.env.BASE_URL, stop: async () => {} } : await startBackend();
       try {
+        // The suite saves, renames and deletes freely: never on someone's ~/.queryview.
+        if (process.env.BASE_URL) {
+          const health = (await (await fetch(`${backend.url}/api/health`)).json()) as { scratch?: boolean };
+          if (!health.scratch) throw new Error(`${backend.url} runs on the default data dir; start it with DATA_DIR set`);
+        }
         // Point the default workspace at the remote CI stood up, through the
         // same API a user would. Unset locally: git sync stays disabled.
         const remote = process.env.E2E_GIT_REMOTE;
