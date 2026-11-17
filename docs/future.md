@@ -4,6 +4,22 @@ Planned work, highest priority first. Each entry is a proposal, not yet
 implemented — the spec lives here until it ships, then moves into the relevant
 doc.
 
+## run_sql: server-side file access
+
+An agent's [`run_sql`](./mcp.md#tools) runs read-only, but read-only only
+blocks writes to tables. On MySQL, `SELECT … INTO OUTFILE` and `INTO DUMPFILE`
+still write files on the database server, and `LOAD_FILE()` reads them, when
+the login has the FILE privilege. `secure_file_priv` limits where, and an
+existing file is never overwritten. Postgres's `COPY … TO '<file>'` likely
+has the same gap for a superuser (untested).
+
+- **Refuse in `run_sql`.** Reject `INTO OUTFILE` / `INTO DUMPFILE` (MySQL) and
+  `COPY … TO` a file (Postgres), skipping comments and ignoring case. A
+  text check can be dodged, so it backs up the next item.
+- **Document the login.** [mcp.md](./mcp.md) and [connect.md](./connect.md)
+  advise an agent connection to use a login without file privileges: no FILE
+  on MySQL, no superuser or `pg_write_server_files` on Postgres.
+
 ## DuckDB file mode: schema picker
 
 A DuckDB connection whose `path` is a `.duckdb` file should navigate like
@@ -45,6 +61,7 @@ each workspace; multi-user sync needs git pulling or a webhook first.
 
 - [api.md](./api.md) — backend JSON API.
 - [connect.md](./connect.md) — connecting, storage.
+- [mcp.md](./mcp.md) — the agent tools, `run_sql` among them.
 - [gitsync.md](./gitsync.md) — git backup & restore, whose follow-ups live here.
 - [workspace.md](./workspace.md) — workspaces and their git remotes.
 - [session.md](./session.md) — sessions and what they remember.
