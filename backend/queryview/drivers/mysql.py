@@ -238,12 +238,13 @@ class MySqlDriver:
             async with _connect(config, database) as conn:
                 _, rows, _ = await _fetch(
                     conn,
-                    "SELECT TABLE_NAME, TABLE_ROWS, DATA_LENGTH + INDEX_LENGTH FROM information_schema.TABLES "
+                    "SELECT TABLE_NAME, TABLE_ROWS, DATA_LENGTH + INDEX_LENGTH, TABLE_TYPE = 'VIEW' "
+                    "FROM information_schema.TABLES "
                     "WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME",
                     None,
                     query_timeout.get(),
                 )
-                return TablesResult([{"name": n, "rows": r, "bytes": b} for n, r, b in rows])
+                return TablesResult([{"name": n, "rows": r, "bytes": b, "view": bool(v)} for n, r, b, v in rows])
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
 

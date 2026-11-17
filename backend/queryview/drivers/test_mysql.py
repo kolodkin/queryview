@@ -72,10 +72,13 @@ def test_run_query_builds_aliased_backtick_sql_and_decodes_json(monkeypatch):
 
 
 def test_list_tables_reads_information_schema(monkeypatch):
-    log = _fake(monkeypatch, lambda sql: (ID, [("items", 3, 16384), ("v", None, None)]))
+    log = _fake(monkeypatch, lambda sql: (ID, [("items", 3, 16384, 0), ("v", None, None, 1)]))
     r = asyncio.run(MySqlDriver().list_tables(CFG, "shop"))
     assert isinstance(r, TablesResult)
-    assert r.tables == [{"name": "items", "rows": 3, "bytes": 16384}, {"name": "v", "rows": None, "bytes": None}]
+    assert r.tables == [
+        {"name": "items", "rows": 3, "bytes": 16384, "view": False},
+        {"name": "v", "rows": None, "bytes": None, "view": True},
+    ]
     assert "TABLE_SCHEMA = DATABASE()" in log["sql"][0]
 
 
