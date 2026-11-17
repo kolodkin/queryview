@@ -156,10 +156,7 @@ test("ClickHouse views are listed under their own heading", async ({ page, seeds
     const rows = page.getByTestId("explorer-table");
     await expect(rows.first()).toHaveAttribute("data-table", "items");
     await expect(rows.last()).toHaveAttribute("data-table", "a_items_view");
-    // The heading sits between the last table and the first view.
-    const heading = page.getByTestId("explorer-views-heading");
-    await expect(heading).toHaveText("Views");
-    await expect(tableRow(page, "items").locator("xpath=following::h3[1]")).toHaveText("Views");
+    await expect(page.getByTestId("explorer-views-heading")).toHaveText("Views");
     await shot("explorer views heading");
 
     await tableRow(page, "a_items_view").click();

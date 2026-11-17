@@ -28,8 +28,8 @@ order-by select the [dashboard widget](./query.md#fields-selection--ordering) us
   `GET /api/db/tables`. A DuckDB folder connection adds a **Union by name**
   checkbox beside the heading (see [DuckDB folder mode](#duckdb-folder-mode)).
   ClickHouse and Postgres views (materialized ones included) follow the
-  tables under a **Views** heading; other drivers list views among the tables. Each entry shows the engine's row-count and size
-  estimates under the name (e.g. `1.2K rows · 3.4MB`), and a **copy** icon
+  tables under a **Views** heading; other drivers list views among the tables.
+  Each entry shows the engine's row-count and size estimates under the name (e.g. `1.2K rows · 3.4MB`), and a **copy** icon
   that copies the name without opening the table. Row counts abbreviate with K/M/G/T/P at each power of
   1000, byte sizes with KB/MB/GB/TB/PB at each power of 1024; an estimate the
   engine doesn't track (views, a never-analyzed Postgres table) is simply

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import {
@@ -400,7 +400,8 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
             {shownTables.map((t, i, all) => {
               const meta = tableMeta(t)
               return (
-                <div key={t.name}>
+                <Fragment key={t.name}>
+                  {/* shownTables puts views last: the heading opens their run. */}
                   {t.view && !all[i - 1]?.view && (
                     <h3
                       data-testid="explorer-views-heading"
@@ -436,7 +437,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
                     </button>
                     <CopyName name={t.name} testid="explorer-table-copy" />
                   </div>
-                </div>
+                </Fragment>
               )
             })}
             {tables.length === 0 && !tablesError && (
