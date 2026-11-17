@@ -178,9 +178,7 @@ class PostgresDriver:
                     "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm') "
                     "ORDER BY c.relname"
                 )
-                return TablesResult(
-                    [{"name": r["name"], "rows": r["rows"], "bytes": r["bytes"], "view": r["view"]} for r in rows]
-                )
+                return TablesResult([dict(r) for r in rows])
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))
 

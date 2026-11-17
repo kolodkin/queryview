@@ -119,6 +119,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     const shown = filterNames(tables, tableFilter, (t) => t.name)
     return [...shown.filter((t) => !t.view), ...shown.filter((t) => t.view)]
   }, [tables, tableFilter])
+  const firstView = shownTables.find((t) => t.view)
 
   // Load the sidebar whenever the active database changes; a selected table
   // that vanished (database switch) is dropped from the URL.
@@ -397,12 +398,11 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
           <Loading label="Loading tables…" testid="explorer-tables-loading" />
         ) : (
           <div className="mt-2 min-h-0 grow basis-0 space-y-1 overflow-auto">
-            {shownTables.map((t, i, all) => {
+            {shownTables.map((t) => {
               const meta = tableMeta(t)
               return (
                 <Fragment key={t.name}>
-                  {/* shownTables puts views last: the heading opens their run. */}
-                  {t.view && !all[i - 1]?.view && (
+                  {t === firstView && (
                     <h3
                       data-testid="explorer-views-heading"
                       className="px-2 pt-2 text-sm font-semibold text-slate-200"
