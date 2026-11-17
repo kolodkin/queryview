@@ -99,7 +99,8 @@ def test_execute_script_drains_rows_and_stops_at_the_first_error(monkeypatch):
         )
     )
     assert [(r.ok, r.status) for r in out] == [(True, "OK, 2 rows affected"), (True, ""), (False, "")]
-    assert out[1].truncated and len(out[1].rows.data) == SCRIPT_ROW_CAP
+    rows = out[1].rows
+    assert out[1].truncated and rows is not None and len(rows.data) == SCRIPT_ROW_CAP
     assert log["fetchmany"] == SCRIPT_ROW_CAP + 1 and log["drained"] == 1
     assert set(log["cursors"]) == {"SSCursor"}  # capped: unbuffered
     assert "missing" in out[2].message and len(log["sql"]) == 3
