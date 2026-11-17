@@ -168,5 +168,6 @@ def test_error_message_names_the_exception_type():
 
 def test_parse_host_port_config_takes_an_optional_database():
     fields, err = parse_host_port_config({"host": "h", "port": "1", "database": " sales_reporting "})
-    assert err is None and fields["database"] == "sales_reporting"
-    assert parse_host_port_config({"host": "h", "port": "1"})[0]["database"] == ""
+    assert err is None and fields is not None and fields["database"] == "sales_reporting"
+    blank, _ = parse_host_port_config({"host": "h", "port": "1"})
+    assert blank is not None and blank["database"] == ""

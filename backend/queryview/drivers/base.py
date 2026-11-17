@@ -215,7 +215,8 @@ def parse_host_port_config(body: Any) -> tuple[dict[str, Any] | None, str | None
     port = _parse_port(b.get("port"))
     username = b.get("username") if isinstance(b.get("username"), str) else ""
     password = b.get("password") if isinstance(b.get("password"), str) else ""
-    database = b.get("database").strip() if isinstance(b.get("database"), str) else ""
+    raw_database = b.get("database")
+    database = raw_database.strip() if isinstance(raw_database, str) else ""
     if not host:
         return None, "host required"
     if port is None:
