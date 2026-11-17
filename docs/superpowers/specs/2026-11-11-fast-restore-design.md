@@ -77,7 +77,7 @@ as `connected: false`, indistinguishable from "never connected".
 - Frontend unit: none; the probing state is React wiring.
 - e2e: a session on a connection to a closed port renders the shell, then
   lands on Connect with the toast, within the probe budget. The user's
-  Studio text from before the restart is still there.
+  Scripts text from before the restart is still there.
 
 ## Left to the builder
 
