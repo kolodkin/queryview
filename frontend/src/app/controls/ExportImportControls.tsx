@@ -22,7 +22,7 @@ export default function ExportImportControls({ kind, name, disabled, compact, on
   const [error, setError] = useState('')
   const btnClass = compact
     ? 'glass-btn px-2 py-1 text-xs font-medium'
-    : 'glass-btn px-3 py-2 font-medium'
+    : 'glass-btn px-3 py-2 text-sm font-medium'
 
   function flash(text: string) {
     setNote(text)
