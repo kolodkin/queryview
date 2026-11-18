@@ -47,8 +47,63 @@ document.addEventListener('DOMContentLoaded', bind);
 window.setParams = function (values) {
   parent.postMessage({ type: 'set-params', values: values }, '*');
 };
+// The page as static HTML, for the host's Snapshot: scripts out, canvases as
+// images, form state in attributes, and each widget's shadow root written as
+// declarative shadow DOM with its stylesheet, controls hidden and height
+// uncapped. Every change to the live page is undone before returning.
+function snapshot() {
+  var undo = [];
+  function swap(el, other) {
+    el.replaceWith(other);
+    undo.push(function () { other.replaceWith(el); });
+  }
+  try {
+    var roots = [];
+    (function walk(scope) {
+      scope.querySelectorAll('*').forEach(function (el) {
+        if (el.shadowRoot) { roots.push(el.shadowRoot); walk(el.shadowRoot); }
+      });
+    })(document);
+    [document].concat(roots).forEach(function (scope) {
+      scope.querySelectorAll('input').forEach(function (i) {
+        if (i.type === 'checkbox' || i.type === 'radio') i.toggleAttribute('checked', i.checked);
+        else i.setAttribute('value', i.value);
+      });
+      scope.querySelectorAll('option').forEach(function (o) {
+        o.toggleAttribute('selected', o.selected);
+      });
+      scope.querySelectorAll('script').forEach(function (s) {
+        swap(s, document.createComment(''));
+      });
+      scope.querySelectorAll('canvas').forEach(function (c) {
+        var img = document.createElement('img');
+        try { img.src = c.toDataURL('image/png'); } catch (err) { return; } // tainted: left as is
+        ['id', 'class', 'style', 'width', 'height'].forEach(function (a) {
+          if (c.hasAttribute(a)) img.setAttribute(a, c.getAttribute(a));
+        });
+        swap(c, img);
+      });
+    });
+    roots.forEach(function (root) {
+      var style = document.createElement('style');
+      style.textContent = root.adoptedStyleSheets.map(function (sheet) {
+        return Array.prototype.map.call(sheet.cssRules, function (r) { return r.cssText; }).join('\n');
+      }).join('\n') +
+        '\n[data-qv-chrome]{display:none!important}' +
+        '[data-qv-scroll]{max-height:none!important;flex:none!important}';
+      root.append(style);
+      undo.push(function () { style.remove(); });
+    });
+    return { type: 'qv-snapshot-result', html: document.documentElement.getHTML({ shadowRoots: roots }) };
+  } catch (err) {
+    return { type: 'qv-snapshot-result', message: String(err && err.message || err) };
+  } finally {
+    undo.reverse().forEach(function (f) { f(); });
+  }
+}
 window.addEventListener('message', function (e) {
   var d = e.data;
+  if (d && d.type === 'qv-snapshot') { parent.postMessage(snapshot(), '*'); return; }
   if (!d || d.type !== 'params-results') return;
   // A failed run keeps the previous results on screen and reports the message.
   if (d.results) { window.queries = d.results; bind(); }

@@ -13,6 +13,15 @@ describe('buildSrcDoc', () => {
     expect(doc.endsWith('</script>\n<h1>hi</h1>')).toBe(true)
   })
 
+  test('the prologue answers a snapshot request with its own serialized document', () => {
+    const doc = buildSrcDoc('', {})
+    expect(doc).toContain("d.type === 'qv-snapshot'")
+    expect(doc).toContain('getHTML(')
+    expect(doc).toContain('adoptedStyleSheets')
+    expect(doc).toContain('[data-qv-chrome]')
+    expect(doc).toContain("type: 'qv-snapshot-result'")
+  })
+
   test('escapes < in result data so it cannot close the prologue script', () => {
     const doc = buildSrcDoc('', { q: { s: ['</script><img onerror=x>'] } })
     expect(doc).not.toContain('</script><img')
