@@ -120,6 +120,8 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
     return [...shown.filter((t) => !t.view), ...shown.filter((t) => t.view)]
   }, [tables, tableFilter])
   const firstView = shownTables.find((t) => t.view)
+  const viewCount = tables.filter((t) => t.view).length
+  const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
 
   // Load the sidebar whenever the active database changes; a selected table
   // that vanished (database switch) is dropped from the URL.
@@ -381,7 +383,9 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               type="search"
               value={tableFilter}
               onChange={(e) => setTableFilter(e.target.value)}
-              placeholder={`Filter ${tables.length} tables…`}
+              placeholder={`Filter ${count(tables.length - viewCount, 'table')}${
+                viewCount ? ` and ${count(viewCount, 'view')}` : ''
+              }…`}
               aria-label="Filter tables"
               data-testid="explorer-table-filter"
               autoComplete="off"
