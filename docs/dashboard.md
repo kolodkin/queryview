@@ -30,7 +30,8 @@ agent-authored HTML, which renders inside an isolated iframe.
 - **Snapshot** — downloads the dashboard as one static `<name>.html`: what
   is on screen at the current parameters, charts as images, and every row
   each widget holds, without its controls or scroll box (raise a widget's
-  **Limit** first for more rows). The file runs no script and opens in a
+  **Limit** first for more rows); a caption gives each widget's row count,
+  limit, offset and order. The file runs no script and opens in a
   current browser; print it from there for a PDF. Taken while a widget is
   still loading, it is refused;
 - a **sandboxed iframe** that renders the selected dashboard.

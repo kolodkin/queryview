@@ -98,7 +98,7 @@ function snapshot() {
       style.textContent = root.adoptedStyleSheets.map(function (sheet) {
         return Array.prototype.map.call(sheet.cssRules, function (r) { return r.cssText; }).join('\\n');
       }).join('\\n') +
-        '\\n[data-qv-chrome]{display:none!important}' +
+        '\\n[data-qv-chrome]{display:none!important}[data-qv-snapshot]{display:block!important}' +
         '[data-qv-scroll]{max-height:none!important;flex:none!important}';
       root.append(style);
       undo.push(function () { style.remove(); });

@@ -237,6 +237,22 @@ export function SelectView({
         </button>
       </div>
 
+      {/* What the controls were set to: shown only in a snapshot, in their place. */}
+      {result && (
+        <p data-qv-snapshot data-testid="qv-caption" className="hidden text-xs text-slate-400">
+          {[
+            `${result.data.length} rows`,
+            `limit ${page.limit}`,
+            page.offset ? `offset ${page.offset}` : '',
+            page.orderBy.length
+              ? `ordered by ${page.orderBy.map((o) => `${o.name} ${o.dir.toLowerCase()}`).join(', ')}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      )}
+
       {fields.length > 0 && (
         <div data-qv-chrome>
           <FieldPickers

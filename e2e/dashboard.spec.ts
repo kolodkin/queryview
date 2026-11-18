@@ -182,6 +182,7 @@ test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, 
   // The live page is as it was: its canvas back in place, the widget still interactive.
   await expect(frame.locator("canvas#c")).toHaveCount(1);
   await expect(frame.getByTestId("qv-limit")).toBeVisible();
+  await expect(frame.getByTestId("qv-caption")).toBeHidden();
   await expect(frame.getByTestId("qv-param")).toHaveValue("beta");
 
   // The file, in a browser that runs no JavaScript.
@@ -193,6 +194,8 @@ test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, 
   await still.goto(`file://${path}`);
   await expect(still.getByTestId("qv-results").locator("tbody tr")).toHaveCount(200);
   await expect(still.getByTestId("qv-limit")).toBeHidden();
+  // In place of the controls, what they were set to.
+  await expect(still.getByTestId("qv-caption")).toHaveText("200 rows · limit 200 · ordered by n desc");
   await expect(still.locator("img#c")).toBeVisible();
   await expect(still.locator("canvas")).toHaveCount(0);
   // A dropdown is its chosen value, not a list to pick from.
