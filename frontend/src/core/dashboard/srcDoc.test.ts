@@ -13,6 +13,12 @@ describe('buildSrcDoc', () => {
     expect(doc.endsWith('</script>\n<h1>hi</h1>')).toBe(true)
   })
 
+  test('the prologue is valid JavaScript', () => {
+    const doc = buildSrcDoc('', {})
+    const js = doc.slice(doc.indexOf('<script>') + 8, doc.indexOf('</script>'))
+    expect(() => new Function(js)).not.toThrow()
+  })
+
   test('the prologue answers a snapshot request with its own serialized document', () => {
     const doc = buildSrcDoc('', {})
     expect(doc).toContain("d.type === 'qv-snapshot'")

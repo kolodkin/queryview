@@ -1,5 +1,7 @@
 // Dashboards run their queries through the path drivers.spec.ts covers per
 // driver, so these run once on DuckDB (no service).
+import { readFileSync } from "node:fs";
+
 import { DUCK, api, armRemote, connect, dashboardFrame, expect, openDashboard, test } from "./fixtures";
 
 // Reads window.queries and writes a value into the DOM, so the test can
@@ -153,4 +155,46 @@ test("rename and delete a saved dashboard", async ({ page, seeds, baseURL }) => 
   await expect(page.getByTestId("dashboard-empty")).toBeVisible();
   expect(await options.allTextContents()).not.toContain(renamed);
   expect((await api(`${baseURL}/api/dashboards/${encodeURIComponent(renamed)}`, { ok: false })).status).toBe(404);
+});
+
+test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, baseURL, browser }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "snap",
+    html:
+      '<qv-param name="pick"></qv-param>' +
+      '<canvas id="c" width="40" height="20"></canvas>' +
+      "<script>const x = document.getElementById('c').getContext('2d'); x.fillStyle = 'red'; x.fillRect(0, 0, 40, 20);</script>" +
+      '<qv-select-view query="rows" limit="200"></qv-select-view>',
+    queries: { rows: "SELECT range AS n FROM range(200)", q: "SELECT name FROM items WHERE name = {pick}" },
+    params: [{ name: "pick", options_sql: "SELECT name FROM items ORDER BY id" }],
+  });
+  await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(200);
+  await frame.getByTestId("qv-param").selectOption("beta");
+  await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(200);
+
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("dashboard-snapshot").click()]);
+  expect(download.suggestedFilename()).toBe("snap.html");
+  const path = test.info().outputPath("snap.html");
+  await download.saveAs(path);
+
+  // The live page is as it was: its canvas back in place, the widget still interactive.
+  await expect(frame.locator("canvas#c")).toHaveCount(1);
+  await expect(frame.getByTestId("qv-limit")).toBeVisible();
+
+  // The file, in a browser that runs no JavaScript.
+  const text = readFileSync(path, "utf-8");
+  expect(text).not.toContain("<script");
+  expect(text).not.toContain("window.queries");
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const still = await context.newPage();
+  await still.goto(`file://${path}`);
+  await expect(still.getByTestId("qv-results").locator("tbody tr")).toHaveCount(200);
+  await expect(still.getByTestId("qv-limit")).toBeHidden();
+  await expect(still.locator("img#c")).toBeVisible();
+  await expect(still.locator("canvas")).toHaveCount(0);
+  await expect(still.locator("option[selected]")).toHaveText("beta");
+  // Every row laid out: no height cap, no scroll box.
+  expect((await still.getByTestId("qv-results").boundingBox())!.height).toBeGreaterThan(3000);
+  await context.close();
 });

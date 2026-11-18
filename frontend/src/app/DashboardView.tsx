@@ -6,9 +6,11 @@ import {
   applyToQueries,
   parseDashboardParams,
   parseParamsRequest,
+  parseSnapshotResult,
   parseWidgetRequest,
   rejectedWidgetReply,
   resolveParams,
+  snapshotDocument,
   widgetQueryNames,
   type DashboardParam,
   type Dialect,
@@ -19,6 +21,7 @@ import {
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch, postJson } from './api'
+import { downloadText } from './yamlio'
 import DashboardSqlPanel from './DashboardSqlPanel'
 import { announceGitSync, gitStatus, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
@@ -146,6 +149,8 @@ function DashboardView({
   // query is substituted with.
   const resolvedRef = useRef<ResolvedParam[]>([])
   const frameRef = useRef<HTMLIFrameElement>(null)
+  // A Snapshot waiting for the frame's serialized document.
+  const snapshotRef = useRef<((html: string | null, message?: string) => void) | null>(null)
   // The SQL as last run (load or Execute). The frame's widgets and param
   // re-runs use this, so a half-typed edit in the SQL panel never runs.
   const executedRef = useRef<Record<string, string>>({})
@@ -441,6 +446,24 @@ function DashboardView({
     frame.contentWindow?.postMessage(answer, '*')
   }
 
+  // Download the dashboard as one static HTML file. Only the frame can read
+  // its page, so it serializes itself; its answer is untrusted text, wrapped
+  // behind a policy that blocks every script (docs/dashboard.md).
+  function snapshot() {
+    const frame = frameRef.current
+    if (!frame || !active || snapshotRef.current) return
+    const title = active.name || 'dashboard'
+    const done = (html: string | null, message?: string) => {
+      snapshotRef.current = null
+      clearTimeout(timer)
+      if (html === null) setError(message ?? 'The dashboard did not answer the snapshot request.')
+      else downloadText(`${title}.html`, snapshotDocument(html, title), 'text/html')
+    }
+    const timer = setTimeout(() => done(null), 5000)
+    snapshotRef.current = done
+    frame.contentWindow?.postMessage({ type: 'qv-snapshot' }, '*')
+  }
+
   // Open `push` in place of the current dashboard (null: the store's copy of
   // the selected one), dropping unsaved edits and the remembered draft.
   function reopen(push: DashboardPush | null) {
@@ -482,6 +505,12 @@ function DashboardView({
     async function onMessage(e: MessageEvent) {
       const frame = frameRef.current
       if (!frame || e.source !== frame.contentWindow) return
+      const snap = parseSnapshotResult(e.data)
+      if (snap) {
+        if ('html' in snap) snapshotRef.current?.(snap.html)
+        else snapshotRef.current?.(null, snap.message)
+        return
+      }
       if (!active) return
       const widget = parseWidgetRequest(e.data)
       if (widget) {
@@ -603,6 +632,16 @@ function DashboardView({
             setReloadNonce((n) => n + 1)
           }}
         />
+        <button
+          type="button"
+          data-testid="dashboard-snapshot"
+          onClick={snapshot}
+          disabled={!active || loading}
+          title="Download this dashboard as a static HTML file"
+          className="glass-btn px-3 py-2 text-sm font-medium"
+        >
+          Snapshot
+        </button>
       </div>
 
       {showSql && active && (

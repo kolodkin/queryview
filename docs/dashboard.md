@@ -27,11 +27,16 @@ agent-authored HTML, which renders inside an isolated iframe.
 - **Rename** and **Delete** — for a saved dashboard; Rename asks for the new
   name and keeps unsaved SQL-panel edits, Delete asks to confirm;
 - **Edit queries** — the [SQL panel](#the-sql-panel);
+- **Snapshot** — downloads the dashboard as one static `<name>.html`: what
+  is on screen at the current parameters, charts as images, and every row
+  each widget holds, without its controls or scroll box (raise a widget's
+  **Limit** first for more rows). The file runs no script and opens in any
+  browser; print it from there for a PDF;
 - a **sandboxed iframe** that renders the selected dashboard.
 
 ```
 +-- /dashboard ------------------------------------------+
-| [dashboard v] [New query] [Save] [Rename] [Delete] ... |
+| [dashboard v] [New query] [Save] [Rename] ... [Snapshot] |
 | +- SQL panel (Edit queries) -------------------------+ |
 | | [ sales v ]                    [Min][S][M][L][XL]  | |
 | | SELECT ...                                         | |
@@ -262,7 +267,11 @@ The HTML renders in
 **without** `allow-same-origin`, giving it an opaque origin: it can run JS and load CDN
 assets but cannot read the app's storage or call `/api/*` as the session (it
 has neither the session id nor any credential). A link the page opens with
-`target="_blank"` lands in a normal tab. Data reaches it only through the
+`target="_blank"` lands in a normal tab. The page cannot print or download
+by itself; **Snapshot** is the way out. The frame serializes its own
+document, and the host puts a policy that blocks all scripts ahead of that
+text, so the file is inert whatever the dashboard's HTML contains. It holds
+rendered query results: treat the file as data. Data reaches it only through the
 injected `window.queries` and the [widget](#widgets) replies; the
 `window.queries` JSON has `<` escaped so result data containing `</script>` can't break out
 of the prologue.

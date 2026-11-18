@@ -87,9 +87,9 @@ function snapshot() {
     roots.forEach(function (root) {
       var style = document.createElement('style');
       style.textContent = root.adoptedStyleSheets.map(function (sheet) {
-        return Array.prototype.map.call(sheet.cssRules, function (r) { return r.cssText; }).join('\n');
-      }).join('\n') +
-        '\n[data-qv-chrome]{display:none!important}' +
+        return Array.prototype.map.call(sheet.cssRules, function (r) { return r.cssText; }).join('\\n');
+      }).join('\\n') +
+        '\\n[data-qv-chrome]{display:none!important}' +
         '[data-qv-scroll]{max-height:none!important;flex:none!important}';
       root.append(style);
       undo.push(function () { style.remove(); });
