@@ -16,6 +16,15 @@ describe('snapshotDocument', () => {
     expect(doc.endsWith('<html><head></head><body>hi</body></html>')).toBe(true)
   })
 
+  it('neutralizes every http-equiv the frame sent: no refresh, no second policy', () => {
+    const doc = snapshotDocument(
+      '<meta HTTP-Equiv="refresh" content="0;url=https://example.internal">',
+      't',
+    )
+    expect(doc.match(/http-equiv/gi)).toHaveLength(2) // ours, and the frame's renamed
+    expect(doc).toContain('<meta data-http-equiv="refresh"')
+  })
+
   it('escapes the title', () => {
     expect(snapshotDocument('', 'a <b> & c')).toContain('<title>a &lt;b&gt; &amp; c</title>')
   })

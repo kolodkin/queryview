@@ -30,13 +30,14 @@ agent-authored HTML, which renders inside an isolated iframe.
 - **Snapshot** — downloads the dashboard as one static `<name>.html`: what
   is on screen at the current parameters, charts as images, and every row
   each widget holds, without its controls or scroll box (raise a widget's
-  **Limit** first for more rows). The file runs no script and opens in any
-  browser; print it from there for a PDF;
+  **Limit** first for more rows). The file runs no script and opens in a
+  current browser; print it from there for a PDF. Taken while a widget is
+  still loading, it is refused;
 - a **sandboxed iframe** that renders the selected dashboard.
 
 ```
 +-- /dashboard ------------------------------------------+
-| [dashboard v] [New query] [Save] [Rename] ... [Snapshot] |
+| [dashboard v] [New query] [Save] ... [Snapshot]        |
 | +- SQL panel (Edit queries) -------------------------+ |
 | | [ sales v ]                    [Min][S][M][L][XL]  | |
 | | SELECT ...                                         | |
@@ -270,8 +271,11 @@ has neither the session id nor any credential). A link the page opens with
 `target="_blank"` lands in a normal tab. The page cannot print or download
 by itself; **Snapshot** is the way out. The frame serializes its own
 document, and the host puts a policy that blocks all scripts ahead of that
-text, so the file is inert whatever the dashboard's HTML contains. It holds
-rendered query results: treat the file as data. Data reaches it only through the
+text and disarms any `http-equiv` in it, so the file runs no script and
+redirects nowhere, whatever the dashboard's HTML contains. What the
+dashboard loads from elsewhere (stylesheets, fonts, images) is still fetched
+when the file is opened. It holds rendered query results: treat the file as
+data. Data reaches it only through the
 injected `window.queries` and the [widget](#widgets) replies; the
 `window.queries` JSON has `<` escaped so result data containing `</script>` can't break out
 of the prologue.

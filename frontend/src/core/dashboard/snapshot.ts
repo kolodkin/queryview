@@ -25,6 +25,8 @@ export function snapshotDocument(html: string, title: string): string {
     "script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" +
     '">' +
     `<title>${escapeText(title)}</title>\n` +
-    html
+    // No http-equiv of the frame's survives: a refresh would navigate the
+    // opened file away. Attribute names can't be entity-encoded around this.
+    html.replace(/http-equiv/gi, 'data-http-equiv')
   )
 }
