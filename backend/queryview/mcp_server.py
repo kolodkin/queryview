@@ -32,7 +32,7 @@ from .validation import dashboard_params_error
 
 mcp = MCPServer(
     "queryview",
-    description="Local, agent-controlled SQL workbench for ClickHouse, Postgres, DuckDB and SQLite.",
+    description="Local, agent-controlled SQL workbench for ClickHouse, Postgres, MySQL, DuckDB and SQLite.",
     instructions=(
         "Open your own tab with new_tab unless given a session id. Run SQL, reads and writes, with run_script "
         "(apply writes once), then push_script the final SQL with run=False. Use push_dashboard "
@@ -181,7 +181,7 @@ async def list_connections(session_id: str) -> dict[str, Any]:
     ("session" | "saved"), "created_by" ("agent" | "user") and "active".
     Locked saved connections are left out, even while a tab has one unlocked.
 
-    You may use_connection any ClickHouse or Postgres one; remove_connection only
+    You may use_connection any ClickHouse, Postgres or MySQL one; remove_connection only
     scope="session", created_by="agent" entries.
 
     Returns {"ok": True, "connections": [{name, type, scope, created_by,
@@ -233,7 +233,7 @@ async def _databases_of(session_id: str, c: dict[str, Any]) -> dict[str, Any]:
 
 
 # Network drivers only: DuckDB's and SQLite's SQL read any file the backend can.
-_AGENT_DRIVERS = ("clickhouse", "postgres")
+_AGENT_DRIVERS = ("clickhouse", "postgres", "mysql")
 
 
 @mcp.tool()
@@ -245,15 +245,16 @@ async def add_connection(session_id: str, name: str, type: str, config: dict[str
     Args:
         session_id: The session id shown in the QueryView popover.
         name: A name no saved or session connection uses yet.
-        type: "clickhouse" or "postgres" (DuckDB and SQLite are refused: they read local files).
-        config: {host, port, username, password}.
+        type: "clickhouse", "postgres" or "mysql" (DuckDB and SQLite are refused: they read local files).
+        config: {host, port, username, password}, plus an optional `database` to
+            list and open only that one.
 
     Returns {"ok": True, "name", "type", "databases"} or {"ok": False, "message"}.
     """
     if await sessions.get_session_rec(session_id) is None:
         return {"ok": False, "message": "unknown session"}
     if type not in _AGENT_DRIVERS:
-        return {"ok": False, "message": f"the agent may add only {' or '.join(_AGENT_DRIVERS)} connections"}
+        return {"ok": False, "message": f"the agent may add only {', '.join(_AGENT_DRIVERS)} connections"}
     if not name.strip():
         return {"ok": False, "message": "name required"}
     _, parsed, error = parse_driver_config({**(config if isinstance(config, dict) else {}), "type": type})
@@ -281,7 +282,7 @@ async def remove_connection(session_id: str, name: str) -> dict[str, Any]:
 
 @mcp.tool()
 async def use_connection(session_id: str, name: str, database: str | None = None) -> dict[str, Any]:
-    """Switch the session to any ClickHouse or Postgres connection
+    """Switch the session to any ClickHouse, Postgres or MySQL connection
     list_connections shows, optionally selecting `database` (both need one
     before querying). The browser follows within a few seconds. Locked
     connections are refused, and so are DuckDB and SQLite ones: they read local
@@ -293,7 +294,7 @@ async def use_connection(session_id: str, name: str, database: str | None = None
     # shortcut: no switching to file drivers until DuckDB reads blob storage instead of local files
     listed = next((c for c in await agent_connections_for(session_id) if c["name"] == name), None)
     if listed is not None and listed["created_by"] != "agent" and listed["type"] not in _AGENT_DRIVERS:
-        return {"ok": False, "message": f"the agent may switch only to {' or '.join(_AGENT_DRIVERS)} connections"}
+        return {"ok": False, "message": f"the agent may switch only to {', '.join(_AGENT_DRIVERS)} connections"}
     return await open_saved(session_id, name, database, by="agent")
 
 

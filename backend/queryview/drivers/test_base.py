@@ -13,6 +13,7 @@ from queryview.drivers.base import (
     Column,
     QueryRows,
     build_order_by,
+    parse_host_port_config,
     rows_to_columns,
     select_all_sql,
     split_statements,
@@ -163,3 +164,10 @@ def test_error_message_names_the_exception_type():
 
     assert error_message(ValueError("bad")) == "ValueError: bad"
     assert error_message(TimeoutError()) == "TimeoutError"
+
+
+def test_parse_host_port_config_takes_an_optional_database():
+    fields, err = parse_host_port_config({"host": "h", "port": "1", "database": " sales_reporting "})
+    assert err is None and fields is not None and fields["database"] == "sales_reporting"
+    blank, _ = parse_host_port_config({"host": "h", "port": "1"})
+    assert blank is not None and blank["database"] == ""

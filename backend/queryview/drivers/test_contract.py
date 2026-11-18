@@ -16,6 +16,7 @@ from queryview.drivers import DRIVERS, Driver
 from queryview.drivers.base import DatabasesResult, Err, FieldsResult, RowsResult, TablesResult, TextResult
 from queryview.drivers.clickhouse import ChConfig
 from queryview.drivers.duckdb import DuckConfig
+from queryview.drivers.mysql import MySqlConfig
 from queryview.drivers.postgres import PgConfig
 from queryview.drivers.sqlite import SqliteConfig
 
@@ -38,6 +39,11 @@ SAMPLES: dict[str, DriverSample] = {
     "postgres": DriverSample(
         PgConfig("h", 5432, "u", "p"),
         {"host": "h", "port": "5432", "username": "u", "password": "p"},
+        requires_database=True,
+    ),
+    "mysql": DriverSample(
+        MySqlConfig("h", 3306, "u", "p"),
+        {"host": "h", "port": "3306", "username": "u", "password": "p"},
         requires_database=True,
     ),
     "duckdb": DriverSample(

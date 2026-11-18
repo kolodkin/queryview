@@ -89,6 +89,9 @@ same JSON shape as every other result
 - **Postgres** — each statement is prepared and executed on the run's
   connection; rows are read through a cursor up to the cap, and a statement
   with no result columns reports its command tag.
+- **MySQL** — statements run in autocommit on the run's connection; rows
+  stream up to the cap (the rest is read and dropped), and a statement with no
+  result reports `OK, N rows affected`.
 - **DuckDB** — the file is opened **read-write** for the run, while every other
   page opens it read-only. DuckDB refuses a second open of one file with a
   different mode in the same process, so the explorer and dashboards error on

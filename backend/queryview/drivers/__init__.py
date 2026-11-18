@@ -5,7 +5,10 @@ from __future__ import annotations
 from .base import Driver
 from .clickhouse import ClickHouseDriver
 from .duckdb import DuckDBDriver
+from .mysql import MySqlDriver
 from .postgres import PostgresDriver
 from .sqlite import SqliteDriver
 
-DRIVERS: dict[str, Driver] = {d.type: d for d in (ClickHouseDriver(), PostgresDriver(), DuckDBDriver(), SqliteDriver())}
+DRIVERS: dict[str, Driver] = {
+    d.type: d for d in (ClickHouseDriver(), PostgresDriver(), MySqlDriver(), DuckDBDriver(), SqliteDriver())
+}

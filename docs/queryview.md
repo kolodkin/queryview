@@ -96,7 +96,7 @@ database may take, in whole seconds 1–600, 30 by default. It covers queries,
 describes, table and database lists and the connect probe; an agent's `run_sql`
 and a script run connect within it, then have their own longer limits. Applied
 on blur or Enter, remembered with the session and read by the server on each
-request. ClickHouse, Postgres and SQLite honour it; a DuckDB query runs to
+request. ClickHouse, Postgres, MySQL and SQLite honour it; a DuckDB query runs to
 completion.
 
 ## Design principles
