@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-import yaml
 from mcp.server.mcpserver import Context, MCPServer
 
 from . import gitsync, remote, sessions
@@ -33,7 +32,6 @@ from .connect import select_database as connect_select_database
 from .dashboards import _dashboard_event, get_dashboard
 from .mcp_skills import SkillsExtension
 from .validation import dashboard_params_error
-from .yamlio import YamlIOError, dashboard_from_data
 
 mcp = MCPServer(
     "queryview",
@@ -442,7 +440,7 @@ async def push_dashboard(
             return _push_failed("pass either `html` and `queries`, or `dir`")
         try:
             d = await asyncio.to_thread(_read_dashboard_dir, dir)
-        except (ValueError, YamlIOError) as e:
+        except (ValueError, gitsync.GitSyncError) as e:
             return _push_failed(str(e))
         html, queries = d["html"], d["queries"]
         name = name or d["name"]
@@ -490,17 +488,7 @@ def _read_dashboard_dir(path: str) -> dict[str, Any]:
             texts[fname] = p.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             raise ValueError(f"cannot read {fname} in `dir` (a UTF-8 file up to {_DIR_FILE_MAX} bytes)") from None
-    try:
-        meta = yaml.safe_load(texts.get("meta.yaml", "")) or {}
-        queries = yaml.safe_load(texts["queries.yaml"])
-    except yaml.YAMLError:
-        raise ValueError("malformed yaml in `dir`") from None
-    if not isinstance(meta, dict):
-        raise ValueError("meta.yaml must be a mapping")
-    data = {**meta, "html": texts["dashboard.html"], "queries": queries}
-    named = "name" in meta
-    d = dashboard_from_data(data if named else {**data, "name": "draft"}, "dashboard dir", require_html=False)
-    return d if named else {**d, "name": None}
+    return gitsync.dashboard_from_files(texts, require_name=False)
 
 
 # Agents edit saved entities or push unnamed drafts; only the user names one.
