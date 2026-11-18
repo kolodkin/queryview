@@ -274,7 +274,8 @@ def test_mcp_push_dashboard_reads_dir(tmp_path):
 
         # Inline params win over meta.yaml; a meta name must be a saved dashboard.
         assert _run(push_dashboard(rid, params=[], dir=str(tmp_path)))["pushed"] is True
-        assert _run(remote.next_message(rid, 1.0))["params"] == []
+        msg = _run(remote.next_message(rid, 1.0))
+        assert msg is not None and msg["params"] == []
         (tmp_path / "meta.yaml").write_text("name: no such dash\n", encoding="utf-8")
         assert 'no saved dashboard named "no such dash"' in _run(push_dashboard(rid, dir=str(tmp_path)))["message"]
     finally:
