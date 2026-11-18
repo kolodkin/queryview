@@ -26,6 +26,9 @@ describe('buildSrcDoc', () => {
     expect(doc).toContain('adoptedStyleSheets')
     expect(doc).toContain('[data-qv-chrome]')
     expect(doc).toContain("type: 'qv-snapshot-result'")
+    // A widget mid-query has no rows yet: the snapshot is refused, not taken empty.
+    expect(doc).toContain('[data-qv-busy]')
+    expect(doc).toContain('A widget is still loading')
   })
 
   test('escapes < in result data so it cannot close the prologue script', () => {

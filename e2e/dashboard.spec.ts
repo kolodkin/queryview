@@ -162,15 +162,16 @@ test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, 
   const frame = await openDashboard(page, baseURL, {
     name: "snap",
     html:
-      '<qv-param name="pick"></qv-param>' +
+      '<qv-param name="pick"></qv-param><b id="v" data-qv-query="q" data-qv-column="name"></b>' +
       '<canvas id="c" width="40" height="20"></canvas>' +
       "<script>const x = document.getElementById('c').getContext('2d'); x.fillStyle = 'red'; x.fillRect(0, 0, 40, 20);</script>" +
-      '<qv-select-view query="rows" limit="200"></qv-select-view>',
-    queries: { rows: "SELECT range AS n FROM range(200)", q: "SELECT name FROM items WHERE name = {pick}" },
+      '<qv-select-view query="rows" limit="200" order-by="n desc" fields="n"></qv-select-view>',
+    queries: { rows: "SELECT range AS n, range * 2 AS m FROM range(200)", q: "SELECT name FROM items WHERE name = {pick}" },
     params: [{ name: "pick", options_sql: "SELECT name FROM items ORDER BY id" }],
   });
   await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(200);
   await frame.getByTestId("qv-param").selectOption("beta");
+  await expect(frame.locator("#v")).toHaveText("beta"); // the re-run landed
   await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(200);
 
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("dashboard-snapshot").click()]);
@@ -181,6 +182,7 @@ test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, 
   // The live page is as it was: its canvas back in place, the widget still interactive.
   await expect(frame.locator("canvas#c")).toHaveCount(1);
   await expect(frame.getByTestId("qv-limit")).toBeVisible();
+  await expect(frame.getByTestId("qv-param")).toHaveValue("beta");
 
   // The file, in a browser that runs no JavaScript.
   const text = readFileSync(path, "utf-8");
@@ -193,7 +195,9 @@ test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, 
   await expect(still.getByTestId("qv-limit")).toBeHidden();
   await expect(still.locator("img#c")).toBeVisible();
   await expect(still.locator("canvas")).toHaveCount(0);
-  await expect(still.locator("option[selected]")).toHaveText("beta");
+  // A dropdown is its chosen value, not a list to pick from.
+  await expect(still.getByTestId("qv-param")).toHaveText("beta");
+  await expect(still.locator("select")).toHaveCount(0);
   // Every row laid out: no height cap, no scroll box.
   expect((await still.getByTestId("qv-results").boundingBox())!.height).toBeGreaterThan(3000);
   await context.close();

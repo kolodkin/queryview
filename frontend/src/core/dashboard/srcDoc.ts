@@ -48,7 +48,7 @@ window.setParams = function (values) {
   parent.postMessage({ type: 'set-params', values: values }, '*');
 };
 // The page as static HTML, for the host's Snapshot: scripts out, canvases as
-// images, form state in attributes, and each widget's shadow root written as
+// images, dropdowns as their chosen value, input state in attributes, and each widget's shadow root written as
 // declarative shadow DOM with its stylesheet, controls hidden and height
 // uncapped. Every change to the live page is undone before returning.
 function snapshot() {
@@ -64,13 +64,22 @@ function snapshot() {
         if (el.shadowRoot) { roots.push(el.shadowRoot); walk(el.shadowRoot); }
       });
     })(document);
+    if (roots.some(function (root) { return root.querySelector('[data-qv-busy]'); })) {
+      return { type: 'qv-snapshot-result', message: 'A widget is still loading. Take the snapshot when it has finished.' };
+    }
     [document].concat(roots).forEach(function (scope) {
       scope.querySelectorAll('input').forEach(function (i) {
         if (i.type === 'checkbox' || i.type === 'radio') i.toggleAttribute('checked', i.checked);
         else i.setAttribute('value', i.value);
       });
-      scope.querySelectorAll('option').forEach(function (o) {
-        o.toggleAttribute('selected', o.selected);
+      // A dropdown becomes its chosen value: the file has nothing to pick.
+      scope.querySelectorAll('select').forEach(function (sel) {
+        var span = document.createElement('span');
+        span.textContent = Array.prototype.map.call(sel.selectedOptions, function (o) { return o.textContent; }).join(', ');
+        ['id', 'class', 'style', 'data-testid'].forEach(function (a) {
+          if (sel.hasAttribute(a)) span.setAttribute(a, sel.getAttribute(a));
+        });
+        swap(sel, span);
       });
       scope.querySelectorAll('script').forEach(function (s) {
         swap(s, document.createComment(''));

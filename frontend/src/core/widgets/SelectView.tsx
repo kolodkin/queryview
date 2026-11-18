@@ -178,6 +178,8 @@ export function SelectView({
     <section
       data-testid="qv-select-view"
       data-qv-scroll
+      // A snapshot waits for the rows (../dashboard/srcDoc.ts).
+      data-qv-busy={busy || undefined}
       className="flex max-h-[36rem] flex-col gap-2 rounded-xl bg-slate-950 p-3 text-sm text-slate-200"
     >
       {/* data-qv-chrome: left out of a snapshot (../dashboard/srcDoc.ts). */}
