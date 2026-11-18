@@ -63,7 +63,7 @@ an agent push is refused with `blocked, user editing` while you type.
 The MCP server at `/mcp` (see [mcp.md](./mcp.md) for arming and the
 session id) exposes:
 
-- `push_dashboard(session_id, html, queries, params?, name?)` — push the
+- `push_dashboard(session_id, html?, queries?, params?, name?, dir?)` — push the
   dashboard **draft** to the browser identified by `session_id`, which navigates
   to the dashboard view and renders it. Without `name` the draft is new:
   **Save** asks the user for its name. `name` must be a saved dashboard, which
@@ -78,9 +78,30 @@ a dashboard is portable across sessions, instances and git sync; opened in a
 disconnected session it asks you to connect. Select a database first, or
 fully-qualify tables as `db.table`.
 
-The REST mirror `POST /api/dashboards` takes the same fields (plus optional
+The REST mirror `POST /api/dashboards` takes the inline fields (plus optional
 `session_id`) and drives the same persist-and-push path (used by the e2e suite).
 See [api.md](./api.md) for the full endpoint list.
+
+## Pushing from a folder
+
+An agent regenerates inline `html` and `queries` in full on every push. With
+`dir`, it writes them once to a folder of its own (its scratchpad) and each
+re-push is a short call; the server reads the folder, so both must share a
+filesystem.
+
+```
+push_dashboard(session_id, dir="/tmp/agent-scratch/sales-overview")
+
+sales-overview/
+  dashboard.html
+  queries.yaml     {query name: SQL}
+  meta.yaml        optional: name, params
+```
+
+The layout is a dashboard's folder in [workspace git](./gitsync.md). `dir` is
+an absolute path outside QueryView's data directory, and only these three
+names are read. Inline `name` and `params` win over `meta.yaml`; `dir`
+together with `html` or `queries` is refused.
 
 ## The `window.queries` contract for HTML authors
 
