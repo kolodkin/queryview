@@ -63,7 +63,7 @@ an agent push is refused with `blocked, user editing` while you type.
 The MCP server at `/mcp` (see [mcp.md](./mcp.md) for arming and the
 session id) exposes:
 
-- `push_dashboard(session_id, html, queries, params?, name?, dir?)` — push the
+- `push_dashboard(session_id, html?, queries?, params?, name?, dir?)` — push the
   dashboard **draft** to the browser identified by `session_id`, which navigates
   to the dashboard view and renders it. Without `name` the draft is new:
   **Save** asks the user for its name. `name` must be a saved dashboard, which
