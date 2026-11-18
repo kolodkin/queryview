@@ -246,9 +246,9 @@ def test_mcp_upsert_dashboard_pushes_draft_without_persisting(default_ws_id):
 
 
 def test_mcp_push_dashboard_reads_dir(tmp_path):
-    _run(_save_active_connection("c", ChConfig("h", 8123, "u", "p"), "clickhouse"))
+    _run(_save_active_connection("c-dir", ChConfig("h", 8123, "u", "p"), "clickhouse"))
     rec = _run(sessions.create_session())
-    _run(sessions.set_connection(rec.id, "c"))
+    _run(sessions.set_connection(rec.id, "c-dir"))
     rid = remote.register(rec.id)
     try:
         assert "or `dir`" in _run(push_dashboard(rid))["message"]
