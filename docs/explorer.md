@@ -26,8 +26,11 @@ order-by select the [dashboard widget](./query.md#fields-selection--ordering) us
 
 - **Sidebar** — the tables of the session's selected database, from
   `GET /api/db/tables`. A DuckDB folder connection adds a **Union by name**
-  checkbox beside the heading (see [DuckDB folder mode](#duckdb-folder-mode)). Each entry shows the engine's row-count and size
-  estimates under the name (e.g. `1.2K rows · 3.4MB`), and a **copy** icon
+  checkbox beside the heading (see [DuckDB folder mode](#duckdb-folder-mode)).
+  ClickHouse, Postgres and MySQL views (materialized ones included) follow
+  the tables under a **Views** heading; other drivers list views among the tables.
+  Each entry shows the engine's row-count and size estimates under the name
+  (e.g. `1.2K rows · 3.4MB`), and a **copy** icon
   that copies the name without opening the table. Row counts abbreviate with K/M/G/T/P at each power of
   1000, byte sizes with KB/MB/GB/TB/PB at each power of 1024; an estimate the
   engine doesn't track (views, a never-analyzed Postgres table) is simply
@@ -85,8 +88,9 @@ engine doesn't track them:
 
 | Driver     | Names                                                       | Estimates |
 | ---------- | ----------------------------------------------------------- | --------- |
-| ClickHouse | `system.tables` for the selected database (same set as `SHOW TABLES`) | `total_rows` / `total_bytes` (null for views) |
-| Postgres   | `pg_class` for the `public` schema, tables and views — what an unqualified name resolves to under the default `search_path`; other schemas need explicit SQL on the query page | planner's `reltuples` (null until first ANALYZE/VACUUM) / `pg_total_relation_size` |
+| ClickHouse | `system.tables` for the selected database (same set as `SHOW TABLES`); `view: true` for the `View`, `MaterializedView`, `LiveView` and `WindowView` engines | `total_rows` / `total_bytes` (null for views) |
+| Postgres   | `pg_class` for the `public` schema, tables and views — what an unqualified name resolves to under the default `search_path`; `view: true` for `relkind` `v`/`m`; other schemas need explicit SQL on the query page | planner's `reltuples` (null until first ANALYZE/VACUUM) / `pg_total_relation_size` |
+| MySQL      | `information_schema.TABLES` for the selected database; `view: true` for `TABLE_TYPE` `VIEW` / `SYSTEM VIEW` | `TABLE_ROWS` (estimate, null for views) / `DATA_LENGTH + INDEX_LENGTH` |
 | DuckDB file | `SHOW TABLES` against the file (no database picker)         | `duckdb_tables()`'s `estimated_size` rows; bytes = distinct `pragma_storage_info` blocks × block size (null for views / `:memory:`) |
 | DuckDB folder | the selected folder's data files and `*.<ext>` globs (below) | rows null (never scanned); bytes = file size, summed for a glob |
 | SQLite     | `sqlite_master` tables and views (no database picker)        | none — SQLite keeps no estimates (both null) |

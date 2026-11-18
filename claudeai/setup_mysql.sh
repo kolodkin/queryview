@@ -61,6 +61,8 @@ fi
 # Ubuntu 24.04 ships libaio.so.1 as libaio.so.1t64.
 aio() { ldconfig -p | awk '/libaio\.so\.1(t64)? /{print $NF; exit}'; }
 if [ -z "$(aio)" ]; then
+  # A fresh container has an empty package list: refresh it or the install finds nothing.
+  apt-get update -q >/dev/null 2>&1 || true
   apt-get install -y -q libaio1t64 >/dev/null 2>&1 || apt-get install -y -q libaio1 >/dev/null || die "libaio missing (install libaio1)"
 fi
 [ -e "$MY/lib/libaio.so.1" ] || ln -s "$(aio)" "$MY/lib/libaio.so.1"

@@ -144,12 +144,14 @@ def test_list_tables_parses_rows_and_bytes_with_nulls(monkeypatch):
     _capture(
         monkeypatch,
         seen,
-        _json_compact(["name", "total_rows", "total_bytes"], [["items", "3", "245"], ["v_items", None, None]]),
+        _json_compact(
+            ["name", "total_rows", "total_bytes", "is_view"], [["items", "3", "245", 0], ["v_items", None, None, 1]]
+        ),
     )
     r = asyncio.run(d.list_tables(CFG, "db"))
     assert isinstance(r, TablesResult) and r.tables == [
-        {"name": "items", "rows": 3, "bytes": 245},
-        {"name": "v_items", "rows": None, "bytes": None},
+        {"name": "items", "rows": 3, "bytes": 245, "view": False},
+        {"name": "v_items", "rows": None, "bytes": None, "view": True},
     ]
     assert "system.tables" in seen["query"]
     assert seen["database"] == "db"
