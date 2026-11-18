@@ -257,6 +257,9 @@ def test_mcp_push_dashboard_reads_dir(tmp_path):
         assert "either" in _run(push_dashboard(rid, "<p>", {"q": "SELECT 1"}, dir=str(tmp_path)))["message"]
         assert "cannot read" in _run(push_dashboard(rid, dir=str(tmp_path)))["message"]
 
+        (tmp_path / "dashboard.html").symlink_to(_data_dir() / "queryview.db")
+        assert "data dir" in _run(push_dashboard(rid, dir=str(tmp_path)))["message"]
+        (tmp_path / "dashboard.html").unlink()
         (tmp_path / "dashboard.html").write_text("<p>from disk</p>", encoding="utf-8")
         (tmp_path / "queries.yaml").write_text("- not a map\n", encoding="utf-8")
         assert "queries must be" in _run(push_dashboard(rid, dir=str(tmp_path)))["message"]

@@ -474,11 +474,11 @@ def _read_dashboard_dir(path: str) -> dict[str, Any]:
     root = Path(path)
     if not root.is_absolute():
         raise ValueError("`dir` must be an absolute path")
-    if root.resolve().is_relative_to(_data_dir().resolve()):
-        raise ValueError("`dir` may not be inside the QueryView data dir")
     texts: dict[str, str] = {}
     for fname in gitsync.DASHBOARD_FILES:
         p = root / fname
+        if p.resolve().is_relative_to(_data_dir().resolve()):  # resolved: a symlink can't reach in either
+            raise ValueError("`dir` may not be inside the QueryView data dir")
         if fname == "meta.yaml" and not os.path.lexists(p):
             continue
         # is_file also keeps a FIFO from blocking the read; errors stay vague: no filesystem oracle.
