@@ -65,16 +65,17 @@ def dashboard_to_files(d: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def dashboard_from_files(files: dict[str, str]) -> dict[str, Any]:
-    """Inverse of dashboard_to_files."""
+def dashboard_from_files(files: dict[str, str], require_name: bool = True) -> dict[str, Any]:
+    """Inverse of dashboard_to_files. require_name=False reads an agent's draft
+    folder, where meta.yaml and its name are optional."""
     try:
-        meta = yaml.safe_load(files["meta.yaml"])
+        meta = yaml.safe_load(files["meta.yaml"] if require_name else files.get("meta.yaml", ""))
         queries = yaml.safe_load(files["queries.yaml"])
     except yaml.YAMLError as e:
         raise GitSyncError(f"malformed dashboard file: {e}") from e
     data = {**(meta if isinstance(meta, dict) else {}), "html": files["dashboard.html"], "queries": queries}
     try:
-        return dashboard_from_data(data, require_html=False)
+        return dashboard_from_data(data, require_html=False, require_name=require_name)
     except YamlIOError as e:
         raise GitSyncError(str(e)) from e
 
