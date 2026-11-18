@@ -389,9 +389,8 @@ async def push_dashboard(
 ) -> dict[str, Any]:
     """Push a dashboard to a live QueryView session.
 
-    Pass `html` and `queries` inline, or write them to a folder (your
-    scratchpad) and pass its path as `dir`: re-pushing after an edit is then a
-    short call. `dir` needs the server on your machine.
+    Prefer `dir` when the server runs on your machine: write the files to your
+    scratchpad once, and a re-push after an edit is a short call.
 
     The dashboard renders immediately in the browser as a DRAFT: nothing is
     written to the store until the user's **Save** in the dashboard view. Omit `name` for a new dashboard:
