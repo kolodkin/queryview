@@ -5,8 +5,10 @@ in-process remote.py hub."""
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
+import yaml
 from mcp.server.mcpserver import Context, MCPServer
 
 from . import gitsync, remote, sessions
@@ -379,12 +381,17 @@ async def list_dashboards(session_id: str | None = None) -> dict[str, Any]:
 @mcp.tool()
 async def push_dashboard(
     session_id: str,
-    html: str,
-    queries: dict[str, str],
+    html: str | None = None,
+    queries: dict[str, str] | None = None,
     params: list[dict[str, Any]] | None = None,
     name: str | None = None,
+    dir: str | None = None,
 ) -> dict[str, Any]:
     """Push a dashboard to a live QueryView session.
+
+    Pass `html` and `queries` inline, or write them to a folder (your
+    scratchpad) and pass its path as `dir`: re-pushing after an edit is then a
+    short call. `dir` needs the server on your machine.
 
     The dashboard renders immediately in the browser as a DRAFT: nothing is
     written to the store until the user's **Save** in the dashboard view. Omit `name` for a new dashboard:
@@ -417,6 +424,10 @@ async def push_dashboard(
         params: Optional selector specs (see above).
         name: Optional name of an existing saved dashboard to edit; any other
             name is refused.
+        dir: Absolute path of a folder holding `dashboard.html`,
+            `queries.yaml` (a {name: SQL} map) and optionally `meta.yaml`
+            (`name`, `params`), instead of `html` and `queries`. Inline
+            `name` / `params` win over meta.yaml.
 
     Returns {ok, pushed, message, database}; "not connected" if
     the session has no connection.
@@ -424,6 +435,17 @@ async def push_dashboard(
     rec = await sessions.get_session_rec(session_id) if session_id else None
     if rec is None or rec.connection_name is None:
         return _push_failed("not connected")
+    if (dir is None) == (html is None and queries is None):
+        return _push_failed("pass either `html` and `queries`, or `dir`")
+    if dir is not None:
+        try:
+            html, queries, meta = _read_dashboard_dir(dir)
+        except ValueError as e:
+            return _push_failed(str(e))
+        name = name or meta.get("name")
+        params = meta.get("params") if params is None else params
+    if html is None or queries is None:
+        return _push_failed("`html` and `queries` are both required")
     perr = dashboard_params_error(params)
     if perr is not None:
         return _push_failed(perr)
@@ -439,6 +461,35 @@ async def push_dashboard(
             "database": await sessions.database_of(session_id),
         },
     )
+
+
+_DIR_FILE_MAX = 5_000_000  # bytes; far above any real dashboard
+
+
+def _read_dashboard_dir(path: str) -> tuple[str, dict[str, str], dict[str, Any]]:
+    """(html, queries, meta) from a folder in the git-sync layout (docs/gitsync.md).
+    Only these three fixed names are read, so `dir` can't aim at an arbitrary file."""
+    texts: dict[str, str] = {}
+    for fname in gitsync.DASHBOARD_FILES:
+        p = Path(path) / fname
+        try:
+            if fname == "meta.yaml" and not p.exists():
+                continue
+            if p.stat().st_size > _DIR_FILE_MAX:
+                raise ValueError(f"{fname} is larger than {_DIR_FILE_MAX} bytes")
+            texts[fname] = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            raise ValueError(f"cannot read {p}: {e}") from e
+    try:
+        queries = yaml.safe_load(texts["queries.yaml"]) or {}
+        meta = yaml.safe_load(texts.get("meta.yaml", "")) or {}
+    except yaml.YAMLError as e:
+        raise ValueError(f"malformed yaml in {path}: {e}") from e
+    if not isinstance(queries, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in queries.items()):
+        raise ValueError("queries.yaml must be a {name: SQL} map")
+    if not isinstance(meta, dict):
+        raise ValueError("meta.yaml must be a mapping")
+    return texts["dashboard.html"], queries, meta
 
 
 # Agents edit saved entities or push unnamed drafts; only the user names one.

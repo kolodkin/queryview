@@ -35,6 +35,17 @@ Use `push_dashboard` only when the user asks for it.
 `push_dashboard` renders HTML fed by named queries as an unsaved draft; re-push to revise
 it. See the tool's description for the `window.queries` and `params` contract.
 
+When the server runs on your machine, keep the dashboard as a folder in your
+scratchpad with exactly these file names, and push with `dir=<folder>`: a
+revision is a file edit and a short call, not the whole HTML again.
+
+```
+<scratchpad>/sales-overview/
+  dashboard.html   the HTML document
+  queries.yaml     {query_name: SQL}
+  meta.yaml        optional: params (and name, to edit a saved dashboard)
+```
+
 Two tags save hand-drawing a table or a selector; place them anywhere in the HTML:
 
 ```html

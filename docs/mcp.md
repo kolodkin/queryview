@@ -97,10 +97,12 @@ you [armed](#arming-a-session).
   [Explorer](./explorer.md), on `table` when given (refused when the database
   doesn't list it). Returns `{ok, message, database}`; past the switch, a
   failure still leaves the session on `database`.
-- `push_dashboard(session_id, html, queries, params?, name?)` — push a dashboard
+- `push_dashboard(session_id, html, queries, params?, name?, dir?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
   renders it. `name` selects a saved dashboard to
-  [edit](#naming-and-saving). Returns
+  [edit](#naming-and-saving). `dir` reads the draft from
+  [a folder](./dashboard.md#pushing-from-a-folder) instead of `html` and
+  `queries`. Returns
   `{ok, pushed, message, database}`; a disconnected session fails with
   `not connected`. See [dashboard.md](./dashboard.md).
 - `new_tab(name)` — a session of the agent's own; see [Tabs](#tabs).

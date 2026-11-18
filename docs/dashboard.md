@@ -63,7 +63,7 @@ an agent push is refused with `blocked, user editing` while you type.
 The MCP server at `/mcp` (see [mcp.md](./mcp.md) for arming and the
 session id) exposes:
 
-- `push_dashboard(session_id, html, queries, params?, name?)` — push the
+- `push_dashboard(session_id, html, queries, params?, name?, dir?)` — push the
   dashboard **draft** to the browser identified by `session_id`, which navigates
   to the dashboard view and renders it. Without `name` the draft is new:
   **Save** asks the user for its name. `name` must be a saved dashboard, which
@@ -71,6 +71,26 @@ session id) exposes:
   writes it to the store. Returns
   `{ok, pushed, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
+
+### Pushing from a folder
+
+An agent regenerates inline `html` and `queries` in full on every push. With
+`dir`, it writes them once to a folder of its own (its scratchpad) and each
+re-push is a short call; the server reads the folder, so both must share a
+filesystem.
+
+```
+push_dashboard(session_id, dir="/tmp/agent-scratch/sales-overview")
+
+sales-overview/
+  dashboard.html
+  queries.yaml     {query name: SQL}
+  meta.yaml        optional: name, params
+```
+
+The layout is a dashboard's folder in [workspace git](./gitsync.md). Only
+these three names are read. Inline `name` and `params` win over `meta.yaml`;
+`dir` together with `html` or `queries` is refused.
 
 A dashboard never names a [connection](./connect.md): it runs on the
 **viewing** session's connection and selected database. So
