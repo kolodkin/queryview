@@ -238,7 +238,7 @@ class MySqlDriver:
             async with _connect(config, database) as conn:
                 _, rows, _ = await _fetch(
                     conn,
-                    "SELECT TABLE_NAME, TABLE_ROWS, DATA_LENGTH + INDEX_LENGTH, TABLE_TYPE = 'VIEW' "
+                    "SELECT TABLE_NAME, TABLE_ROWS, DATA_LENGTH + INDEX_LENGTH, TABLE_TYPE IN ('VIEW', 'SYSTEM VIEW') "
                     "FROM information_schema.TABLES "
                     "WHERE TABLE_SCHEMA = DATABASE() ORDER BY TABLE_NAME",
                     None,

@@ -88,9 +88,9 @@ engine doesn't track them:
 
 | Driver     | Names                                                       | Estimates |
 | ---------- | ----------------------------------------------------------- | --------- |
-| ClickHouse | `system.tables` for the selected database (same set as `SHOW TABLES`); `view: true` for the `*View` engines | `total_rows` / `total_bytes` (null for views) |
+| ClickHouse | `system.tables` for the selected database (same set as `SHOW TABLES`); `view: true` for the `View`, `MaterializedView`, `LiveView` and `WindowView` engines | `total_rows` / `total_bytes` (null for views) |
 | Postgres   | `pg_class` for the `public` schema, tables and views — what an unqualified name resolves to under the default `search_path`; `view: true` for `relkind` `v`/`m`; other schemas need explicit SQL on the query page | planner's `reltuples` (null until first ANALYZE/VACUUM) / `pg_total_relation_size` |
-| MySQL      | `information_schema.TABLES` for the selected database; `view: true` for `TABLE_TYPE` `VIEW` | `TABLE_ROWS` (estimate, null for views) / `DATA_LENGTH + INDEX_LENGTH` |
+| MySQL      | `information_schema.TABLES` for the selected database; `view: true` for `TABLE_TYPE` `VIEW` / `SYSTEM VIEW` | `TABLE_ROWS` (estimate, null for views) / `DATA_LENGTH + INDEX_LENGTH` |
 | DuckDB file | `SHOW TABLES` against the file (no database picker)         | `duckdb_tables()`'s `estimated_size` rows; bytes = distinct `pragma_storage_info` blocks × block size (null for views / `:memory:`) |
 | DuckDB folder | the selected folder's data files and `*.<ext>` globs (below) | rows null (never scanned); bytes = file size, summed for a glob |
 | SQLite     | `sqlite_master` tables and views (no database picker)        | none — SQLite keeps no estimates (both null) |
