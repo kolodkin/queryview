@@ -762,6 +762,17 @@ def test_rename_moves_folder_in_one_commit(git_env):
     assert _html("ua sales") is None and _html("ua sales 2026") == "<p>s</p>"
 
 
+def test_rename_changing_only_the_case(git_env):
+    """A case-insensitive filesystem (macOS, Windows) refuses that `git mv` outright."""
+    _run(gitsync.save(_default_ws(), _dash("ua coverage", "<p>c</p>")))
+    r = _run(gitsync.rename(_default_ws(), "ua coverage", "UA Coverage"))
+    assert r["committed"] is True
+    files = _repo_files(git_env)
+    assert f"{dashboard_reldir('UA Coverage')}/meta.yaml" in files
+    assert f"{dashboard_reldir('ua coverage')}/meta.yaml" not in files
+    assert _html("ua coverage") is None and _html("UA Coverage") == "<p>c</p>"
+
+
 def test_rename_never_committed_makes_no_commit(git_env):
     _save("ua draft", "<p>d</p>")
     r = _run(gitsync.rename(_default_ws(), "ua draft", "ua draft 2"))

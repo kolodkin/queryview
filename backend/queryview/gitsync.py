@@ -556,7 +556,14 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
         repo = await _read_repo_entity(wd, head, src)
         moved_matches_row = dashboard_to_files(local) == dashboard_to_files(repo)
         (wd / dst).parent.mkdir(parents=True, exist_ok=True)
-        await _git("mv", src, dst, cwd=wd)
+        if src.lower() == dst.lower():
+            # Only the case changes: a case-insensitive filesystem (macOS,
+            # Windows) refuses that move, so go through a name of its own.
+            await _git("mv", src, f"{src}.renaming", cwd=wd)
+            src_now = f"{src}.renaming"
+        else:
+            src_now = src
+        await _git("mv", src_now, dst, cwd=wd)
         meta = dashboard_to_files({**repo, "name": new})["meta.yaml"]  # the canonical name lives here
         (wd / dst / "meta.yaml").write_text(meta, encoding="utf-8")
         await _git("add", "-A", "--", dst, cwd=wd)
