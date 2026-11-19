@@ -22,6 +22,7 @@ import {
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch, postJson } from './api'
+import { CopyName } from './controls/CopyName'
 import { downloadText } from './yamlio'
 import DashboardSqlPanel from './DashboardSqlPanel'
 import { announceGitSync, gitStatus, onGitSync } from './gitsync'
@@ -573,6 +574,7 @@ function DashboardView({
             </option>
           ))}
         </select>
+        {active?.name && <CopyName name={active.name} testid="dashboard-copy" />}
         <button
           type="button"
           data-testid="dashboard-new-query"

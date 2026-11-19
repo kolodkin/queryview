@@ -229,3 +229,12 @@ test("Snapshot is refused while a widget is loading", async ({ page, seeds, base
   expect(download.suggestedFilename()).toBe("loading.html");
   await expect(page.getByTestId("dashboard-error")).toHaveCount(0); // the refusal is cleared
 });
+
+test("the dashboard's name can be copied", async ({ page, context, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  await expect(page.getByTestId("dashboard-copy")).toHaveCount(0); // nothing open: nothing to copy
+  await openDashboard(page, baseURL, { name: "copy me", html: "<p>hi</p>", queries: {} });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByTestId("dashboard-copy").click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("copy me");
+});
