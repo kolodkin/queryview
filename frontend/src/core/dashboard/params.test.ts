@@ -360,6 +360,17 @@ describe('text params', () => {
     expect(long[0].value).toHaveLength(10_000)
   })
 
+  test('a message that leaves a text out keeps what was typed', async () => {
+    const typed = await resolveParams(params, { note: 'abc' }, run, CH)
+    const later = await resolveParams(params, { seeded: 'x' }, run, CH, typed)
+    expect(later.map((p) => p.value)).toEqual(['abc', 'x', 'typed'])
+  })
+
+  test('default: none opens a text empty, as it does every other kind', () => {
+    const [p] = parseDashboardParams([{ name: 'q', kind: 'text', default: 'none' }])
+    expect(p.text).toBe('')
+  })
+
   test('substitutes as a literal, empty included, and never as an identifier', () => {
     expect(sub('SELECT {note}', params, { note: "o'k\\d" })).toBe("SELECT 'o''k\\\\d'")
     expect(substituteParams('SELECT {note}', params, { note: "o'k\\d" }, PG)).toBe(

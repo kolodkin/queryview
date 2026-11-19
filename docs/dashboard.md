@@ -232,8 +232,9 @@ FROM {table} GROUP BY value, category
 | `text` | whatever was typed, as a quoted string literal | `{note}` → `'o''k'` |
 
 A `text` param is free input (up to 10,000 characters): it takes no options,
-opens on its `default` string (else empty), and an empty one still
-substitutes, as `''`, so its queries run. It is only ever a string:
+opens on its `default` string (empty without one, or with `default: none`),
+and an empty one still substitutes, as `''`, so its queries run. A
+`setParams` that leaves it out keeps what was typed. It is only ever a string:
 `{note:identifier}` is an error. An `options_sql` may reference it, which is
 how typed text can pick a scope computed in SQL.
 

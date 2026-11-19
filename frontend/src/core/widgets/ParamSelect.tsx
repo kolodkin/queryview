@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react'
 
-import type { ResolvedParam } from '../dashboard/params'
+import { MAX_TEXT_PARAM, type ResolvedParam } from '../dashboard/params'
 import { onParamsResults } from './frameChannel'
 
 type FrameWindow = Window & {
@@ -24,10 +24,13 @@ export function ParamSelect({ name }: { name: string }) {
   const param = params.find((p) => p.name === name)
   if (!param) return null
 
-  // Every param's value goes along: the host re-defaults any it isn't sent.
+  // Every selector's value goes along: the host re-defaults any it isn't sent.
+  // Not a text's: the host keeps what was typed, which this copy may predate.
   function choose(value: string | boolean) {
     const values: Record<string, string | boolean> = {}
-    for (const p of params) values[p.name] = p.kind === 'dimension' ? p.value !== '' : p.value
+    for (const p of params) {
+      if (p.kind !== 'text') values[p.name] = p.kind === 'dimension' ? p.value !== '' : p.value
+    }
     values[name] = value
     frame().setParams?.(values)
   }
@@ -42,7 +45,11 @@ export function ParamSelect({ name }: { name: string }) {
           data-testid="qv-param"
           key={param.value}
           defaultValue={param.value}
-          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          maxLength={MAX_TEXT_PARAM}
+          onKeyDown={(e) => {
+            // Not the Enter that accepts an IME candidate.
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) e.currentTarget.blur()
+          }}
           onBlur={(e) => e.target.value !== param.value && choose(e.target.value)}
           className="glass-input px-2 py-1 text-sm"
         />

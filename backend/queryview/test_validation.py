@@ -23,6 +23,7 @@ def test_dashboard_params_rules():
     # text: free input, an optional default string, never an option list
     assert dashboard_params_error([{"name": "t", "kind": "text"}]) is None
     assert dashboard_params_error([{"name": "t", "kind": "text", "default": "abc"}]) is None
+    assert dashboard_params_error([{"name": "t", "kind": "text", "default": None}]) is None  # a blank `default:`
     assert "options" in (dashboard_params_error([{"name": "t", "kind": "text", "options": ["a"]}]) or "")
     assert "default" in (dashboard_params_error([{"name": "t", "kind": "text", "default": 3}]) or "")
     assert "name" in (dashboard_params_error([{"kind": "text"}]) or "")

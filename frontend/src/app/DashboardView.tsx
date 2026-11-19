@@ -399,7 +399,7 @@ function DashboardView({
     let resolved = resolvedRef.current
     try {
       if (values) {
-        resolved = await resolveParams(declared, values, runQueries, dialect)
+        resolved = await resolveParams(declared, values, runQueries, dialect, resolved)
         resolvedRef.current = resolved
       }
       const executed = executedRef.current

@@ -69,7 +69,8 @@ export function parseDashboardParams(raw: unknown): DashboardParam[] {
     if (hasOptions && sql) continue // ambiguous
     if (kind === 'text') {
       if (hasOptions || sql) continue // free input has no list to pick from
-      const text = typeof o.default === 'string' ? o.default : ''
+      // `default: none` opens it empty, as for every kind.
+      const text = typeof o.default === 'string' && o.default !== 'none' ? o.default : ''
       out.push({ name: o.name, kind, autoSelect: false, text })
     } else if (sql) {
       out.push({ name: o.name, kind, optionsSql: sql, autoSelect })
@@ -188,16 +189,25 @@ export function missingParams(
 // Resolve every selector's options in dependency order, keeping the caller's
 // values where they are still offered. A param whose options_sql depends on one
 // not chosen yet resolves to no options and no value — with `default: none`
-// that is the normal opening state, not a failure.
+// that is the normal opening state, not a failure. A text the caller leaves
+// out keeps its value in `previous` (what was typed), else opens on its default.
 export async function resolveParams(
   params: DashboardParam[],
   values: Record<string, string>,
   run: QueryRunner,
   dialect: Dialect,
+  previous: ResolvedParam[] = [],
 ): Promise<ResolvedParam[]> {
   const resolved: ResolvedParam[] = []
   const chosen: Record<string, string> = {}
   for (const p of resolveOrder(params)) {
+    if (p.kind === 'text') {
+      const kept = previous.find((r) => r.name === p.name && r.kind === 'text')?.value
+      const value = (values[p.name] ?? kept ?? p.text ?? '').slice(0, MAX_TEXT_PARAM)
+      chosen[p.name] = value
+      resolved.push({ name: p.name, kind: p.kind, options: [], value })
+      continue
+    }
     let options = p.options ?? []
     if (p.optionsSql) {
       if (missingParams(p.optionsSql, params, chosen).length) {
@@ -211,17 +221,15 @@ export async function resolveParams(
     }
     const want = values[p.name]
     const value =
-      p.kind === 'text'
-        ? (want ?? p.text ?? '').slice(0, MAX_TEXT_PARAM)
-        : p.kind === 'dimension'
-          ? isChecked(want)
-            ? want
+      p.kind === 'dimension'
+        ? isChecked(want)
+          ? want
+          : ''
+        : want && options.includes(want)
+          ? want
+          : p.autoSelect
+            ? (options[0] ?? '')
             : ''
-          : want && options.includes(want)
-            ? want
-            : p.autoSelect
-              ? (options[0] ?? '')
-              : ''
     chosen[p.name] = value
     resolved.push({ name: p.name, kind: p.kind, options, value })
   }

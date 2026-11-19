@@ -46,22 +46,19 @@ def dashboard_params_error(raw: object) -> str | None:
         kind = entry.get("kind", "value")
         if kind not in DASHBOARD_PARAM_KINDS:
             return f"invalid {label} kind must be one of {', '.join(DASHBOARD_PARAM_KINDS)}"
+        name = entry.get("name")
+        if not isinstance(name, str) or not name:
+            return f"invalid {label} name must be a non-empty string"
         if kind == "text":
-            # Free input: a name, an optional opening text, no list to pick from.
-            name = entry.get("name")
-            if not isinstance(name, str) or not name:
-                return f"invalid {label} name must be a non-empty string"
+            # Free input: an optional opening text, no list to pick from.
             if entry.get("options") is not None or entry.get("options_sql") is not None:
                 return f"invalid {label} a text param takes no options"
-            if not isinstance(entry.get("default", ""), str):
+            if not isinstance(entry.get("default") or "", str):
                 return f"invalid {label} default must be a string"
             continue
         if entry.get("default") not in (None, "none"):
             return f"invalid {label} default must be 'none' when given"
         if kind == "dimension" and entry.get("options") is None and entry.get("options_sql") is None:
-            name = entry.get("name")
-            if not isinstance(name, str) or not name:
-                return f"invalid {label} name must be a non-empty string"
             continue
         err = _selector_error(entry, label)
         if err:
