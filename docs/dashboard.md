@@ -27,11 +27,12 @@ agent-authored HTML, which renders inside an isolated iframe.
 - **Rename** and **Delete** — for a saved dashboard; Rename asks for the new
   name and keeps unsaved SQL-panel edits, Delete asks to confirm;
 - **Edit queries** — the [SQL panel](#the-sql-panel);
+- **Snapshot** — downloads the dashboard as a [static file](#snapshot);
 - a **sandboxed iframe** that renders the selected dashboard.
 
 ```
 +-- /dashboard ------------------------------------------+
-| [dashboard v] [New query] [Save] [Rename] [Delete] ... |
+| [dashboard v] [New query] [Save] ... [Snapshot]        |
 | +- SQL panel (Edit queries) -------------------------+ |
 | | [ sales v ]                    [Min][S][M][L][XL]  | |
 | | SELECT ...                                         | |
@@ -276,6 +277,24 @@ dashboard-level error banner instead of partial panels. On success every named
 query is present in `window.queries`. A failing query's message is prefixed with
 its panel name (e.g. `churn: Unknown table …`) so it's clear which one to fix.
 
+## Snapshot
+
+**Snapshot** downloads the open dashboard as one static `<name>.html`, as it
+stands at the current parameters. Print the file for a PDF.
+
+- Each widget shows every row it holds, without controls or a scroll box,
+  under a caption of its row count, limit, offset and order. Raise its
+  **Limit** first for more rows.
+- A canvas chart becomes an image; a dropdown, its chosen value.
+- Refused while a widget is still loading.
+- The file runs no script and redirects nowhere, whatever the dashboard's
+  HTML contains: the host puts a script-blocking policy ahead of the frame's
+  text. Stylesheets, fonts and images from elsewhere are still fetched when
+  it is opened; embedded frames are not.
+- A WebGL chart or a canvas holding a cross-origin image comes out blank; a
+  password field, empty.
+- It holds rendered query results: treat the file as data.
+
 ## Isolation & security
 
 The HTML renders in
@@ -283,7 +302,8 @@ The HTML renders in
 **without** `allow-same-origin`, giving it an opaque origin: it can run JS and load CDN
 assets but cannot read the app's storage or call `/api/*` as the session (it
 has neither the session id nor any credential). A link the page opens with
-`target="_blank"` lands in a normal tab. Data reaches it only through the
+`target="_blank"` lands in a normal tab. The page cannot print or download;
+[Snapshot](#snapshot) is the way out. Data reaches it only through the
 injected `window.queries` and the [widget](#widgets) replies; the
 `window.queries` JSON has `<` escaped so result data containing `</script>` can't break out
 of the prologue.

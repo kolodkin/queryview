@@ -84,7 +84,8 @@ export function SelectView({
   const [page, setPage] = useState<Page>({ limit, offset: 0, orderBy })
   const [result, setResult] = useState<QueryRows | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  // Busy from the first render: a snapshot must not catch the widget before its first run.
+  const [busy, setBusy] = useState(true)
   const [fields, setFields] = useState<Field[]>([])
   const [visibleCols, setVisibleCols] = useState<string[]>([])
   // Only the newest run lands: a slow reply must not overwrite a later page.
@@ -177,9 +178,12 @@ export function SelectView({
   return (
     <section
       data-testid="qv-select-view"
+      data-qv-scroll
+      // A snapshot waits for the rows (../dashboard/srcDoc.ts).
+      data-qv-busy={busy || undefined}
       className="flex max-h-[36rem] flex-col gap-2 rounded-xl bg-slate-950 p-3 text-sm text-slate-200"
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-qv-chrome className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => void describe()}
@@ -233,14 +237,32 @@ export function SelectView({
         </button>
       </div>
 
+      {/* What the controls were set to: shown only in a snapshot, in their place. */}
+      {result && (
+        <p data-qv-snapshot data-testid="qv-caption" className="hidden text-xs text-slate-400">
+          {[
+            `${result.data.length} rows`,
+            `limit ${page.limit}`,
+            page.offset ? `offset ${page.offset}` : '',
+            page.orderBy.length
+              ? `ordered by ${page.orderBy.map((o) => `${o.name} ${o.dir.toLowerCase()}`).join(', ')}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </p>
+      )}
+
       {fields.length > 0 && (
-        <FieldPickers
-          fields={fields}
-          visibleCols={visibleCols}
-          orderBy={page.orderBy}
-          onVisibleColsChange={setVisibleCols}
-          onOrderByChange={(next) => setPage({ ...page, orderBy: next })}
-        />
+        <div data-qv-chrome>
+          <FieldPickers
+            fields={fields}
+            visibleCols={visibleCols}
+            orderBy={page.orderBy}
+            onVisibleColsChange={setVisibleCols}
+            onOrderByChange={(next) => setPage({ ...page, orderBy: next })}
+          />
+        </div>
       )}
 
       {error && (

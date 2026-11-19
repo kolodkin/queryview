@@ -47,8 +47,106 @@ document.addEventListener('DOMContentLoaded', bind);
 window.setParams = function (values) {
   parent.postMessage({ type: 'set-params', values: values }, '*');
 };
+// The page as static HTML, for the host's Snapshot: scripts out, canvases as
+// images, dropdowns as their chosen value, input state in attributes, and each widget's shadow root written as
+// declarative shadow DOM with its stylesheet, marked as snapshotting. Every
+// change to the live page is undone before returning.
+function snapshot() {
+  var undo = [];
+  function swap(el, other) {
+    el.replaceWith(other);
+    undo.push(function () { other.replaceWith(el); });
+  }
+  // A stand-in for el: a new element carrying these attributes of its.
+  function standIn(el, tag, names) {
+    var other = document.createElement(tag);
+    names.forEach(function (a) { if (el.hasAttribute(a)) other.setAttribute(a, el.getAttribute(a)); });
+    return other;
+  }
+  // Serialization reads attributes, so live state is written into them.
+  function attr(el, name, value) {
+    var had = el.getAttribute(name);
+    if (value === null) el.removeAttribute(name); else el.setAttribute(name, value);
+    undo.push(function () {
+      if (had === null) el.removeAttribute(name); else el.setAttribute(name, had);
+    });
+  }
+  try {
+    var roots = [];
+    (function walk(scope) {
+      scope.querySelectorAll('*').forEach(function (el) {
+        if (el.shadowRoot) { roots.push(el.shadowRoot); walk(el.shadowRoot); }
+      });
+    })(document);
+    // No rows yet: a widget mid-query, or a qv-* tag the bundle has not upgraded.
+    if (Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
+          return el.localName.indexOf('qv-') === 0;
+        }) ||
+        roots.some(function (root) { return root.querySelector('[data-qv-busy]'); })) {
+      return { type: 'qv-snapshot-result', message: 'A widget is still loading. Take the snapshot when it has finished.' };
+    }
+    var scopes = [document].concat(roots);
+    // Canvases are read before anything moves: one layout, and the size each
+    // is shown at (a rule selecting canvas will not match its image).
+    var images = [];
+    scopes.forEach(function (scope) {
+      scope.querySelectorAll('canvas').forEach(function (c) {
+        var img = standIn(c, 'img', ['id', 'class', 'style', 'width', 'height']);
+        try { img.src = c.toDataURL('image/png'); } catch (err) { return; } // tainted: left as is
+        var box = c.getBoundingClientRect();
+        img.style.width = box.width + 'px';
+        img.style.height = box.height + 'px';
+        images.push([c, img]);
+      });
+    });
+    images.forEach(function (pair) { swap(pair[0], pair[1]); });
+    scopes.forEach(function (scope) {
+      scope.querySelectorAll('input').forEach(function (i) {
+        if (i.type === 'password') attr(i, 'value', null);
+        else if (i.type === 'checkbox' || i.type === 'radio') attr(i, 'checked', i.checked ? '' : null);
+        else if (i.type !== 'file') attr(i, 'value', i.value);
+      });
+      scope.querySelectorAll('textarea').forEach(function (t) {
+        var area = standIn(t, 'textarea', ['id', 'class', 'style', 'rows', 'cols']);
+        area.textContent = t.value;
+        swap(t, area);
+      });
+      // A dropdown becomes its chosen value: the file has nothing to pick.
+      scope.querySelectorAll('select').forEach(function (sel) {
+        var span = standIn(sel, 'span', ['id', 'class', 'style', 'data-testid']);
+        span.textContent = Array.prototype.map.call(sel.selectedOptions, function (o) { return o.textContent; }).join(', ');
+        swap(sel, span);
+      });
+      scope.querySelectorAll('script').forEach(function (s) {
+        swap(s, document.createComment(''));
+      });
+    });
+    // Every widget adopts one shared sheet: its text is built once.
+    var texts = new Map();
+    function cssText(sheet) {
+      if (!texts.has(sheet)) {
+        texts.set(sheet, Array.prototype.map.call(sheet.cssRules, function (r) { return r.cssText; }).join('\\n'));
+      }
+      return texts.get(sheet);
+    }
+    roots.forEach(function (root) {
+      var style = document.createElement('style');
+      style.textContent = root.adoptedStyleSheets.map(cssText).join('\\n');
+      // The widgets' own stylesheet holds the snapshot rules, keyed on this.
+      attr(root.host, 'data-qv-snapshotting', '');
+      root.append(style);
+      undo.push(function () { style.remove(); });
+    });
+    return { type: 'qv-snapshot-result', html: document.documentElement.getHTML({ shadowRoots: roots }) };
+  } catch (err) {
+    return { type: 'qv-snapshot-result', message: String(err && err.message || err) };
+  } finally {
+    undo.reverse().forEach(function (f) { f(); });
+  }
+}
 window.addEventListener('message', function (e) {
   var d = e.data;
+  if (d && d.type === 'qv-snapshot') { parent.postMessage(snapshot(), '*'); return; }
   if (!d || d.type !== 'params-results') return;
   // A failed run keeps the previous results on screen and reports the message.
   if (d.results) { window.queries = d.results; bind(); }

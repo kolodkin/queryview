@@ -48,6 +48,7 @@ function BodyCell({
             type="button"
             onClick={() => onOpen({ column: col, value, type })}
             data-testid="cell-expand"
+            data-qv-chrome
             data-col={col}
             aria-label={`Open ${col} value`}
             title={format ? `Open parsed ${format}` : 'Open full value'}
@@ -95,6 +96,7 @@ export function ResultsTable({
   return (
     <div
       data-testid={testid}
+      data-qv-scroll
       className={`min-h-0 ${className} overflow-auto rounded-xl border border-white/10 ${
         dimmed ? 'opacity-50 transition-opacity' : ''
       }`}

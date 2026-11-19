@@ -3,6 +3,7 @@
 // the agent's CSS and ours cannot touch each other.
 
 import type { ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
 
 import css from '../kernel.css?inline'
@@ -48,8 +49,10 @@ export function defineWidget(
       shadow.adoptedStyleSheets = sheets(display)
       const el = document.createElement('div')
       shadow.replaceChildren(el)
-      this.root = createRoot(el)
-      this.root.render(render(this))
+      const root = (this.root = createRoot(el))
+      // Rendered before the tag reads as defined: a snapshot taken right after
+      // the upgrade finds the widget (and its busy mark), not an empty root.
+      flushSync(() => root.render(render(this)))
     }
     // A page that re-renders its HTML must not leave the old widget querying.
     disconnectedCallback() {
