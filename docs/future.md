@@ -57,6 +57,18 @@ no picker and lists only what `SHOW TABLES` returns.
 - **Script-created widgets.** The widget bundle loads, and a widget's query is
   kept out of the up-front run, only when the tag is written in the HTML: one
   a script creates is not seen.
+- **Snapshots for agents.** An agent building a report from one or more
+  dashboards needs their [snapshots](./dashboard.md#snapshot) as files. The
+  server would render them in a headless browser of its own (the same snapshot
+  code, written to a file whose path the tool returns) so no user tab is in
+  the loop and reports can be batched or scheduled. Open: a browser engine in
+  the server image, and which connection a session with no user behind it
+  runs on. Asking a user's armed tab for its snapshot was considered and
+  dropped: the HTML is too large to return inline, and it needs that tab open.
+- **Tabs that work in a snapshot.** A dashboard's own tabs switch by script,
+  so a snapshot freezes on the tab that was open. A built-in `<qv-tabs>`
+  that switches without script would work in the file; authors can get the
+  same today with radio inputs and `:checked`.
 
 ## Git sync
 
