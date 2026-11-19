@@ -16,7 +16,8 @@ agent-authored HTML, which renders inside an isolated iframe.
 [queryview.md](./queryview.md). It has:
 
 - a **dropdown** of saved dashboards — selecting one sets `?name=<name>`, so the
-  URL is shareable and the back button works;
+  URL is shareable and the back button works; the button beside it copies the
+  open dashboard's name;
 - **New query** — an unsaved draft holding one [`<qv-select-view>`](#widgets)
   over one query, for ad-hoc SQL; **Save** asks for its name. The
   [session](./session.md) remembers the draft's SQL, so it survives leaving
