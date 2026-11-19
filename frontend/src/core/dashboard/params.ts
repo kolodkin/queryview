@@ -69,9 +69,8 @@ export function parseDashboardParams(raw: unknown): DashboardParam[] {
     if (hasOptions && sql) continue // ambiguous
     if (kind === 'text') {
       if (hasOptions || sql) continue // free input has no list to pick from
-      // `default: none` opens it empty, as for every kind.
-      const text = typeof o.default === 'string' && o.default !== 'none' ? o.default : ''
-      out.push({ name: o.name, kind, autoSelect: false, text })
+      const text = autoSelect && typeof o.default === 'string' ? o.default : ''
+      out.push({ name: o.name, kind, autoSelect, text })
     } else if (sql) {
       out.push({ name: o.name, kind, optionsSql: sql, autoSelect })
     } else if (hasOptions) {
@@ -203,7 +202,7 @@ export async function resolveParams(
   for (const p of resolveOrder(params)) {
     if (p.kind === 'text') {
       const kept = previous.find((r) => r.name === p.name && r.kind === 'text')?.value
-      const value = (values[p.name] ?? kept ?? p.text ?? '').slice(0, MAX_TEXT_PARAM)
+      const value = (values[p.name] ?? kept ?? p.text!).slice(0, MAX_TEXT_PARAM)
       chosen[p.name] = value
       resolved.push({ name: p.name, kind: p.kind, options: [], value })
       continue

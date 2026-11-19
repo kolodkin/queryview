@@ -7,13 +7,10 @@ MAX_LIMIT = 10000
 
 
 def _selector_error(entry: object, label: str) -> str | None:
-    """One selector spec's shared rules — a name and exactly one of `options` /
+    """One selector spec's option rule — exactly one of `options` /
     `options_sql` — with messages prefixed by `label` (e.g. "params[0]")."""
     if not isinstance(entry, dict):
         return f"invalid {label} must be a mapping"
-    name = entry.get("name")
-    if not isinstance(name, str) or not name:
-        return f"invalid {label} name must be a non-empty string"
     options, sql = entry.get("options"), entry.get("options_sql")
     if (options is None) == (sql is None):
         return f"invalid {label} must declare exactly one of options or options_sql"
@@ -53,7 +50,8 @@ def dashboard_params_error(raw: object) -> str | None:
             # Free input: an optional opening text, no list to pick from.
             if entry.get("options") is not None or entry.get("options_sql") is not None:
                 return f"invalid {label} a text param takes no options"
-            if not isinstance(entry.get("default") or "", str):
+            default = entry.get("default")
+            if default is not None and not isinstance(default, str):
                 return f"invalid {label} default must be a string"
             continue
         if entry.get("default") not in (None, "none"):

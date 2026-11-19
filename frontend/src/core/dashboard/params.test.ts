@@ -349,6 +349,8 @@ describe('text params', () => {
       ['scope', 'value', undefined],
     ])
     expect(parseDashboardParams([{ name: 'x', kind: 'text', options: ['a'] }])).toEqual([])
+    // `default: none` opens it empty, as for every kind.
+    expect(parseDashboardParams([{ name: 'q', kind: 'text', default: 'none' }])[0].text).toBe('')
   })
 
   test('takes whatever was sent, the default until something is, and a length cap', async () => {
@@ -364,11 +366,6 @@ describe('text params', () => {
     const typed = await resolveParams(params, { note: 'abc' }, run, CH)
     const later = await resolveParams(params, { seeded: 'x' }, run, CH, typed)
     expect(later.map((p) => p.value)).toEqual(['abc', 'x', 'typed'])
-  })
-
-  test('default: none opens a text empty, as it does every other kind', () => {
-    const [p] = parseDashboardParams([{ name: 'q', kind: 'text', default: 'none' }])
-    expect(p.text).toBe('')
   })
 
   test('substitutes as a literal, empty included, and never as an identifier', () => {
