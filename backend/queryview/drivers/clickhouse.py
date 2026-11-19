@@ -229,11 +229,13 @@ class ClickHouseDriver:
         self, config: ChConfig, database: str | None, union: bool = False, limit: int = DEFAULT_LIST_LIMIT
     ) -> TablesResult | Err:
         # Same set SHOW TABLES yields, plus the engine's stored row/byte counts
-        # (NULL for views and engines that don't track them).
+        # (NULL for views and engines that don't track them), and whether it is a view.
         r = await ch_rows(
             config,
-            "SELECT name, total_rows, total_bytes FROM system.tables WHERE database = currentDatabase() ORDER BY name",
-            3,
+            "SELECT name, total_rows, total_bytes, engine IN ('View', 'MaterializedView', 'LiveView', 'WindowView') "
+            "FROM system.tables "
+            "WHERE database = currentDatabase() ORDER BY name",
+            4,
             database=database,
         )
         if isinstance(r, Err):
@@ -244,6 +246,7 @@ class ClickHouseDriver:
                     "name": row[0],
                     "rows": None if row[1] is None else int(row[1]),
                     "bytes": None if row[2] is None else int(row[2]),
+                    "view": bool(row[3]),
                 }
                 for row in r.data
             ]

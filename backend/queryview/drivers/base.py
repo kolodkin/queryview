@@ -69,6 +69,7 @@ class DatabasesResult(Result):
 class TablesResult(Result):
     # Each table is {"name": str, "rows": int|None, "bytes": int|None}; rows and
     # bytes are cheap engine estimates, None when the engine doesn't track them.
+    # Optional "view": True for a view (materialized ones included); absent = a table.
     tables: list[dict[str, Any]]
     truncated: bool = False  # more files than the list limit (DuckDB folder mode)
 

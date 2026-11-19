@@ -1,7 +1,7 @@
 // The explorer page: table sidebar -> rows with the field/order-by selects and
 // pagination, for every driver (same seeds as drivers.spec.ts).
 import type { Route } from "@playwright/test";
-import { CASES, CH, DUCK, chDb, chExec, connect, expect, tableRow, test } from "./fixtures";
+import { CASES, CH, DUCK, chDb, chExec, connect, dbExec, expect, tableRow, test } from "./fixtures";
 
 // Mirrors DEFAULT_SIDEBAR_WIDTH in frontend/src/app/explorerSettings.ts.
 const DEFAULT_WIDTH = 256;
@@ -144,6 +144,37 @@ test("refresh reloads the rows from the database", async ({ page, seeds }) => {
     await chExec(`DROP TABLE IF EXISTS ${table}`);
   }
 });
+
+// Drivers that flag views: they follow the tables under a Views heading.
+for (const c of CASES.filter((c) => ["clickhouse", "postgres", "mysql"].includes(c.id))) {
+  test(`views are listed under their own heading [${c.id}]`, async ({ page, seeds, shot }) => {
+    await seeds[c.seed]();
+    // ClickHouse runs over HTTP with no default database, so it qualifies names.
+    const name = (n: string) => (c.id === "clickhouse" ? `${chDb()}.${n}` : n);
+    const run = (sql: string) =>
+      c.id === "clickhouse" ? chExec(sql) : dbExec(c.id as "postgres" | "mysql", chDb(), sql);
+    // "a_" sorts before "items", so the grouping, not the name order, puts it after.
+    await run(`CREATE VIEW ${name("a_items_view")} AS SELECT * FROM ${name("items")}`);
+    try {
+      await connect(page, c, chDb());
+      await page.getByTestId("nav-explorer").click();
+      const rows = page.getByTestId("explorer-table");
+      await expect(rows.first()).toHaveAttribute("data-table", "items");
+      await expect(rows.last()).toHaveAttribute("data-table", "a_items_view");
+      await expect(page.getByTestId("explorer-views-heading")).toHaveText("Views");
+      await expect(page.getByTestId("explorer-table-filter")).toHaveAttribute(
+        "placeholder",
+        "Filter 1 table and 1 view…",
+      );
+      await shot(`${c.id} explorer views heading`);
+
+      await tableRow(page, "a_items_view").click();
+      await expect(page.getByTestId("explorer-output")).toContainText("alpha");
+    } finally {
+      await run(`DROP VIEW IF EXISTS ${name("a_items_view")}`);
+    }
+  });
+}
 
 test("sidebar width is draggable and remembered", async ({ page, seeds, shot }) => {
   // The Tables sidebar resizes from its right edge so long names need not be

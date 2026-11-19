@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import {
@@ -43,6 +43,7 @@ type TableInfo = {
   bytes: number | null
   query: string
   path?: string | null
+  view?: boolean
 }
 
 // The "1.2K rows · 3.4MB" subline, or null when the engine knows neither.
@@ -113,10 +114,14 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   // off this: nothing fires until the table is confirmed present, so a stale
   // selection (e.g. after a database switch) never issues doomed queries.
   const selected = tables.find((t) => t.name === table)
-  const shownTables = useMemo(
-    () => filterNames(tables, tableFilter, (t) => t.name),
-    [tables, tableFilter],
-  )
+  // Tables first, then views (listed under their own heading).
+  const shownTables = useMemo(() => {
+    const shown = filterNames(tables, tableFilter, (t) => t.name)
+    return [...shown.filter((t) => !t.view), ...shown.filter((t) => t.view)]
+  }, [tables, tableFilter])
+  const firstView = shownTables.find((t) => t.view)
+  const viewCount = tables.filter((t) => t.view).length
+  const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
 
   // Load the sidebar whenever the active database changes; a selected table
   // that vanished (database switch) is dropped from the URL.
@@ -378,7 +383,9 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
               type="search"
               value={tableFilter}
               onChange={(e) => setTableFilter(e.target.value)}
-              placeholder={`Filter ${tables.length} tables…`}
+              placeholder={`Filter ${count(tables.length - viewCount, 'table')}${
+                viewCount ? ` and ${count(viewCount, 'view')}` : ''
+              }…`}
               aria-label="Filter tables"
               data-testid="explorer-table-filter"
               autoComplete="off"
@@ -398,34 +405,43 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
             {shownTables.map((t) => {
               const meta = tableMeta(t)
               return (
-                <div
-                  key={t.name}
-                  className={`group flex items-center rounded hover:bg-white/10 ${
-                    t.name === table ? 'bg-white/10' : ''
-                  }`}
-                >
-                  <button
-                    type="button"
-                    data-testid="explorer-table"
-                    data-table={t.name}
-                    title={t.name}
-                    onClick={() => setSearchParams({ table: t.name })}
-                    className={`block min-w-0 flex-1 px-2 py-1.5 text-left text-sm ${
-                      t.name === table ? 'font-medium text-indigo-200' : 'text-slate-200'
+                <Fragment key={t.name}>
+                  {t === firstView && (
+                    <h3
+                      data-testid="explorer-views-heading"
+                      className="px-2 pt-2 text-sm font-semibold text-slate-200"
+                    >
+                      Views
+                    </h3>
+                  )}
+                  <div
+                    className={`group flex items-center rounded hover:bg-white/10 ${
+                      t.name === table ? 'bg-white/10' : ''
                     }`}
                   >
-                    <span className="block truncate">{t.name}</span>
-                    {meta && (
-                      <span
-                        data-testid="explorer-table-meta"
-                        className="block truncate text-xs font-normal text-slate-400"
-                      >
-                        {meta}
-                      </span>
-                    )}
-                  </button>
-                  <CopyName name={t.name} testid="explorer-table-copy" />
-                </div>
+                    <button
+                      type="button"
+                      data-testid="explorer-table"
+                      data-table={t.name}
+                      title={t.name}
+                      onClick={() => setSearchParams({ table: t.name })}
+                      className={`block min-w-0 flex-1 px-2 py-1.5 text-left text-sm ${
+                        t.name === table ? 'font-medium text-indigo-200' : 'text-slate-200'
+                      }`}
+                    >
+                      <span className="block truncate">{t.name}</span>
+                      {meta && (
+                        <span
+                          data-testid="explorer-table-meta"
+                          className="block truncate text-xs font-normal text-slate-400"
+                        >
+                          {meta}
+                        </span>
+                      )}
+                    </button>
+                    <CopyName name={t.name} testid="explorer-table-copy" />
+                  </div>
+                </Fragment>
               )
             })}
             {tables.length === 0 && !tablesError && (

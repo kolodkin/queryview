@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from queryview import remote, sessions
+from queryview.connect import _data_dir, _save_active_connection
 from queryview.dashboards import (
     delete_dashboard,
     get_dashboard,
@@ -18,8 +19,10 @@ from queryview.dashboards import (
     rename_dashboard,
     upsert_dashboard,
 )
+from queryview.drivers.clickhouse import ChConfig
 from queryview.gitsync import save_and_push
 from queryview.main import app
+from queryview.mcp_server import push_dashboard
 from queryview.workspaces import DEFAULT_WORKSPACE, resolve
 
 
@@ -223,25 +226,58 @@ def test_dashboards_upsert_pushes_to_registered_session():
 
 
 def test_mcp_upsert_dashboard_pushes_draft_without_persisting(default_ws_id):
-    from queryview.connect import _save_active_connection
-    from queryview.drivers.clickhouse import ChConfig
-    from queryview.mcp_server import push_dashboard as mcp_push
-
     _run(_save_active_connection("c", ChConfig("h", 8123, "u", "p"), "clickhouse"))
     rec = _run(sessions.create_session())
     _run(sessions.set_connection(rec.id, "c"))
     rid = remote.register(rec.id)
     try:
         # The agent can't coin a name: only the user names a new dashboard.
-        out = _run(mcp_push(rid, "<p>d</p>", {"q": "SELECT 1"}, name="draftdash"))
+        out = _run(push_dashboard(rid, "<p>d</p>", {"q": "SELECT 1"}, name="draftdash"))
         assert out["pushed"] is False and 'no saved dashboard named "draftdash"' in out["message"]
-        out = _run(mcp_push(rid, "<p>d</p>", {"q": "SELECT 1"}))
+        out = _run(push_dashboard(rid, "<p>d</p>", {"q": "SELECT 1"}))
         assert out["pushed"] is True and "persisted" not in out
         # Draft: the agent push must NOT persist — only the user's Save does.
         assert _run(get_dashboard("draftdash", default_ws_id)) is None
         msg = _run(remote.next_message(rid, 1.0))
         assert msg is not None
         assert msg["type"] == "dashboard" and msg["name"] == ""
+    finally:
+        remote.unregister(rid)
+
+
+def test_mcp_push_dashboard_reads_dir(tmp_path):
+    _run(_save_active_connection("c-dir", ChConfig("h", 8123, "u", "p"), "clickhouse"))
+    rec = _run(sessions.create_session())
+    _run(sessions.set_connection(rec.id, "c-dir"))
+    rid = remote.register(rec.id)
+    try:
+        assert "or `dir`" in _run(push_dashboard(rid))["message"]
+        assert "absolute" in _run(push_dashboard(rid, dir="sales-overview"))["message"]
+        assert "data dir" in _run(push_dashboard(rid, dir=str(_data_dir() / "gitsync")))["message"]
+        assert "either" in _run(push_dashboard(rid, "<p>", {"q": "SELECT 1"}, dir=str(tmp_path)))["message"]
+        assert "cannot read" in _run(push_dashboard(rid, dir=str(tmp_path)))["message"]
+
+        (tmp_path / "dashboard.html").symlink_to(_data_dir() / "queryview.db")
+        assert "data dir" in _run(push_dashboard(rid, dir=str(tmp_path)))["message"]
+        (tmp_path / "dashboard.html").unlink()
+        (tmp_path / "dashboard.html").write_text("<p>from disk</p>", encoding="utf-8")
+        (tmp_path / "queries.yaml").write_text("- not a map\n", encoding="utf-8")
+        assert "queries must be" in _run(push_dashboard(rid, dir=str(tmp_path)))["message"]
+
+        (tmp_path / "queries.yaml").write_text("sales: SELECT 1\n", encoding="utf-8")
+        (tmp_path / "meta.yaml").write_text("params:\n  - name: region\n    options: [east, west]\n", encoding="utf-8")
+        out = _run(push_dashboard(rid, dir=str(tmp_path)))
+        assert out["pushed"] is True, out
+        msg = _run(remote.next_message(rid, 1.0))
+        assert msg is not None and msg["html"] == "<p>from disk</p>"
+        assert msg["queries"] == {"sales": "SELECT 1"} and msg["params"][0]["name"] == "region"
+
+        # Inline params win over meta.yaml; a meta name must be a saved dashboard.
+        assert _run(push_dashboard(rid, params=[], dir=str(tmp_path)))["pushed"] is True
+        msg = _run(remote.next_message(rid, 1.0))
+        assert msg is not None and msg["params"] == []
+        (tmp_path / "meta.yaml").write_text("name: no such dash\n", encoding="utf-8")
+        assert 'no saved dashboard named "no such dash"' in _run(push_dashboard(rid, dir=str(tmp_path)))["message"]
     finally:
         remote.unregister(rid)
 

@@ -5,12 +5,15 @@ in-process remote.py hub."""
 from __future__ import annotations
 
 import asyncio
+import os
+from pathlib import Path
 from typing import Any
 
 from mcp.server.mcpserver import Context, MCPServer
 
 from . import gitsync, remote, sessions
 from .connect import (
+    _data_dir,
     _gated_session,
     _session_conn,
     add_session_connection,
@@ -379,12 +382,16 @@ async def list_dashboards(session_id: str | None = None) -> dict[str, Any]:
 @mcp.tool()
 async def push_dashboard(
     session_id: str,
-    html: str,
-    queries: dict[str, str],
+    html: str | None = None,
+    queries: dict[str, str] | None = None,
     params: list[dict[str, Any]] | None = None,
     name: str | None = None,
+    dir: str | None = None,
 ) -> dict[str, Any]:
     """Push a dashboard to a live QueryView session.
+
+    Prefer `dir` when the server runs on your machine: write the files to your
+    scratchpad once, and a re-push after an edit is a short call.
 
     The dashboard renders immediately in the browser as a DRAFT: nothing is
     written to the store until the user's **Save** in the dashboard view. Omit `name` for a new dashboard:
@@ -417,6 +424,10 @@ async def push_dashboard(
         params: Optional selector specs (see above).
         name: Optional name of an existing saved dashboard to edit; any other
             name is refused.
+        dir: Absolute path of a folder holding `dashboard.html`,
+            `queries.yaml` (a {name: SQL} map) and optionally `meta.yaml`
+            (`name`, `params`), instead of `html` and `queries`. Inline
+            `name` / `params` win over meta.yaml.
 
     Returns {ok, pushed, message, database}; "not connected" if
     the session has no connection.
@@ -424,6 +435,18 @@ async def push_dashboard(
     rec = await sessions.get_session_rec(session_id) if session_id else None
     if rec is None or rec.connection_name is None:
         return _push_failed("not connected")
+    if dir:
+        if html is not None or queries is not None:
+            return _push_failed("pass either `html` and `queries`, or `dir`")
+        try:
+            d = await asyncio.to_thread(_read_dashboard_dir, dir)
+        except (ValueError, gitsync.GitSyncError) as e:
+            return _push_failed(str(e))
+        html, queries = d["html"], d["queries"]
+        name = name or d["name"]
+        params = d["params"] if params is None else params
+    if html is None or queries is None:
+        return _push_failed("pass `html` and `queries`, or `dir`")
     perr = dashboard_params_error(params)
     if perr is not None:
         return _push_failed(perr)
@@ -439,6 +462,33 @@ async def push_dashboard(
             "database": await sessions.database_of(session_id),
         },
     )
+
+
+_DIR_FILE_MAX = 5_000_000  # bytes; far above any real dashboard
+
+
+def _read_dashboard_dir(path: str) -> dict[str, Any]:
+    """A dashboard (name None when meta.yaml gives none) from a folder in the
+    git-sync layout. Only its three fixed names are read, and never inside the
+    data dir, so `dir` can't aim at an arbitrary file or another workspace's clone."""
+    root = Path(path)
+    if not root.is_absolute():
+        raise ValueError("`dir` must be an absolute path")
+    texts: dict[str, str] = {}
+    for fname in gitsync.DASHBOARD_FILES:
+        p = root / fname
+        if p.resolve().is_relative_to(_data_dir().resolve()):  # resolved: a symlink can't reach in either
+            raise ValueError("`dir` may not be inside the QueryView data dir")
+        if fname == "meta.yaml" and not os.path.lexists(p):
+            continue
+        # is_file also keeps a FIFO from blocking the read; errors stay vague: no filesystem oracle.
+        try:
+            if not p.is_file() or p.stat().st_size > _DIR_FILE_MAX:
+                raise OSError
+            texts[fname] = p.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            raise ValueError(f"cannot read {fname} in `dir` (a UTF-8 file up to {_DIR_FILE_MAX} bytes)") from None
+    return gitsync.dashboard_from_files(texts, require_name=False)
 
 
 # Agents edit saved entities or push unnamed drafts; only the user names one.

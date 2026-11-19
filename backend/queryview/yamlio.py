@@ -87,13 +87,16 @@ def dashboard_to_data(d: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def dashboard_from_data(data: Any, where: str = "dashboard file", require_html: bool = True) -> dict[str, Any]:
+def dashboard_from_data(
+    data: Any, where: str = "dashboard file", require_html: bool = True, require_name: bool = True
+) -> dict[str, Any]:
     """Validate a dashboard mapping back to the upsert_dashboard shape.
     gitsync passes require_html=False: its repo format stores the HTML as a
-    separate file that may legitimately be empty."""
+    separate file that may legitimately be empty. require_name=False lets an
+    agent's unsaved draft carry no name (None)."""
     if not isinstance(data, dict):
         raise YamlIOError(f"malformed {where}: expected a mapping")
-    name = _require_str(data, "name", where)
+    name = _require_str(data, "name", where) if require_name or "name" in data else None
     # A `connection` key (older documents) is ignored: a dashboard runs on the
     # viewing session's connection.
     html = _require_str(data, "html", where) if require_html else str(data.get("html") or "")

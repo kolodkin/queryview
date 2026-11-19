@@ -77,8 +77,9 @@ def test_list_tables_queries_public_schema_with_estimates(monkeypatch):
         async def fetch(self, sql):
             captured["sql"] = sql
             return [
-                {"name": "items", "rows": 3, "bytes": 16384},
-                {"name": "fresh", "rows": None, "bytes": 8192},  # never analyzed
+                {"name": "items", "rows": 3, "bytes": 16384, "view": False},
+                {"name": "fresh", "rows": None, "bytes": 8192, "view": False},  # never analyzed
+                {"name": "v_items", "rows": None, "bytes": 0, "view": True},
             ]
 
         async def close(self):
@@ -91,8 +92,9 @@ def test_list_tables_queries_public_schema_with_estimates(monkeypatch):
     monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
     r = asyncio.run(d.list_tables(PgConfig("h", 5432, "u", ""), "mydb"))
     assert isinstance(r, TablesResult) and r.tables == [
-        {"name": "items", "rows": 3, "bytes": 16384},
-        {"name": "fresh", "rows": None, "bytes": 8192},
+        {"name": "items", "rows": 3, "bytes": 16384, "view": False},
+        {"name": "fresh", "rows": None, "bytes": 8192, "view": False},
+        {"name": "v_items", "rows": None, "bytes": 0, "view": True},
     ]
     assert captured["database"] == "mydb"
     assert "nspname = 'public'" in captured["sql"]

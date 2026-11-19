@@ -11,6 +11,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
 
 
 @pytest.fixture
@@ -83,7 +85,9 @@ def _isolated_db(tmp_path_factory: pytest.TempPathFactory):
     # Reset the lazy globals so the next DB touch picks up the new paths.
     import queryview.connect as _c
 
-    _c._engine = None  # type: ignore[attr-defined]
+    # No pool: tests call asyncio.run per step, and a pooled engine's wait queue
+    # binds to the first loop that has to wait, failing every later one.
+    _c._engine = create_async_engine(f"sqlite+aiosqlite:///{_c._db_path()}", poolclass=NullPool)  # type: ignore[attr-defined]
     _c._schema_ready = False  # type: ignore[attr-defined]
     _c._key = None  # type: ignore[attr-defined]
     yield
