@@ -49,10 +49,12 @@ document.addEventListener('DOMContentLoaded', bind);
 document.addEventListener('DOMContentLoaded', function () {
   var style = document.createElement('style');
   style.textContent =
+    // A lit segment sweeping over a faint track, clear of a rounded frame's corners.
     'html[data-qv-loading]::before{content:"";position:fixed;z-index:2147483647;top:0;left:0;' +
-    'width:100%;height:3px;background:linear-gradient(90deg,transparent,var(--qv-accent,#818cf8),transparent) ' +
-    'no-repeat;background-size:40% 100%;animation:qv-loading 1.1s linear infinite}' +
-    '@keyframes qv-loading{from{background-position:-70% 0}to{background-position:170% 0}}';
+    'width:100%;height:4px;background:linear-gradient(90deg,transparent,var(--qv-accent,#818cf8) 35%,' +
+    'var(--qv-accent,#818cf8) 65%,transparent) no-repeat,rgba(129,140,248,.4);' +
+    'background-size:35% 100%,100% 100%;animation:qv-loading 1.2s linear infinite}' +
+    '@keyframes qv-loading{from{background-position:-30% 0,0 0}to{background-position:130% 0,0 0}}';
   document.head.append(style);
 });
 window.setParams = function (values) {
