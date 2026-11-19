@@ -5,12 +5,13 @@
 //   identifier  a table/column: {field} -> "city" (a literal would make
 //               `SELECT {field}` select a constant string, not the column)
 //   dimension   an optional GROUP BY column: checked -> its own column, else ''
+//   text        whatever the user typed, as a literal: {note} -> 'o''k'
 //
 // An options_sql may itself reference another param ({table}), so field lists
 // can depend on the selected table; resolveOrder sequences those. See
 // docs/dashboard.md, "Dashboard parameters".
 
-export type ParamKind = 'value' | 'identifier' | 'dimension'
+export type ParamKind = 'value' | 'identifier' | 'dimension' | 'text'
 
 // A selector with its option list resolved and a value chosen (or left empty) —
 // what the page receives as `window.params`.
@@ -36,9 +37,14 @@ export type DashboardParam = {
   // Whether the first option is chosen for you. `default: none` leaves the
   // selector empty, holding back queries that need it until a choice is made.
   autoSelect: boolean
+  // A text param's opening value (its `default`, else empty).
+  text?: string
 }
 
-const KINDS: ParamKind[] = ['value', 'identifier', 'dimension']
+// The longest text a page may send into a query.
+export const MAX_TEXT_PARAM = 10_000
+
+const KINDS: ParamKind[] = ['value', 'identifier', 'dimension', 'text']
 const CASTS = ['literal', 'identifier']
 // `{name}` substitutes per the param's kind; `{name:literal}` / `{name:identifier}`
 // override it for that one spot: a table is an identifier in `FROM {table}` but
@@ -61,7 +67,11 @@ export function parseDashboardParams(raw: unknown): DashboardParam[] {
     const hasOptions = Array.isArray(o.options)
     const sql = typeof o.options_sql === 'string' ? o.options_sql.trim() : ''
     if (hasOptions && sql) continue // ambiguous
-    if (sql) {
+    if (kind === 'text') {
+      if (hasOptions || sql) continue // free input has no list to pick from
+      const text = autoSelect && typeof o.default === 'string' ? o.default : ''
+      out.push({ name: o.name, kind, autoSelect, text })
+    } else if (sql) {
       out.push({ name: o.name, kind, optionsSql: sql, autoSelect })
     } else if (hasOptions) {
       const options = (o.options as unknown[]).filter((v) => typeof v !== 'object').map(String)
@@ -125,6 +135,11 @@ export function substituteParams(
       // contributes nothing to the grouping.
       return isChecked(raw) ? quoteIdentifier(name, name, dialect) : "''"
     }
+    if (p.kind === 'text') {
+      // Typed text is only ever a string: never quoted into a name.
+      if (cast === 'identifier') throw new Error(`{${name}} is text: it cannot be an identifier`)
+      return quoteLiteral(raw ?? '', dialect.backslashEscapes)
+    }
     if (raw === undefined || raw === '') throw new Error(`no value selected for {${name}}`)
     const asIdentifier = cast ? cast === 'identifier' : p.kind === 'identifier'
     return asIdentifier
@@ -156,8 +171,8 @@ export function resolveOrder(params: DashboardParam[]): DashboardParam[] {
   return ordered
 }
 
-// The declared params a query still needs a value for. Dimensions never count:
-// an unchecked one is off, not unset.
+// The declared params a query still needs a value for. Dimensions and text
+// never count: an unchecked one is off, and an empty text is a value.
 export function missingParams(
   sql: string,
   params: DashboardParam[],
@@ -166,23 +181,32 @@ export function missingParams(
   const byName = new Map(params.map((p) => [p.name, p]))
   return placeholdersIn(sql).filter((name) => {
     const p = byName.get(name)
-    return !!p && p.kind !== 'dimension' && !values[name]
+    return !!p && p.kind !== 'dimension' && p.kind !== 'text' && !values[name]
   })
 }
 
 // Resolve every selector's options in dependency order, keeping the caller's
 // values where they are still offered. A param whose options_sql depends on one
 // not chosen yet resolves to no options and no value — with `default: none`
-// that is the normal opening state, not a failure.
+// that is the normal opening state, not a failure. A text the caller leaves
+// out keeps its value in `previous` (what was typed), else opens on its default.
 export async function resolveParams(
   params: DashboardParam[],
   values: Record<string, string>,
   run: QueryRunner,
   dialect: Dialect,
+  previous: ResolvedParam[] = [],
 ): Promise<ResolvedParam[]> {
   const resolved: ResolvedParam[] = []
   const chosen: Record<string, string> = {}
   for (const p of resolveOrder(params)) {
+    if (p.kind === 'text') {
+      const kept = previous.find((r) => r.name === p.name && r.kind === 'text')?.value
+      const value = (values[p.name] ?? kept ?? p.text!).slice(0, MAX_TEXT_PARAM)
+      chosen[p.name] = value
+      resolved.push({ name: p.name, kind: p.kind, options: [], value })
+      continue
+    }
     let options = p.options ?? []
     if (p.optionsSql) {
       if (missingParams(p.optionsSql, params, chosen).length) {

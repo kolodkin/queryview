@@ -2,6 +2,25 @@
 // on DuckDB (no service); drivers.spec.ts runs the widget's query path per driver.
 import { DUCK, armRemote, connect, executeSql, expect, mcpCall, openDashboard, openNewQuery, test } from "./fixtures";
 
+test("a text param takes what is typed, as a literal", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "typed",
+    html: '<qv-param name="pick"></qv-param><b id="v" data-qv-query="q" data-qv-column="name"></b>',
+    queries: { q: "SELECT name FROM items WHERE name = {pick}" },
+    params: [{ name: "pick", kind: "text", default: "alpha" }],
+  });
+  await expect(frame.locator("#v")).toHaveText("alpha");
+  const input = frame.getByTestId("qv-param");
+  await expect(input).toHaveValue("alpha");
+  await input.fill("beta");
+  await input.press("Enter");
+  await expect(frame.locator("#v")).toHaveText("beta");
+  await input.fill("x' OR '1'='1"); // stays one string: no row is named that
+  await input.press("Enter");
+  await expect(frame.locator("#v")).toHaveText("—");
+});
+
 test("qv-param reruns the dashboard", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {

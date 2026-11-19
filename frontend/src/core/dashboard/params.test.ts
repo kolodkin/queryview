@@ -327,3 +327,57 @@ describe('an unchecked dimension', () => {
     expect(substituteParams('GROUP BY {by_city}', params, { by_city: '0' }, PG)).toBe("GROUP BY ''")
   })
 })
+
+describe('text params', () => {
+  const params = parseDashboardParams([
+    { name: 'note', kind: 'text' },
+    { name: 'seeded', kind: 'text', default: 'abc' },
+    {
+      name: 'scope',
+      options_sql: "SELECT if({note} = '', 'latest', {note})",
+    },
+  ])
+  const run = async (queries: Record<string, string>) => ({
+    ok: true as const,
+    results: { o: { v: [queries.o.includes("if('' = ''") ? 'latest' : 'typed'] } },
+  })
+
+  test('parses, with an optional default text', () => {
+    expect(params.map((p) => [p.name, p.kind, p.text])).toEqual([
+      ['note', 'text', ''],
+      ['seeded', 'text', 'abc'],
+      ['scope', 'value', undefined],
+    ])
+    expect(parseDashboardParams([{ name: 'x', kind: 'text', options: ['a'] }])).toEqual([])
+    // `default: none` opens it empty, as for every kind.
+    expect(parseDashboardParams([{ name: 'q', kind: 'text', default: 'none' }])[0].text).toBe('')
+  })
+
+  test('takes whatever was sent, the default until something is, and a length cap', async () => {
+    const opening = await resolveParams(params, {}, run, CH)
+    expect(opening.map((p) => p.value)).toEqual(['', 'abc', 'latest'])
+    const typed = await resolveParams(params, { note: "o'k\\d", seeded: '' }, run, CH)
+    expect(typed.map((p) => p.value)).toEqual(["o'k\\d", '', 'typed'])
+    const long = await resolveParams(params, { note: 'x'.repeat(20_000) }, run, CH)
+    expect(long[0].value).toHaveLength(10_000)
+  })
+
+  test('a message that leaves a text out keeps what was typed', async () => {
+    const typed = await resolveParams(params, { note: 'abc' }, run, CH)
+    const later = await resolveParams(params, { seeded: 'x' }, run, CH, typed)
+    expect(later.map((p) => p.value)).toEqual(['abc', 'x', 'typed'])
+  })
+
+  test('substitutes as a literal, empty included, and never as an identifier', () => {
+    expect(sub('SELECT {note}', params, { note: "o'k\\d" })).toBe("SELECT 'o''k\\\\d'")
+    expect(substituteParams('SELECT {note}', params, { note: "o'k\\d" }, PG)).toBe(
+      "SELECT 'o''k\\d'",
+    )
+    expect(sub('SELECT {note}', params, { note: '' })).toBe("SELECT ''")
+    expect(() => sub('SELECT {note:identifier}', params, { note: 'a' })).toThrow(/identifier/)
+  })
+
+  test('an empty text is a value: its queries still run', () => {
+    expect(missingParams('SELECT {note}', params, { note: '' })).toEqual([])
+  })
+})

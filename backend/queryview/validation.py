@@ -7,13 +7,10 @@ MAX_LIMIT = 10000
 
 
 def _selector_error(entry: object, label: str) -> str | None:
-    """One selector spec's shared rules — a name and exactly one of `options` /
+    """One selector spec's option rule — exactly one of `options` /
     `options_sql` — with messages prefixed by `label` (e.g. "params[0]")."""
     if not isinstance(entry, dict):
         return f"invalid {label} must be a mapping"
-    name = entry.get("name")
-    if not isinstance(name, str) or not name:
-        return f"invalid {label} name must be a non-empty string"
     options, sql = entry.get("options"), entry.get("options_sql")
     if (options is None) == (sql is None):
         return f"invalid {label} must declare exactly one of options or options_sql"
@@ -27,13 +24,14 @@ def _selector_error(entry: object, label: str) -> str | None:
     return None
 
 
-DASHBOARD_PARAM_KINDS = ("value", "identifier", "dimension")
+DASHBOARD_PARAM_KINDS = ("value", "identifier", "dimension", "text")
 
 
 def dashboard_params_error(raw: object) -> str | None:
     """Validate a dashboard's `params` (see docs/dashboard.md#dashboard-parameters):
     the selector rules, plus a `kind` and an optional `default: none`. A
-    `dimension` is a checkbox, so it needs no options. None is no params."""
+    `dimension` is a checkbox, so it needs no options; a `text` is free input
+    with an optional `default` string. None is no params."""
     if raw is None:
         return None
     if not isinstance(raw, list):
@@ -45,12 +43,20 @@ def dashboard_params_error(raw: object) -> str | None:
         kind = entry.get("kind", "value")
         if kind not in DASHBOARD_PARAM_KINDS:
             return f"invalid {label} kind must be one of {', '.join(DASHBOARD_PARAM_KINDS)}"
+        name = entry.get("name")
+        if not isinstance(name, str) or not name:
+            return f"invalid {label} name must be a non-empty string"
+        if kind == "text":
+            # Free input: an optional opening text, no list to pick from.
+            if entry.get("options") is not None or entry.get("options_sql") is not None:
+                return f"invalid {label} a text param takes no options"
+            default = entry.get("default")
+            if default is not None and not isinstance(default, str):
+                return f"invalid {label} default must be a string"
+            continue
         if entry.get("default") not in (None, "none"):
             return f"invalid {label} default must be 'none' when given"
         if kind == "dimension" and entry.get("options") is None and entry.get("options_sql") is None:
-            name = entry.get("name")
-            if not isinstance(name, str) or not name:
-                return f"invalid {label} name must be a non-empty string"
             continue
         err = _selector_error(entry, label)
         if err:
