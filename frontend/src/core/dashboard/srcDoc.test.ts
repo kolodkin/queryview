@@ -13,6 +13,13 @@ describe('buildSrcDoc', () => {
     expect(doc.endsWith('</script>\n<h1>hi</h1>')).toBe(true)
   })
 
+  test('the prologue marks the page while a re-run is in flight', () => {
+    const doc = buildSrcDoc('', {})
+    expect(doc).toContain("setAttribute('data-qv-loading', '')")
+    expect(doc).toContain("removeAttribute('data-qv-loading')")
+    expect(doc).toContain('html[data-qv-loading]::before')
+  })
+
   test('the prologue is valid JavaScript', () => {
     const doc = buildSrcDoc('', {})
     const js = doc.slice(doc.indexOf('<script>') + 8, doc.indexOf('</script>'))
@@ -28,7 +35,7 @@ describe('buildSrcDoc', () => {
     expect(doc).toContain("type: 'qv-snapshot-result'")
     // A widget mid-query has no rows yet: the snapshot is refused, not taken empty.
     expect(doc).toContain('[data-qv-busy]')
-    expect(doc).toContain('A widget is still loading')
+    expect(doc).toContain('The dashboard is still loading')
     expect(doc).toContain("':not(:defined)'") // a qv-* tag the bundle has not upgraded yet
     expect(doc).toContain("i.type === 'password'") // never written to the file
   })

@@ -221,7 +221,7 @@ test("Snapshot is refused while a widget is loading", async ({ page, seeds, base
   });
   await expect(frame.getByTestId("qv-select-view")).toBeVisible();
   await page.getByTestId("dashboard-snapshot").click();
-  await expect(page.getByTestId("dashboard-error")).toContainText("A widget is still loading");
+  await expect(page.getByTestId("dashboard-error")).toContainText("The dashboard is still loading");
 
   release();
   await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(3);

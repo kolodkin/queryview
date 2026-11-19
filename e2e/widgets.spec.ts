@@ -2,6 +2,40 @@
 // on DuckDB (no service); drivers.spec.ts runs the widget's query path per driver.
 import { DUCK, armRemote, connect, executeSql, expect, mcpCall, openDashboard, openNewQuery, test } from "./fixtures";
 
+test("the frame marks itself while a re-run is in flight", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "loading-mark",
+    html:
+      "<style>body{background:#0c1124;color:#fff;font-size:40px}[data-qv-loading] #v{opacity:.2}</style>" +
+      '<qv-param name="pick"></qv-param><b id="v" data-qv-query="q" data-qv-column="name"></b>',
+    queries: { q: "SELECT name FROM items WHERE name = {pick}" },
+    params: [{ name: "pick", options_sql: "SELECT name FROM items ORDER BY id" }],
+  });
+  await expect(frame.locator("#v")).toHaveText("alpha");
+  await expect(frame.locator("html")).not.toHaveAttribute("data-qv-loading");
+
+  let release = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route("**/api/runqueries", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await frame.getByTestId("qv-param").selectOption("beta");
+  await expect(frame.locator("html")).toHaveAttribute("data-qv-loading", "");
+  await expect(frame.locator("#v")).toHaveText("alpha"); // the old value, marked stale
+  // The bar is really drawn, and the dashboard's own rule applies.
+  const look = await frame.locator("html").evaluate((el) => {
+    const bar = getComputedStyle(el, "::before");
+    return [bar.content, bar.height, bar.position, bar.animationName, getComputedStyle(document.getElementById("v")!).opacity].join("|");
+  });
+  expect(look).toBe('""|4px|fixed|qv-loading|0.2');
+
+  release();
+  await expect(frame.locator("#v")).toHaveText("beta");
+  await expect(frame.locator("html")).not.toHaveAttribute("data-qv-loading");
+});
+
 test("a text param takes what is typed, as a literal", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
