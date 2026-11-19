@@ -231,12 +231,15 @@ FROM {table} GROUP BY value, category
 | `dimension` | a checkbox: its own column when checked, `''` when not | `{category}` → `"category"` / `''` |
 | `text` | whatever was typed, as a quoted string literal | `{note}` → `'o''k'` |
 
-A `text` param is free input (up to 10,000 characters): it takes no options,
-opens on its `default` string (empty without one, or with `default: none`),
-and an empty one still substitutes, as `''`, so its queries run. A
-`setParams` that leaves it out keeps what was typed. It is only ever a string:
-`{note:identifier}` is an error. An `options_sql` may reference it, which is
-how typed text can pick a scope computed in SQL.
+A `text` param is free input:
+
+- No options; up to 10,000 characters.
+- Opens on its `default` string: empty without one, or with `default: none`.
+- An empty one still substitutes, as `''`, so its queries run.
+- A `setParams` that leaves it out keeps what was typed.
+- Only ever a string: `{note:identifier}` is an error.
+- An `options_sql` may reference it, so typed text can pick a scope computed
+  in SQL.
 
 A placeholder can override its param's kind in one spot: **`{table:literal}`**
 gives a string where the SQL wants one while `FROM {table}` still gets the
