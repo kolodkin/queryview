@@ -31,7 +31,7 @@ export { filterNames } from './nameFilter'
 export { useDismiss } from './useDismiss'
 export { useCopy } from './useCopy'
 export { DashboardFrame } from './dashboard/DashboardFrame'
-export { parseSnapshotResult, snapshotDocument } from './dashboard/snapshot'
+export { parseSnapshotResult, snapshotDocument, type SnapshotResult } from './dashboard/snapshot'
 export { buildSrcDoc, type DashboardResults, type QvTheme, type QvToken } from './dashboard/srcDoc'
 export {
   applyToQueries,

@@ -11,6 +11,7 @@ import {
   rejectedWidgetReply,
   resolveParams,
   snapshotDocument,
+  type SnapshotResult,
   widgetQueryNames,
   type DashboardParam,
   type Dialect,
@@ -152,8 +153,7 @@ function DashboardView({
   // A Snapshot waiting for the frame's serialized document.
   const snapshotRef = useRef<{
     frame: HTMLIFrameElement
-    timer: ReturnType<typeof setTimeout>
-    done: (html: string | null, message?: string) => void
+    done: (r: SnapshotResult) => void
   } | null>(null)
   // The SQL as last run (load or Execute). The frame's widgets and param
   // re-runs use this, so a half-typed edit in the SQL panel never runs.
@@ -456,19 +456,18 @@ function DashboardView({
   function snapshot() {
     const frame = frameRef.current
     if (!frame || !active || snapshotRef.current?.frame === frame) return
-    clearTimeout(snapshotRef.current?.timer) // one left by a dashboard since closed
+    const unanswered = { message: 'The dashboard did not answer the snapshot request.' }
+    snapshotRef.current?.done(unanswered) // one left by a dashboard since closed: it says nothing
     const title = active.name || 'dashboard'
-    const done = (html: string | null, message?: string) => {
+    const done = (r: SnapshotResult) => {
       snapshotRef.current = null
       clearTimeout(timer)
       if (frameRef.current !== frame) return // the dashboard was switched meanwhile
-      setError(
-        html === null ? (message ?? 'The dashboard did not answer the snapshot request.') : null,
-      )
-      if (html !== null) downloadText(`${title}.html`, snapshotDocument(html, title), 'text/html')
+      setError('html' in r ? null : r.message)
+      if ('html' in r) downloadText(`${title}.html`, snapshotDocument(r.html, title), 'text/html')
     }
-    const timer = setTimeout(() => done(null), 5000)
-    snapshotRef.current = { frame, timer, done }
+    const timer = setTimeout(() => done(unanswered), 5000)
+    snapshotRef.current = { frame, done }
     frame.contentWindow?.postMessage({ type: 'qv-snapshot' }, '*')
   }
 
@@ -515,9 +514,7 @@ function DashboardView({
       if (!frame || e.source !== frame.contentWindow) return
       const snap = parseSnapshotResult(e.data)
       if (snap) {
-        const pending = snapshotRef.current?.frame === frame ? snapshotRef.current : null
-        if ('html' in snap) pending?.done(snap.html)
-        else pending?.done(null, snap.message)
+        if (snapshotRef.current?.frame === frame) snapshotRef.current.done(snap)
         return
       }
       if (!active) return

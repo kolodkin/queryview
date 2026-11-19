@@ -183,7 +183,6 @@ export function SelectView({
       data-qv-busy={busy || undefined}
       className="flex max-h-[36rem] flex-col gap-2 rounded-xl bg-slate-950 p-3 text-sm text-slate-200"
     >
-      {/* data-qv-chrome: left out of a snapshot (../dashboard/srcDoc.ts). */}
       <div data-qv-chrome className="flex flex-wrap items-center gap-2">
         <button
           type="button"

@@ -24,12 +24,12 @@ describe('buildSrcDoc', () => {
     expect(doc).toContain("d.type === 'qv-snapshot'")
     expect(doc).toContain('getHTML(')
     expect(doc).toContain('adoptedStyleSheets')
-    expect(doc).toContain('[data-qv-chrome]')
+    expect(doc).toContain('data-qv-snapshotting')
     expect(doc).toContain("type: 'qv-snapshot-result'")
     // A widget mid-query has no rows yet: the snapshot is refused, not taken empty.
     expect(doc).toContain('[data-qv-busy]')
     expect(doc).toContain('A widget is still loading')
-    expect(doc).toContain(':not(:defined)') // a widget tag the bundle has not upgraded yet
+    expect(doc).toContain("':not(:defined)'") // a qv-* tag the bundle has not upgraded yet
     expect(doc).toContain("i.type === 'password'") // never written to the file
   })
 

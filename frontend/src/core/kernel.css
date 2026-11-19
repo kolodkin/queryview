@@ -180,3 +180,22 @@
     background: rgba(148, 163, 184, 0.55);
   }
 }
+
+/* A widget in a dashboard snapshot (dashboard/srcDoc.ts marks its host): the
+   controls go, the caption shows, nothing is capped or scrolled, and a long
+   value wraps since nothing can open it. Unlayered, to beat the utilities. */
+:host([data-qv-snapshotting]) [data-qv-chrome] {
+  display: none !important;
+}
+:host([data-qv-snapshotting]) [data-qv-snapshot] {
+  display: block !important;
+}
+:host([data-qv-snapshotting]) [data-qv-scroll] {
+  max-height: none !important;
+  flex: none !important;
+}
+:host([data-qv-snapshotting]) .cell-scroll {
+  overflow: visible !important;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
+}
