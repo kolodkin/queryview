@@ -2,6 +2,32 @@
 // on DuckDB (no service); drivers.spec.ts runs the widget's query path per driver.
 import { DUCK, armRemote, connect, executeSql, expect, mcpCall, openDashboard, openNewQuery, test } from "./fixtures";
 
+test("the frame marks itself while a re-run is in flight", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "loading-mark",
+    html: '<qv-param name="pick"></qv-param><b id="v" data-qv-query="q" data-qv-column="name"></b>',
+    queries: { q: "SELECT name FROM items WHERE name = {pick}" },
+    params: [{ name: "pick", options_sql: "SELECT name FROM items ORDER BY id" }],
+  });
+  await expect(frame.locator("#v")).toHaveText("alpha");
+  await expect(frame.locator("html")).not.toHaveAttribute("data-qv-loading");
+
+  let release = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route("**/api/runqueries", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await frame.getByTestId("qv-param").selectOption("beta");
+  await expect(frame.locator("html")).toHaveAttribute("data-qv-loading", "");
+  await expect(frame.locator("#v")).toHaveText("alpha"); // the old value, marked stale
+
+  release();
+  await expect(frame.locator("#v")).toHaveText("beta");
+  await expect(frame.locator("html")).not.toHaveAttribute("data-qv-loading");
+});
+
 test("a text param takes what is typed, as a literal", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {

@@ -44,7 +44,19 @@ function bind() {
   });
 }
 document.addEventListener('DOMContentLoaded', bind);
+// While a re-run is in flight the page carries data-qv-loading: a bar runs
+// across its top, and its own CSS can dim what is now stale.
+document.addEventListener('DOMContentLoaded', function () {
+  var style = document.createElement('style');
+  style.textContent =
+    'html[data-qv-loading]::before{content:"";position:fixed;z-index:2147483647;top:0;left:0;' +
+    'width:100%;height:3px;background:linear-gradient(90deg,transparent,var(--qv-accent,#818cf8),transparent) ' +
+    'no-repeat;background-size:40% 100%;animation:qv-loading 1.1s linear infinite}' +
+    '@keyframes qv-loading{from{background-position:-70% 0}to{background-position:170% 0}}';
+  document.head.append(style);
+});
 window.setParams = function (values) {
+  document.documentElement.setAttribute('data-qv-loading', '');
   parent.postMessage({ type: 'set-params', values: values }, '*');
 };
 // The page as static HTML, for the host's Snapshot: scripts out, canvases as
@@ -78,12 +90,14 @@ function snapshot() {
         if (el.shadowRoot) { roots.push(el.shadowRoot); walk(el.shadowRoot); }
       });
     })(document);
-    // No rows yet: a widget mid-query, or a qv-* tag the bundle has not upgraded.
-    if (Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
+    // Stale or no rows yet: a re-run in flight, a widget mid-query, or a qv-*
+    // tag the bundle has not upgraded.
+    if (document.documentElement.hasAttribute('data-qv-loading') ||
+        Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
           return el.localName.indexOf('qv-') === 0;
         }) ||
         roots.some(function (root) { return root.querySelector('[data-qv-busy]'); })) {
-      return { type: 'qv-snapshot-result', message: 'A widget is still loading. Take the snapshot when it has finished.' };
+      return { type: 'qv-snapshot-result', message: 'The dashboard is still loading. Take the snapshot when it has finished.' };
     }
     var scopes = [document].concat(roots);
     // Canvases are read before anything moves: one layout, and the size each
@@ -148,6 +162,7 @@ window.addEventListener('message', function (e) {
   var d = e.data;
   if (d && d.type === 'qv-snapshot') { parent.postMessage(snapshot(), '*'); return; }
   if (!d || d.type !== 'params-results') return;
+  document.documentElement.removeAttribute('data-qv-loading');
   // A failed run keeps the previous results on screen and reports the message.
   if (d.results) { window.queries = d.results; bind(); }
   if (d.params && d.params.length) window.params = d.params;
