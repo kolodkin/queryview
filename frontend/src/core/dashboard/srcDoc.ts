@@ -57,6 +57,14 @@ function snapshot() {
     el.replaceWith(other);
     undo.push(function () { other.replaceWith(el); });
   }
+  // Serialization reads attributes, so live state is written into them.
+  function attr(el, name, value) {
+    var had = el.getAttribute(name);
+    if (value === null) el.removeAttribute(name); else el.setAttribute(name, value);
+    undo.push(function () {
+      if (had === null) el.removeAttribute(name); else el.setAttribute(name, had);
+    });
+  }
   try {
     var roots = [];
     (function walk(scope) {
@@ -64,13 +72,24 @@ function snapshot() {
         if (el.shadowRoot) { roots.push(el.shadowRoot); walk(el.shadowRoot); }
       });
     })(document);
-    if (roots.some(function (root) { return root.querySelector('[data-qv-busy]'); })) {
+    // No rows yet: a widget mid-query, or a tag the bundle has not upgraded.
+    if (document.querySelector('qv-select-view:not(:defined),qv-param:not(:defined)') ||
+        roots.some(function (root) { return root.querySelector('[data-qv-busy]'); })) {
       return { type: 'qv-snapshot-result', message: 'A widget is still loading. Take the snapshot when it has finished.' };
     }
     [document].concat(roots).forEach(function (scope) {
       scope.querySelectorAll('input').forEach(function (i) {
-        if (i.type === 'checkbox' || i.type === 'radio') i.toggleAttribute('checked', i.checked);
-        else i.setAttribute('value', i.value);
+        if (i.type === 'password') attr(i, 'value', null);
+        else if (i.type === 'checkbox' || i.type === 'radio') attr(i, 'checked', i.checked ? '' : null);
+        else if (i.type !== 'file') attr(i, 'value', i.value);
+      });
+      scope.querySelectorAll('textarea').forEach(function (t) {
+        var area = document.createElement('textarea');
+        ['id', 'class', 'style', 'rows', 'cols'].forEach(function (a) {
+          if (t.hasAttribute(a)) area.setAttribute(a, t.getAttribute(a));
+        });
+        area.textContent = t.value;
+        swap(t, area);
       });
       // A dropdown becomes its chosen value: the file has nothing to pick.
       scope.querySelectorAll('select').forEach(function (sel) {
@@ -90,6 +109,10 @@ function snapshot() {
         ['id', 'class', 'style', 'width', 'height'].forEach(function (a) {
           if (c.hasAttribute(a)) img.setAttribute(a, c.getAttribute(a));
         });
+        // The size it is shown at: a rule selecting canvas no longer matches.
+        var box = c.getBoundingClientRect();
+        img.style.width = box.width + 'px';
+        img.style.height = box.height + 'px';
         swap(c, img);
       });
     });
@@ -99,6 +122,8 @@ function snapshot() {
         return Array.prototype.map.call(sheet.cssRules, function (r) { return r.cssText; }).join('\\n');
       }).join('\\n') +
         '\\n[data-qv-chrome]{display:none!important}[data-qv-snapshot]{display:block!important}' +
+        // A long value wraps in its cell: nothing can open it in the file.
+        '.cell-scroll{overflow:visible!important;white-space:pre-wrap!important;overflow-wrap:anywhere}' +
         '[data-qv-scroll]{max-height:none!important;flex:none!important}';
       root.append(style);
       undo.push(function () { style.remove(); });

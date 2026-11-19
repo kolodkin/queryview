@@ -275,7 +275,9 @@ document, and the host puts a policy that blocks all scripts ahead of that
 text and disarms any `http-equiv` in it, so the file runs no script and
 redirects nowhere, whatever the dashboard's HTML contains. What the
 dashboard loads from elsewhere (stylesheets, fonts, images) is still fetched
-when the file is opened. It holds rendered query results: treat the file as
+when the file is opened; frames it embeds are not. A WebGL chart, or a
+canvas holding a cross-origin image, comes out blank, and a password field
+empty. It holds rendered query results: treat the file as
 data. Data reaches it only through the
 injected `window.queries` and the [widget](#widgets) replies; the
 `window.queries` JSON has `<` escaped so result data containing `</script>` can't break out

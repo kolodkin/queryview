@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MAX_SNAPSHOT_BYTES, parseSnapshotResult, snapshotDocument } from './snapshot'
+import { MAX_SNAPSHOT_CHARS, parseSnapshotResult, snapshotDocument } from './snapshot'
 
 describe('snapshotDocument', () => {
   it('puts the charset and a script-blocking policy ahead of anything the frame sent', () => {
@@ -9,7 +9,7 @@ describe('snapshotDocument', () => {
       doc.startsWith(
         '<!doctype html><meta charset="utf-8">' +
           '<meta http-equiv="Content-Security-Policy" content="' +
-          "script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" +
+          "script-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" +
           '">',
       ),
     ).toBe(true)
@@ -23,6 +23,15 @@ describe('snapshotDocument', () => {
     )
     expect(doc.match(/http-equiv/gi)).toHaveLength(2) // ours, and the frame's renamed
     expect(doc).toContain('<meta data-http-equiv="refresh"')
+    expect(snapshotDocument('<meta http-equiv\n = refresh>', 't')).toContain(
+      '<meta data-http-equiv\n = refresh>',
+    )
+  })
+
+  it('leaves the words http-equiv alone in text', () => {
+    expect(snapshotDocument('<td>the http-equiv header</td>', 't')).toContain(
+      '<td>the http-equiv header</td>',
+    )
   })
 
   it('escapes the title', () => {
@@ -44,10 +53,12 @@ describe('parseSnapshotResult', () => {
     expect(parseSnapshotResult({ type: 'qv-size', height: 1 })).toBeNull()
     expect(parseSnapshotResult({ type: 'qv-snapshot-result', html: 7 })).toBeNull()
     expect(parseSnapshotResult({ type: 'qv-snapshot-result' })).toBeNull()
-    const big = { type: 'qv-snapshot-result', html: { length: MAX_SNAPSHOT_BYTES + 1 } }
-    expect(parseSnapshotResult(big)).toBeNull()
+    expect(parseSnapshotResult({ type: 'qv-snapshot-result', html: { length: 1 } })).toBeNull()
+  })
+
+  it('answers an oversize document with a message, not silence', () => {
     expect(
-      parseSnapshotResult({ type: 'qv-snapshot-result', html: 'x'.repeat(MAX_SNAPSHOT_BYTES + 1) }),
-    ).toBeNull()
+      parseSnapshotResult({ type: 'qv-snapshot-result', html: 'x'.repeat(MAX_SNAPSHOT_CHARS + 1) }),
+    ).toEqual({ message: 'The dashboard is too large to snapshot.' })
   })
 })

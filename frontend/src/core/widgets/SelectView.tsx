@@ -84,7 +84,8 @@ export function SelectView({
   const [page, setPage] = useState<Page>({ limit, offset: 0, orderBy })
   const [result, setResult] = useState<QueryRows | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  // Busy from the first render: a snapshot must not catch the widget before its first run.
+  const [busy, setBusy] = useState(true)
   const [fields, setFields] = useState<Field[]>([])
   const [visibleCols, setVisibleCols] = useState<string[]>([])
   // Only the newest run lands: a slow reply must not overwrite a later page.

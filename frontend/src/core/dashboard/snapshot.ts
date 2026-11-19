@@ -2,14 +2,18 @@
 // (the prologue in ./srcDoc.ts) and the host wraps that text for download.
 // See docs/dashboard.md.
 
-// The largest document the host accepts from a frame.
-export const MAX_SNAPSHOT_BYTES = 50_000_000
+// The largest document the host accepts from a frame, in characters.
+export const MAX_SNAPSHOT_CHARS = 50_000_000
 
 export function parseSnapshotResult(data: unknown): { html: string } | { message: string } | null {
   if (!data || typeof data !== 'object') return null
   const { type, html, message } = data as { type?: unknown; html?: unknown; message?: unknown }
   if (type !== 'qv-snapshot-result') return null
-  if (typeof html === 'string') return html.length <= MAX_SNAPSHOT_BYTES ? { html } : null
+  if (typeof html === 'string') {
+    return html.length <= MAX_SNAPSHOT_CHARS
+      ? { html }
+      : { message: 'The dashboard is too large to snapshot.' }
+  }
   return typeof message === 'string' ? { message } : null
 }
 
@@ -22,11 +26,13 @@ export function snapshotDocument(html: string, title: string): string {
   return (
     '<!doctype html><meta charset="utf-8">' +
     '<meta http-equiv="Content-Security-Policy" content="' +
-    "script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'" +
+    "script-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" +
     '">' +
     `<title>${escapeText(title)}</title>\n` +
-    // No http-equiv of the frame's survives: a refresh would navigate the
-    // opened file away. Attribute names can't be entity-encoded around this.
-    html.replace(/http-equiv/gi, 'data-http-equiv')
+    // No http-equiv attribute of the frame's survives: a refresh would
+    // navigate the opened file away. An attribute name can't be
+    // entity-encoded, and only one followed by `=` has a value to act on, so
+    // this catches every live one and leaves the words alone in text.
+    html.replace(/http-equiv(?=\s*=)/gi, 'data-http-equiv')
   )
 }

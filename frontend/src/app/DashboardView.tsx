@@ -150,7 +150,11 @@ function DashboardView({
   const resolvedRef = useRef<ResolvedParam[]>([])
   const frameRef = useRef<HTMLIFrameElement>(null)
   // A Snapshot waiting for the frame's serialized document.
-  const snapshotRef = useRef<((html: string | null, message?: string) => void) | null>(null)
+  const snapshotRef = useRef<{
+    frame: HTMLIFrameElement
+    timer: ReturnType<typeof setTimeout>
+    done: (html: string | null, message?: string) => void
+  } | null>(null)
   // The SQL as last run (load or Execute). The frame's widgets and param
   // re-runs use this, so a half-typed edit in the SQL panel never runs.
   const executedRef = useRef<Record<string, string>>({})
@@ -451,16 +455,20 @@ function DashboardView({
   // behind a policy that blocks every script (docs/dashboard.md).
   function snapshot() {
     const frame = frameRef.current
-    if (!frame || !active || snapshotRef.current) return
+    if (!frame || !active || snapshotRef.current?.frame === frame) return
+    clearTimeout(snapshotRef.current?.timer) // one left by a dashboard since closed
     const title = active.name || 'dashboard'
     const done = (html: string | null, message?: string) => {
       snapshotRef.current = null
       clearTimeout(timer)
-      if (html === null) setError(message ?? 'The dashboard did not answer the snapshot request.')
-      else downloadText(`${title}.html`, snapshotDocument(html, title), 'text/html')
+      if (frameRef.current !== frame) return // the dashboard was switched meanwhile
+      setError(
+        html === null ? (message ?? 'The dashboard did not answer the snapshot request.') : null,
+      )
+      if (html !== null) downloadText(`${title}.html`, snapshotDocument(html, title), 'text/html')
     }
     const timer = setTimeout(() => done(null), 5000)
-    snapshotRef.current = done
+    snapshotRef.current = { frame, timer, done }
     frame.contentWindow?.postMessage({ type: 'qv-snapshot' }, '*')
   }
 
@@ -507,8 +515,9 @@ function DashboardView({
       if (!frame || e.source !== frame.contentWindow) return
       const snap = parseSnapshotResult(e.data)
       if (snap) {
-        if ('html' in snap) snapshotRef.current?.(snap.html)
-        else snapshotRef.current?.(null, snap.message)
+        const pending = snapshotRef.current?.frame === frame ? snapshotRef.current : null
+        if ('html' in snap) pending?.done(snap.html)
+        else pending?.done(null, snap.message)
         return
       }
       if (!active) return

@@ -29,6 +29,8 @@ describe('buildSrcDoc', () => {
     // A widget mid-query has no rows yet: the snapshot is refused, not taken empty.
     expect(doc).toContain('[data-qv-busy]')
     expect(doc).toContain('A widget is still loading')
+    expect(doc).toContain(':not(:defined)') // a widget tag the bundle has not upgraded yet
+    expect(doc).toContain("i.type === 'password'") // never written to the file
   })
 
   test('escapes < in result data so it cannot close the prologue script', () => {
