@@ -35,7 +35,18 @@ export function ParamSelect({ name }: { name: string }) {
   return (
     <label className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-2 py-1 text-sm text-slate-200">
       <span className="text-slate-400">{name}</span>
-      {param.kind === 'dimension' ? (
+      {param.kind === 'text' ? (
+        // Uncontrolled, keyed on the value: typing stays local until Enter or blur.
+        <input
+          type="text"
+          data-testid="qv-param"
+          key={param.value}
+          defaultValue={param.value}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          onBlur={(e) => e.target.value !== param.value && choose(e.target.value)}
+          className="glass-input px-2 py-1 text-sm"
+        />
+      ) : param.kind === 'dimension' ? (
         <input
           type="checkbox"
           data-testid="qv-param"

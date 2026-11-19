@@ -406,7 +406,7 @@ async def push_dashboard(
     `window.queries.sales.revenue`. Load chart libraries from a CDN if needed.
 
     `params` declares selectors substituted into the queries' `{name}`
-    placeholders (kinds value / identifier / dimension, `options` or
+    placeholders (kinds value / identifier / dimension / text, `options` or
     `options_sql`, `default: none`); the page gets them as `window.params` and
     re-runs with `window.setParams({...})`. See docs/dashboard.md.
 

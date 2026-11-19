@@ -27,13 +27,14 @@ def _selector_error(entry: object, label: str) -> str | None:
     return None
 
 
-DASHBOARD_PARAM_KINDS = ("value", "identifier", "dimension")
+DASHBOARD_PARAM_KINDS = ("value", "identifier", "dimension", "text")
 
 
 def dashboard_params_error(raw: object) -> str | None:
     """Validate a dashboard's `params` (see docs/dashboard.md#dashboard-parameters):
     the selector rules, plus a `kind` and an optional `default: none`. A
-    `dimension` is a checkbox, so it needs no options. None is no params."""
+    `dimension` is a checkbox, so it needs no options; a `text` is free input
+    with an optional `default` string. None is no params."""
     if raw is None:
         return None
     if not isinstance(raw, list):
@@ -45,6 +46,16 @@ def dashboard_params_error(raw: object) -> str | None:
         kind = entry.get("kind", "value")
         if kind not in DASHBOARD_PARAM_KINDS:
             return f"invalid {label} kind must be one of {', '.join(DASHBOARD_PARAM_KINDS)}"
+        if kind == "text":
+            # Free input: a name, an optional opening text, no list to pick from.
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                return f"invalid {label} name must be a non-empty string"
+            if entry.get("options") is not None or entry.get("options_sql") is not None:
+                return f"invalid {label} a text param takes no options"
+            if not isinstance(entry.get("default", ""), str):
+                return f"invalid {label} default must be a string"
+            continue
         if entry.get("default") not in (None, "none"):
             return f"invalid {label} default must be 'none' when given"
         if kind == "dimension" and entry.get("options") is None and entry.get("options_sql") is None:

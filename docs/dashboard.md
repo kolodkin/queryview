@@ -184,7 +184,8 @@ frame with the rest of the page; only dashboards that use one load them.
   is encoded too; build the link around an id instead.
 - **`<qv-param name>`** — the selector for one
   [dashboard parameter](#dashboard-parameters): a dropdown, or a checkbox for a
-  `dimension`. A change re-runs the dashboard.
+  `dimension`, a text box for a `text` (sent on Enter or on leaving it). A
+  change re-runs the dashboard.
 
 A query a `<qv-select-view>` names belongs to that widget: it runs per page
 through `/api/db/query`, is **not** in `window.queries`, and a failure shows in
@@ -228,6 +229,13 @@ FROM {table} GROUP BY value, category
 | `value` (default) | quoted string literal, single quotes doubled (and backslashes on ClickHouse) | `{region}` → `'eu'` |
 | `identifier` | a quoted table/column, in the connection's own quoting | `{field}` → `"city"` (`` `city` `` on ClickHouse) |
 | `dimension` | a checkbox: its own column when checked, `''` when not | `{category}` → `"category"` / `''` |
+| `text` | whatever was typed, as a quoted string literal | `{note}` → `'o''k'` |
+
+A `text` param is free input (up to 10,000 characters): it takes no options,
+opens on its `default` string (else empty), and an empty one still
+substitutes, as `''`, so its queries run. It is only ever a string:
+`{note:identifier}` is an error. An `options_sql` may reference it, which is
+how typed text can pick a scope computed in SQL.
 
 A placeholder can override its param's kind in one spot: **`{table:literal}`**
 gives a string where the SQL wants one while `FROM {table}` still gets the
