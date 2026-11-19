@@ -205,3 +205,27 @@ test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, 
   expect((await still.getByTestId("qv-results").boundingBox())!.height).toBeGreaterThan(3000);
   await context.close();
 });
+
+test("Snapshot is refused while a widget is loading", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  let release = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route("**/api/db/query", async (route) => {
+    await held;
+    await route.continue();
+  });
+  const frame = await openDashboard(page, baseURL, {
+    name: "loading",
+    html: '<qv-select-view query="rows"></qv-select-view>',
+    queries: { rows: "SELECT name FROM items ORDER BY id" },
+  });
+  await expect(frame.getByTestId("qv-select-view")).toBeVisible();
+  await page.getByTestId("dashboard-snapshot").click();
+  await expect(page.getByTestId("dashboard-error")).toContainText("A widget is still loading");
+
+  release();
+  await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(3);
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("dashboard-snapshot").click()]);
+  expect(download.suggestedFilename()).toBe("loading.html");
+  await expect(page.getByTestId("dashboard-error")).toHaveCount(0); // the refusal is cleared
+});
