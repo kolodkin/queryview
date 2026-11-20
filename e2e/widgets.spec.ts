@@ -3,6 +3,7 @@
 import {
   DUCK,
   armRemote,
+  closeQueries,
   connect,
   executeSql,
   expect,
@@ -284,7 +285,7 @@ test("a widget pages the executed SQL, not a half-typed edit", async ({ page, se
   await expect(rows).toHaveCount(2);
   await page.getByTestId("dashboard-edit-queries").click();
   await page.getByTestId("dash-sql").fill("SELECT id, name FROM items WHERE id = 1"); // not executed
-  await page.getByTestId("dash-sql-close").click();
+  await closeQueries(page);
   await frame.getByTestId("qv-next").click();
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText("gamma");
@@ -319,7 +320,7 @@ test("saving a draft does not run a half-typed edit", async ({ page, seeds }) =>
   await expect(frame.getByTestId("qv-results")).toContainText("alpha");
   await page.getByTestId("dashboard-edit-queries").click();
   await page.getByTestId("dash-sql").fill("SELECT name FROM items WHERE id = 3"); // not executed
-  await page.getByTestId("dash-sql-close").click();
+  await closeQueries(page);
   page.once("dialog", (d) => d.accept("half"));
   await page.getByTestId("dashboard-save").click();
   await expect(page.getByTestId("dashboard-select")).toHaveValue("half");
@@ -420,11 +421,11 @@ test("Execute re-runs only the queries that were edited", async ({ page, seeds, 
   await expect(popup).toContainText("alpha");
   await expect(frame.locator("#b").getByTestId("qv-results")).toContainText("gamma");
   await expect(frame.locator("#chart")).toHaveText("alpha");
-  expect(sent).toEqual([one, one]); // widget a and the popup's table; b and chart did not re-run
+  expect(sent).toEqual([one]); // one run shared by widget a and the popup's table; b and chart did not re-run
 
   await page.getByTestId("dash-sql-query").selectOption("chart");
   await expect(popup).toContainText("alpha");
-  await expect.poll(() => sent.length).toBe(3); // the popup's table ran the picked query
+  await expect.poll(() => sent.length).toBe(2); // the popup's table ran the picked query
   sent.length = 0;
   const two = "SELECT name FROM items WHERE id = 2";
   await page.getByTestId("dash-sql").fill(two);

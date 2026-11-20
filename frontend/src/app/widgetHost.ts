@@ -9,13 +9,21 @@ import { downloadText } from './yamlio'
 // The SQL to run for a query name, or why it can't run.
 export type WidgetSql = { sql: string } | { message: string }
 
-async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
-  try {
-    const res = await postJson(path, body)
-    return await res.json()
-  } catch {
-    return { ok: false, message: 'request failed' }
+// Requests on their way, by path and body: two tables asking for the same page
+// at once (a dashboard widget and the query popup's) share one run.
+const inFlight = new Map<string, Promise<Record<string, unknown>>>()
+
+function post(path: string, body: unknown): Promise<Record<string, unknown>> {
+  const key = path + JSON.stringify(body)
+  let pending = inFlight.get(key)
+  if (!pending) {
+    pending = postJson(path, body)
+      .then((res) => res.json() as Promise<Record<string, unknown>>)
+      .catch(() => ({ ok: false, message: 'request failed' }))
+      .finally(() => inFlight.delete(key))
+    inFlight.set(key, pending)
   }
+  return pending
 }
 
 // Answer one widget request; null when there is nothing to post back (CSV).

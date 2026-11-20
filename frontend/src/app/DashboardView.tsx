@@ -439,11 +439,6 @@ function DashboardView({
     const changed = Object.keys(active.queries).filter((n) => active.queries[n] !== before[n])
     executedRef.current = active.queries
     const only = changed.length ? changed : null
-    // The popup's table re-queries on the same message as a widget.
-    popupFrameRef.current?.contentWindow?.postMessage(
-      { type: 'params-results', ok: true, queries: only },
-      '*',
-    )
     const frame = frameRef.current
     if (!frame) {
       setReloadNonce((n) => n + 1)
@@ -454,6 +449,12 @@ function DashboardView({
     // The page keeps its last results; the failure shows above it.
     setError(answer.ok ? null : String(answer.message))
     frame.contentWindow?.postMessage(answer, '*')
+    // The popup's table re-queries on the same message as a widget, and at
+    // the same moment: a page both show runs once (widgetHost.ts).
+    popupFrameRef.current?.contentWindow?.postMessage(
+      { type: 'params-results', ok: true, queries: only },
+      '*',
+    )
   }
 
   // Download the dashboard as one static HTML file. Only the frame can read

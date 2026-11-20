@@ -61,7 +61,8 @@ its rows in a results table like a [`<qv-select-view>`](#widgets), whatever
 the dashboard's HTML does with that query.
 
 **Execute** re-runs the queries you edited: in the popup's table, on the page
-and in the widgets over them (everything, when nothing was edited). The frame
+and in the widgets over them (everything, when nothing was edited). A page the popup's table and a widget
+both show runs once. The frame
 is not reloaded, so the page keeps its state; a failing page query shows its
 error above the frame. Until **Execute**, the popup's table, the page and its
 widgets run the SQL as last executed. **Close**, or a click outside the popup,

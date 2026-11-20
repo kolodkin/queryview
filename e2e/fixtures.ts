@@ -186,6 +186,14 @@ export async function openDashboard(page: Page, baseURL: string | undefined, das
 /** The results frame inside the Edit queries popup. */
 export const queryPopupFrame = (page: Page): FrameLocator => page.frameLocator('[data-testid="dash-sql-frame"]');
 
+/** Close the Edit queries popup. Waits two frames: the dashboard's frame is
+ * out of process, and a click sent to it before the browser has drawn the
+ * popup's removal still lands on the popup's backdrop and is lost. */
+export async function closeQueries(page: Page): Promise<void> {
+  await page.getByTestId("dash-sql-close").click();
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+}
+
 /** Open a New query draft (ad-hoc SQL: one `<qv-select-view>`) from wherever
  * the test is, as `/dashboard?new` does, without a reload; closes the query
  * popup it opens with and returns the draft's frame. */
@@ -194,7 +202,7 @@ export async function openNewQuery(page: Page): Promise<FrameLocator> {
     history.pushState(null, "", "/dashboard?new");
     dispatchEvent(new PopStateEvent("popstate"));
   });
-  await page.getByTestId("dash-sql-close").click();
+  await closeQueries(page);
   return dashboardFrame(page);
 }
 
@@ -203,7 +211,7 @@ export async function executeSql(page: Page, sql: string): Promise<void> {
   await page.getByTestId("dashboard-edit-queries").click();
   await page.getByTestId("dash-sql").fill(sql);
   await page.getByTestId("dash-sql-execute").click();
-  await page.getByTestId("dash-sql-close").click();
+  await closeQueries(page);
 }
 
 /** Arm remote control via the agent popover and return the session id the
