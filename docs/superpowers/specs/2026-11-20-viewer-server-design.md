@@ -112,7 +112,7 @@ untouched.
 
 | Variable | Meaning |
 | --- | --- |
-| `QV_CONNECTIONS` | JSON list of `{name, type, database, config}`. `type` and `config` are what the `add_connection` agent tool takes; `database` is fixed per connection and required where the driver has a picker. |
+| `QV_CONNECTIONS` | JSON list of `{name, type, database, config}`. `type` is any driver and `config` is what its `parse_config` takes; `database` is fixed per connection and required where the driver has a picker. |
 | `QV_GIT_REMOTE` | The repo, in the [workspace remote](../../gitsync.md) URL form (an HTTPS URL may embed a token). |
 | `QV_GIT_BRANCH` | Default `main`. |
 | `QV_SYNC_INTERVAL` | Seconds between fetches, default 60. |
@@ -121,6 +121,10 @@ untouched.
 Startup validates every connection with its driver's `parse_config` and does
 the first clone. Either failing exits non-zero, naming the entry or the git
 error and never echoing a config or the token.
+
+A DuckDB connection whose `path` is a folder is refused at startup: its SQL
+can read any local file, the server's environment (every password and the git
+token) included. SQLite and DuckDB file mode already block other files.
 
 ### Sync
 
@@ -146,9 +150,16 @@ No session header. Every reply is JSON; errors are `{ok: false, message}`.
 
 - `queries` in `/api/run` lets the page leave out the queries its widgets
   fetch themselves, as the app does.
-- Every run resolves the selectors first, so a value is always one of the
-  param's options. That costs the `options_sql` queries again on each widget
-  page; acceptable for now (see non-goals).
+- Every run resolves the selectors first, on all three POST endpoints. A
+  value the options don't offer falls back as in the app (the first option,
+  or none with `default: none`) and never reaches the SQL. That costs the
+  `options_sql` queries again on each widget page; acceptable for now (see
+  non-goals).
+- `order_by` names follow the identifier rule params use: no quote character,
+  and no backslash where the dialect escapes with it. Enforced in the shared
+  `ORDER BY` builder, so the app gets it too.
+- The SQL is not a secret, only unsendable: driver errors pass through as in
+  the app, so an author can debug from the page.
 - Unknown connection, dashboard or query name is a 404.
 
 ### The page
@@ -182,7 +193,8 @@ No session header. Every reply is JSON; errors are `{ok: false, message}`.
 - No login: anyone who can reach the server sees every dashboard's data on
   every configured connection. The docs say to put it behind a proxy or SSO.
 - Whoever can push to the repo decides the SQL the server runs. The docs
-  advise a read-only database login.
+  advise a read-only database login without file privileges (see
+  `future.md`, "run_sql: server-side file access").
 
 ## Docs
 
@@ -198,8 +210,8 @@ Layers and fixtures per the project `testing` skill.
   endpoints; the existing dashboard e2e passes unchanged.
 - Phase 2: API tests against a local bare repo and a file database, covering
   sync picking up a new commit, a failed fetch keeping the last copy, startup
-  failures, and a value outside the options being refused; one e2e for the
-  page.
+  failures (a DuckDB folder among them), a value outside the options never
+  reaching the SQL, and a hostile `order_by` name; one e2e for the page.
 
 ## Left to the builder
 
