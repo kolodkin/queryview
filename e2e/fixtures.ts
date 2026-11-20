@@ -183,19 +183,27 @@ export async function openDashboard(page: Page, baseURL: string | undefined, das
   return dashboardFrame(page);
 }
 
-/** Open a New query draft (ad-hoc SQL: one `<qv-select-view>` under the SQL
- * panel) from wherever the test is; returns the draft's frame. */
+/** The results frame inside the Edit queries popup. */
+export const queryPopupFrame = (page: Page): FrameLocator => page.frameLocator('[data-testid="dash-sql-frame"]');
+
+/** Open a New query draft (ad-hoc SQL: one `<qv-select-view>`) from wherever
+ * the test is, as `/dashboard?new` does, without a reload; closes the query
+ * popup it opens with and returns the draft's frame. */
 export async function openNewQuery(page: Page): Promise<FrameLocator> {
-  await page.getByTestId("nav-dashboard").click();
-  await page.getByTestId("dashboard-new-query").click();
-  await expect(page.getByTestId("dash-sql")).toBeVisible();
+  await page.evaluate(() => {
+    history.pushState(null, "", "/dashboard?new");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await page.getByTestId("dash-sql-close").click();
   return dashboardFrame(page);
 }
 
-/** Type SQL into the dashboard's SQL panel and Execute it. */
+/** Type SQL into the Edit queries popup, Execute it and close the popup. */
 export async function executeSql(page: Page, sql: string): Promise<void> {
+  await page.getByTestId("dashboard-edit-queries").click();
   await page.getByTestId("dash-sql").fill(sql);
   await page.getByTestId("dash-sql-execute").click();
+  await page.getByTestId("dash-sql-close").click();
 }
 
 /** Arm remote control via the agent popover and return the session id the

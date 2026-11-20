@@ -86,6 +86,7 @@ for (const c of CASES) {
       await expect(draft.locator("thead th")).toContainText(["id", "name"]);
       await expect(draft.locator("tbody tr")).toContainText(["one", "two"]);
       await shot(`${c.id} opened in Dashboard`);
+      await page.getByTestId("dash-sql-close").click();
 
       // Back on Scripts the script is still there; run just the DROP under the cursor.
       await openScriptsPage(page);

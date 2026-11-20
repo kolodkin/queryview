@@ -16,6 +16,7 @@ export {
 } from './results/rows'
 export { ResultsTable } from './results/ResultsTable'
 export { renderDefaultCell } from './cells/defaultCell'
+export { escapeHtml } from './cells/cellView'
 export {
   complexCellItems,
   parseComplexType,

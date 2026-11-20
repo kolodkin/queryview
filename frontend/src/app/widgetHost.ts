@@ -2,7 +2,7 @@
 // <qv-select-view> named, on the session's connection. The frame sent a name
 // and values only; the SQL is the dashboard's own, resolved by the caller.
 
-import { failureReply, type WidgetReply, type WidgetRequest } from '../core'
+import { escapeHtml, failureReply, type WidgetReply, type WidgetRequest } from '../core'
 import { postJson } from './api'
 import { downloadText } from './yamlio'
 
@@ -58,4 +58,13 @@ export async function answerWidget(
     meta: (d.meta ?? []) as never,
     data: (d.data ?? []) as never,
   }
+}
+
+// A page of one results table over one query. The frame paints its own
+// backdrop; match the app's instead of white.
+export function queryViewHtml(query: string): string {
+  return (
+    '<style>body{margin:0;background:#0c1124}</style>' +
+    `<qv-select-view query="${escapeHtml(query)}"></qv-select-view>`
+  )
 }

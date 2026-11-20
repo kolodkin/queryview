@@ -137,12 +137,14 @@ test("rename and delete a saved dashboard", async ({ page, seeds, baseURL }) => 
   // An unsaved SQL-panel edit survives the rename.
   await page.getByTestId("dashboard-edit-queries").click();
   await page.getByTestId("dash-sql").fill("SELECT name FROM items WHERE id = 1");
+  await page.getByTestId("dash-sql-close").click();
   page.once("dialog", (d) => d.accept(renamed));
   await page.getByTestId("dashboard-rename").click();
   const options = page.getByTestId("dashboard-select").locator("option");
   await expect.poll(() => new URL(page.url()).searchParams.get("name")).toBe(renamed);
   await expect.poll(() => options.allTextContents()).toContain(renamed);
   expect(await options.allTextContents()).not.toContain(name);
+  await page.getByTestId("dashboard-edit-queries").click();
   await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 1");
   expect((await api(`${baseURL}/api/dashboards/${encodeURIComponent(name)}`, { ok: false })).status).toBe(404);
 

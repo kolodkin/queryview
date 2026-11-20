@@ -27,7 +27,7 @@ import { downloadText } from './yamlio'
 import DashboardSqlPanel from './DashboardSqlPanel'
 import { announceGitSync, gitStatus, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
-import { answerWidget, type WidgetSql } from './widgetHost'
+import { answerWidget, queryViewHtml, type WidgetSql } from './widgetHost'
 
 // A dashboard names no connection: it runs on the viewing session's.
 export type DashboardPush = {
@@ -60,10 +60,7 @@ const runQueries: QueryRunner = async (queries) => {
   }
 }
 
-// The frame paints its own backdrop; match the app's instead of white.
-const NEW_QUERY_HTML =
-  '<style>body{margin:0;background:#0c1124}</style>' +
-  '<qv-select-view query="main"></qv-select-view>'
+const NEW_QUERY_HTML = queryViewHtml('main')
 
 // The session view holding the unsaved New query draft, so it survives leaving
 // the page and a reload (docs/session.md).
@@ -151,6 +148,8 @@ function DashboardView({
   // query is substituted with.
   const resolvedRef = useRef<ResolvedParam[]>([])
   const frameRef = useRef<HTMLIFrameElement>(null)
+  // The query popup's results frame, answered like the dashboard's own.
+  const popupFrameRef = useRef<HTMLIFrameElement>(null)
   // A Snapshot waiting for the frame's serialized document.
   const snapshotRef = useRef<{
     frame: HTMLIFrameElement
@@ -166,7 +165,7 @@ function DashboardView({
   // The object last known to equal the store's copy: Save has nothing to
   // write while `active` is it.
   const savedRef = useRef<DashboardPush | null>(null)
-  const [showSql, setShowSql] = useState(() => localPush !== null)
+  const [showSql, setShowSql] = useState(false)
   // Bumped per load, keying the frame: a draft reloads from memory with the
   // same HTML and results, which alone would leave the old frame (and its
   // widgets' rows from the previous database) in place.
@@ -439,13 +438,19 @@ function DashboardView({
     const before = executedRef.current
     const changed = Object.keys(active.queries).filter((n) => active.queries[n] !== before[n])
     executedRef.current = active.queries
+    const only = changed.length ? changed : null
+    // The popup's table re-queries on the same message as a widget.
+    popupFrameRef.current?.contentWindow?.postMessage(
+      { type: 'params-results', ok: true, queries: only },
+      '*',
+    )
     const frame = frameRef.current
     if (!frame) {
       setReloadNonce((n) => n + 1)
       return
     }
     // Nothing edited: Execute refreshes everything.
-    const answer = await rerun(active, null, changed.length ? changed : null)
+    const answer = await rerun(active, null, only)
     // The page keeps its last results; the failure shows above it.
     setError(answer.ok ? null : String(answer.message))
     frame.contentWindow?.postMessage(answer, '*')
@@ -479,7 +484,7 @@ function DashboardView({
     setLocalPush(push)
   }
 
-  // Unsaved scratch: one widget over one query, the SQL panel open.
+  // Unsaved scratch: one widget over one query, the query popup open.
   function newQuery(sql = '', replace = false) {
     reopen({
       name: '',
@@ -511,8 +516,10 @@ function DashboardView({
         : { message: 'Waiting for a parameter choice.' }
     }
     async function onMessage(e: MessageEvent) {
-      const frame = frameRef.current
-      if (!frame || e.source !== frame.contentWindow) return
+      const frame = [frameRef.current, popupFrameRef.current].find(
+        (f) => f && e.source === f.contentWindow,
+      )
+      if (!frame) return
       const snap = parseSnapshotResult(e.data)
       if (snap) {
         if (snapshotRef.current?.frame === frame) snapshotRef.current.done(snap)
@@ -575,14 +582,6 @@ function DashboardView({
           ))}
         </select>
         {active?.name && <CopyName name={active.name} testid="dashboard-copy" />}
-        <button
-          type="button"
-          data-testid="dashboard-new-query"
-          onClick={() => newQuery()}
-          className="glass-btn px-3 py-2 text-sm font-medium"
-        >
-          New query
-        </button>
         <button
           type="button"
           data-testid="dashboard-save"
@@ -657,7 +656,10 @@ function DashboardView({
           queries={active.queries}
           onChange={editQuery}
           onExecute={() => void execute()}
+          onClose={() => setShowSql(false)}
           remoteId={remoteId}
+          frameRef={popupFrameRef}
+          loadSeq={loadSeq}
         />
       )}
 
