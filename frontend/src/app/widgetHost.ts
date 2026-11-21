@@ -9,12 +9,12 @@ import { downloadText } from './yamlio'
 // The SQL to run for a query name, or why it can't run.
 export type WidgetSql = { sql: string } | { message: string }
 
-// Requests on their way, by path and body: two tables asking for the same page
-// at once (a dashboard widget and the query popup's) share one run.
+// Requests on their way, by connection, path and body: two tables asking for
+// the same page at once (a dashboard widget and the query popup's) share one run.
 const inFlight = new Map<string, Promise<Record<string, unknown>>>()
 
-function post(path: string, body: unknown): Promise<Record<string, unknown>> {
-  const key = path + JSON.stringify(body)
+function post(runOn: string, path: string, body: unknown): Promise<Record<string, unknown>> {
+  const key = JSON.stringify([runOn, path, body])
   let pending = inFlight.get(key)
   if (!pending) {
     pending = postJson(path, body)
@@ -32,6 +32,8 @@ export async function answerWidget(
   sqlFor: (query: string) => WidgetSql,
   // A CSV request has no reply to carry its failure; the host shows it.
   onCsvError: (message: string) => void,
+  // The session's connection and database: a run is never shared across a switch.
+  runOn: string,
 ): Promise<WidgetReply | null> {
   const resolved = sqlFor(req.query)
   const failed = (message: string): WidgetReply | null => {
@@ -45,19 +47,19 @@ export async function answerWidget(
   const query = resolved.sql
 
   if (req.type === 'widget-describe') {
-    const d = await post('/api/db/describe', { query })
+    const d = await post(runOn, '/api/db/describe', { query })
     if (!d.ok) return failed(String(d.message ?? 'describe failed'))
     return { type: 'widget-fields', id: req.id, ok: true, fields: (d.fields ?? []) as never }
   }
 
   const page = { query, limit: req.limit, offset: req.offset, order_by: req.orderBy }
   if (req.type === 'widget-csv') {
-    const d = await post('/api/db/query', { ...page, format: 'csv' })
+    const d = await post(runOn, '/api/db/query', { ...page, format: 'csv' })
     if (!d.ok) return failed(String(d.message ?? 'download failed'))
     downloadText('query.csv', String(d.output ?? ''), 'text/csv')
     return null
   }
-  const d = await post('/api/db/query', page)
+  const d = await post(runOn, '/api/db/query', page)
   if (!d.ok) return failed(String(d.message ?? 'query failed'))
   return {
     type: 'widget-result',

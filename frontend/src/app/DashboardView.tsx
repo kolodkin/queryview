@@ -119,7 +119,7 @@ function DashboardView({
   identQuote?: string
   // Whether backslash escapes in the connection's dialect.
   backslashEscapes?: boolean
-  // The armed remote session, for the SQL panel's edit lock.
+  // The armed remote session, for the query popup's edit lock.
   remoteId?: string | null
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -156,7 +156,7 @@ function DashboardView({
     done: (r: SnapshotResult) => void
   } | null>(null)
   // The SQL as last run (load or Execute). The frame's widgets and param
-  // re-runs use this, so a half-typed edit in the SQL panel never runs.
+  // re-runs use this, so a half-typed edit in the query popup never runs.
   const executedRef = useRef<Record<string, string>>({})
   // The page-query results the frame holds as `window.queries`.
   const shownRef = useRef<DashboardResults>({})
@@ -420,18 +420,18 @@ function DashboardView({
     }
   }
 
-  // An edit in the SQL panel. Kept in a ref too, so a reload (a database
+  // An edit in the query popup. Kept in a ref too, so a reload (a database
   // switch) keeps it in the editor; nothing runs it until Execute.
   function editQuery(query: string, sql: string) {
     if (!active) return
     const next = { ...active, queries: { ...active.queries, [query]: sql } }
     editedRef.current = next
     setActive(next)
-    // Queued; written when the SQL panel is left (its edit lock flushes).
+    // Queued; written when the query popup is left (its edit lock flushes).
     if (!next.name) patchView(VIEW, { draft: { html: next.html, queries: next.queries } })
   }
 
-  // Execute from the SQL panel: post into the live frame rather than rebuild
+  // Execute from the query popup: post into the live frame rather than rebuild
   // it, so the page keeps its state; its widgets re-query on the same message.
   async function execute() {
     if (!active) return
@@ -448,13 +448,15 @@ function DashboardView({
     const answer = await rerun(active, null, only)
     // The page keeps its last results; the failure shows above it.
     setError(answer.ok ? null : String(answer.message))
-    frame.contentWindow?.postMessage(answer, '*')
-    // The popup's table re-queries on the same message as a widget, and at
-    // the same moment: a page both show runs once (widgetHost.ts).
-    popupFrameRef.current?.contentWindow?.postMessage(
-      { type: 'params-results', ok: true, queries: only },
-      '*',
-    )
+    broadcast(answer)
+  }
+
+  // A re-run's results go to the dashboard's frame and the query popup's at
+  // the same moment: their tables re-query on it, and an identical page they
+  // both show runs once (widgetHost.ts).
+  function broadcast(answer: Record<string, unknown>) {
+    for (const f of [frameRef.current, popupFrameRef.current])
+      f?.contentWindow?.postMessage(answer, '*')
   }
 
   // Download the dashboard as one static HTML file. Only the frame can read
@@ -529,7 +531,7 @@ function DashboardView({
       if (!active) return
       const widget = parseWidgetRequest(e.data)
       if (widget) {
-        const reply = await answerWidget(widget, sqlFor, setError)
+        const reply = await answerWidget(widget, sqlFor, setError, runOn ?? '')
         if (reply) frame.contentWindow?.postMessage(reply, '*')
         return
       }
@@ -540,14 +542,13 @@ function DashboardView({
       }
       const values = parseParamsRequest(e.data)
       if (!values) return
-      const answer = await rerun(active, values)
-      frame.contentWindow?.postMessage(answer, '*')
+      broadcast(await rerun(active, values))
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-    // rerun reads only refs and the dialect beyond its arguments.
+    // rerun and broadcast read only refs and the dialect beyond their arguments.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, dialect])
+  }, [active, dialect, runOn])
 
   return (
     // mt clears the floating header when the page is taller than the window.
@@ -613,9 +614,9 @@ function DashboardView({
         <button
           type="button"
           data-testid="dashboard-edit-queries"
-          onClick={() => setShowSql((v) => !v)}
+          onClick={() => setShowSql(true)}
           disabled={!active}
-          className={`px-3 py-2 text-sm font-medium ${showSql ? 'glass-btn-primary' : 'glass-btn'}`}
+          className="glass-btn px-3 py-2 text-sm font-medium"
         >
           Edit queries
         </button>

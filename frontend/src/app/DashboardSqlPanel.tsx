@@ -1,6 +1,6 @@
-import { useRef, useState, type Ref } from 'react'
+import { useState, type Ref } from 'react'
 
-import { DashboardFrame } from '../core'
+import { DashboardFrame, useDismiss } from '../core'
 import { useEditLock } from './sessionLock'
 import { queryViewHtml } from './widgetHost'
 import TextareaSizes from './controls/TextareaSizes'
@@ -36,7 +36,8 @@ function DashboardSqlPanel({
   const names = Object.keys(queries)
   const [picked, setPicked] = useState(names[0] ?? '')
   const [rows, setRows] = useState(8)
-  const panelRef = useRef<HTMLDivElement>(null)
+  // A press on the backdrop, or Escape, closes; edits are kept.
+  const panelRef = useDismiss<HTMLDivElement>(true, onClose)
   useEditLock(panelRef, remoteId)
   // The picked query may be gone after another dashboard loads.
   const name = names.includes(picked) ? picked : (names[0] ?? '')
@@ -47,12 +48,6 @@ function DashboardSqlPanel({
       aria-modal="true"
       aria-label="Dashboard queries"
       className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') onClose()
-      }}
     >
       <div
         ref={panelRef}

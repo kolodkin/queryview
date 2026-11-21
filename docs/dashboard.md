@@ -49,24 +49,27 @@ shared link always shows live data.
 `/dashboard?new` opens a **New query** draft: an unsaved dashboard holding one
 [`<qv-select-view>`](#widgets) over one query, for ad-hoc SQL, with the
 [SQL panel](#the-sql-panel) open. [Scripts](./scripts.md)' **Open in
-Dashboard** and the old `/studio` URL land there. **Save** asks for its name.
-The [session](./session.md) remembers the draft's SQL, so it survives leaving
-the page and a reload; picking a dashboard discards it.
+Dashboard** and `/studio` land there. **Save** asks for its name. The
+[session](./session.md) remembers the draft's SQL across a reload; picking a
+dashboard discards it.
 
 ## The SQL panel
 
-**Edit queries** opens a popup over the page, outside the frame: a drop-down
-of the dashboard's queries (its `queries.yaml`), the picked query's SQL, and
-its rows in a results table like a [`<qv-select-view>`](#widgets), whatever
-the dashboard's HTML does with that query.
+**Edit queries** opens a popup over the page, outside the frame:
 
-**Execute** re-runs the queries you edited: in the popup's table, on the page
-and in the widgets over them (everything, when nothing was edited). A page the popup's table and a widget
-both show runs once. The frame
-is not reloaded, so the page keeps its state; a failing page query shows its
-error above the frame. Until **Execute**, the popup's table, the page and its
-widgets run the SQL as last executed. **Close**, or a click outside the popup,
-keeps the edits; **Save** persists the edited dashboard.
+- a drop-down of the dashboard's queries (its `queries.yaml`);
+- the picked query's SQL;
+- its rows, in a results table like a [`<qv-select-view>`](#widgets),
+  whatever the dashboard's HTML does with that query.
+
+**Execute** re-runs the queries you edited (everything, when nothing was
+edited): in the popup's table, on the page and in the widgets over them. A
+page of rows the popup and a widget both show runs once. The frame is not
+reloaded, so the page keeps its state; a failing page query shows its error
+above the frame. Until **Execute**, everything runs the SQL as last executed.
+
+**Close**, Escape or a press outside the popup keeps the edits; **Save**
+persists the edited dashboard.
 
 Focus in the panel holds the human [edit lock](./query.md#co-edit--edit-lock):
 an agent push is refused with `blocked, user editing` while you type.
