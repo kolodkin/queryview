@@ -59,13 +59,13 @@ ID = (("id", FIELD_TYPE.LONGLONG),)
 def test_run_query_builds_aliased_backtick_sql_and_decodes_json(monkeypatch):
     desc = (("id", FIELD_TYPE.LONGLONG), ("doc", FIELD_TYPE.JSON))
     log = _fake(monkeypatch, lambda sql: (desc, [(2**60, '{"a": 1.5}')]))
-    r = asyncio.run(MySqlDriver().run_query(CFG, "SELECT * FROM t;", "shop", 50, 10, [{"name": "a`b", "dir": "desc"}]))
+    r = asyncio.run(MySqlDriver().run_query(CFG, "SELECT * FROM t;", "shop", 50, 10, [{"name": "a b", "dir": "desc"}]))
     assert isinstance(r, RowsResult)
     assert r.rows.meta == [Column("id", "bigint"), Column("doc", "json")]
     assert r.rows.data == [[str(2**60), {"a": "1.5"}]]
     assert log["database"] == "shop" and log.get("closed")
     assert log["cursors"] == ["Cursor"]  # a LIMIT-bounded page is buffered
-    assert log["sql"] == ["SELECT * FROM (\nSELECT * FROM t\n) AS _qv ORDER BY `a``b` DESC LIMIT 50 OFFSET 10"]
+    assert log["sql"] == ["SELECT * FROM (\nSELECT * FROM t\n) AS _qv ORDER BY `a b` DESC LIMIT 50 OFFSET 10"]
 
     csv = asyncio.run(MySqlDriver().export_csv(CFG, "SELECT 1", "shop", 50, 0, None))
     assert isinstance(csv, TextResult) and csv.text == 'id,doc\n1152921504606846976,"{""a"": 1.5}"'

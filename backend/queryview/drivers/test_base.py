@@ -31,11 +31,21 @@ def test_select_all_sql_quotes_and_doubles_embedded_quotes():
 
 def test_build_order_by_quotes_and_whitelists_direction():
     assert build_order_by([{"name": "a", "dir": "desc"}], "`") == "ORDER BY `a` DESC"
-    # Unknown direction falls back to ASC; quote chars in the name are doubled.
-    assert build_order_by([{"name": "a`b", "dir": "x"}], "`") == "ORDER BY `a``b` ASC"
+    # Unknown direction falls back to ASC.
+    assert build_order_by([{"name": "a", "dir": "x"}], "`") == "ORDER BY `a` ASC"
     assert build_order_by([{"name": "a"}], '"') == 'ORDER BY "a" ASC'
     assert build_order_by(None, "`") == ""
     assert build_order_by([{"bad": 1}], "`") == ""
+
+
+def test_order_by_skips_a_name_with_the_quote_character():
+    assert build_order_by([{"name": 'a"b'}, {"name": "c"}], '"') == 'ORDER BY "c" ASC'
+    assert build_order_by([{"name": "a`, (SELECT 1) -- "}], "`") == ""
+
+
+def test_order_by_skips_a_backslash_only_where_the_dialect_escapes():
+    assert build_order_by([{"name": "a\\"}], "`", backslash_escapes=True) == ""
+    assert build_order_by([{"name": "a\\"}], '"') == 'ORDER BY "a\\" ASC'
 
 
 def test_wrap_paginated_matches_clickhouse_shape_without_alias():
