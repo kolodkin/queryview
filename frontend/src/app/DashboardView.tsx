@@ -150,6 +150,8 @@ function DashboardView({
   // The selectors as last resolved (load or set-params): what a widget's
   // query is substituted with.
   const resolvedRef = useRef<ResolvedParam[]>([])
+  // The last re-run asked for; the next waits for it (see rerun).
+  const rerunQueue = useRef<Promise<unknown>>(Promise.resolve())
   const frameRef = useRef<HTMLIFrameElement>(null)
   // A Snapshot waiting for the frame's serialized document.
   const snapshotRef = useRef<{
@@ -390,10 +392,23 @@ function DashboardView({
   // keeps the current ones (the SQL changed, not the params).
   // `only` limits the run to those queries (the ones Execute changed); the
   // frame keeps the rest, and only widgets over those re-query.
-  async function rerun(
+  // One at a time, in the order asked: a re-run starts from what the one
+  // before it resolved (a typed text), and the frame gets the answers in order.
+  function rerun(
     dash: DashboardPush,
     values: Record<string, string> | null,
     only: string[] | null = null,
+  ): Promise<Record<string, unknown>> {
+    const run = () => rerunNow(dash, values, only)
+    const answer = rerunQueue.current.then(run, run)
+    rerunQueue.current = answer
+    return answer
+  }
+
+  async function rerunNow(
+    dash: DashboardPush,
+    values: Record<string, string> | null,
+    only: string[] | null,
   ): Promise<Record<string, unknown>> {
     const declared = parseDashboardParams(dash.params)
     let resolved = resolvedRef.current
