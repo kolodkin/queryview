@@ -101,8 +101,8 @@ sales-overview/
 ```
 
 The layout is a dashboard's folder in [workspace git](./gitsync.md). `dir` is
-an absolute path outside QueryView's data directory, and only these three
-names are read. Inline `name` and `params` win over `meta.yaml`; `dir`
+an absolute path outside QueryView's data directory; only these three
+names are read, and none through a symlink. Inline `name` and `params` win over `meta.yaml`; `dir`
 together with `html` or `queries` is refused.
 
 ## The `window.queries` contract for HTML authors

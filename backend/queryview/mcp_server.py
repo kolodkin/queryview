@@ -469,8 +469,9 @@ _DIR_FILE_MAX = 5_000_000  # bytes; far above any real dashboard
 
 def _read_dashboard_dir(path: str) -> dict[str, Any]:
     """A dashboard (name None when meta.yaml gives none) from a folder in the
-    git-sync layout. Only its three fixed names are read, and never inside the
-    data dir, so `dir` can't aim at an arbitrary file or another workspace's clone."""
+    git-sync layout. Only its three fixed names are read, never through a
+    symlink and never inside the data dir, so `dir` can't aim at an arbitrary
+    file or another workspace's clone."""
     root = Path(path)
     if not root.is_absolute():
         raise ValueError("`dir` must be an absolute path")
@@ -482,8 +483,10 @@ def _read_dashboard_dir(path: str) -> dict[str, Any]:
         if fname == "meta.yaml" and not os.path.lexists(p):
             continue
         # is_file also keeps a FIFO from blocking the read; errors stay vague: no filesystem oracle.
+        # A symlink is refused: it could name any file the server can read.
+        # shortcut: checked, then read by path (a swap in between gets through), open with O_NOFOLLOW if `dir` must hold against a local racer
         try:
-            if not p.is_file() or p.stat().st_size > _DIR_FILE_MAX:
+            if p.is_symlink() or not p.is_file() or p.stat().st_size > _DIR_FILE_MAX:
                 raise OSError
             texts[fname] = p.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
