@@ -117,10 +117,10 @@ untouched.
 - `DashboardView.tsx` posts templates, declaration and values at its four
   substitution sites (load, `set-params`, **Execute**, the widget host) and
   takes the resolved params from the reply.
-- `params.ts` keeps the types, `parseDashboardParams` and
-  `parseParamsRequest`. Quoting, substitution, ordering, option resolution and
-  their tests are deleted, as is the `identQuote` / `backslashEscapes` plumbing
-  if nothing else reads it.
+- `params.ts` keeps the types, `parseParamsRequest` and two small helpers for
+  the values it posts. Parsing, quoting, substitution, ordering, option
+  resolution and their tests are deleted, as is the `identQuote` /
+  `backslashEscapes` plumbing if nothing else reads it.
 
 ## Phase 2: configuration
 
