@@ -33,16 +33,7 @@ export { useCopy } from './useCopy'
 export { DashboardFrame } from './dashboard/DashboardFrame'
 export { parseSnapshotResult, snapshotDocument, type SnapshotResult } from './dashboard/snapshot'
 export { buildSrcDoc, type DashboardResults, type QvTheme, type QvToken } from './dashboard/srcDoc'
-export {
-  applyToQueries,
-  parseDashboardParams,
-  parseParamsRequest,
-  resolveParams,
-  type DashboardParam,
-  type Dialect,
-  type QueryRunner,
-  type ResolvedParam,
-} from './dashboard/params'
+export { parseParamsRequest, valuesOf, withKeptText, type ResolvedParam } from './dashboard/params'
 export {
   parseFieldsAttr,
   parseOrderByAttr,

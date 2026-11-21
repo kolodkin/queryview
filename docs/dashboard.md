@@ -193,8 +193,9 @@ the widget, leaving the rest of the dashboard up. A name the dashboard doesn't
 declare shows `Unknown query “…”`.
 
 The widget sends the app a query name, limit, offset and order-by columns —
-**never SQL**. The app looks the name up in the dashboard's `queries`,
-substitutes the current parameters and runs it.
+**never SQL**. The app looks the name up in the dashboard's `queries` and
+posts it with the current parameter values; the backend substitutes them and
+runs it.
 
 ## Dashboard parameters
 
@@ -266,9 +267,10 @@ window.params = [{ name, kind, options: [...], value }, …]
 ```
 
 The page draws its own controls from that list and asks for a re-run with
-`window.setParams({ field: 'city', category: true })`. The host substitutes the
-values into the dashboard's **own** queries, runs them on the session's
-connection, and posts the results back; `window.onQueryResults(queries, params,
+`window.setParams({ field: 'city', category: true })`. The host posts the
+values with the dashboard's **own** queries; the backend substitutes them and
+runs the queries on the session's connection, and the host posts the results
+back; `window.onQueryResults(queries, params,
 message)` then fires with the new `window.queries` and `window.params`
 (`message` is set when the run failed and the previous results were kept). The
 iframe isn't reloaded, so the page keeps its state.
@@ -279,9 +281,12 @@ declares, reviewable in `queries.yaml`.
 
 ## Running the queries: `/api/runqueries`
 
-The browser POSTs `{queries}` to `/api/runqueries`, which runs each query on
-the session's connection and selected database (wrapped in a paginated subselect
-capped at 1000 rows) and returns column-oriented results. Switching the
+The browser POSTs `{queries, params, values}` to `/api/runqueries`: the
+dashboard's queries as written, its `params` declaration and the chosen
+values. The backend resolves each selector's options and value, substitutes
+them into the queries, and runs each one on the session's connection and
+selected database (wrapped in a paginated subselect capped at 1000 rows). It
+returns column-oriented results and the resolved selectors. Switching the
 connection or database re-runs them.
 
 It is **fail-fast**: if any query fails, or the session is not connected or has

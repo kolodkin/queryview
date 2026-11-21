@@ -1,13 +1,16 @@
 // The app's side of the dashboard widget channel: run the query a
 // <qv-select-view> named, on the session's connection. The frame sent a name
-// and values only; the SQL is the dashboard's own, resolved by the caller.
+// and values only; the SQL is the dashboard's own template, which the backend
+// substitutes with the current selections.
 
 import { failureReply, type WidgetReply, type WidgetRequest } from '../core'
 import { postJson } from './api'
 import { downloadText } from './yamlio'
 
-// The SQL to run for a query name, or why it can't run.
-export type WidgetSql = { sql: string } | { message: string }
+// The template to run for a query name with the dashboard's params declaration
+// and current values, or why it can't run.
+export type WidgetSql =
+  { sql: string; params: unknown[]; values: Record<string, string> } | { message: string }
 
 async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
   try {
@@ -34,15 +37,15 @@ export async function answerWidget(
     return failureReply(req.type, req.id, message)
   }
   if ('message' in resolved) return failed(resolved.message)
-  const query = resolved.sql
+  const sql = { query: resolved.sql, params: resolved.params, values: resolved.values }
 
   if (req.type === 'widget-describe') {
-    const d = await post('/api/db/describe', { query })
+    const d = await post('/api/db/describe', sql)
     if (!d.ok) return failed(String(d.message ?? 'describe failed'))
     return { type: 'widget-fields', id: req.id, ok: true, fields: (d.fields ?? []) as never }
   }
 
-  const page = { query, limit: req.limit, offset: req.offset, order_by: req.orderBy }
+  const page = { ...sql, limit: req.limit, offset: req.offset, order_by: req.orderBy }
   if (req.type === 'widget-csv') {
     const d = await post('/api/db/query', { ...page, format: 'csv' })
     if (!d.ok) return failed(String(d.message ?? 'download failed'))
