@@ -1,6 +1,18 @@
 // Dashboard widgets: the <qv-*> tags an agent drops into dashboard HTML. Once
 // on DuckDB (no service); drivers.spec.ts runs the widget's query path per driver.
-import { DUCK, armRemote, connect, executeSql, expect, mcpCall, openDashboard, openNewQuery, test } from "./fixtures";
+import {
+  DUCK,
+  armRemote,
+  closeQueries,
+  connect,
+  executeSql,
+  expect,
+  mcpCall,
+  openDashboard,
+  openNewQuery,
+  queryPopupFrame,
+  test,
+} from "./fixtures";
 
 test("a text param takes what is typed, as a literal", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
@@ -153,8 +165,7 @@ test("New query runs ad-hoc SQL and saves as a dashboard", async ({ page, seeds,
   const frame = await openNewQuery(page);
   await expect(frame.getByTestId("qv-error")).toHaveText("Enter a query.");
 
-  await page.getByTestId("dash-sql").fill("SELECT name FROM items ORDER BY id");
-  await page.getByTestId("dash-sql-execute").click();
+  await executeSql(page, "SELECT name FROM items ORDER BY id");
   const rows = frame.getByTestId("qv-results").locator("tbody tr");
   await expect(rows).toHaveCount(3);
   await shot("new query draft");
@@ -167,7 +178,7 @@ test("New query runs ad-hoc SQL and saves as a dashboard", async ({ page, seeds,
   await expect(rows).toHaveCount(3);
 });
 
-test("Execute keeps the page state", async ({ page, seeds, baseURL }) => {
+test("Execute keeps the page state", async ({ page, seeds, baseURL, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
     name: "stateful",
@@ -180,8 +191,14 @@ test("Execute keeps the page state", async ({ page, seeds, baseURL }) => {
 
   await page.getByTestId("dashboard-edit-queries").click();
   await expect(page.getByTestId("dash-sql")).toHaveValue(ITEMS.q);
+  // The popup shows the picked query's rows in a table of its own.
+  const popupRows = queryPopupFrame(page).getByTestId("qv-results").locator("tbody tr");
+  await expect(popupRows).toHaveCount(3);
+  await shot("edit queries popup");
   await page.getByTestId("dash-sql").fill("SELECT id, name FROM items WHERE id = 3");
   await page.getByTestId("dash-sql-execute").click();
+  await expect(popupRows).toHaveCount(1);
+  await shot("edit queries popup after execute");
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText("gamma");
   await expect(frame.locator("#keep")).toHaveValue("x");
@@ -270,6 +287,7 @@ test("a widget pages the executed SQL, not a half-typed edit", async ({ page, se
   await expect(rows).toHaveCount(2);
   await page.getByTestId("dashboard-edit-queries").click();
   await page.getByTestId("dash-sql").fill("SELECT id, name FROM items WHERE id = 1"); // not executed
+  await closeQueries(page);
   await frame.getByTestId("qv-next").click();
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText("gamma");
@@ -292,7 +310,7 @@ test("a saved edit is what reopens, not the draft it was saved from", async ({ p
   await saved;
   await expect(page.getByTestId("dashboard-save")).toHaveText("Saved");
 
-  await page.getByTestId("dashboard-new-query").click(); // leave, then come back
+  await page.getByTestId("dashboard-select").selectOption(""); // leave, then come back
   await page.getByTestId("dashboard-select").selectOption("first");
   await expect(frame.getByTestId("qv-results")).toContainText("beta");
 });
@@ -302,11 +320,14 @@ test("saving a draft does not run a half-typed edit", async ({ page, seeds }) =>
   const frame = await openNewQuery(page);
   await executeSql(page, "SELECT name FROM items WHERE id = 1");
   await expect(frame.getByTestId("qv-results")).toContainText("alpha");
+  await page.getByTestId("dashboard-edit-queries").click();
   await page.getByTestId("dash-sql").fill("SELECT name FROM items WHERE id = 3"); // not executed
+  await closeQueries(page);
   page.once("dialog", (d) => d.accept("half"));
   await page.getByTestId("dashboard-save").click();
   await expect(page.getByTestId("dashboard-select")).toHaveValue("half");
   await expect(frame.getByTestId("qv-results")).toContainText("alpha");
+  await page.getByTestId("dashboard-edit-queries").click();
   await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 3");
 });
 
@@ -354,10 +375,12 @@ test("a New query draft survives leaving the page and a reload", async ({ page, 
 
   await page.getByTestId("nav-explorer").click();
   await page.getByTestId("nav-dashboard").click();
+  await page.getByTestId("dashboard-edit-queries").click();
   await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 2");
   await expect(frame.getByTestId("qv-results")).toContainText("beta");
 
   await page.reload();
+  await page.getByTestId("dashboard-edit-queries").click();
   await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 2");
   await expect(frame.getByTestId("qv-results")).toContainText("beta");
 });
@@ -380,6 +403,12 @@ test("Execute re-runs only the queries that were edited", async ({ page, seeds, 
   await expect(frame.locator("#chart")).toHaveText("alpha");
   await expect(frame.locator("#b").getByTestId("qv-results")).toContainText("gamma");
 
+  // The popup's own table runs the picked query too: let it settle first.
+  const popup = queryPopupFrame(page).getByTestId("qv-results");
+  await page.getByTestId("dashboard-edit-queries").click();
+  await page.getByTestId("dash-sql-query").selectOption("a");
+  await expect(popup).toContainText("beta");
+
   // Record what each Execute sends to the database.
   const sent: string[] = [];
   page.on("request", (r) => {
@@ -387,19 +416,23 @@ test("Execute re-runs only the queries that were edited", async ({ page, seeds, 
     if (r.url().endsWith("/api/runqueries")) sent.push(...Object.keys(r.postDataJSON().queries));
   });
 
-  await page.getByTestId("dashboard-edit-queries").click();
-  await page.getByTestId("dash-sql-query").selectOption("a");
-  await page.getByTestId("dash-sql").fill("SELECT name FROM items WHERE id = 1");
+  const one = "SELECT name FROM items WHERE id = 1";
+  await page.getByTestId("dash-sql").fill(one);
   await page.getByTestId("dash-sql-execute").click();
   await expect(frame.locator("#a").getByTestId("qv-results")).toContainText("alpha");
+  await expect(popup).toContainText("alpha");
   await expect(frame.locator("#b").getByTestId("qv-results")).toContainText("gamma");
   await expect(frame.locator("#chart")).toHaveText("alpha");
-  expect(sent).toEqual(["SELECT name FROM items WHERE id = 1"]); // b and chart did not re-run
+  expect(sent).toEqual([one]); // one run shared by widget a and the popup's table; b and chart did not re-run
 
-  sent.length = 0;
   await page.getByTestId("dash-sql-query").selectOption("chart");
-  await page.getByTestId("dash-sql").fill("SELECT name FROM items WHERE id = 2");
+  await expect(popup).toContainText("alpha");
+  await expect.poll(() => sent.length).toBe(2); // the popup's table ran the picked query
+  sent.length = 0;
+  const two = "SELECT name FROM items WHERE id = 2";
+  await page.getByTestId("dash-sql").fill(two);
   await page.getByTestId("dash-sql-execute").click();
   await expect(frame.locator("#chart")).toHaveText("beta");
-  expect(sent).toEqual(["chart"]); // only the edited page query; neither widget
+  await expect(popup).toContainText("beta");
+  expect(sent.sort()).toEqual([two, "chart"]); // the edited page query and the popup's table; neither widget
 });
