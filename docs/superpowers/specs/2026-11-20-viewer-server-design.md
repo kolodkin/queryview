@@ -40,6 +40,14 @@ and a dashboard; they cannot edit anything or run SQL of their own.
 - The app's behaviour changing for its users in phase 1.
 - Substitution rules living in both TypeScript and Python.
 
+## Constraints
+
+- First deployment target: Azure Container Apps. Disk is ephemeral, replicas
+  may be several and may scale to zero, so each replica clones at start and
+  polls on its own, and nothing is shared between them.
+- The config arrives as a secret mounted as a file; the platform's built-in
+  authentication is the login.
+
 ## Approaches
 
 **Where the viewer lives**
@@ -233,7 +241,9 @@ No session header. Every reply is JSON; errors are `{ok: false, message}`.
 
 ## Docs
 
-- New `docs/server.md`, joined to the `README.md` list.
+- New `docs/server.md`, joined to the `README.md` list. It includes running
+  on Azure Container Apps: the config as a secret volume, built-in
+  authentication in front.
 - `api.md`: the three extended endpoints. `dashboard.md`: substitution happens
   on the server. `docker.md`: running the server. `future.md`: the agent tool.
 
