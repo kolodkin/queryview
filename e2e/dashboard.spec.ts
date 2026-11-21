@@ -230,6 +230,18 @@ test("Snapshot is refused while a widget is loading", async ({ page, seeds, base
   await expect(page.getByTestId("dashboard-error")).toHaveCount(0); // the refusal is cleared
 });
 
+test("Snapshot is not held up by a qv- tag the bundle does not know", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "unknown-tag",
+    html: '<qv-nope></qv-nope><b id="v" data-qv-query="q"></b>',
+    queries: { q: "SELECT name FROM items ORDER BY id" },
+  });
+  await expect(frame.locator("#v")).toHaveText("alpha");
+  const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("dashboard-snapshot").click()]);
+  expect(download.suggestedFilename()).toBe("unknown-tag.html");
+});
+
 test("the dashboard's name can be copied", async ({ page, context, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await expect(page.getByTestId("dashboard-copy")).toHaveCount(0); // nothing open: nothing to copy

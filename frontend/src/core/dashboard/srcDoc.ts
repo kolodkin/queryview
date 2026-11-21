@@ -79,7 +79,9 @@ function snapshot() {
       });
     })(document);
     // No rows yet: a widget mid-query, or a qv-* tag the bundle has not upgraded.
-    if (Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
+    // Once the page has loaded the bundle has run: a tag still undefined is one
+    // it does not know, and stays as written.
+    if (document.readyState !== 'complete' && Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
           return el.localName.indexOf('qv-') === 0;
         }) ||
         roots.some(function (root) { return root.querySelector('[data-qv-busy]'); })) {
