@@ -77,12 +77,16 @@ def parse_params(raw: object) -> list[Param]:
     if not isinstance(raw, list):
         return []
     out: list[Param] = []
+    seen: set[str] = set()
     for o in raw:
         if not isinstance(o, dict):
             continue
         name = o.get("name")
-        if not isinstance(name, str) or not name:
+        # One declaration per name, the first: a value must be checked and
+        # substituted under the same one.
+        if not isinstance(name, str) or not name or name in seen:
             continue
+        seen.add(name)
         kind = "value" if o.get("kind") is None else o["kind"]
         if kind not in KINDS:
             continue

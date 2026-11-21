@@ -330,3 +330,10 @@ def test_text_substitutes_as_a_literal_and_never_as_an_identifier():
 
 def test_an_empty_text_is_a_value():
     assert missing("SELECT {note}", TEXT, {"note": ""}) == []
+
+
+def test_a_name_declared_twice_keeps_the_first():
+    # One declaration per name: a value is checked and substituted under the same one.
+    twice = [{"name": "col", "kind": "text"}, {"name": "col", "kind": "identifier", "options": ["city"]}]
+    assert parse_params(twice) == [Param(name="col", kind="text", text="")]
+    assert _sub("SELECT {col}", parse_params(twice), {"col": "secret"}) == "SELECT 'secret'"

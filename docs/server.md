@@ -95,7 +95,9 @@ repo appears within `sync_interval`, with nothing to click.
   on it. The browser sends dashboard, query and connection names plus
   parameter values; the SQL never leaves the server.
 - **Values are checked.** A parameter value the dashboard's options don't
-  offer falls back to the default and never reaches the SQL.
+  offer falls back to the default and never reaches the SQL. A `text`
+  parameter is free input by design: what a viewer types reaches the SQL only
+  as a quoted string, at most 10,000 characters.
 - **The repo decides the SQL.** Whoever can push to it chooses what runs, so
   give each connection a read-only database login without file privileges
   (see [future.md](./future.md#run_sql-server-side-file-access)).

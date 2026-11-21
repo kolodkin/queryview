@@ -40,7 +40,7 @@ test("shows a dashboard from the repo, and a param re-runs its query", async ({ 
   await shot("viewer server");
 });
 
-test("a widget pages and sorts through the server", async ({ page }) => {
+test("a widget pages through the server", async ({ page }) => {
   const frame = await open(page, "?connection=local&name=items");
   const rows = frame.getByTestId("qv-results").locator("tbody tr");
   await expect(rows).toHaveCount(2);
@@ -92,6 +92,22 @@ test("a dashboard that is gone says so", async ({ page }) => {
   await open(page, "?connection=local&name=gone");
   await expect(page.getByTestId("viewer-error")).toHaveText("Dashboard “gone” not found.");
   await expect(page.getByTestId("dashboard-frame")).toHaveCount(0);
+});
+
+test("a dashboard deleted while open says so on the next param change", async ({ page }) => {
+  const listed = async (status: number) =>
+    expect(async () => {
+      expect((await page.request.get(`${viewer.url}/api/dashboards/doomed`)).status()).toBe(status);
+    }).toPass();
+  await viewer.push([{ ...ITEMS, name: "doomed" }]);
+  await listed(200);
+  const frame = await open(page, "?connection=local&name=doomed");
+  await expect(frame.locator("#v")).toHaveText("alpha");
+
+  await viewer.push([], ["doomed"]);
+  await listed(404);
+  await frame.getByTestId("qv-param").selectOption("beta");
+  await expect(page.getByTestId("viewer-error")).toHaveText("Dashboard “doomed” not found.");
 });
 
 test("Snapshot downloads the dashboard as a static file", async ({ page }) => {

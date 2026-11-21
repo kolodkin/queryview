@@ -4,6 +4,7 @@ values, never SQL, and none of the app's routes exist."""
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
 
 import pytest
@@ -13,6 +14,7 @@ from queryview import serving
 from queryview.gitsync import GitSyncError
 from queryview.server.config import ServerConfig, load_config
 from queryview.server.main import create_app
+from queryview.server.repo import Repo
 
 SALES = {
     "name": "sales",
@@ -291,3 +293,76 @@ def test_a_failed_fetch_keeps_serving(tmp_path, dash_repo):
         c.portal.call(asyncio.sleep, 0.3)  # several failed fetches
         assert c.get("/api/dashboards").json() == [{"name": "sales"}]
         assert c.post("/api/run", json=ON_SALES).status_code == 200
+
+
+# --- Review fixes ------------------------------------------------------------
+
+NOTES = {
+    "name": "notes",
+    "html": "<p>notes</p>",
+    "queries": {"echo": "SELECT {note} AS v, {region} AS g FROM orders ORDER BY amount"},
+    "params": [{"name": "note", "kind": "text", "default": "hi"}, {"name": "region", "kind": "dimension"}],
+}
+ON_NOTES = {"connection": "local", "dashboard": "notes"}
+
+
+def _show(client, dash_repo, *dashboards):
+    dash_repo.commit(list(dashboards))
+    asyncio.run(client.app.state.repo.refresh())
+
+
+def test_text_and_dimension_params_run(client, dash_repo):
+    _show(client, dash_repo, NOTES)
+    r = client.post("/api/run", json=ON_NOTES)
+    assert r.json()["results"]["echo"] == {"v": ["hi", "hi"], "g": ["", ""]}
+    r = client.post("/api/run", json={**ON_NOTES, "values": {"note": "o'k; --", "region": "on"}})
+    assert r.json()["results"]["echo"] == {"v": ["o'k; --", "o'k; --"], "g": ["eu", "us"]}
+
+
+@pytest.mark.parametrize("path", ["/api/run", "/api/query", "/api/describe"])
+@pytest.mark.parametrize("values", [{"note": "\ud800"}, {"region": "\udfff"}, {"note": "a\ud800b", "region": "on"}])
+def test_text_that_cannot_be_encoded_is_not_a_500(client, dash_repo, path, values):
+    _show(client, dash_repo, NOTES)
+    # Sent as JSON's own \\ud800 escape: the client cannot encode the character itself.
+    body = json.dumps({**ON_NOTES, "query": "echo", "values": values})
+    r = client.post(path, content=body, headers={"content-type": "application/json"})
+    assert r.status_code == 200, r.text  # dropped: the default runs
+
+
+def test_a_param_declared_twice_cannot_slip_a_value_past_its_options(client, dash_repo):
+    twice = [{"name": "col", "kind": "text"}, {"name": "col", "kind": "identifier", "options": ["amount"]}]
+    dup = {"name": "dup", "html": "<p>dup</p>", "queries": {"q": "SELECT {col} AS v FROM orders"}, "params": twice}
+    _show(client, dash_repo, dup)
+    r = client.post(
+        "/api/query", json={"connection": "local", "dashboard": "dup", "query": "q", "values": {"col": "region"}}
+    )
+    # Either the dashboard is refused, or the value stays a string: never the region column.
+    assert r.status_code == 404 or r.json()["data"] == [["region"], ["region"]], r.text
+    assert "eu" not in r.text
+
+
+def test_an_unknown_dashboard_names_it(client):
+    r = client.post("/api/run", json={**ON_SALES, "dashboard": "gone"})
+    assert r.status_code == 404 and r.json()["message"] == "Dashboard “gone” not found."
+    assert client.get("/api/dashboards/gone").json()["message"] == "Dashboard “gone” not found."
+
+
+def test_an_unexpected_sync_error_does_not_stop_polling(tmp_path, dash_repo, monkeypatch):
+    dash_repo.commit([SALES])
+    config = _config(tmp_path, dash_repo)
+    real, calls = Repo.refresh, {"n": 0}
+
+    async def flaky(self):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("disk full")
+        return await real(self)
+
+    monkeypatch.setattr(Repo, "refresh", flaky)
+    with TestClient(create_app(ServerConfig(config.remote, config.branch, 0.05, config.connections))) as c:
+        dash_repo.commit([{**SALES, "name": "ops"}])
+        for _ in range(100):
+            if len(c.get("/api/dashboards").json()) == 2:
+                break
+            c.portal.call(asyncio.sleep, 0.05)
+        assert calls["n"] > 2 and len(c.get("/api/dashboards").json()) == 2

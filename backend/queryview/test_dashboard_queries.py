@@ -129,3 +129,8 @@ def test_run_dashboard_needs_a_connected_session():
 def test_clean_values_keeps_only_strings():
     assert clean_values({"a": "x", "b": 5, "c": None, "d": ["x"], 1: "y"}) == {"a": "x"}
     assert clean_values(None) == {} and clean_values(["a"]) == {}
+
+
+def test_clean_values_drops_text_that_cannot_be_sent_back():
+    # A lone surrogate parses from JSON but cannot be encoded into the reply.
+    assert clean_values({"a": "\ud800", "b": "ok"}) == {"b": "ok"}

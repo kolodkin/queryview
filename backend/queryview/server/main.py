@@ -36,6 +36,11 @@ def _fail(message: str, status: int = 400, **extra: Any) -> JSONResponse:
     return JSONResponse({"ok": False, "message": message, **extra}, status_code=status)
 
 
+def _not_found(dashboard: Any) -> str:
+    """What the page shows for a dashboard that is not (or no longer) in the repo."""
+    return f"Dashboard “{dashboard}” not found." if isinstance(dashboard, str) else "unknown dashboard"
+
+
 def _int(value: Any, default: int) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, str)):
         return default
@@ -54,6 +59,9 @@ async def _poll(repo: Repo, interval: float) -> None:
             await repo.refresh()
         except GitSyncError as e:
             log.warning("sync failed, still showing the last copy: %s", e)
+        except Exception:
+            # Anything else must not end the loop: the page would go stale for good.
+            log.exception("sync failed unexpectedly, still showing the last copy")
 
 
 def create_app(config: ServerConfig) -> FastAPI:
@@ -87,7 +95,7 @@ def create_app(config: ServerConfig) -> FastAPI:
             return _fail("unknown connection", 404)
         dash = repo.get(dname) if isinstance(dname, str) else None
         if dash is None:
-            return _fail("unknown dashboard", 404)
+            return _fail(_not_found(dname), 404)
         return conn, dash, body
 
     async def _widget_sql(conn: Connection, dash: dict[str, Any], body: dict[str, Any]) -> str | JSONResponse:
@@ -124,7 +132,7 @@ def create_app(config: ServerConfig) -> FastAPI:
     async def dashboard(name: str):
         d = repo.get(name)
         if d is None:
-            return _fail("unknown dashboard", 404)
+            return _fail(_not_found(name), 404)
         # Query names only: the SQL and the params' options_sql stay here.
         return {"name": d["name"], "html": d["html"], "queries": list(d["queries"])}
 

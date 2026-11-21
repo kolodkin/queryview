@@ -22,11 +22,20 @@ def dialect_of(driver: Driver) -> Dialect:
     return Dialect(driver.ident_quote, driver.backslash_escapes)
 
 
+def _sendable(text: str) -> bool:
+    """Whether a reply can carry it: JSON parses a lone surrogate that UTF-8 cannot encode."""
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def clean_values(raw: object) -> dict[str, str]:
     """A request's param values: the string entries of a mapping, the rest dropped."""
     if not isinstance(raw, dict):
         return {}
-    return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
+    return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str) and _sendable(k) and _sendable(v)}
 
 
 def _params_error(message: str) -> dict[str, Any]:

@@ -4,7 +4,7 @@
 type Json = Record<string, unknown>
 
 // A failed request as the `{ok: false, message}` the server itself sends.
-const failed = (message: string): Json => ({ ok: false, message })
+const failed = (message: string): Json => ({ ok: false, message, status: 0 })
 
 export async function getJson(path: string): Promise<{ status: number; body: unknown }> {
   try {
@@ -23,7 +23,8 @@ export async function postJson(path: string, body: Json): Promise<Json> {
       body: JSON.stringify(body),
     })
     const data = (await res.json().catch(() => null)) as Json | null
-    return data ?? failed('request failed')
+    // `status` rides along: a 404 means the dashboard is no longer in the repo.
+    return data ? { ...data, status: res.status } : failed('request failed')
   } catch {
     return failed('request failed')
   }

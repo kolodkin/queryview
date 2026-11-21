@@ -168,6 +168,9 @@ function ViewerApp() {
         })
         const params = run.params as ResolvedParam[] | undefined
         if (params) resolvedRef.current = params
+        // Gone from the repo since it was opened: the page says so. A failing
+        // query stays the frame's to show, as in the app.
+        setError(run.status === 404 ? String(run.message ?? 'Dashboard not found.') : null)
         if (!run.ok)
           return {
             type: 'params-results',
