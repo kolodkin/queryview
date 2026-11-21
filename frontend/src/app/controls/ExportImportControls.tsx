@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { downloadText, fetchExport, importYaml, type ExportKind } from '../yamlio'
+import { downloadText } from '../../core'
+import { fetchExport, importYaml, type ExportKind } from '../yamlio'
 import { activeWorkspace } from '../session'
 
 type Props = {
@@ -36,7 +37,7 @@ export default function ExportImportControls({ kind, name, disabled, compact, on
       setError(r.message ?? 'export failed')
       return
     }
-    downloadText(r.filename ?? `${kind}.yaml`, r.text ?? '')
+    downloadText(r.filename ?? `${kind}.yaml`, r.text ?? '', 'application/x-yaml')
   }
 
   async function doImport(file: File) {

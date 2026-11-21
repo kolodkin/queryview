@@ -3,27 +3,26 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 
 import {
   DashboardFrame,
-  parseParamsRequest,
-  parseSnapshotResult,
-  parseWidgetRequest,
-  rejectedWidgetReply,
+  answerWidget,
+  downloadText,
+  listenToFrame,
   snapshotDocument,
   type SnapshotResult,
   valuesOf,
+  widgetPage,
   widgetQueryNames,
   withKeptText,
   type DashboardResults,
   type ResolvedParam,
+  type WidgetPost,
 } from '../core'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch, postJson } from './api'
 import { CopyName } from './controls/CopyName'
-import { downloadText } from './yamlio'
 import DashboardSqlPanel from './DashboardSqlPanel'
 import { announceGitSync, gitStatus, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
-import { answerWidget, type WidgetSql } from './widgetHost'
 
 // A dashboard names no connection: it runs on the viewing session's.
 export type DashboardPush = {
@@ -471,47 +470,29 @@ function DashboardView({
     setShowSql(true)
   }
 
-  // Answer the page's setParams: values only, and only from this dashboard's
-  // own frame. The SQL is the dashboard's, substituted by the backend, so the
-  // page never issues SQL of its own.
+  // Answer the open dashboard's frame: its setParams (values only), its
+  // widgets and its snapshot. The SQL is the dashboard's own, substituted by
+  // the backend, so the page never issues SQL of its own.
   useEffect(() => {
     if (!active) return
     const params = active.params ?? []
-    // One of this dashboard's queries, to run with the current selections.
-    function sqlFor(query: string): WidgetSql {
+    // Run or describe one of this dashboard's queries with the current selections.
+    const post: WidgetPost = async (kind, req) => {
       // hasOwn: a name like `constructor` must not find Object's own.
-      if (!Object.hasOwn(executedRef.current, query)) return { message: `Unknown query “${query}”` }
-      const sql = executedRef.current[query]
-      if (!sql.trim()) return { message: 'Enter a query.' }
-      return { sql, params, values: valuesOf(resolvedRef.current) }
+      if (!Object.hasOwn(executedRef.current, req.query))
+        return { ok: false, message: `Unknown query “${req.query}”` }
+      const query = executedRef.current[req.query]
+      if (!query.trim()) return { ok: false, message: 'Enter a query.' }
+      const body = { query, params, values: valuesOf(resolvedRef.current), ...widgetPage(req) }
+      return (await postJson(`/api/db/${kind}`, body)).json()
     }
-    async function onMessage(e: MessageEvent) {
-      const frame = frameRef.current
-      if (!frame || e.source !== frame.contentWindow) return
-      const snap = parseSnapshotResult(e.data)
-      if (snap) {
-        if (snapshotRef.current?.frame === frame) snapshotRef.current.done(snap)
-        return
-      }
-      if (!active) return
-      const widget = parseWidgetRequest(e.data)
-      if (widget) {
-        const reply = await answerWidget(widget, sqlFor, setError)
-        if (reply) frame.contentWindow?.postMessage(reply, '*')
-        return
-      }
-      const rejected = rejectedWidgetReply(e.data)
-      if (rejected) {
-        frame.contentWindow?.postMessage(rejected, '*')
-        return
-      }
-      const values = parseParamsRequest(e.data)
-      if (!values) return
-      const answer = await rerun(active, values)
-      frame.contentWindow?.postMessage(answer, '*')
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
+    return listenToFrame(() => frameRef.current, {
+      onSnapshot: (snap) => {
+        if (snapshotRef.current?.frame === frameRef.current) snapshotRef.current.done(snap)
+      },
+      onWidget: (req) => answerWidget(req, post, setError),
+      onSetParams: (values) => rerun(active, values),
+    })
   }, [active])
 
   return (
