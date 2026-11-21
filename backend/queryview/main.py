@@ -43,7 +43,7 @@ from .connect import (
     session_settings,
     unlock_connection,
 )
-from .dashboard_queries import run_dashboard_queries
+from .dashboard_queries import clean_values, run_dashboard, run_dashboard_queries, session_sql
 from .dashboards import get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
@@ -410,6 +410,21 @@ def _gate_error(r: dict[str, Any], reasons_409: tuple[str, ...], default: int = 
     return JSONResponse({"ok": False, "message": r["message"]}, status_code=status)
 
 
+async def _with_params(
+    request: Request, b: dict[str, Any], sql: str, reasons_409: tuple[str, ...]
+) -> tuple[str, JSONResponse | None]:
+    """A dashboard widget's query: with `params` in the body, `sql` is a
+    template and `values` are substituted here (docs/dashboard.md#dashboard-parameters).
+    Returns the SQL to run, or the failed response."""
+    if "params" not in b:
+        return sql, None
+    ready, err = await session_sql(request.state.sid, sql, b["params"], clean_values(b.get("values")))
+    if ready is not None:
+        return ready, None
+    assert err is not None
+    return sql, _gate_error(err, reasons_409, default=400 if err.get("reason") == "params" else 200)
+
+
 # Run a SQL query (paginated) against this session's selected database.
 @app.post("/api/db/query")
 async def db_query(request: Request):
@@ -419,6 +434,9 @@ async def db_query(request: Request):
     sql = raw_sql.strip() if isinstance(raw_sql, str) else ""
     if not sql:
         return JSONResponse({"ok": False, "message": "query required"}, status_code=400)
+    sql, failed = await _with_params(request, b, sql, ("no-session",))
+    if failed is not None:
+        return failed
     limit = _parse_int(b.get("limit"), 100)
     limit = 100 if limit < 1 else min(limit, 1000)
     offset = _parse_int(b.get("offset"), 0)
@@ -468,6 +486,9 @@ async def db_describe(request: Request):
     sql = raw_sql.strip() if isinstance(raw_sql, str) else ""
     if not sql:
         return JSONResponse({"ok": False, "message": "query required"}, status_code=400)
+    sql, failed = await _with_params(request, b, sql, ("no-session", "no-database"))
+    if failed is not None:
+        return failed
     r = await describe_query(request.state.sid, sql)
     if not r["ok"]:
         return _gate_error(r, ("no-session", "no-database"))
@@ -565,14 +586,23 @@ async def run_queries(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
     queries = _clean_queries(b.get("queries"))
-    if not queries:
+    # With `params` the queries are templates, substituted here; a dashboard of
+    # widgets alone sends none and still gets its selectors resolved.
+    with_params = "params" in b
+    if not queries and not with_params:
         return JSONResponse({"ok": False, "message": "queries are required"}, status_code=400)
-    r = await run_dashboard_queries(request.state.sid, queries)
+    if with_params:
+        r = await run_dashboard(request.state.sid, queries, b["params"], clean_values(b.get("values")))
+    else:
+        r = await run_dashboard_queries(request.state.sid, queries)
+    resolved = {"params": r["params"]} if "params" in r else {}
     if not r["ok"]:
         # Not connected / no database: the session must act first, not the request.
-        status = 400 if r.get("reason") == "query" else 409
-        return JSONResponse({"ok": False, "message": r["message"], "reason": r.get("reason")}, status_code=status)
-    return {"ok": True, "results": r["results"]}
+        status = 400 if r.get("reason") in ("query", "params") else 409
+        return JSONResponse(
+            {"ok": False, "message": r["message"], "reason": r.get("reason"), **resolved}, status_code=status
+        )
+    return {"ok": True, "results": r["results"], **resolved}
 
 
 # The user's Save: upsert a dashboard (in a synced workspace also one commit,
