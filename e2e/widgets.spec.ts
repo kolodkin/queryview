@@ -178,7 +178,7 @@ test("New query runs ad-hoc SQL and saves as a dashboard", async ({ page, seeds,
   await expect(rows).toHaveCount(3);
 });
 
-test("Execute keeps the page state", async ({ page, seeds, baseURL }) => {
+test("Execute keeps the page state", async ({ page, seeds, baseURL, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
     name: "stateful",
@@ -194,9 +194,11 @@ test("Execute keeps the page state", async ({ page, seeds, baseURL }) => {
   // The popup shows the picked query's rows in a table of its own.
   const popupRows = queryPopupFrame(page).getByTestId("qv-results").locator("tbody tr");
   await expect(popupRows).toHaveCount(3);
+  await shot("edit queries popup");
   await page.getByTestId("dash-sql").fill("SELECT id, name FROM items WHERE id = 3");
   await page.getByTestId("dash-sql-execute").click();
   await expect(popupRows).toHaveCount(1);
+  await shot("edit queries popup after execute");
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toContainText("gamma");
   await expect(frame.locator("#keep")).toHaveValue("x");
