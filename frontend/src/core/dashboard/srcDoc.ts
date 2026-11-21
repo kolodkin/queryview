@@ -78,12 +78,11 @@ function snapshot() {
         if (el.shadowRoot) { roots.push(el.shadowRoot); walk(el.shadowRoot); }
       });
     })(document);
-    // No rows yet: a widget mid-query, or a qv-* tag the bundle has not upgraded.
-    // Once the page has loaded the bundle has run: a tag still undefined is one
-    // it does not know, and stays as written.
-    if (document.readyState !== 'complete' && Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
+    // No rows yet: a widget mid-query, or a qv-* tag the bundle has not upgraded
+    // (once the page has loaded, one still undefined is unknown to it and stays).
+    if ((document.readyState !== 'complete' && Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
           return el.localName.indexOf('qv-') === 0;
-        }) ||
+        })) ||
         roots.some(function (root) { return root.querySelector('[data-qv-busy]'); })) {
       return { type: 'qv-snapshot-result', message: 'A widget is still loading. Take the snapshot when it has finished.' };
     }

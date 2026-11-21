@@ -777,8 +777,7 @@ def test_case_only_rename_leaves_a_dashboard_named_like_its_temp_folder(git_env)
     _run(gitsync.save(_default_ws(), _dash("ua reach", "<p>c</p>")))
     _run(gitsync.save(_default_ws(), _dash("ua reach.renaming", "<p>other</p>")))
     _run(gitsync.rename(_default_ws(), "ua reach", "UA Reach"))
-    files = sorted(_repo_files(git_env))
-    assert files == sorted(
+    assert sorted(_repo_files(git_env)) == sorted(
         f"{dashboard_reldir(name)}/{f}" for name in ("UA Reach", "ua reach.renaming") for f in DASHBOARD_FILES
     )
     shown = subprocess.run(

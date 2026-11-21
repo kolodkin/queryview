@@ -147,7 +147,6 @@ function DashboardView({
   // The selectors as last resolved (load or set-params): what a widget's
   // query is substituted with.
   const resolvedRef = useRef<ResolvedParam[]>([])
-  // The last re-run asked for; the next waits for it (see rerun).
   const rerunQueue = useRef<Promise<unknown>>(Promise.resolve())
   const frameRef = useRef<HTMLIFrameElement>(null)
   // The query popup's results frame, answered like the dashboard's own.
