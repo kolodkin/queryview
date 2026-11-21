@@ -396,14 +396,15 @@ function DashboardView({
     dash: DashboardPush,
     values: Record<string, string> | null,
     only: string[] | null = null,
-  ): Promise<Record<string, unknown>> {
-    // Its turn can come after the dashboard was switched: that frame is gone,
-    // nobody reads the answer, and running would overwrite the new one's refs.
+  ): Promise<Record<string, unknown> | null> {
+    // Null once the dashboard was switched: a run whose turn comes after that
+    // would overwrite the new one's refs, and its answer is for a frame now gone.
     const frame = frameRef.current
-    const run = async () =>
-      frameRef.current === frame
-        ? rerunNow(dash, values, only)
-        : { type: 'params-results', ok: true, params: [] }
+    const run = async () => {
+      if (frameRef.current !== frame) return null
+      const answer = await rerunNow(dash, values, only)
+      return frameRef.current === frame ? answer : null
+    }
     const answer = rerunQueue.current.then(run, run)
     rerunQueue.current = answer
     return answer
@@ -466,6 +467,7 @@ function DashboardView({
     }
     // Nothing edited: Execute refreshes everything.
     const answer = await rerun(active, null, only)
+    if (!answer) return
     // The page keeps its last results; the failure shows above it.
     setError(answer.ok ? null : String(answer.message))
     broadcast(answer)
@@ -562,7 +564,8 @@ function DashboardView({
       }
       const values = parseParamsRequest(e.data)
       if (!values) return
-      broadcast(await rerun(active, values))
+      const answer = await rerun(active, values)
+      if (answer) broadcast(answer)
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
