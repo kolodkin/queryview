@@ -4,7 +4,7 @@
 
 Run QueryView as a shared, display-only server. It shows the dashboards of the
 git repo a local QueryView [syncs](../../gitsync.md) to, on database
-connections given in environment variables, rendered as the app's
+connections given in a mounted config file, rendered as the app's
 [dashboard page](../../dashboard.md) renders them. Viewers pick a connection
 and a dashboard; they cannot edit anything or run SQL of their own.
 
@@ -30,6 +30,8 @@ and a dashboard; they cannot edit anything or run SQL of their own.
 - An agent tool that runs a dashboard with values. The Python function makes
   it a thin wrapper later; `future.md` gets a line.
 - Caching resolved options between requests.
+- `${VAR}` references inside the config file, or env vars as a second way to
+  configure. The file is the one secret to mount.
 
 ## Anti-goals
 
@@ -125,21 +127,39 @@ untouched.
 
 ### Configuration
 
-| Variable | Meaning |
-| --- | --- |
-| `QV_CONNECTIONS` | JSON list of `{name, type, database, config}`. `type` is any driver and `config` is what its `parse_config` takes; `database` is fixed per connection and required where the driver has a picker. |
-| `QV_GIT_REMOTE` | The repo, in the [workspace remote](../../gitsync.md) URL form (an HTTPS URL may embed a token). |
-| `QV_GIT_BRANCH` | Default `main`. |
-| `QV_SYNC_INTERVAL` | Seconds between fetches, default 60. |
-| `PORT`, `DATA_DIR` | As the app. `DATA_DIR` holds only the clone, in a directory of its own. |
+One YAML file, mounted into the container (a Kubernetes Secret, a Docker
+secret, a bind mount). `QV_CONFIG` names its path, default
+`/etc/queryview/server.yaml`.
+
+```yaml
+git:
+  remote: https://<token>@github.com/example/dashboards.git
+  branch: main          # default
+  sync_interval: 60     # seconds between fetches, default
+connections:
+  - name: sales
+    type: postgres
+    host: db.example.internal
+    port: 5432
+    username: viewer
+    password: <password>
+    database: sales_reporting
+```
+
+- `git.remote` takes the [workspace remote](../../gitsync.md) URL form.
+- A connection is a `name` and `type` plus the fields that driver's Connect
+  form posts (its `parse_config`). `database` is required where the driver has
+  a picker; it is the one database the connection runs on.
+- `PORT` and `DATA_DIR` stay env vars, as in the app. `DATA_DIR` holds only
+  the clone, in a directory of its own.
 
 Startup validates every connection with its driver's `parse_config` and does
 the first clone. Either failing exits non-zero, naming the entry or the git
 error and never echoing a config or the token.
 
 A DuckDB connection whose `path` is a folder is refused at startup: its SQL
-can read any local file, the server's environment (every password and the git
-token) included. SQLite and DuckDB file mode already block other files.
+can read any local file, the config file (every password and the git token)
+included. SQLite and DuckDB file mode already block other files.
 
 ### Sync
 
