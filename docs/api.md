@@ -32,7 +32,7 @@ shared (SQLite). See [session.md](./session.md).
 | POST   | `/api/db/lock`      | `{name, passphrase}`                   | Lock a saved connection; `{ok, token}`. `DELETE` with the same body removes the lock; `POST /api/db/unlock` exchanges the passphrase for this session's token. Wrong passphrase → `403`. See [connect.md](./connect.md#locked-connections). |
 | GET    | `/api/db/databases` | —                                      | Re-list this session's connection's databases. `{ok, name, databases, databases_truncated?}` (`databases_truncated` when a DuckDB folder list was cut at the Explorer's Max entries) \| `{ok:false, message}`. No session → `409`. |
 | POST   | `/api/db/database`  | `{database}`                           | Select this session's active connection's database; a name not in the cached list is re-listed once. `{ok}`. |
-| POST   | `/api/db/query`     | `{query, limit?, offset?, format?, order_by?, params?, values?}` | Run SQL against this session's selected database, paginated by `limit`/`offset` (defaults 100/0). `order_by` is `[{name, dir}]` (`dir` ASC/DESC, names quoted with the driver's identifier quote) sorting the pagination wrapper. `{ok, meta:[{name, type}], data:[[…]]}` — ClickHouse's `JSONCompact` shape, 64-bit integers and decimals quoted, collections as JSON arrays/objects — \| `{ok:false, message}`. `format:"csv"` returns `{ok, output}` (CSV text) instead. With `params` (a dashboard's declaration) and `values`, `query` is a template: its `{name}` placeholders are substituted server-side from `values` as given; a bad value or one still unchosen → `400` (see [dashboard.md](./dashboard.md#dashboard-parameters)). Empty query → `400`; no session → `409`. |
+| POST   | `/api/db/query`     | `{query, limit?, offset?, format?, order_by?, params?, values?}` | Run SQL against this session's selected database, paginated by `limit`/`offset` (defaults 100/0). `order_by` is `[{name, dir}]` (`dir` ASC/DESC, names quoted with the driver's identifier quote; one holding that quote character is ignored) sorting the pagination wrapper. `{ok, meta:[{name, type}], data:[[…]]}` — ClickHouse's `JSONCompact` shape, 64-bit integers and decimals quoted, collections as JSON arrays/objects — \| `{ok:false, message}`. `format:"csv"` returns `{ok, output}` (CSV text) instead. With `params` (a dashboard's declaration) and `values`, `query` is a template: its `{name}` placeholders are substituted server-side from `values` as given; a bad value or one still unchosen → `400` (see [dashboard.md](./dashboard.md#dashboard-parameters)). Empty query → `400`; no session → `409`. |
 | POST   | `/api/db/execute`   | `{sql}`                                | Run a `;`-separated script as written on this session's selected database — writes and DDL included, no pagination — statement by statement on one connection, stopping at the first failure (the Scripts page). `{ok, database, results:[{sql, ok, meta, data, truncated, status, message, elapsed_ms}]}`, one entry per statement run; `meta`/`data` for a row-returning statement (`data` capped at 100 rows), else `status` is the driver's word (`OK`, `INSERT 0 3`). See [scripts.md](./scripts.md). Empty `sql` → `400`; no session / no database → `409`. |
 | POST   | `/api/db/describe`  | `{query, params?, values?}`            | Describe the query's output columns via ClickHouse `DESCRIBE` (no data scanned). `{ok, fields:[{name, type}]}` \| `{ok:false, message}`. `params` and `values` as for `/api/db/query`. Empty query → `400`; no session / no database → `409`. |
 | GET    | `/api/db/tables`    | `?union=1` (optional)                  | Tables of this session's selected database (the Explorer sidebar). `{ok, tables:[{name, rows, bytes, query}]}` — rows/bytes are engine estimates (null when untracked); `query` is the browse SELECT quoted with the driver's identifier quote, or the driver's own `read_*` call for a DuckDB folder, where `union=1` adds `union_by_name` to glob entries and `truncated: true` marks a file list cut at the Explorer's Max entries — \| `{ok:false, message}`. No session / no database → `409`. |
@@ -107,6 +107,27 @@ the UI.
 `git_restore` mirror the same surface, resolving the workspace from an
 optional `session_id` (see [workspace.md](./workspace.md)).
 
+## Viewer server
+
+The [viewer server](./server.md) (`queryview-server`) is a separate app with
+its own, smaller API. No session header; none of the routes above exist on it.
+A body names a `connection` and a `dashboard`, never SQL. Errors are
+`{ok:false, message}`: `404` for an unknown connection, dashboard or query
+name, `400` for a bad body, a bad value or a failing query.
+
+| Method | Path                     | Body                                             | Description |
+| ------ | ------------------------ | ------------------------------------------------ | ----------- |
+| GET    | `/api/health`            | —                                                | `{status, service}`. |
+| GET    | `/api/connections`       | —                                                | `[{name, type}]`, in config order; never a config. |
+| GET    | `/api/dashboards`        | —                                                | `[{name}]`, the dashboards at the repo's head. |
+| GET    | `/api/dashboards/{name}` | —                                                | `{name, html, queries:[name]}`: query names only, no SQL. |
+| POST   | `/api/run`               | `{connection, dashboard, queries?:[name], values?}` | Resolve the selectors from `values` and run the named queries (all when omitted), as `/api/runqueries` does with `params`: `{ok, results, params}`. |
+| POST   | `/api/query`             | `{connection, dashboard, query, values?, limit?, offset?, order_by?, format?}` | One page of a dashboard query, as `/api/db/query`: `{ok, meta, data}`, or `{ok, output}` for `format:"csv"`. A query waiting on a choice → `400`. |
+| POST   | `/api/describe`          | `{connection, dashboard, query, values?}`        | The query's output columns: `{ok, fields}`. |
+
+Every POST resolves the selectors first, so a value outside a param's options
+falls back to its default and never reaches the SQL.
+
 ## Related docs
 
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
@@ -117,3 +138,4 @@ optional `session_id` (see [workspace.md](./workspace.md)).
 - [gitsync.md](./gitsync.md) — backing up and restoring dashboards via git.
 - [export-import.md](./export-import.md) — YAML export/import of dashboards and workspaces.
 - [workspace.md](./workspace.md) — workspaces: entity ownership and per-workspace remotes.
+- [server.md](./server.md) — the display-only viewer server.

@@ -53,7 +53,13 @@ docker run -d --name queryview \
   ghcr.io/kolodkin/queryview:latest
 ```
 
+## Viewer server
+
+The image also runs the display-only [viewer server](./server.md): pass the
+command `queryview-server` and mount its config file.
+
 ## Related docs
 
 - [gitsync.md](./gitsync.md) — workspace git sync, remote URLs and credentials.
 - [connect.md](./connect.md) — connections and drivers.
+- [server.md](./server.md) — the display-only viewer server.
