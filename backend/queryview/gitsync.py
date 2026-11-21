@@ -558,9 +558,10 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
         (wd / dst).parent.mkdir(parents=True, exist_ok=True)
         if src.lower() == dst.lower():
             # Only the case changes: a case-insensitive filesystem (macOS,
-            # Windows) refuses that move, so go through a name of its own.
-            await _git("mv", src, f"{src}.renaming", cwd=wd)
-            src_now = f"{src}.renaming"
+            # Windows) refuses that move, so go through a name no dashboard's
+            # folder has: a slug never starts with a dot.
+            src_now = "dashboards/.renaming"
+            await _git("mv", src, src_now, cwd=wd)
         else:
             src_now = src
         await _git("mv", src_now, dst, cwd=wd)
