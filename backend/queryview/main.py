@@ -6,13 +6,10 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
-from functools import lru_cache
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import (
-    FileResponse,
     JSONResponse,
     PlainTextResponse,
     RedirectResponse,
@@ -47,26 +44,12 @@ from .dashboard_queries import clean_values, run_dashboard, run_dashboard_querie
 from .dashboards import get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
+from .serving import PACKAGED_STATIC, resolve_port, serve_static
 from .validation import dashboard_params_error
-
-# SPA bundle shipped inside the wheel (release CI copies frontend/dist here);
-# absent in a source checkout, where the repo's frontend/dist is used instead.
-_PACKAGED_STATIC = Path(__file__).resolve().parent / "static"
 
 # Opt-in in a source checkout; defaults on for an installed wheel (which ships
 # its SPA bundle) so `pip install queryview` serves the UI out of the box.
-SERVE_STATIC = os.environ.get("SERVE_STATIC", "1" if _PACKAGED_STATIC.is_dir() else "") == "1"
-
-
-@lru_cache(maxsize=1)
-def _static_root() -> Path:
-    env = os.environ.get("STATIC_ROOT")
-    if env:
-        return Path(env).resolve()
-    repo_dist = (Path(__file__).resolve().parent.parent.parent / "frontend" / "dist").resolve()
-    if repo_dist.is_dir():
-        return repo_dist
-    return _PACKAGED_STATIC
+SERVE_STATIC = os.environ.get("SERVE_STATIC", "1" if PACKAGED_STATIC.is_dir() else "") == "1"
 
 
 async def _read_json(request: Request) -> Any:
@@ -867,34 +850,11 @@ async def api_not_found(rest: str):
     return JSONResponse({"error": "not found"}, status_code=404)
 
 
-# Vite names everything under assets/ by content, and the app asks for the
-# widget bundle as /widgets.js?v=<content hash>: either can be cached for good.
-_FOREVER = {"Cache-Control": "public, max-age=31536000, immutable"}
-
-
-async def _serve_static(full_path: str, versioned: bool = False):
-    """A built file, or index.html for a client-side route. A missing path with
-    a file extension is a missing file, not a route: 404, so a broken build
-    fails loudly instead of handing a script the app's HTML."""
-    root = _static_root()
-    candidate = (root / full_path).resolve()
-    try:
-        candidate.relative_to(root)
-    except ValueError:
-        return JSONResponse({"error": "not found"}, status_code=404)
-    if candidate.is_file():
-        cached = versioned or full_path.startswith("assets/")
-        return FileResponse(candidate, headers=_FOREVER if cached else None)
-    if candidate.suffix:
-        return JSONResponse({"error": "not found"}, status_code=404)
-    return FileResponse(root / "index.html")
-
-
 if SERVE_STATIC:
 
     @app.get("/{full_path:path}")
     async def spa(full_path: str, v: str | None = None):
-        return await _serve_static(full_path, v is not None)
+        return await serve_static(full_path, v is not None)
 
 else:
 
@@ -903,20 +863,8 @@ else:
         return JSONResponse({"error": "not found"}, status_code=404)
 
 
-def _resolve_port(argv: list[str] | None = None) -> int:
-    """Listen port: --port beats the PORT env var, which beats 8000."""
-    import argparse
-
-    parser = argparse.ArgumentParser(prog="queryview")
-    parser.add_argument("--port", type=int, help="listen port (default: $PORT or 8000)")
-    args = parser.parse_args(argv)
-    if args.port is not None:
-        return args.port
-    return int(os.environ.get("PORT", "8000"))
-
-
 def run() -> None:
     """Console-script entry point: launch uvicorn on the resolved port."""
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=_resolve_port())
+    uvicorn.run(app, host="0.0.0.0", port=resolve_port())
