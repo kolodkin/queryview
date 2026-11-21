@@ -399,7 +399,13 @@ function DashboardView({
     values: Record<string, string> | null,
     only: string[] | null = null,
   ): Promise<Record<string, unknown>> {
-    const run = () => rerunNow(dash, values, only)
+    // Its turn can come after the dashboard was switched: that frame is gone,
+    // nobody reads the answer, and running would overwrite the new one's refs.
+    const frame = frameRef.current
+    const run = async () =>
+      frameRef.current === frame
+        ? rerunNow(dash, values, only)
+        : { type: 'params-results', ok: true, params: [] }
     const answer = rerunQueue.current.then(run, run)
     rerunQueue.current = answer
     return answer
