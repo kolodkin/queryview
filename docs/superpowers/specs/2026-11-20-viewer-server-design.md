@@ -75,11 +75,10 @@ and a dashboard; they cannot edit anything or run SQL of their own.
    It would sit on top of polling, which stays as the fallback for a missed
    delivery, so it can be added later without changing anything here.
 
-## Phase 1: substitution in Python (the app)
+## Phase 1: substitution in Python
 
-Lands first, on its own, proven by the existing test suites.
-
-### `backend/queryview/dashboard_params.py`
+Lands first, in the app alone, proven by the existing test suites. The new
+module is `backend/queryview/dashboard_params.py`.
 
 A port of `params.ts` with the same rules and the same error messages:
 placeholder syntax and casts, literal and identifier quoting per dialect,
@@ -94,7 +93,7 @@ detection, `default: none`, and held-back queries.
 - `params.test.ts` cases for the ported functions are rewritten as pytest and
   are the contract.
 
-### API
+## Phase 1: API
 
 The three endpoints gain optional `params` (the dashboard's declaration) and
 `values`. Without them they behave as today, so Explorer and Scripts are
@@ -113,7 +112,7 @@ untouched.
 - A text param the page leaves out of `set-params` keeps what was typed: the
   frontend fills it in from its last resolved params before posting.
 
-### Frontend
+## Phase 1: frontend
 
 - `DashboardView.tsx` posts templates, declaration and values at its four
   substitution sites (load, `set-params`, **Execute**, the widget host) and
@@ -123,9 +122,7 @@ untouched.
   their tests are deleted, as is the `identQuote` / `backslashEscapes` plumbing
   if nothing else reads it.
 
-## Phase 2: the viewer server
-
-### Configuration
+## Phase 2: configuration
 
 One YAML file, mounted into the container (a Kubernetes Secret, a Docker
 secret, a bind mount). `QV_CONFIG` names its path, default
@@ -161,7 +158,7 @@ A DuckDB connection whose `path` is a folder is refused at startup: its SQL
 can read any local file, the config file (every password and the git token)
 included. SQLite and DuckDB file mode already block other files.
 
-### Sync
+## Phase 2: sync
 
 - Reuses `gitsync`'s clone, fetch, tree listing and read-at-ref code. Nothing
   is merged, committed or pushed.
@@ -169,7 +166,7 @@ included. SQLite and DuckDB file mode already block other files.
   dashboards are re-read into memory and served from there.
 - A failed fetch is logged and the last good copy keeps serving.
 
-### API
+## Phase 2: API
 
 No session header. Every reply is JSON; errors are `{ok: false, message}`.
 
@@ -197,7 +194,7 @@ No session header. Every reply is JSON; errors are `{ok: false, message}`.
   the app, so an author can debug from the page.
 - Unknown connection, dashboard or query name is a 404.
 
-### The page
+## Phase 2: the page
 
 ```
 +-- queryview-server ------------------------------------+
@@ -218,12 +215,12 @@ No session header. Every reply is JSON; errors are `{ok: false, message}`.
 - Frame message handling that the app and the viewer both need is shared, not
   copied. `src/core` never fetches, so the transport is passed in.
 
-### Packaging
+## Phase 2: packaging
 
 - `[project.scripts]` gains `queryview-server = "queryview.server.main:run"`.
 - The same Docker image, started with the command `queryview-server`.
 
-### Security
+## Security
 
 - No login: anyone who can reach the server sees every dashboard's data on
   every configured connection. The docs say to put it behind a proxy or SSO.
