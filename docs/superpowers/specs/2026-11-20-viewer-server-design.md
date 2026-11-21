@@ -14,13 +14,18 @@ and a dashboard; they cannot edit anything or run SQL of their own.
 - The server holds the SQL: the browser sends names and parameter values only.
 - One implementation of parameter substitution, in Python, used by the app and
   the viewer server.
+- Always the latest commit: what a local QueryView pushes to the repo shows
+  on the server within the sync interval, with nobody clicking anything.
 - Stateless: no SQLite, sessions or encryption key. A restart re-clones.
 
 ## Non-goals
 
 - Login. Access control is a reverse proxy or SSO in front (see
   [Security](#security)).
-- A webhook, several repos, workspaces, or a database picker.
+- A webhook endpoint (see [Approaches](#approaches)), several repos,
+  workspaces, or a database picker.
+- Pushing a change into a page that is already open: it shows on the next
+  load or pick.
 - A dashboard naming its connection (`meta.yaml` is unchanged).
 - An agent tool that runs a dashboard with values. The Python function makes
   it a thin wrapper later; `future.md` gets a line.
@@ -57,6 +62,16 @@ and a dashboard; they cannot edit anything or run SQL of their own.
 2. `meta.yaml` names it. No choice for viewers, but dashboards stop being
    portable and the app must round-trip the field.
 3. A mapping file in the repo. Portable, but a second thing to keep in step.
+
+**How the server stays current**
+
+1. **Polling: `git fetch` on a timer.** Up to one interval behind (60 seconds
+   by default). Nothing inbound, so it works behind a firewall, and it is the
+   only moving part. **Picked.**
+2. A GitHub webhook that triggers the fetch. Seconds behind, but GitHub must
+   reach the server, and it adds an endpoint with a shared secret to verify.
+   It would sit on top of polling, which stays as the fallback for a missed
+   delivery, so it can be added later without changing anything here.
 
 ## Phase 1: substitution in Python (the app)
 
