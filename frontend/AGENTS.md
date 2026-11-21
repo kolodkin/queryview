@@ -8,6 +8,8 @@ src/
   core/    backend-agnostic kernel — result parsing, cell rendering, query
            params, presentation pickers, the dashboard sandbox
   app/     the QueryView application — pages, connections, workspaces, git sync
+  viewer/  the viewer server's page (viewer.html) — display only, names and
+           values to its own API; imports core, never app
   main.tsx
 ```
 
