@@ -165,14 +165,15 @@ test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, 
       '<qv-param name="pick"></qv-param><b id="v" data-qv-query="q" data-qv-column="name"></b>' +
       '<canvas id="c" width="40" height="20"></canvas>' +
       "<script>const x = document.getElementById('c').getContext('2d'); x.fillStyle = 'red'; x.fillRect(0, 0, 40, 20);</script>" +
-      '<qv-select-view query="rows" limit="200" order-by="n desc" fields="n"></qv-select-view>',
-    queries: { rows: "SELECT range AS n, range * 2 AS m FROM range(200)", q: "SELECT name FROM items WHERE name = {pick}" },
+      '<qv-select-view query="rows" limit="200" order-by="n desc" fields="n,p"></qv-select-view>',
+    queries: { rows: "SELECT range AS n, range * 2 AS m, {pick} AS p FROM range(200)", q: "SELECT name FROM items WHERE name = {pick}" },
     params: [{ name: "pick", options_sql: "SELECT name FROM items ORDER BY id" }],
   });
   await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(200);
   await frame.getByTestId("qv-param").selectOption("beta");
   await expect(frame.locator("#v")).toHaveText("beta"); // the re-run landed
-  await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(200);
+  // So did the widget's own: a snapshot taken while it is still querying is refused.
+  await expect(frame.getByTestId("qv-results").locator("tbody tr").first()).toContainText("beta");
 
   const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("dashboard-snapshot").click()]);
   expect(download.suggestedFilename()).toBe("snap.html");
