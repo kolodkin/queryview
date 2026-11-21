@@ -2,7 +2,7 @@
 // driver, so these run once on DuckDB (no service).
 import { readFileSync } from "node:fs";
 
-import { DUCK, api, armRemote, connect, dashboardFrame, expect, openDashboard, test } from "./fixtures";
+import { DUCK, api, armRemote, closeQueries, connect, dashboardFrame, expect, openDashboard, test } from "./fixtures";
 
 // Reads window.queries and writes a value into the DOM, so the test can
 // assert the injected results reached the agent HTML. Styled as large,
@@ -137,12 +137,14 @@ test("rename and delete a saved dashboard", async ({ page, seeds, baseURL }) => 
   // An unsaved SQL-panel edit survives the rename.
   await page.getByTestId("dashboard-edit-queries").click();
   await page.getByTestId("dash-sql").fill("SELECT name FROM items WHERE id = 1");
+  await closeQueries(page);
   page.once("dialog", (d) => d.accept(renamed));
   await page.getByTestId("dashboard-rename").click();
   const options = page.getByTestId("dashboard-select").locator("option");
   await expect.poll(() => new URL(page.url()).searchParams.get("name")).toBe(renamed);
   await expect.poll(() => options.allTextContents()).toContain(renamed);
   expect(await options.allTextContents()).not.toContain(name);
+  await page.getByTestId("dashboard-edit-queries").click();
   await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 1");
   expect((await api(`${baseURL}/api/dashboards/${encodeURIComponent(name)}`, { ok: false })).status).toBe(404);
 
