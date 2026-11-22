@@ -55,3 +55,10 @@ def test_port_env_used_without_flag(monkeypatch, started):
 def test_port_defaults_to_8000(monkeypatch):
     monkeypatch.delenv("PORT", raising=False)
     assert serving.resolve_port([]) == 8000
+
+
+def test_host_is_an_argument(started):
+    # The app has no login: the dev scripts pass 127.0.0.1 so a developer's
+    # machine does not serve it to the network.
+    run(["--host", "127.0.0.1"])
+    assert started[0][1]["host"] == "127.0.0.1"
