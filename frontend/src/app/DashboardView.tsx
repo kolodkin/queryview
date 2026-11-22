@@ -23,6 +23,7 @@ import { CopyName } from './controls/CopyName'
 import DashboardSqlPanel from './DashboardSqlPanel'
 import { announceGitSync, gitStatus, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
+import { queryViewHtml, sharedPost } from './widgetHost'
 
 // A dashboard names no connection: it runs on the viewing session's.
 export type DashboardPush = {
@@ -74,10 +75,7 @@ async function runDashboard(
   }
 }
 
-// The frame paints its own backdrop; match the app's instead of white.
-const NEW_QUERY_HTML =
-  '<style>body{margin:0;background:#0c1124}</style>' +
-  '<qv-select-view query="main"></qv-select-view>'
+const NEW_QUERY_HTML = queryViewHtml('main')
 
 // The session view holding the unsaved New query draft, so it survives leaving
 // the page and a reload (docs/session.md).
@@ -116,7 +114,7 @@ function DashboardView({
   onPushConsumed?: () => void
   // The session's connection and database; a change re-runs the queries.
   runOn?: string | null
-  // The armed remote session, for the SQL panel's edit lock.
+  // The armed remote session, for the query popup's edit lock.
   remoteId?: string | null
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -139,14 +137,17 @@ function DashboardView({
   // The selectors as last resolved (load or set-params): what a widget's
   // query is substituted with.
   const resolvedRef = useRef<ResolvedParam[]>([])
+  const rerunQueue = useRef<Promise<unknown>>(Promise.resolve())
   const frameRef = useRef<HTMLIFrameElement>(null)
+  // The query popup's results frame, answered like the dashboard's own.
+  const popupFrameRef = useRef<HTMLIFrameElement>(null)
   // A Snapshot waiting for the frame's serialized document.
   const snapshotRef = useRef<{
     frame: HTMLIFrameElement
     done: (r: SnapshotResult) => void
   } | null>(null)
   // The SQL as last run (load or Execute). The frame's widgets and param
-  // re-runs use this, so a half-typed edit in the SQL panel never runs.
+  // re-runs use this, so a half-typed edit in the query popup never runs.
   const executedRef = useRef<Record<string, string>>({})
   // The page-query results the frame holds as `window.queries`.
   const shownRef = useRef<DashboardResults>({})
@@ -155,7 +156,7 @@ function DashboardView({
   // The object last known to equal the store's copy: Save has nothing to
   // write while `active` is it.
   const savedRef = useRef<DashboardPush | null>(null)
-  const [showSql, setShowSql] = useState(() => localPush !== null)
+  const [showSql, setShowSql] = useState(false)
   // Bumped per load, keying the frame: a draft reloads from memory with the
   // same HTML and results, which alone would leave the old frame (and its
   // widgets' rows from the previous database) in place.
@@ -374,10 +375,30 @@ function DashboardView({
   // keeps the current ones (the SQL changed, not the params).
   // `only` limits the run to those queries (the ones Execute changed); the
   // frame keeps the rest, and only widgets over those re-query.
-  async function rerun(
+  // One at a time, in the order asked: a re-run starts from what the one
+  // before it resolved (a typed text), and the frame gets the answers in order.
+  function rerun(
     dash: DashboardPush,
     values: Record<string, string> | null,
     only: string[] | null = null,
+  ): Promise<Record<string, unknown> | null> {
+    // Null once the dashboard was switched: a run whose turn comes after that
+    // would overwrite the new one's refs, and its answer is for a frame now gone.
+    const frame = frameRef.current
+    const run = async () => {
+      if (frameRef.current !== frame) return null
+      const answer = await rerunNow(dash, values, only)
+      return frameRef.current === frame ? answer : null
+    }
+    const answer = rerunQueue.current.then(run, run)
+    rerunQueue.current = answer
+    return answer
+  }
+
+  async function rerunNow(
+    dash: DashboardPush,
+    values: Record<string, string> | null,
+    only: string[] | null,
   ): Promise<Record<string, unknown>> {
     // Fresh selections, with any text the page left out; else the current ones.
     const sent = values ? withKeptText(values, resolvedRef.current) : valuesOf(resolvedRef.current)
@@ -398,34 +419,44 @@ function DashboardView({
     }
   }
 
-  // An edit in the SQL panel. Kept in a ref too, so a reload (a database
+  // An edit in the query popup. Kept in a ref too, so a reload (a database
   // switch) keeps it in the editor; nothing runs it until Execute.
   function editQuery(query: string, sql: string) {
     if (!active) return
     const next = { ...active, queries: { ...active.queries, [query]: sql } }
     editedRef.current = next
     setActive(next)
-    // Queued; written when the SQL panel is left (its edit lock flushes).
+    // Queued; written when the query popup is left (its edit lock flushes).
     if (!next.name) patchView(VIEW, { draft: { html: next.html, queries: next.queries } })
   }
 
-  // Execute from the SQL panel: post into the live frame rather than rebuild
+  // Execute from the query popup: post into the live frame rather than rebuild
   // it, so the page keeps its state; its widgets re-query on the same message.
   async function execute() {
     if (!active) return
     const before = executedRef.current
     const changed = Object.keys(active.queries).filter((n) => active.queries[n] !== before[n])
     executedRef.current = active.queries
+    const only = changed.length ? changed : null
     const frame = frameRef.current
     if (!frame) {
       setReloadNonce((n) => n + 1)
       return
     }
     // Nothing edited: Execute refreshes everything.
-    const answer = await rerun(active, null, changed.length ? changed : null)
+    const answer = await rerun(active, null, only)
+    if (!answer) return
     // The page keeps its last results; the failure shows above it.
     setError(answer.ok ? null : String(answer.message))
-    frame.contentWindow?.postMessage(answer, '*')
+    broadcast(answer)
+  }
+
+  // A re-run's results go to the dashboard's frame and the query popup's at
+  // the same moment: their tables re-query on it, and an identical page they
+  // both show runs once (widgetHost.ts).
+  function broadcast(answer: Record<string, unknown>) {
+    for (const f of [frameRef.current, popupFrameRef.current])
+      f?.contentWindow?.postMessage(answer, '*')
   }
 
   // Download the dashboard as one static HTML file. Only the frame can read
@@ -456,7 +487,7 @@ function DashboardView({
     setLocalPush(push)
   }
 
-  // Unsaved scratch: one widget over one query, the SQL panel open.
+  // Unsaved scratch: one widget over one query, the query popup open.
   function newQuery(sql = '', replace = false) {
     reopen({
       name: '',
@@ -484,16 +515,20 @@ function DashboardView({
       const query = executedRef.current[req.query]
       if (!query.trim()) return { ok: false, message: 'Enter a query.' }
       const body = { query, params, values: valuesOf(resolvedRef.current), ...widgetPage(req) }
-      return (await postJson(`/api/db/${kind}`, body)).json()
+      // Shared: the same page asked for by both frames runs once.
+      return sharedPost(runOn ?? '', `/api/db/${kind}`, body)
     }
-    return listenToFrame(() => frameRef.current, {
-      onSnapshot: (snap) => {
-        if (snapshotRef.current?.frame === frameRef.current) snapshotRef.current.done(snap)
+    // The dashboard's frame and the query popup's are answered alike.
+    return listenToFrame(() => [frameRef.current, popupFrameRef.current], {
+      onSnapshot: (snap, frame) => {
+        if (snapshotRef.current?.frame === frame) snapshotRef.current.done(snap)
       },
       onWidget: (req) => answerWidget(req, post, setError),
       onSetParams: (values) => rerun(active, values),
     })
-  }, [active])
+    // rerun reads only refs beyond its arguments.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, runOn])
 
   return (
     // mt clears the floating header when the page is taller than the window.
@@ -531,14 +566,6 @@ function DashboardView({
         {active?.name && <CopyName name={active.name} testid="dashboard-copy" />}
         <button
           type="button"
-          data-testid="dashboard-new-query"
-          onClick={() => newQuery()}
-          className="glass-btn px-3 py-2 text-sm font-medium"
-        >
-          New query
-        </button>
-        <button
-          type="button"
           data-testid="dashboard-save"
           onClick={() => void save()}
           disabled={!active || saving || active === savedRef.current}
@@ -567,9 +594,9 @@ function DashboardView({
         <button
           type="button"
           data-testid="dashboard-edit-queries"
-          onClick={() => setShowSql((v) => !v)}
+          onClick={() => setShowSql(true)}
           disabled={!active}
-          className={`px-3 py-2 text-sm font-medium ${showSql ? 'glass-btn-primary' : 'glass-btn'}`}
+          className="glass-btn px-3 py-2 text-sm font-medium"
         >
           Edit queries
         </button>
@@ -611,7 +638,10 @@ function DashboardView({
           queries={active.queries}
           onChange={editQuery}
           onExecute={() => void execute()}
+          onClose={() => setShowSql(false)}
           remoteId={remoteId}
+          frameRef={popupFrameRef}
+          loadSeq={loadSeq}
         />
       )}
 

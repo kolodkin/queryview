@@ -18,10 +18,6 @@ agent-authored HTML, which renders inside an isolated iframe.
 - a **dropdown** of saved dashboards — selecting one sets `?name=<name>`, so the
   URL is shareable and the back button works; the button beside it copies the
   open dashboard's name;
-- **New query** — an unsaved draft holding one [`<qv-select-view>`](#widgets)
-  over one query, for ad-hoc SQL; **Save** asks for its name. The
-  [session](./session.md) remembers the draft's SQL, so it survives leaving
-  the page and a reload; picking a dashboard discards it;
 - **Save** — writes the open dashboard to the store; reads **Saved**, disabled,
   while the open dashboard is the store's copy (no draft, agent push or
   SQL-panel edit);
@@ -33,14 +29,15 @@ agent-authored HTML, which renders inside an isolated iframe.
 
 ```
 +-- /dashboard ------------------------------------------+
-| [dashboard v] [New query] [Save] ... [Snapshot]        |
-| +- SQL panel (Edit queries) -------------------------+ |
-| | [ sales v ]                    [Min][S][M][L][XL]  | |
-| | SELECT ...                                         | |
-| | [Execute]                                          | |
-| +----------------------------------------------------+ |
+| [dashboard v] [Save] ... [Edit queries] ... [Snapshot] |
 | +- sandboxed frame (the dashboard HTML) -------------+ |
 | | <qv-param>   chart   <qv-select-view query=sales>  | |
+| |   +- SQL panel (Edit queries popup) ----------+    | |
+| |   | [ sales v ]      [Min][S][M][L][XL][Close]|    | |
+| |   | SELECT ...                                |    | |
+| |   | [Execute]                                 |    | |
+| |   | results table over sales                  |    | |
+| |   +-------------------------------------------+    | |
 | +----------------------------------------------------+ |
 +--------------------------------------------------------+
 ```
@@ -49,13 +46,30 @@ Open it from the corner nav, or by URL: `?name=<name>` jumps straight to one.
 Reopening re-fetches the dashboard and re-runs its queries, so a reloaded or
 shared link always shows live data.
 
+`/dashboard?new` opens a **New query** draft: an unsaved dashboard holding one
+[`<qv-select-view>`](#widgets) over one query, for ad-hoc SQL, with the
+[SQL panel](#the-sql-panel) open. [Scripts](./scripts.md)' **Open in
+Dashboard** and `/studio` land there. **Save** asks for its name. The
+[session](./session.md) remembers the draft's SQL across a reload; picking a
+dashboard discards it.
+
 ## The SQL panel
 
-**Edit queries** opens an editor for the dashboard's queries, outside the
-frame: pick a query, edit its SQL, and **Execute** re-runs the queries you
-edited, and the widgets over them (everything, when nothing was edited). The frame is not reloaded, so the page keeps its state; a failing
-query shows its error above it. Until **Execute**, the page and its widgets
-run the SQL as last executed. **Save** persists the edited dashboard.
+**Edit queries** opens a popup over the page, outside the frame:
+
+- a drop-down of the dashboard's queries (its `queries.yaml`);
+- the picked query's SQL;
+- its rows, in a results table like a [`<qv-select-view>`](#widgets),
+  whatever the dashboard's HTML does with that query.
+
+**Execute** re-runs the queries you edited (everything, when nothing was
+edited): in the popup's table, on the page and in the widgets over them. A
+page of rows the popup and a widget both show runs once. The frame is not
+reloaded, so the page keeps its state; a failing page query shows its error
+above the frame. Until **Execute**, everything runs the SQL as last executed.
+
+**Close**, Escape or a press outside the popup keeps the edits; **Save**
+persists the edited dashboard.
 
 Focus in the panel holds the human [edit lock](./query.md#co-edit--edit-lock):
 an agent push is refused with `blocked, user editing` while you type.
@@ -101,9 +115,12 @@ sales-overview/
 ```
 
 The layout is a dashboard's folder in [workspace git](./gitsync.md). `dir` is
-an absolute path outside QueryView's data directory, and only these three
-names are read. Inline `name` and `params` win over `meta.yaml`; `dir`
-together with `html` or `queries` is refused.
+an absolute path outside QueryView's data directory; only these three
+names are read, and none through a symlink. Inline `name` and `params` win
+over `meta.yaml`; `dir` together with `html` or `queries` is refused.
+
+The symlink check runs just before the read, so it does not hold against a
+process on the server's machine that swaps a file for a link in between.
 
 ## The `window.queries` contract for HTML authors
 

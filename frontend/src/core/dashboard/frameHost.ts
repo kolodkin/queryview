@@ -61,27 +61,30 @@ export async function answerWidget(
 }
 
 export type FrameHandlers = {
-  // The frame's answer to a snapshot request.
-  onSnapshot(result: SnapshotResult): void
+  // A frame's answer to a snapshot request.
+  onSnapshot(result: SnapshotResult, frame: HTMLIFrameElement): void
   // A widget's request; the reply is posted back to it (null: nothing to post).
   onWidget(req: WidgetRequest): Promise<WidgetReply | null>
-  // The page's setParams, values only; resolves to the params-results message.
-  onSetParams(values: Record<string, string>): Promise<Record<string, unknown>>
+  // The page's setParams, values only; resolves to the params-results message,
+  // or null when the run was dropped (its dashboard is gone).
+  onSetParams(values: Record<string, string>): Promise<Record<string, unknown> | null>
 }
 
-// Dispatch the dashboard frame's messages to `handlers`, ignoring every other
-// window: the page sends values and names only, never SQL. Returns the
-// unsubscribe.
+// Dispatch the messages of the frames showing one dashboard (its page, and any
+// other view of its queries) to `handlers`, ignoring every other window: a
+// frame sends values and names only, never SQL. A widget is answered in the
+// frame that asked; a re-run's results go to every frame at once, so their
+// tables re-query together. Returns the unsubscribe.
 export function listenToFrame(
-  frame: () => HTMLIFrameElement | null,
+  frames: () => (HTMLIFrameElement | null)[],
   handlers: FrameHandlers,
 ): () => void {
   async function onMessage(e: MessageEvent) {
-    const target = frame()
-    if (!target || e.source !== target.contentWindow) return
-    const reply = (message: unknown) => target.contentWindow?.postMessage(message, '*')
+    const source = frames().find((f) => f && e.source === f.contentWindow)
+    if (!source) return
+    const reply = (message: unknown) => source.contentWindow?.postMessage(message, '*')
     const snap = parseSnapshotResult(e.data)
-    if (snap) return handlers.onSnapshot(snap)
+    if (snap) return handlers.onSnapshot(snap, source)
     const widget = parseWidgetRequest(e.data)
     if (widget) {
       const answer = await handlers.onWidget(widget)
@@ -91,7 +94,9 @@ export function listenToFrame(
     const rejected = rejectedWidgetReply(e.data)
     if (rejected) return reply(rejected)
     const values = parseParamsRequest(e.data)
-    if (values) reply(await handlers.onSetParams(values))
+    if (!values) return
+    const answer = await handlers.onSetParams(values)
+    if (answer) for (const f of frames()) f?.contentWindow?.postMessage(answer, '*')
   }
   window.addEventListener('message', onMessage)
   return () => window.removeEventListener('message', onMessage)

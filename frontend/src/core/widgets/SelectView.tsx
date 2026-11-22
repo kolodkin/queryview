@@ -241,7 +241,7 @@ export function SelectView({
       {result && (
         <p data-qv-snapshot data-testid="qv-caption" className="hidden text-xs text-slate-400">
           {[
-            `${result.data.length} rows`,
+            `${result.data.length} ${result.data.length === 1 ? 'row' : 'rows'}`,
             `limit ${page.limit}`,
             page.offset ? `offset ${page.offset}` : '',
             page.orderBy.length

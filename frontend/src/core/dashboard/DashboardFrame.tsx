@@ -14,6 +14,7 @@ export function DashboardFrame({
   params = [],
   theme,
   ref,
+  testid = 'dashboard-frame',
   className = 'h-[78vh] w-full rounded-xl border border-white/10 bg-white',
 }: {
   html: string
@@ -23,6 +24,7 @@ export function DashboardFrame({
   theme?: QvTheme
   // The host answers set-params messages only from this frame.
   ref?: Ref<HTMLIFrameElement>
+  testid?: string
   className?: string
 }) {
   // Deliberately keyed on the load, not on params: a re-run posts new params
@@ -35,7 +37,7 @@ export function DashboardFrame({
     <iframe
       ref={ref}
       title="dashboard"
-      data-testid="dashboard-frame"
+      data-testid={testid}
       // No allow-same-origin: the page gets no session and no /api. Popups
       // escape the sandbox so a clicked link in a cell opens a normal tab.
       sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"

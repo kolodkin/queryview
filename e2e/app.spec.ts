@@ -11,6 +11,7 @@ import {
   chDb,
   chExec,
   connCard,
+  closeQueries,
   connect,
   executeSql,
   expect,
@@ -138,11 +139,14 @@ for (const c of PICKER) {
 
     // An edit since the run is not what produced the results: the re-run is of
     // the SQL as last executed, and the edit stays in the editor.
+    await page.getByTestId("dashboard-edit-queries").click();
     await page.getByTestId("dash-sql").fill("SELECT 'edited'");
+    await closeQueries(page);
     await switchDatabaseFromPill(page, other);
     await expect(output).toContainText(other);
     await expect(output).not.toContainText(chDb());
     await expect(output).not.toContainText("edited");
+    await page.getByTestId("dashboard-edit-queries").click();
     await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT 'edited'");
   });
 

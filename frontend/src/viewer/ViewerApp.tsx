@@ -146,7 +146,7 @@ function ViewerApp() {
     const on = { connection, dashboard: shown.dashboard.name }
     const widgets = new Set(widgetQueryNames(shown.dashboard.html))
     const own = shown.dashboard.queries.filter((q) => !widgets.has(q))
-    return listenToFrame(() => frameRef.current, {
+    return listenToFrame(() => [frameRef.current], {
       onSnapshot: (snap) => snapshotRef.current?.(snap),
       onWidget: (req) =>
         answerWidget(
