@@ -1,4 +1,4 @@
-"""The viewer server's config file (docs/server.md): git remote, sync
+"""The viewer server's config file (docs/viewer_server): git remote, sync
 interval and the connections, validated at startup."""
 
 from __future__ import annotations

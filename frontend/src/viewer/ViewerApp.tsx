@@ -1,4 +1,4 @@
-// The viewer server's page (docs/server.md): pick a connection and a
+// The viewer server's page (docs/viewer_server): pick a connection and a
 // dashboard, and see it as the app's dashboard page shows it. Display only:
 // it sends names and parameter values, never SQL.
 

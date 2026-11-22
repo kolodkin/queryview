@@ -107,27 +107,6 @@ the UI.
 `git_restore` mirror the same surface, resolving the workspace from an
 optional `session_id` (see [workspace.md](./workspace.md)).
 
-## Viewer server
-
-The [viewer server](./server.md) (`queryview-server`) is a separate app with
-its own, smaller API. No session header; none of the routes above exist on it.
-A body names a `connection` and a `dashboard`, never SQL. Errors are
-`{ok:false, message}`: `404` for an unknown connection, dashboard or query
-name, `400` for a bad body, a bad value or a failing query.
-
-| Method | Path                     | Body                                             | Description |
-| ------ | ------------------------ | ------------------------------------------------ | ----------- |
-| GET    | `/api/health`            | —                                                | `{status, service}`. |
-| GET    | `/api/connections`       | —                                                | `[{name, type}]`, in config order; never a config. |
-| GET    | `/api/dashboards`        | —                                                | `[{name}]`, the dashboards at the repo's head. |
-| GET    | `/api/dashboards/{name}` | —                                                | `{name, html, queries:[name]}`: query names only, no SQL. |
-| POST   | `/api/run`               | `{connection, dashboard, queries?:[name], values?}` | Resolve the selectors from `values` and run the named queries (all when omitted), as `/api/runqueries` does with `params`: `{ok, results, params}`. |
-| POST   | `/api/query`             | `{connection, dashboard, query, values?, limit?, offset?, order_by?, format?}` | One page of a dashboard query, as `/api/db/query`: `{ok, meta, data}`, or `{ok, output}` for `format:"csv"`. A query waiting on a choice → `400`. |
-| POST   | `/api/describe`          | `{connection, dashboard, query, values?}`        | The query's output columns: `{ok, fields}`. |
-
-Every POST resolves the selectors first, so a value outside a param's options
-falls back to its default and never reaches the SQL.
-
 ## Related docs
 
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
@@ -138,4 +117,4 @@ falls back to its default and never reaches the SQL.
 - [gitsync.md](./gitsync.md) — backing up and restoring dashboards via git.
 - [export-import.md](./export-import.md) — YAML export/import of dashboards and workspaces.
 - [workspace.md](./workspace.md) — workspaces: entity ownership and per-workspace remotes.
-- [server.md](./server.md) — the display-only viewer server.
+- [viewer_server/api.md](./viewer_server/api.md) — the viewer server's own API.
