@@ -35,7 +35,7 @@ async def serve_static(full_path: str, versioned: bool = False, index: str | Non
     """A built file, or `index` for a client-side route (None: the page has no
     routes, so only files are served). A missing path with a file extension is
     a missing file, not a route: 404, so a broken build fails loudly instead of
-    handing a script the app's HTML."""
+    handing a script the app's HTML. So is any route when nothing was built."""
     root = static_root()
     candidate = (root / full_path).resolve()
     try:
@@ -45,7 +45,9 @@ async def serve_static(full_path: str, versioned: bool = False, index: str | Non
     if candidate.is_file():
         cached = versioned or full_path.startswith("assets/")
         return FileResponse(candidate, headers=_FOREVER if cached else None)
-    if candidate.suffix or index is None:
+    # No page to fall back to: the path names a file, the caller has no routes,
+    # or nothing was built.
+    if candidate.suffix or index is None or not (root / index).is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
     return FileResponse(root / index)
 

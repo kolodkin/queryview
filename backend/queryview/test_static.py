@@ -57,3 +57,13 @@ def test_a_page_without_client_routes_serves_files_only(static_root):
     assert str(serve("viewer.html").path) == str(static_root / "viewer.html")
     assert serve("dashboard").status_code == 404  # no route falls back to a page
     assert serve("").status_code == 404
+
+
+def test_a_route_with_no_build_on_disk_is_a_404(tmp_path, monkeypatch):
+    monkeypatch.setenv("STATIC_ROOT", str(tmp_path))  # empty: nothing was built
+    serving.static_root.cache_clear()
+    try:
+        assert asyncio.run(serving.serve_static("dashboard")).status_code == 404
+        assert asyncio.run(serving.serve_static("")).status_code == 404
+    finally:
+        serving.static_root.cache_clear()
