@@ -119,6 +119,9 @@ an absolute path outside QueryView's data directory; only these three
 names are read, and none through a symlink. Inline `name` and `params` win
 over `meta.yaml`; `dir` together with `html` or `queries` is refused.
 
+The symlink check runs just before the read, so it does not hold against a
+process on the server's machine that swaps a file for a link in between.
+
 ## The `window.queries` contract for HTML authors
 
 Before the dashboard HTML runs, the page injects the results as a `window.queries`
