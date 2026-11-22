@@ -1,19 +1,21 @@
-// The app's side of the dashboard widget channel: run the query a
-// <qv-select-view> named, on the session's connection. The frame sent a name
-// and values only; the SQL is the dashboard's own, resolved by the caller.
+// The app's side of the dashboard widget channel: the request a
+// <qv-select-view> makes for the query it named, on the session's connection
+// (answered through core's answerWidget), and the page that shows one query.
 
-import { escapeHtml, failureReply, type WidgetReply, type WidgetRequest } from '../core'
+import { escapeHtml } from '../core'
 import { postJson } from './api'
-import { downloadText } from './yamlio'
-
-// The SQL to run for a query name, or why it can't run.
-export type WidgetSql = { sql: string } | { message: string }
 
 // Requests on their way, by connection, path and body: two tables asking for
 // the same page at once (a dashboard widget and the query popup's) share one run.
 const inFlight = new Map<string, Promise<Record<string, unknown>>>()
 
-function post(runOn: string, path: string, body: unknown): Promise<Record<string, unknown>> {
+// POST `body` to `path`, sharing a run already on its way. `runOn` is the
+// session's connection and database: a run is never shared across a switch.
+export function sharedPost(
+  runOn: string,
+  path: string,
+  body: unknown,
+): Promise<Record<string, unknown>> {
   const key = JSON.stringify([runOn, path, body])
   let pending = inFlight.get(key)
   if (!pending) {
@@ -24,50 +26,6 @@ function post(runOn: string, path: string, body: unknown): Promise<Record<string
     inFlight.set(key, pending)
   }
   return pending
-}
-
-// Answer one widget request; null when there is nothing to post back (CSV).
-export async function answerWidget(
-  req: WidgetRequest,
-  sqlFor: (query: string) => WidgetSql,
-  // A CSV request has no reply to carry its failure; the host shows it.
-  onCsvError: (message: string) => void,
-  // The session's connection and database: a run is never shared across a switch.
-  runOn: string,
-): Promise<WidgetReply | null> {
-  const resolved = sqlFor(req.query)
-  const failed = (message: string): WidgetReply | null => {
-    if (req.type === 'widget-csv') {
-      onCsvError(message)
-      return null
-    }
-    return failureReply(req.type, req.id, message)
-  }
-  if ('message' in resolved) return failed(resolved.message)
-  const query = resolved.sql
-
-  if (req.type === 'widget-describe') {
-    const d = await post(runOn, '/api/db/describe', { query })
-    if (!d.ok) return failed(String(d.message ?? 'describe failed'))
-    return { type: 'widget-fields', id: req.id, ok: true, fields: (d.fields ?? []) as never }
-  }
-
-  const page = { query, limit: req.limit, offset: req.offset, order_by: req.orderBy }
-  if (req.type === 'widget-csv') {
-    const d = await post(runOn, '/api/db/query', { ...page, format: 'csv' })
-    if (!d.ok) return failed(String(d.message ?? 'download failed'))
-    downloadText('query.csv', String(d.output ?? ''), 'text/csv')
-    return null
-  }
-  const d = await post(runOn, '/api/db/query', page)
-  if (!d.ok) return failed(String(d.message ?? 'query failed'))
-  return {
-    type: 'widget-result',
-    id: req.id,
-    ok: true,
-    meta: (d.meta ?? []) as never,
-    data: (d.data ?? []) as never,
-  }
 }
 
 // A page of one results table over one query. The frame paints its own

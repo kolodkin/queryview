@@ -82,6 +82,7 @@ and let [git sync](docs/gitsync.md) do it.
 - [mcp.md](docs/mcp.md) — connecting an agent, its tools, and who names and saves.
 - [api.md](docs/api.md) — the full HTTP endpoint reference.
 - [docker.md](docs/docker.md) — running the container image and persisting its state.
+- [viewer_server/](docs/viewer_server/README.md) — the display-only viewer server: its own docs folder.
 - [creds.md](docs/creds.md) — how connection credentials are stored and protected.
 
 ## Contributing

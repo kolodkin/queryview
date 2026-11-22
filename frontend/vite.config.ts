@@ -36,6 +36,8 @@ function widgetsUrl(): string {
 export default defineConfig(({ command }) => ({
   define: { __WIDGETS_URL__: JSON.stringify(command === 'build' ? widgetsUrl() : '/widgets.js') },
   plugins: [react(), tailwindcss(), widgetsBundle],
+  // Two pages: the app, and the viewer server's page (src/viewer).
+  build: { rollupOptions: { input: { main: 'index.html', viewer: 'viewer.html' } } },
   server: {
     port: 5173,
     proxy: {

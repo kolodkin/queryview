@@ -31,19 +31,18 @@ export { SearchPanel } from './presentation/SearchPanel'
 export { filterNames } from './nameFilter'
 export { useDismiss } from './useDismiss'
 export { useCopy } from './useCopy'
+export { downloadText } from './download'
 export { DashboardFrame } from './dashboard/DashboardFrame'
+export {
+  answerWidget,
+  listenToFrame,
+  widgetPage,
+  type FrameHandlers,
+  type WidgetPost,
+} from './dashboard/frameHost'
 export { parseSnapshotResult, snapshotDocument, type SnapshotResult } from './dashboard/snapshot'
 export { buildSrcDoc, type DashboardResults, type QvTheme, type QvToken } from './dashboard/srcDoc'
-export {
-  applyToQueries,
-  parseDashboardParams,
-  parseParamsRequest,
-  resolveParams,
-  type DashboardParam,
-  type Dialect,
-  type QueryRunner,
-  type ResolvedParam,
-} from './dashboard/params'
+export { parseParamsRequest, valuesOf, withKeptText, type ResolvedParam } from './dashboard/params'
 export {
   parseFieldsAttr,
   parseOrderByAttr,

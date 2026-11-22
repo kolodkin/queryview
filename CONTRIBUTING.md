@@ -52,7 +52,7 @@ npm run dev
 Or individually:
 
 ```bash
-npm run backend    # uvicorn --reload on http://localhost:8000
+npm run backend    # the API alone, reloading: `queryview --api-only --reload --host 127.0.0.1` on http://localhost:8000
 npm run frontend   # http://localhost:5173
 ```
 
@@ -71,7 +71,7 @@ scope against that port.
 
 ```bash
 npm run build      # produces frontend/dist/
-npm run start      # SERVE_STATIC=1, FastAPI serves dist/ + /api on :8000
+npm run start      # `queryview`: FastAPI serves dist/ + /api on :8000
 npm run preview    # build && start in one shot
 ```
 

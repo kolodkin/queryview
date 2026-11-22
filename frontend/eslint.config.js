@@ -45,6 +45,19 @@ export default defineConfig([
     },
   },
   {
+    // src/viewer is the viewer server's page: the kernel and packages only,
+    // never the app (its sessions, workspaces and editing).
+    files: ['src/viewer/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [{ group: ['**/app/*', '**/app'], message: 'viewer must not import the app.' }],
+        },
+      ],
+    },
+  },
+  {
     // One level shallower: a file directly in src/core leaves it with '../'.
     files: ['src/core/*.{ts,tsx}'],
     rules: {

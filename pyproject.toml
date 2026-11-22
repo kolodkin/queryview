@@ -31,8 +31,8 @@ Repository = "https://github.com/kolodkin/queryview"
 Issues = "https://github.com/kolodkin/queryview/issues"
 
 [project.scripts]
-queryview = "queryview.main:run"
-queryview-backend = "queryview.main:run"
+queryview = "queryview.__main__:run"
+queryview-server = "queryview.server.main:run"
 
 [dependency-groups]
 test = [

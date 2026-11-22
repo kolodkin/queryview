@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from queryview.main import app
+from queryview.conftest import app
 
 
 def test_list_includes_default():

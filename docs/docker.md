@@ -57,3 +57,4 @@ docker run -d --name queryview \
 
 - [gitsync.md](./gitsync.md) — workspace git sync, remote URLs and credentials.
 - [connect.md](./connect.md) — connections and drivers.
+- [viewer_server/docker.md](./viewer_server/docker.md) — running the viewer server from this image.

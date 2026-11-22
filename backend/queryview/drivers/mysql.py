@@ -180,7 +180,7 @@ async def _fetch_wrapped(
     try:
         description, rows, _ = await _fetch(
             conn,
-            wrap_paginated(sql, build_order_by(order_by, "`"), limit, offset, alias="_qv"),
+            wrap_paginated(sql, build_order_by(order_by, "`", backslash_escapes=True), limit, offset, alias="_qv"),
             None,
             query_timeout.get(),
         )

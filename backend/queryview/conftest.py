@@ -14,6 +14,11 @@ import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from queryview.app import create_app
+
+# The one app the API tests share, as one process serves one.
+app = create_app()
+
 
 @pytest.fixture
 def clone_base(tmp_path, monkeypatch) -> Path:

@@ -702,8 +702,6 @@ function Shell() {
                 pushed={dashboardPush}
                 onPushConsumed={() => setDashboardPush(null)}
                 runOn={connectionKey(connection)}
-                identQuote={connection?.identQuote}
-                backslashEscapes={connection?.backslashEscapes}
                 remoteId={remoteId}
               />
             }

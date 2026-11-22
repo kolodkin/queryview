@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from queryview.main import app
+from queryview.conftest import app
 
 # Streamable HTTP uses POST (messages), GET (the SSE stream) and DELETE
 # (session termination) — all three must reach the mount.

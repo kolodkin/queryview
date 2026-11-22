@@ -353,7 +353,7 @@ jobs:
       - name: Start git daemon
         uses: ./.github/actions/start-git-daemon
 
-      # The suite starts a backend per worker from .venv's `queryview-backend`
+      # The suite starts a backend per worker from .venv's `queryview`
       # — the installed wheel's, since the project itself is not installed
       # here (see e2e/fixtures.ts).
       - name: Run Playwright e2e tests

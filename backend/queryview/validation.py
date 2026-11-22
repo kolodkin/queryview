@@ -36,6 +36,7 @@ def dashboard_params_error(raw: object) -> str | None:
         return None
     if not isinstance(raw, list):
         return "invalid params: must be a list of selector specs"
+    names: set[str] = set()
     for i, entry in enumerate(raw):
         label = f"params[{i}]"
         if not isinstance(entry, dict):
@@ -46,6 +47,9 @@ def dashboard_params_error(raw: object) -> str | None:
         name = entry.get("name")
         if not isinstance(name, str) or not name:
             return f"invalid {label} name must be a non-empty string"
+        if name in names:
+            return f"invalid {label} name {name!r} is declared twice"
+        names.add(name)
         if kind == "text":
             # Free input: an optional opening text, no list to pick from.
             if entry.get("options") is not None or entry.get("options_sql") is not None:
