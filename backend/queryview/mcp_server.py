@@ -1,4 +1,4 @@
-"""The MCP layer: an MCPServer (mounted by main.py at /mcp) whose tools push
+"""The MCP layer: an MCPServer (mounted by app.py at /mcp) whose tools push
 scripts/dashboards to a live QueryView browser session, delegating to the
 in-process remote.py hub."""
 

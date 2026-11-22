@@ -1,6 +1,7 @@
-"""FastAPI app: the JSON API under /api/*, the X-QV-Session header that names
-the caller's session, and (when SERVE_STATIC=1) serving the built SPA with an
-index.html fallback."""
+"""The app: the JSON API under /api/*, the X-QV-Session header that names the
+caller's session, and optionally the built frontend with an index.html
+fallback. Nothing is built at import: create_app() assembles an app from the
+routes here, and the entry point (__main__.py) names the factory it wants."""
 
 from __future__ import annotations
 
@@ -8,7 +9,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import (
     JSONResponse,
     PlainTextResponse,
@@ -44,12 +45,8 @@ from .dashboard_queries import clean_values, run_dashboard, run_dashboard_querie
 from .dashboards import get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
-from .serving import PACKAGED_STATIC, resolve_port, serve_static
+from .serving import serve_static
 from .validation import dashboard_params_error
-
-# Opt-in in a source checkout; defaults on for an installed wheel (which ships
-# its SPA bundle) so `pip install queryview` serves the UI out of the box.
-SERVE_STATIC = os.environ.get("SERVE_STATIC", "1" if PACKAGED_STATIC.is_dir() else "") == "1"
 
 
 async def _read_json(request: Request) -> Any:
@@ -96,25 +93,24 @@ async def lifespan(app: FastAPI):
     # Schema to head before serving any request (single-process, no lock needed).
     await _ensure_schema()
     # A mounted sub-app's lifespan isn't run by the parent, so run the MCP session
-    # manager here. streamable_http_app() (at mount, below) initializes
+    # manager here. streamable_http_app() (at mount, in create_app) initializes
     # mcp.session_manager before this runs.
     async with mcp.session_manager.run():
         yield
 
 
-app = FastAPI(title="queryview-backend", lifespan=lifespan)
-app.mount("/mcp", mcp.streamable_http_app(streamable_http_path="/", stateless_http=True))
+# Every route, registered once at import; create_app() puts them on an app.
+router = APIRouter()
 
 
-# The GET-only catch-all below suppresses Starlette's own /mcp -> /mcp/ redirect
-# (see test_mcp_mount.py), so issue it explicitly. 307 preserves method and
+# The frontend's GET-only catch-all suppresses Starlette's own /mcp -> /mcp/
+# redirect (see test_mcp_mount.py), so issue it explicitly. 307 preserves method and
 # body; Streamable HTTP uses POST, GET and DELETE.
-@app.api_route("/mcp", methods=["GET", "POST", "DELETE"], include_in_schema=False)
+@router.api_route("/mcp", methods=["GET", "POST", "DELETE"], include_in_schema=False)
 async def mcp_slash_redirect() -> RedirectResponse:
     return RedirectResponse("/mcp/", status_code=307)
 
 
-@app.middleware("http")
 async def session_header(request: Request, call_next):
     """Identify the session from the header the SPA sends on every /api call.
     There is no cookie: a session is named by its id, not by the browser."""
@@ -124,13 +120,13 @@ async def session_header(request: Request, call_next):
     return await call_next(request)
 
 
-@app.get("/api/health")
+@router.get("/api/health")
 async def health() -> dict[str, Any]:
     # `scratch`: the e2e suite refuses a backend on the default data dir.
     return {"status": "ok", "service": "queryview-backend", "scratch": bool(os.environ.get("DATA_DIR"))}
 
 
-@app.get("/api/session")
+@router.get("/api/session")
 async def session(request: Request) -> dict[str, Any]:
     return await get_session(request.state.sid)
 
@@ -173,7 +169,7 @@ def _session_payload(rec: sessions.SessionRec) -> dict[str, Any]:
 
 # Resolve and claim this tab's session (see sessions.attach); doubles as the
 # claim heartbeat.
-@app.post("/api/sessions/attach")
+@router.post("/api/sessions/attach")
 async def sessions_attach(request: Request):
     b = await _read_json(request) or {}
     tab = _clean_str(b.get("tab"))
@@ -188,7 +184,7 @@ async def sessions_attach(request: Request):
 
 
 # Switch this tab to a specific session, or (id omitted/null) to a new one.
-@app.post("/api/sessions/select")
+@router.post("/api/sessions/select")
 async def sessions_select(request: Request):
     b = await _read_json(request) or {}
     tab = _clean_str(b.get("tab"))
@@ -201,12 +197,12 @@ async def sessions_select(request: Request):
     return {"ok": True, "session": _session_payload(rec)}
 
 
-@app.get("/api/sessions")
+@router.get("/api/sessions")
 async def sessions_list() -> dict[str, Any]:
     return {"sessions": await sessions.list_sessions()}
 
 
-@app.patch("/api/sessions/{sid}")
+@router.patch("/api/sessions/{sid}")
 async def sessions_patch(sid: str, request: Request):
     b = await _read_json(request) or {}
     ui = b.get("ui")
@@ -226,7 +222,7 @@ async def sessions_patch(sid: str, request: Request):
     return {"ok": True, "session": _session_payload(rec)}
 
 
-@app.delete("/api/sessions/{sid}")
+@router.delete("/api/sessions/{sid}")
 async def sessions_delete(sid: str):
     ok, reason = await sessions.delete_session(sid)
     if not ok:
@@ -237,7 +233,7 @@ async def sessions_delete(sid: str):
 # The pagehide beacon: apply whatever the tab had not flushed yet, then free its
 # claim rather than waiting out the TTL. A reload fires pagehide, so this is what
 # keeps a change made inside the client's debounce window.
-@app.post("/api/sessions/release")
+@router.post("/api/sessions/release")
 async def sessions_release(request: Request):
     b = await _read_json(request) or {}
     tab = _clean_str(b.get("tab"))
@@ -258,13 +254,13 @@ async def sessions_release(request: Request):
 
 
 # Drop this session's active connection (disconnect command).
-@app.post("/api/db/disconnect")
+@router.post("/api/db/disconnect")
 async def db_disconnect(request: Request) -> dict[str, Any]:
     return await disconnect(request.state.sid)
 
 
 # This session's connections and the saved ones, for the Connect page's cards.
-@app.get("/api/db/connections")
+@router.get("/api/db/connections")
 async def db_connections(request: Request) -> dict[str, Any]:
     return {"connections": await list_connections_for(request.state.sid)}
 
@@ -279,7 +275,7 @@ def _driver_and_config(body: Any):
 
 
 # Test only: a throwaway connectivity check, no save, no activation.
-@app.post("/api/db/test")
+@router.post("/api/db/test")
 async def db_test(request: Request):
     resolved = _driver_and_config(await _read_json(request))
     if isinstance(resolved, JSONResponse):
@@ -290,7 +286,7 @@ async def db_test(request: Request):
 
 
 # Create + open a connection for this session.
-@app.post("/api/db/connect")
+@router.post("/api/db/connect")
 async def db_connect(request: Request):
     body = await _read_json(request)
     resolved = _driver_and_config(body)
@@ -305,7 +301,7 @@ async def db_connect(request: Request):
 
 
 # Open a saved connection by name for this session (a Connect page card).
-@app.post("/api/db/open")
+@router.post("/api/db/open")
 async def db_open(request: Request):
     b = await _read_json(request) or {}
     raw_name = b.get("name") if isinstance(b, dict) else None
@@ -327,7 +323,7 @@ def _lock_body(body: Any) -> tuple[str, str]:
 
 
 # Lock a saved connection behind a passphrase; this tab gets its unlock token.
-@app.post("/api/db/lock")
+@router.post("/api/db/lock")
 async def db_lock(request: Request):
     name, passphrase = _lock_body(await _read_json(request))
     r = await lock_connection(request.state.sid, name, passphrase)
@@ -335,7 +331,7 @@ async def db_lock(request: Request):
 
 
 # Remove a lock, given its passphrase.
-@app.delete("/api/db/lock")
+@router.delete("/api/db/lock")
 async def db_lock_remove(request: Request):
     name, passphrase = _lock_body(await _read_json(request))
     r = await remove_lock(name, passphrase)
@@ -343,7 +339,7 @@ async def db_lock_remove(request: Request):
 
 
 # Exchange a locked connection's passphrase for this tab's unlock token.
-@app.post("/api/db/unlock")
+@router.post("/api/db/unlock")
 async def db_unlock(request: Request):
     name, passphrase = _lock_body(await _read_json(request))
     r = await unlock_connection(request.state.sid, name, passphrase)
@@ -351,14 +347,14 @@ async def db_unlock(request: Request):
 
 
 # A saved connection's config for the edit form, password blanked.
-@app.get("/api/db/connections/{name:path}")
+@router.get("/api/db/connections/{name:path}")
 async def db_connection(name: str, request: Request):
     r = await saved_config(request.state.sid, name)
     return r if r["ok"] else _gate_error(r, (), default=404 if r.get("not_found") else 400)
 
 
 # Delete a connection; a locked one takes its passphrase.
-@app.delete("/api/db/connections")
+@router.delete("/api/db/connections")
 async def db_connection_delete(request: Request):
     name, passphrase = _lock_body(await _read_json(request))
     r = await delete_connection(request.state.sid, name, passphrase)
@@ -366,14 +362,14 @@ async def db_connection_delete(request: Request):
 
 
 # Re-list this session's connection's databases, refreshing the cached list.
-@app.get("/api/db/databases")
+@router.get("/api/db/databases")
 async def db_databases(request: Request):
     r = await refresh_databases(request.state.sid)
     return r if r["ok"] else _gate_error(r, ("no-session",))
 
 
 # Select this session's active connection's database.
-@app.post("/api/db/database")
+@router.post("/api/db/database")
 async def db_database(request: Request):
     b = await _read_json(request) or {}
     raw_db = b.get("database") if isinstance(b, dict) else None
@@ -409,7 +405,7 @@ async def _with_params(
 
 
 # Run a SQL query (paginated) against this session's selected database.
-@app.post("/api/db/query")
+@router.post("/api/db/query")
 async def db_query(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
@@ -438,7 +434,7 @@ async def db_query(request: Request):
 
 
 # Run a script as written, one result per statement (the Scripts page).
-@app.post("/api/db/execute")
+@router.post("/api/db/execute")
 async def db_execute(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
@@ -452,7 +448,7 @@ async def db_execute(request: Request):
 
 
 # Tables of this session's selected database (the Explorer page's sidebar).
-@app.get("/api/db/tables")
+@router.get("/api/db/tables")
 async def db_tables(request: Request):
     r = await list_tables(request.state.sid, union=request.query_params.get("union") == "1")
     if not r["ok"]:
@@ -461,7 +457,7 @@ async def db_tables(request: Request):
 
 
 # Describe a query's output columns (name + type) without scanning data.
-@app.post("/api/db/describe")
+@router.post("/api/db/describe")
 async def db_describe(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
@@ -525,7 +521,7 @@ async def _event_stream(remote_id: str, request: Request):
 
 # Open an SSE channel for this browser; the browser does this when the user
 # arms "remote control". Closing the EventSource unregisters the channel.
-@app.get("/api/remote/events")
+@router.get("/api/remote/events")
 async def remote_events(request: Request):
     # EventSource cannot send headers, so the browser passes its session id in
     # the query string; other callers still identify by header.
@@ -537,7 +533,7 @@ async def remote_events(request: Request):
     )
 
 
-@app.post("/api/remote/lock")
+@router.post("/api/remote/lock")
 async def remote_lock(request: Request):
     """Browser-only edit-lock control for a live session. action=acquire is sent
     on panel focus (and as a ~10s heartbeat); action=release on blur. Owner is
@@ -564,7 +560,7 @@ async def remote_lock(request: Request):
 
 # Run a dashboard's named queries on this session's connection and selected
 # database. Fail-fast: any failure returns an HTTP error and no partial results.
-@app.post("/api/runqueries")
+@router.post("/api/runqueries")
 async def run_queries(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
@@ -590,7 +586,7 @@ async def run_queries(request: Request):
 
 # The user's Save: upsert a dashboard (in a synced workspace also one commit,
 # docs/gitsync.md) and, with a session_id, push it to a live browser session.
-@app.post("/api/dashboards")
+@router.post("/api/dashboards")
 async def dashboards_upsert(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
@@ -615,7 +611,7 @@ async def dashboards_upsert(request: Request):
     return {"ok": True, "persisted": True, "pushed": pushed, "committed": committed, "message": message}
 
 
-@app.get("/api/dashboards")
+@router.get("/api/dashboards")
 async def dashboards_list(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
@@ -623,7 +619,7 @@ async def dashboards_list(request: Request):
     return {"dashboards": await list_dashboards(ws.id)}
 
 
-@app.get("/api/dashboards/{name:path}")
+@router.get("/api/dashboards/{name:path}")
 async def dashboards_get(name: str, request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
@@ -636,7 +632,7 @@ async def dashboards_get(name: str, request: Request):
 
 # Rename / Delete: a user action, one commit in a synced workspace (docs/gitsync.md).
 # `:path`: a name may contain "/", which arrives decoded.
-@app.post("/api/dashboards/{name:path}/rename")
+@router.post("/api/dashboards/{name:path}/rename")
 async def dashboards_rename(name: str, request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
@@ -649,7 +645,7 @@ async def dashboards_rename(name: str, request: Request):
     return await _gitsync_json(gitsync.rename(ws, name, new_name))
 
 
-@app.delete("/api/dashboards/{name:path}")
+@router.delete("/api/dashboards/{name:path}")
 async def dashboards_delete(name: str, request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
@@ -680,7 +676,7 @@ async def _gitsync_json(coro):
     return {"ok": True, **r}
 
 
-@app.get("/api/git/status")
+@router.get("/api/git/status")
 async def git_status(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
@@ -689,7 +685,7 @@ async def git_status(request: Request):
 
 
 # The workspace panel's Sync: merge in what was committed elsewhere.
-@app.post("/api/git/sync")
+@router.post("/api/git/sync")
 async def git_sync(request: Request):
     b = await _read_json(request)
     b = b if isinstance(b, dict) else {}
@@ -708,7 +704,7 @@ async def _sync_attached(name: str) -> dict[str, Any]:
         return {"sync_error": str(e)}
 
 
-@app.get("/api/git/history")
+@router.get("/api/git/history")
 async def git_history(request: Request):
     q = request.query_params
     args = _gitsync_args(q.get("kind"), q.get("name"))
@@ -725,7 +721,7 @@ async def git_history(request: Request):
     return await _gitsync_json(gitsync.history(ws, kind, name, q.get("before") or None, limit))
 
 
-@app.post("/api/git/restore")
+@router.post("/api/git/restore")
 async def git_restore(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
@@ -745,7 +741,7 @@ async def git_restore(request: Request):
 # Download one entity — or the whole workspace — as a self-describing YAML
 # document (its `kind` field drives import, never the filename). Validation,
 # dispatch and the download filename live in yamlio.export.
-@app.get("/api/export")
+@router.get("/api/export")
 async def export_yaml(request: Request):
     q = request.query_params
     ws = await _resolve_workspace(q.get("workspace"))
@@ -764,7 +760,7 @@ async def export_yaml(request: Request):
 
 # Import a YAML document (raw request body) into a workspace, upserting by
 # name. The document's `kind` decides what gets written.
-@app.post("/api/import")
+@router.post("/api/import")
 async def import_yaml(request: Request):
     ws = await _resolve_workspace(request.query_params.get("workspace"))
     if isinstance(ws, JSONResponse):
@@ -784,12 +780,12 @@ async def import_yaml(request: Request):
 # over REST/UI only, deliberately not over MCP.
 
 
-@app.get("/api/workspaces")
+@router.get("/api/workspaces")
 async def workspaces_list():
     return {"workspaces": await workspaces.list_workspaces()}
 
 
-@app.post("/api/workspaces")
+@router.post("/api/workspaces")
 async def workspaces_create(request: Request):
     b = await _read_json(request)
     b = b if isinstance(b, dict) else {}
@@ -805,7 +801,7 @@ async def workspaces_create(request: Request):
     return {"ok": True, **(await _sync_attached(name) if remote_url else {})}
 
 
-@app.patch("/api/workspaces/{name}")
+@router.patch("/api/workspaces/{name}")
 async def workspaces_update(name: str, request: Request):
     b = await _read_json(request)
     b = b if isinstance(b, dict) else {}
@@ -833,7 +829,7 @@ async def workspaces_update(name: str, request: Request):
     return {"ok": True}
 
 
-@app.delete("/api/workspaces/{name}")
+@router.delete("/api/workspaces/{name}")
 async def workspaces_delete(name: str):
     try:
         ws = await workspaces.resolve(name)
@@ -845,26 +841,31 @@ async def workspaces_delete(name: str):
     return {"ok": True, "workspace": moved_to}
 
 
-@app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@router.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def api_not_found(rest: str):
     return JSONResponse({"error": "not found"}, status_code=404)
 
 
-if SERVE_STATIC:
-
-    @app.get("/{full_path:path}")
-    async def spa(full_path: str, v: str | None = None):
-        return await serve_static(full_path, v is not None)
-
-else:
-
-    @app.get("/{full_path:path}")
-    async def not_found(full_path: str):
-        return JSONResponse({"error": "not found"}, status_code=404)
+async def spa(full_path: str, v: str | None = None):
+    """The built frontend: a file, or the app's page for a client-side route."""
+    return await serve_static(full_path, v is not None)
 
 
-def run() -> None:
-    """Console-script entry point: launch uvicorn on the resolved port."""
-    import uvicorn
+def create_app(frontend: bool = True) -> FastAPI:
+    """The app: the API, the MCP endpoint and, with `frontend`, the built
+    frontend on every other path. Without it (the API beside a dev server) a
+    non-API path is a plain 404."""
+    app = FastAPI(title="queryview-backend", lifespan=lifespan)
+    app.mount("/mcp", mcp.streamable_http_app(streamable_http_path="/", stateless_http=True))
+    app.middleware("http")(session_header)
+    app.include_router(router)
+    if frontend:
+        # Last: it matches every path the routes above did not.
+        app.add_api_route("/{full_path:path}", spa, methods=["GET"])
+    return app
 
-    uvicorn.run(app, host="0.0.0.0", port=resolve_port())
+
+def create_api_app() -> FastAPI:
+    """create_app without the frontend, as a name uvicorn can import: a
+    reloading server re-imports its app by name, and a name carries no argument."""
+    return create_app(frontend=False)

@@ -5,7 +5,7 @@ import uuid
 from fastapi.testclient import TestClient
 
 from queryview import remote, sessions
-from queryview.main import app
+from queryview.conftest import app
 
 # Any typed payload: the hub delivers it as is.
 _PUSH = {"type": "script", "sql": "SELECT 1", "run": False}

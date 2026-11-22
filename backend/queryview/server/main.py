@@ -1,7 +1,7 @@
 """The viewer server: a display-only deployment that shows a git repo's
 dashboards on the connections of a config file. See docs/viewer_server.
 
-A separate app from queryview.main, so what a viewer must not reach — saving,
+A separate app from queryview.app, so what a viewer must not reach — saving,
 connecting, running SQL of their own, MCP — is not switched off but absent.
 The browser sends names and parameter values; the SQL stays here."""
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from queryview.main import app
+from queryview.conftest import app
 
 
 def test_attach_creates_a_session_and_returns_it():

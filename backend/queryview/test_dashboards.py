@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from queryview import remote, sessions
+from queryview.conftest import app
 from queryview.connect import _data_dir, _save_active_connection
 from queryview.dashboards import (
     delete_dashboard,
@@ -21,7 +22,6 @@ from queryview.dashboards import (
 )
 from queryview.drivers.clickhouse import ChConfig
 from queryview.gitsync import save_and_push
-from queryview.main import app
 from queryview.mcp_server import push_dashboard
 from queryview.workspaces import DEFAULT_WORKSPACE, resolve
 

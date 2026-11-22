@@ -7,7 +7,7 @@ import asyncio
 
 from fastapi.testclient import TestClient
 
-from queryview.main import app
+from queryview.conftest import app
 
 # The git_env fixture (bare repo + redirected clone base) lives in conftest.py.
 

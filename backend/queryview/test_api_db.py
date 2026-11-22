@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from queryview import connect, sessions
-from queryview.main import app
+from queryview.conftest import app
 
 
 def _row(sid: str) -> sessions.SessionRec:
