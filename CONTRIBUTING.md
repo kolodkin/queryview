@@ -71,7 +71,7 @@ scope against that port.
 
 ```bash
 npm run build      # produces frontend/dist/
-npm run start      # SERVE_STATIC=1, FastAPI serves dist/ + /api on :8000
+npm run start      # `queryview`: FastAPI serves dist/ + /api on :8000
 npm run preview    # build && start in one shot
 ```
 

@@ -52,11 +52,18 @@ async def serve_static(full_path: str, versioned: bool = False, index: str | Non
     return FileResponse(root / index)
 
 
-def resolve_port(argv: list[str] | None = None, prog: str = "queryview") -> int:
-    """Listen port: --port beats the PORT env var, which beats 8000."""
+def port_parser(prog: str) -> argparse.ArgumentParser:
+    """A command's argument parser with the `--port` every entry point takes."""
     parser = argparse.ArgumentParser(prog=prog)
     parser.add_argument("--port", type=int, help="listen port (default: $PORT or 8000)")
-    args = parser.parse_args(argv)
-    if args.port is not None:
-        return args.port
-    return int(os.environ.get("PORT", "8000"))
+    return parser
+
+
+def port_of(args: argparse.Namespace) -> int:
+    """Listen port: --port beats the PORT env var, which beats 8000."""
+    return args.port if args.port is not None else int(os.environ.get("PORT", "8000"))
+
+
+def resolve_port(argv: list[str] | None = None, prog: str = "queryview") -> int:
+    """port_of for a command that takes no other argument."""
+    return port_of(port_parser(prog).parse_args(argv))

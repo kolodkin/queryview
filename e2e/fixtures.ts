@@ -267,7 +267,7 @@ export async function connect(page: Page, c: DriverCase, seed: string): Promise<
   await expect(page.getByTestId("connection-status")).toContainText(c.pathField ? c.id : `· ${chDb()}`);
 }
 
-/** Start a server (`queryview-backend`, `queryview-server`) on a free port and
+/** Start a server (`queryview`, `queryview-server`) on a free port and
  * a throwaway DATA_DIR, with `env(dataDir)` added to its environment. */
 async function startServer(
   name: string,
@@ -285,7 +285,7 @@ async function startServer(
   const logPath = join(dataDir, "backend.log");
   const log = createWriteStream(logPath);
   const proc = spawn(bin, [], {
-    env: { ...process.env, SERVE_STATIC: "1", PORT: String(port), DATA_DIR: dataDir, ...(await env(dataDir)) },
+    env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, ...(await env(dataDir)) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stdout.pipe(log);
@@ -409,7 +409,7 @@ export const test = base.extend<
     async ({}, use) => {
       const backend = process.env.BASE_URL
         ? { url: process.env.BASE_URL, stop: async () => {} }
-        : await startServer("queryview-backend");
+        : await startServer("queryview");
       try {
         // The suite saves, renames and deletes freely: never on someone's ~/.queryview.
         if (process.env.BASE_URL) {
