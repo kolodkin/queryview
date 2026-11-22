@@ -3,6 +3,8 @@ interval and the connections, validated at startup."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -11,7 +13,7 @@ from queryview.server.config import DEFAULT_CONFIG_PATH, ConfigError, config_pat
 GIT = {"remote": "https://example.internal/dashboards.git"}
 
 
-def _write(tmp_path, doc) -> object:
+def _write(tmp_path, doc) -> Path:
     path = tmp_path / "server.yaml"
     path.write_text(doc if isinstance(doc, str) else yaml.safe_dump(doc))
     return path

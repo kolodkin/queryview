@@ -54,7 +54,8 @@ def test_a_page_without_client_routes_serves_files_only(static_root):
     def serve(path: str):
         return asyncio.run(serving.serve_static(path, index=None))
 
-    assert str(serve("viewer.html").path) == str(static_root / "viewer.html")
+    page = serve("viewer.html")
+    assert isinstance(page, FileResponse) and str(page.path) == str(static_root / "viewer.html")
     assert serve("dashboard").status_code == 404  # no route falls back to a page
     assert serve("").status_code == 404
 

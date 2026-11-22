@@ -54,7 +54,7 @@ def test_an_edit_replaces_the_dashboard(dash_repo):
     _run(repo.refresh())
     dash_repo.commit([{**SALES, "html": "<p>new</p>"}])
     _run(repo.refresh())
-    assert repo.get("sales")["html"] == "<p>new</p>"
+    assert (repo.get("sales") or {}).get("html") == "<p>new</p>"
 
 
 def test_an_empty_remote_lists_nothing(dash_repo):

@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -280,7 +281,7 @@ def test_a_new_commit_shows_within_the_sync_interval(tmp_path, dash_repo):
         for _ in range(100):
             if len(c.get("/api/dashboards").json()) == 2:
                 break
-            c.portal.call(asyncio.sleep, 0.05)
+            time.sleep(0.05)  # the poll runs on the app's own thread
         assert c.get("/api/dashboards").json() == [{"name": "ops"}, {"name": "sales"}]
 
 
@@ -290,7 +291,7 @@ def test_a_failed_fetch_keeps_serving(tmp_path, dash_repo):
     fast = ServerConfig(config.remote, config.branch, 0.05, config.connections)
     with TestClient(create_app(fast)) as c:
         dash_repo.remote.rename(tmp_path / "moved.git")
-        c.portal.call(asyncio.sleep, 0.3)  # several failed fetches
+        time.sleep(0.3)  # several failed fetches, on the app's own thread
         assert c.get("/api/dashboards").json() == [{"name": "sales"}]
         assert c.post("/api/run", json=ON_SALES).status_code == 200
 
@@ -364,5 +365,5 @@ def test_an_unexpected_sync_error_does_not_stop_polling(tmp_path, dash_repo, mon
         for _ in range(100):
             if len(c.get("/api/dashboards").json()) == 2:
                 break
-            c.portal.call(asyncio.sleep, 0.05)
+            time.sleep(0.05)  # the poll runs on the app's own thread
         assert calls["n"] > 2 and len(c.get("/api/dashboards").json()) == 2
