@@ -33,6 +33,32 @@ test("a text param takes what is typed, as a literal", async ({ page, seeds, bas
   await expect(frame.locator("#v")).toHaveText("—");
 });
 
+test("typed text survives another selector changed before its re-run answers", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "typed-then-picked",
+    html:
+      '<qv-param name="note"></qv-param><qv-param name="pick"></qv-param>' +
+      '<b id="note" data-qv-query="q" data-qv-column="note"></b><b id="pick" data-qv-query="q" data-qv-column="pick"></b>',
+    queries: { q: "SELECT {note} AS note, {pick} AS pick" },
+    params: [
+      { name: "note", kind: "text", default: "alpha" },
+      { name: "pick", options_sql: "SELECT name FROM items ORDER BY id" },
+    ],
+  });
+  await expect(frame.locator("#pick")).toHaveText("alpha");
+  await frame.locator("input").fill("typed");
+  // One task: the focus blurs the text (its re-run starts), then the pick changes.
+  await frame.locator("select").evaluate((el: HTMLSelectElement) => {
+    el.focus();
+    el.value = "beta";
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await expect(frame.locator("#pick")).toHaveText("beta");
+  await expect(frame.locator("#note")).toHaveText("typed");
+  await expect(frame.locator("input")).toHaveValue("typed");
+});
+
 test("qv-param reruns the dashboard", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
