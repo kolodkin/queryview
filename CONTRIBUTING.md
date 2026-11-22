@@ -52,7 +52,7 @@ npm run dev
 Or individually:
 
 ```bash
-npm run backend    # uvicorn --reload on http://localhost:8000
+npm run backend    # the API alone, reloading: `queryview --api-only --reload` on http://localhost:8000
 npm run frontend   # http://localhost:5173
 ```
 
