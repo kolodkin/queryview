@@ -20,29 +20,39 @@ names the app it wants. No backwards compatibility is kept.
 
 - `backend/queryview/main.py` becomes `backend/queryview/app.py`. Its 45
   routes move from `@app.…` to a module-level `APIRouter` (`@router.…`), so
-  no route body changes or re-indents.
-- `create_app(frontend: bool) -> FastAPI` in `app.py` builds the app: the
-  lifespan, the MCP mount, the session middleware, the router, and, only
+  no route body changes or re-indents. No app object is built at import.
+- `create_app(frontend: bool = True) -> FastAPI` in `app.py` builds the app:
+  the lifespan, the MCP mount, the session middleware, the router, and, only
   with `frontend=True`, the frontend catch-all. Without it a non-API path is
   FastAPI's own 404.
-- Three small modules name an app:
+- The mode is a command-line argument. `backend/queryview/__main__.py` is the
+  one entry point, behind both the `queryview` command and
+  `python -m queryview`:
 
-  | Module | Holds | Started by |
-  | --- | --- | --- |
-  | `queryview/main.py` | `app = create_app(frontend=True)`, `run()` | the `queryview` command, `npm run debug`, `npm run start` |
-  | `queryview/api.py` | `app = create_app(frontend=False)` | `npm run backend` (the API beside Vite) |
-  | `queryview/__main__.py` | calls `run()` | `python -m queryview` |
+  | Argument | Meaning |
+  | --- | --- |
+  | `--port N` | as today: the flag, else `PORT`, else 8000 |
+  | `--api-only` | no frontend: the API beside Vite |
+  | `--reload` | restart on code changes, for development |
 
+- `--reload` makes uvicorn re-import the app by name, and a name cannot carry
+  an argument. So `app.py` also has `create_api_app()`, which is
+  `create_app(frontend=False)`, and the entry point hands uvicorn one of the
+  two factory names.
+- The dev scripts go through the command: `npm run backend` is
+  `queryview --api-only --reload`, `npm run debug` is `queryview --reload`,
+  `npm run start` is `queryview`.
 - `SERVE_STATIC` is deleted: the env read, the `if/else`, and its uses in
   `package.json`, `e2e/fixtures.ts` and `CONTRIBUTING.md`.
 - The `queryview-backend` command, a duplicate of `queryview`, is deleted;
   the e2e fixture and the release workflow's comment name `queryview`.
 - A frontend route with no build on disk is a 404 rather than a failed file
   response (`serving.serve_static`).
-- Tests: the existing suites pass with their `from queryview.main import app`
-  unchanged; one new test that `api.app` answers `/` with a 404 while
-  `main.app` serves the page; one for the missing-build 404. The e2e suite
-  passes.
+- Tests: the nine files that import `app` from `queryview.main` take one
+  shared `create_app()` from `conftest.py` instead. New tests: `--api-only`
+  and `--reload` pick the right factory; the API-only app answers `/` with a
+  404 while the full one serves the page; the missing-build 404. The e2e
+  suite passes.
 
 ## Non-goals
 
