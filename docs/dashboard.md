@@ -309,14 +309,15 @@ dashboard's queries as written, its `params` declaration and the chosen
 values. The backend resolves each selector's options and value, substitutes
 them into the queries, and runs each one on the session's connection and
 selected database (wrapped in a paginated subselect capped at 1000 rows). It
-returns column-oriented results and the resolved selectors. Switching the
-connection or database re-runs them.
+returns column-oriented results and the resolved selectors. Up to five queries
+run at once. Switching the connection or database re-runs them.
 
 It is **fail-fast**: if any query fails, or the session is not connected or has
 no database selected, the whole request returns an HTTP error and the page shows a
 dashboard-level error banner instead of partial panels. On success every named
 query is present in `window.queries`. A failing query's message is prefixed with
-its panel name (e.g. `churn: Unknown table …`) so it's clear which one to fix.
+its panel name (e.g. `churn: Unknown table …`) so it's clear which one to fix. When
+several fail, the first in the dashboard's order is the one reported.
 
 ## Snapshot
 
