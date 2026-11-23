@@ -4,15 +4,14 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 import {
   DashboardFrame,
   answerWidget,
-  downloadText,
   listenToFrame,
-  snapshotDocument,
-  type SnapshotResult,
+  requestSnapshot,
   valuesOf,
   widgetPage,
   widgetQueryNames,
   withKeptText,
   type DashboardResults,
+  type PendingSnapshot,
   type ResolvedParam,
   type WidgetPost,
 } from '../core'
@@ -142,10 +141,7 @@ function DashboardView({
   // The query popup's results frame, answered like the dashboard's own.
   const popupFrameRef = useRef<HTMLIFrameElement>(null)
   // A Snapshot waiting for the frame's serialized document.
-  const snapshotRef = useRef<{
-    frame: HTMLIFrameElement
-    done: (r: SnapshotResult) => void
-  } | null>(null)
+  const snapshotRef = useRef<PendingSnapshot | null>(null)
   // The SQL as last run (load or Execute). The frame's widgets and param
   // re-runs use this, so a half-typed edit in the query popup never runs.
   const executedRef = useRef<Record<string, string>>({})
@@ -459,25 +455,12 @@ function DashboardView({
       f?.contentWindow?.postMessage(answer, '*')
   }
 
-  // Download the dashboard as one static HTML file. Only the frame can read
-  // its page, so it serializes itself; its answer is untrusted text, wrapped
-  // behind a policy that blocks every script (docs/dashboard.md).
+  // Download the dashboard as one static HTML file (docs/dashboard.md).
   function snapshot() {
     const frame = frameRef.current
-    if (!frame || !active || snapshotRef.current?.frame === frame) return
-    const unanswered = { message: 'The dashboard did not answer the snapshot request.' }
-    snapshotRef.current?.done(unanswered) // one left by a dashboard since closed: it says nothing
+    if (!frame || !active) return
     const title = active.name || 'dashboard'
-    const done = (r: SnapshotResult) => {
-      snapshotRef.current = null
-      clearTimeout(timer)
-      if (frameRef.current !== frame) return // the dashboard was switched meanwhile
-      setError('html' in r ? null : r.message)
-      if ('html' in r) downloadText(`${title}.html`, snapshotDocument(r.html, title), 'text/html')
-    }
-    const timer = setTimeout(() => done(unanswered), 5000)
-    snapshotRef.current = { frame, done }
-    frame.contentWindow?.postMessage({ type: 'qv-snapshot' }, '*')
+    requestSnapshot(frame, title, snapshotRef, () => frameRef.current, setError)
   }
 
   // Open `push` in place of the current dashboard (null: the store's copy of

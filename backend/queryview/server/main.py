@@ -18,18 +18,16 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
 from ..dashboard_params import ParamError, apply_to_queries, parse_params
-from ..dashboard_queries import WAITING, clean_values, dialect_of, resolve_on, run_dashboard_on
+from ..dashboard_queries import WAITING, clean_values, dialect_of, resolve_on, resolved_part, run_dashboard_on
 from ..drivers import DRIVERS
 from ..drivers.base import Err
 from ..gitsync import GitSyncError
 from ..serving import resolve_port, serve_static
+from ..validation import page_bounds
 from .config import ConfigError, Connection, ServerConfig, config_path, load_config
 from .repo import Repo
 
 log = logging.getLogger("queryview.server")
-
-# The app's /api/db/query paging bounds.
-_DEFAULT_LIMIT, _MAX_LIMIT = 100, 1000
 
 
 def _fail(message: str, status: int = 400, **extra: Any) -> JSONResponse:
@@ -39,15 +37,6 @@ def _fail(message: str, status: int = 400, **extra: Any) -> JSONResponse:
 def _not_found(dashboard: Any) -> str:
     """What the page shows for a dashboard that is not (or no longer) in the repo."""
     return f"Dashboard “{dashboard}” not found." if isinstance(dashboard, str) else "unknown dashboard"
-
-
-def _int(value: Any, default: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, (int, str)):
-        return default
-    try:
-        return int(value)
-    except ValueError:
-        return default
 
 
 async def _poll(repo: Repo, interval: float) -> None:
@@ -159,7 +148,7 @@ def create_app(config: ServerConfig) -> FastAPI:
             dash["params"],
             clean_values(body.get("values")),
         )
-        resolved = {"params": r["params"]} if "params" in r else {}
+        resolved = resolved_part(r)
         if not r["ok"]:
             return _fail(r["message"], **resolved)
         return {"ok": True, "results": r["results"], **resolved}
@@ -174,9 +163,7 @@ def create_app(config: ServerConfig) -> FastAPI:
         sql = await _widget_sql(conn, dash, body)
         if isinstance(sql, JSONResponse):
             return sql
-        limit = _int(body.get("limit"), _DEFAULT_LIMIT)
-        limit = _DEFAULT_LIMIT if limit < 1 else min(limit, _MAX_LIMIT)
-        offset = max(0, _int(body.get("offset"), 0))
+        limit, offset = page_bounds(body.get("limit"), body.get("offset"))
         order_by = body.get("order_by") if isinstance(body.get("order_by"), list) else None
         driver = DRIVERS[conn.type]
         if body.get("format") == "csv":

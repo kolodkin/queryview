@@ -41,12 +41,12 @@ from .connect import (
     session_settings,
     unlock_connection,
 )
-from .dashboard_queries import clean_values, run_dashboard, run_dashboard_queries, session_sql
+from .dashboard_queries import clean_values, resolved_part, run_dashboard, run_dashboard_queries, session_sql
 from .dashboards import get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .mcp_server import mcp
 from .serving import serve_static
-from .validation import dashboard_params_error
+from .validation import dashboard_params_error, page_bounds
 
 
 async def _read_json(request: Request) -> Any:
@@ -73,19 +73,6 @@ def _clean_queries(raw: Any) -> dict[str, str]:
     if not isinstance(raw, dict):
         return {}
     return {k: v for k, v in raw.items() if isinstance(k, str) and k and isinstance(v, str) and v.strip()}
-
-
-def _parse_int(value: Any, default: int) -> int:
-    if isinstance(value, bool):
-        return default
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return default
-    return default
 
 
 @asynccontextmanager
@@ -416,10 +403,7 @@ async def db_query(request: Request):
     sql, failed = await _with_params(request, b, sql, ("no-session",))
     if failed is not None:
         return failed
-    limit = _parse_int(b.get("limit"), 100)
-    limit = 100 if limit < 1 else min(limit, 1000)
-    offset = _parse_int(b.get("offset"), 0)
-    offset = 0 if offset < 0 else offset
+    limit, offset = page_bounds(b.get("limit"), b.get("offset"))
     raw_order = b.get("order_by")
     order_by = raw_order if isinstance(raw_order, list) else None
     if b.get("format") == "csv":
@@ -574,7 +558,7 @@ async def run_queries(request: Request):
         r = await run_dashboard(request.state.sid, queries, b["params"], clean_values(b.get("values")))
     else:
         r = await run_dashboard_queries(request.state.sid, queries)
-    resolved = {"params": r["params"]} if "params" in r else {}
+    resolved = resolved_part(r)
     if not r["ok"]:
         # Not connected / no database: the session must act first, not the request.
         status = 400 if r.get("reason") in ("query", "params") else 409

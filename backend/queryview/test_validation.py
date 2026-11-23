@@ -1,4 +1,4 @@
-from queryview.validation import MAX_LIMIT, clamp_paging, dashboard_params_error
+from queryview.validation import MAX_LIMIT, clamp_paging, dashboard_params_error, page_bounds
 
 
 def test_clamp_paging():
@@ -47,3 +47,10 @@ def test_dashboard_params_selector_rules():
 def test_dashboard_params_rejects_a_name_declared_twice():
     twice = [{"name": "col", "kind": "text"}, {"name": "col", "kind": "identifier", "options": ["city"]}]
     assert dashboard_params_error(twice) == "invalid params[1] name 'col' is declared twice"
+
+
+def test_page_bounds():
+    assert page_bounds(50, 10) == (50, 10)
+    assert page_bounds(0, -5) == (100, 0)
+    assert page_bounds(5000, "7") == (1000, 7)
+    assert page_bounds(True, [1]) == (100, 0)
