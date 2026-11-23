@@ -189,6 +189,17 @@ export const queryPopupFrame = (page: Page): FrameLocator => page.frameLocator('
 /** Close the Edit queries popup. Waits two frames: the dashboard's frame is
  * out of process, and a click sent to it before the browser has drawn the
  * popup's removal still lands on the popup's backdrop and is lost. */
+// Hold every request to `url` until the returned release is called.
+export async function holdRoute(page: Page, url: string): Promise<() => void> {
+  let release = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route(url, async (route) => {
+    await held;
+    await route.continue();
+  });
+  return release;
+}
+
 export async function closeQueries(page: Page): Promise<void> {
   await page.getByTestId("dash-sql-close").click();
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));

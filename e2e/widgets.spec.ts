@@ -27,12 +27,7 @@ test("the frame marks itself while a re-run is in flight", async ({ page, seeds,
   await expect(frame.locator("#v")).toHaveText("alpha");
   await expect(frame.locator("html")).not.toHaveAttribute("data-qv-loading");
 
-  let release = () => {};
-  const held = new Promise<void>((r) => (release = r));
-  await page.route("**/api/runqueries", async (route) => {
-    await held;
-    await route.continue();
-  });
+  const release = await holdRoute(page, "**/api/runqueries");
   await frame.getByTestId("qv-param").selectOption("beta");
   await expect(frame.locator("html")).toHaveAttribute("data-qv-loading", "");
   await expect(frame.locator("#v")).toHaveText("alpha"); // the old value, marked stale
