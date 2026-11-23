@@ -7,6 +7,7 @@ import {
   connect,
   executeSql,
   expect,
+  holdRoute,
   mcpCall,
   openDashboard,
   openNewQuery,
