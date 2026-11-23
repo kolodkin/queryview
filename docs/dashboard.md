@@ -295,7 +295,8 @@ SELECT {region} AS region, count() AS orders FROM orders WHERE region = {region}
 ```
 
 - Needs `options` or `options_sql`, takes no `default`, and holds no value:
-  `<qv-param>` draws nothing for it. At most 100 options.
+  `<qv-param>` draws nothing for it. At most 100 options; a repeated one runs
+  once.
 - Its `options_sql` may reference other params, never another `each`; no other
   param's `options_sql` may reference it. A query names at most one.
 - The runs must return the same columns, in name and order.
@@ -303,7 +304,8 @@ SELECT {region} AS region, count() AS orders FROM orders WHERE region = {region}
   only the values the query can run on.
 - No options: an empty result with no columns.
 - The 1,000-row cap applies to each run and to the stacked rows, which keep
-  the first 1,000.
+  the first 1,000; values past a full cap are not run.
+- While its list waits on another param's choice, the query waits too.
 - A [widget](#widgets) cannot page such a query.
 
 ## Changing parameters: `window.params` and `setParams`
