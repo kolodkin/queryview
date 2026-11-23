@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from pymysql.constants import COMMAND, FIELD_TYPE
 from pymysql.err import OperationalError
 
@@ -69,6 +70,14 @@ def test_run_query_builds_aliased_backtick_sql_and_decodes_json(monkeypatch):
 
     csv = asyncio.run(MySqlDriver().export_csv(CFG, "SELECT 1", "shop", 50, 0, None))
     assert isinstance(csv, TextResult) and csv.text == 'id,doc\n1152921504606846976,"{""a"": 1.5}"'
+
+
+@pytest.mark.parametrize("method", ["run_query", "export_csv"])
+def test_sorting_by_a_name_with_a_backtick_is_an_error(monkeypatch, method):
+    log = _fake(monkeypatch, lambda sql: (ID, [(1,)]))
+    r = asyncio.run(getattr(MySqlDriver(), method)(CFG, "SELECT 1", "shop", 10, 0, [{"name": "a`b"}]))
+    assert isinstance(r, Err) and "cannot sort by" in r.message, r
+    assert log["sql"] == []
 
 
 def test_list_tables_reads_information_schema(monkeypatch):

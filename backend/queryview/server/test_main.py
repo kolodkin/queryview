@@ -120,10 +120,10 @@ def test_query_pages_and_sorts(client):
     assert client.post("/api/query", json={**body, "offset": 1}).json()["data"] == [["eu", 10]]
 
 
-def test_a_hostile_order_by_name_is_ignored(client):
+def test_a_hostile_order_by_name_is_refused(client):
     body = {**ON_SALES, "query": "rows", "order_by": [{"name": 'amount" DESC, (SELECT 1) -- ', "dir": "ASC"}]}
     r = client.post("/api/query", json=body)
-    assert r.status_code == 200 and r.json()["data"] == [["eu", 10], ["us", 20]]
+    assert r.status_code == 400 and "cannot sort by" in r.json()["message"]
 
 
 def test_query_csv(client):

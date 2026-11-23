@@ -261,7 +261,10 @@ class ClickHouseDriver:
         offset: int,
         order_by: list[dict[str, Any]] | None,
     ) -> RowsResult | Err:
-        order_clause = build_order_by(order_by, "`", backslash_escapes=True)
+        try:
+            order_clause = build_order_by(order_by, "`", backslash_escapes=True)
+        except ValueError as e:
+            return Err(error_message(e))
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias=None)
         return await ch_query(config, paginated, ChRows, database=database)
 
@@ -286,7 +289,10 @@ class ClickHouseDriver:
         offset: int,
         order_by: list[dict[str, Any]] | None,
     ) -> TextResult | Err:
-        order_clause = build_order_by(order_by, "`", backslash_escapes=True)
+        try:
+            order_clause = build_order_by(order_by, "`", backslash_escapes=True)
+        except ValueError as e:
+            return Err(error_message(e))
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias=None)
         return await ch_query(config, paginated, ChCsv, database=database)
 
