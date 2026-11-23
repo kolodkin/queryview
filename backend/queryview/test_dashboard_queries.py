@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 
 import queryview.connect as connect
-from queryview.dashboard_queries import clean_values, run_dashboard, run_dashboard_queries
+from queryview.dashboard_queries import DASHBOARD_CONCURRENCY, clean_values, run_dashboard, run_dashboard_queries
 from queryview.drivers import DRIVERS
 from queryview.drivers.base import Column, DatabasesResult, Err, QueryRows, RowsResult
 
@@ -134,3 +134,47 @@ def test_clean_values_keeps_only_strings():
 def test_clean_values_drops_text_that_cannot_be_sent_back():
     # A lone surrogate parses from JSON but cannot be encoded into the reply.
     assert clean_values({"a": "\ud800", "b": "ok"}) == {"b": "ok"}
+
+
+class _SlowDriver(_RowsDriver):
+    """Counts the queries in flight; `fail` fails at once, the rest wait a tick."""
+
+    def __init__(self):
+        self.running = 0
+        self.peak = 0
+        self.finished: list[str] = []
+
+    async def run_query(self, c, sql, database, limit, offset, order_by):
+        if "fail" in sql:
+            return Err("bad sql")
+        self.running += 1
+        self.peak = max(self.peak, self.running)
+        try:
+            await asyncio.sleep(0.02)
+        finally:
+            self.running -= 1
+        self.finished.append(sql)
+        return RowsResult(QueryRows([Column("n", "Int32")], [[1]]))
+
+
+def _slow(monkeypatch, sid: str) -> _SlowDriver:
+    driver = _SlowDriver()
+    monkeypatch.setitem(DRIVERS, "rowsfake", driver)
+    asyncio.run(connect.connect_new(sid, sid, {"v": 1}, "rowsfake"))
+    return driver
+
+
+def test_queries_run_together_up_to_the_limit_and_keep_their_order(monkeypatch):
+    driver = _slow(monkeypatch, "s-par1")
+    names = [f"q{i}" for i in range(DASHBOARD_CONCURRENCY + 3)]
+    r = asyncio.run(run_dashboard_queries("s-par1", {n: f"SELECT {n}" for n in names}))
+    assert r["ok"] is True
+    assert driver.peak == DASHBOARD_CONCURRENCY
+    assert list(r["results"]) == names and list(r["meta"]) == names
+
+
+def test_a_failing_query_stops_the_ones_still_running(monkeypatch):
+    driver = _slow(monkeypatch, "s-par2")
+    r = asyncio.run(run_dashboard_queries("s-par2", {"bad": "fail", "slow": "SELECT 1"}))
+    assert r == {"ok": False, "reason": "query", "message": "bad: bad sql"}
+    assert driver.finished == [] and driver.running == 0
