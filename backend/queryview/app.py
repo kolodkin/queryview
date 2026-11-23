@@ -44,6 +44,7 @@ from .connect import (
 from .dashboard_queries import clean_values, run_dashboard, run_dashboard_queries, session_sql
 from .dashboards import get_dashboard, list_dashboards
 from .drivers import DRIVERS
+from .drivers.clickhouse import close_client
 from .mcp_server import mcp
 from .serving import serve_static
 from .validation import dashboard_params_error
@@ -96,7 +97,10 @@ async def lifespan(app: FastAPI):
     # manager here. streamable_http_app() (at mount, in create_app) initializes
     # mcp.session_manager before this runs.
     async with mcp.session_manager.run():
-        yield
+        try:
+            yield
+        finally:
+            await close_client()
 
 
 # Every route, registered once at import; create_app() puts them on an app.

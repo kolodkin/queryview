@@ -21,6 +21,7 @@ from ..dashboard_params import ParamError, apply_to_queries, parse_params
 from ..dashboard_queries import WAITING, clean_values, dialect_of, resolve_on, run_dashboard_on
 from ..drivers import DRIVERS
 from ..drivers.base import Err
+from ..drivers.clickhouse import close_client
 from ..gitsync import GitSyncError
 from ..serving import resolve_port, serve_static
 from .config import ConfigError, Connection, ServerConfig, config_path, load_config
@@ -77,6 +78,7 @@ def create_app(config: ServerConfig) -> FastAPI:
             poll.cancel()
             with suppress(asyncio.CancelledError):
                 await poll
+            await close_client()
 
     app = FastAPI(title="queryview-server", lifespan=lifespan)
     app.state.repo = repo
