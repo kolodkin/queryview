@@ -14,6 +14,7 @@ from ..gitsync import (
     _origin_head,
     _read_repo_entity,
     _repo_entities,
+    dashboard_reldir,
     forget,
 )
 from ..workspaces import WorkspaceRec
@@ -45,13 +46,20 @@ class Repo:
         if self._started and head == self._head:
             return False
         dashboards: dict[str, dict[str, Any]] = {}
+        folders: dict[str, str] = {}  # name -> the folder it was read from
         for entity in await _repo_entities(wd, head) if head else []:
             try:
                 d = await _read_repo_entity(wd, head, entity["relpath"])  # type: ignore[arg-type]
             except GitSyncError as e:
                 log.warning("skipping %s: %s", entity["relpath"], e)
                 continue
-            dashboards[d["name"]] = d
+            name, relpath = d["name"], entity["relpath"]
+            if name in dashboards:
+                # One name, two folders: the name's own folder wins, else the first.
+                log.warning("%s: the name %r is already used by %s", relpath, name, folders[name])
+                if relpath != dashboard_reldir(name):
+                    continue
+            dashboards[name], folders[name] = d, relpath
         # Swapped whole, so a request never sees half a refresh.
         self._dashboards, self._head, self._started = dashboards, head, True
         log.info("showing %d dashboards at %s", len(dashboards), head or "an empty repo")

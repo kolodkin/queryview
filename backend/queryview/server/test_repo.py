@@ -8,7 +8,7 @@ import shutil
 
 import pytest
 
-from queryview.gitsync import GitSyncError
+from queryview.gitsync import GitSyncError, dashboard_to_files
 from queryview.server.repo import Repo
 
 SALES = {"name": "sales", "html": "<p>hi</p>", "queries": {"q": "SELECT 1 AS n"}, "params": []}
@@ -102,3 +102,16 @@ def test_fetch_errors_hide_the_token(clone_base):
     with pytest.raises(GitSyncError) as e:
         _run(repo.refresh())
     assert "tok-example" not in str(e.value)
+
+
+def test_two_folders_with_one_name_are_logged_and_the_names_own_folder_wins(dash_repo, caplog):
+    copy = {
+        f"dashboards/sales_copy/{f}": text for f, text in dashboard_to_files({**SALES, "html": "<p>copy</p>"}).items()
+    }
+    older = {f"dashboards/a-sales/{f}": text for f, text in dashboard_to_files({**SALES, "html": "<p>a</p>"}).items()}
+    dash_repo.commit([SALES], raw={**copy, **older})
+    repo = _repo(dash_repo)
+    with caplog.at_level("WARNING", logger="queryview.server"):
+        _run(repo.refresh())
+    assert repo.names() == ["sales"] and repo.get("sales") == SALES
+    assert "dashboards/sales_copy" in caplog.text and "dashboards/a-sales" in caplog.text

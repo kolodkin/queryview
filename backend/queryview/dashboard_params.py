@@ -194,6 +194,20 @@ def resolve_order(params: list[Param]) -> list[Param]:
     return ordered
 
 
+def needed(sql: str, params: list[Param]) -> list[Param]:
+    """The params a query references, and those their options_sql reference in
+    turn: all that resolving its values takes."""
+    by_name = {p.name: p for p in params}
+    names: set[str] = set()
+    todo = [sql]
+    while todo:
+        for name in placeholders_in(todo.pop()):
+            if name in by_name and name not in names:
+                names.add(name)
+                todo.append(by_name[name].options_sql or "")
+    return [p for p in params if p.name in names]
+
+
 def missing(sql: str, params: list[Param], values: dict[str, str]) -> list[str]:
     """The declared params a query still needs a value for. Dimensions and text
     never count: an unchecked one is off, and an empty text is a value."""
