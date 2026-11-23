@@ -37,8 +37,11 @@ test("the frame marks itself while a re-run is in flight", async ({ page, seeds,
   await expect(frame.locator("html")).toHaveAttribute("data-qv-loading", "");
   await expect(frame.locator("#v")).toHaveText("alpha"); // the old value, marked stale
   // The bar is drawn, and the dashboard's own rule applies.
-  const bar = await frame.locator("html").evaluate((el) => getComputedStyle(el, "::before").animationName);
-  expect(bar).toBe("qv-loading");
+  const bar = await frame.locator("html").evaluate((el) => {
+    const track = getComputedStyle(el, "::before");
+    return [track.height, getComputedStyle(el, "::after").animationName].join(" ");
+  });
+  expect(bar).toBe("4px qv-loading");
   await expect(frame.locator("#v")).toHaveCSS("opacity", "0.2");
 
   release();

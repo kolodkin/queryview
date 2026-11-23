@@ -22,14 +22,17 @@ function themeStyle(theme: QvTheme): string {
 }
 
 // While a re-run is in flight the page carries data-qv-loading: a bar runs
-// across its top (a lit segment sweeping over a faint track, clear of a rounded
-// frame's corners), and the page's own CSS can dim what is now stale.
+// across its top, and the page's own CSS can dim what is now stale. A faint
+// track with a lit segment sweeping over it, moved by transform so it costs no
+// repaint, and 4px so it clears a rounded frame's corners.
 const LOADING_STYLE =
-  '<style>html[data-qv-loading]::before{content:"";position:fixed;z-index:2147483647;top:0;left:0;' +
-  'width:100%;height:4px;background:linear-gradient(90deg,transparent,var(--qv-accent,#818cf8) 35%,' +
-  'var(--qv-accent,#818cf8) 65%,transparent) no-repeat,rgba(129,140,248,.4);' +
-  'background-size:35% 100%,100% 100%;animation:qv-loading 1.2s linear infinite}' +
-  '@keyframes qv-loading{from{background-position:-30% 0,0 0}to{background-position:130% 0,0 0}}</style>\n'
+  '<style>html[data-qv-loading]::before,html[data-qv-loading]::after{content:"";position:fixed;' +
+  'z-index:2147483647;top:0;left:0;height:4px;pointer-events:none}' +
+  'html[data-qv-loading]::before{width:100%;background:rgba(129,140,248,.4)}' +
+  'html[data-qv-loading]::after{width:35%;background:linear-gradient(90deg,transparent,' +
+  'var(--qv-accent,#818cf8) 35%,var(--qv-accent,#818cf8) 65%,transparent);' +
+  'animation:qv-loading 1.2s linear infinite}' +
+  '@keyframes qv-loading{from{transform:translateX(-100%)}to{transform:translateX(100vw)}}</style>\n'
 
 // The in-iframe half of the params channel, plus the bound values. The page
 // sends values only; the host substitutes them into the dashboard's own SQL and
