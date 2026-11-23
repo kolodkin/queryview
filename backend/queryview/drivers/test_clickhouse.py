@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from queryview.drivers.base import (
@@ -30,7 +30,9 @@ from queryview.drivers.clickhouse import (
     ChRows,
     ChText,
     ClickHouseDriver,
+    _client,
     ch_fetch,
+    close_client,
 )
 
 JSON_COMPACT = (
@@ -39,15 +41,15 @@ JSON_COMPACT = (
 
 
 def _capture(monkeypatch, seen, text):
-    async def fake_ch_fetch(c, query, clause=None, database=None, settings=None, write=False, client=None):
-        seen.update(query=query, clause=clause, database=database, settings=settings, write=write, client=client)
+    async def fake_ch_fetch(c, query, clause=None, database=None, settings=None, write=False, timeout=None):
+        seen.update(query=query, clause=clause, database=database, settings=settings, write=write, timeout=timeout)
         return text
 
     monkeypatch.setattr("queryview.drivers.clickhouse.ch_fetch", fake_ch_fetch)
 
 
 def _fail(monkeypatch, message):
-    async def fake_ch_fetch(c, query, clause=None, database=None, settings=None, write=False, client=None):
+    async def fake_ch_fetch(c, query, clause=None, database=None, settings=None, write=False, timeout=None):
         return Err(message)
 
     monkeypatch.setattr("queryview.drivers.clickhouse.ch_fetch", fake_ch_fetch)
@@ -217,11 +219,11 @@ def test_ch_rows_from_text_decodes_and_rejects():
 def test_execute_script_posts_each_statement_as_written(monkeypatch):
     """The Scripts page: no pagination wrapper, a write (HTTP POST — a GET is
     read-only in ClickHouse), JSONCompact via default_format so a statement
-    with no result set simply comes back empty, one client for the script."""
+    with no result set simply comes back empty, on the script timeout."""
     d = ClickHouseDriver()
     calls = []
 
-    async def fake_ch_fetch(c, query, clause=None, database=None, settings=None, write=False, client=None):
+    async def fake_ch_fetch(c, query, clause=None, database=None, settings=None, write=False, timeout=None):
         calls.append(
             {
                 "query": query,
@@ -229,7 +231,7 @@ def test_execute_script_posts_each_statement_as_written(monkeypatch):
                 "clause": clause,
                 "settings": settings,
                 "write": write,
-                "client": client,
+                "timeout": timeout,
             }
         )
         return "" if query.startswith("INSERT") else JSON_COMPACT
@@ -238,12 +240,11 @@ def test_execute_script_posts_each_statement_as_written(monkeypatch):
     results = asyncio.run(d.execute_script(CFG, "INSERT INTO t VALUES (1); SELECT id, tags FROM t;", "db"))
     assert [c["query"] for c in calls] == ["INSERT INTO t VALUES (1)", "SELECT id, tags FROM t"]
     assert all(c["write"] and c["clause"] is None and c["database"] == "db" for c in calls)
-    assert calls[0]["client"] is not None and calls[0]["client"] is calls[1]["client"]
     # Statements share one server session (SET, temporary tables), and a
     # statement may run far longer than a read-only probe.
     sid = calls[0]["settings"]["session_id"]
     assert sid and calls[1]["settings"]["session_id"] == sid
-    assert calls[0]["client"].timeout.read == SCRIPT_TIMEOUT_SECONDS
+    assert calls[0]["timeout"].read == SCRIPT_TIMEOUT_SECONDS
     assert calls[0]["settings"]["default_format"] == "JSONCompact"
     assert calls[0]["settings"]["output_format_json_quote_64bit_integers"] == "1"
     assert [r.ok for r in results] == [True, True]
@@ -256,7 +257,7 @@ def test_execute_script_stops_at_the_first_error(monkeypatch):
     d = ClickHouseDriver()
     calls = []
 
-    async def fake_ch_fetch(c, query, clause=None, database=None, settings=None, write=False, client=None):
+    async def fake_ch_fetch(c, query, clause=None, database=None, settings=None, write=False, timeout=None):
         calls.append(query)
         return Err("ClickHouse responded 404: no table") if "missing" in query else ""
 
@@ -272,7 +273,7 @@ def test_execute_script_shows_non_json_output_as_status(monkeypatch):
     is shown rather than failing on the JSON parse."""
     d = ClickHouseDriver()
 
-    async def fake_ch_fetch(c, query, clause=None, database=None, settings=None, write=False, client=None):
+    async def fake_ch_fetch(c, query, clause=None, database=None, settings=None, write=False, timeout=None):
         return "1,a\n2,b"
 
     monkeypatch.setattr("queryview.drivers.clickhouse.ch_fetch", fake_ch_fetch)
@@ -292,22 +293,21 @@ def test_run_sql_sends_statement_as_written_with_server_limits(monkeypatch):
     assert s["max_execution_time"] == "60"
 
 
-def test_ch_fetch_sends_query_id_and_names_it_in_errors():
-    import httpx
+def _transport(monkeypatch, handler) -> None:
+    """Answer the driver's HTTP requests with `handler`."""
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr("queryview.drivers.clickhouse._client", lambda: client)
 
-    from queryview.drivers.clickhouse import ch_fetch
 
+def test_ch_fetch_sends_query_id_and_names_it_in_errors(monkeypatch):
     seen = {}
 
     def handler(req):
         seen.update(req.url.params)
         return httpx.Response(500, text="boom")
 
-    async def go():
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            return await ch_fetch(CFG, "SELECT 1", client=client)
-
-    r = asyncio.run(go())
+    _transport(monkeypatch, handler)
+    r = asyncio.run(ch_fetch(CFG, "SELECT 1"))
     assert len(seen["query_id"]) == 32 and seen["cancel_http_readonly_queries_on_client_close"] == "1"
     assert isinstance(r, Err) and f"query_id {seen['query_id']}" in r.message
 
@@ -317,25 +317,62 @@ def test_requests_connect_within_the_query_timeout(monkeypatch):
     gets its own limit), take the session's query timeout."""
     seen = []
 
-    class FakeClient:
-        def __init__(self, timeout):
-            seen.append(timeout)
+    def handler(req):
+        seen.append(req.extensions["timeout"])
+        return httpx.Response(200, text=JSON_COMPACT)
 
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *exc):
-            return None
-
-        async def get(self, url, params, auth):
-            return SimpleNamespace(text=JSON_COMPACT, is_success=True, status_code=200)
-
-    monkeypatch.setattr("queryview.drivers.clickhouse.httpx.AsyncClient", FakeClient)
+    _transport(monkeypatch, handler)
     token = query_timeout.set(45)
     try:
         assert asyncio.run(ch_fetch(CFG, "SELECT 1")) == JSON_COMPACT
         assert isinstance(asyncio.run(ClickHouseDriver().run_sql(CFG, "SELECT 1", "db", 10)), RowsResult)
     finally:
         query_timeout.reset(token)
-    assert seen[0] == 45
-    assert seen[1].connect == 45 and seen[1].read == RUN_SQL_TIMEOUT_SECONDS + 45
+    assert seen[0]["connect"] == 45 and seen[0]["read"] == 45
+    assert seen[1]["connect"] == 45 and seen[1]["read"] == RUN_SQL_TIMEOUT_SECONDS + 45
+
+
+def test_a_read_is_sent_again_when_its_kept_connection_was_closed(monkeypatch):
+    """A write is not: the server may have run it."""
+    calls = []
+
+    def handler(req):
+        calls.append(req.method)
+        if len(calls) == 1:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        return httpx.Response(200, text="1")
+
+    _transport(monkeypatch, handler)
+    assert asyncio.run(ch_fetch(CFG, "SELECT 1")) == "1"
+    assert calls == ["GET", "GET"]
+    calls.clear()
+    r = asyncio.run(ch_fetch(CFG, "INSERT INTO t VALUES (1)", write=True))
+    assert isinstance(r, Err) and calls == ["POST"]
+
+
+def test_queries_share_one_connection_and_no_cookies():
+    """Each query used to open its own connection, a round trip on a slow link.
+    The client they now share serves every session, so it keeps no cookie."""
+    opened = 0
+
+    async def serve(reader, writer):
+        nonlocal opened
+        opened += 1
+        while await reader.readuntil(b"\r\n\r\n"):
+            writer.write(b"HTTP/1.1 200 OK\r\nSet-Cookie: proxy=one-users-session\r\nContent-Length: 1\r\n\r\n1")
+            await writer.drain()
+
+    async def go():
+        server = await asyncio.start_server(serve, "127.0.0.1", 0)
+        cfg = ChConfig("127.0.0.1", server.sockets[0].getsockname()[1], "u", "p")
+        try:
+            out = [await ch_fetch(cfg, "SELECT 1"), await ch_fetch(cfg, "SELECT 1")]
+            assert not _client().cookies.jar
+            return out
+        finally:
+            await close_client()
+            server.close()
+            await server.wait_closed()
+
+    assert asyncio.run(go()) == ["1", "1"]
+    assert opened == 1

@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import os
 import threading
+from contextlib import suppress
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -323,14 +324,24 @@ class DuckDBDriver:
         order_clause = build_order_by(order_by, '"')
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias="_qv")
 
+        opened: list[duckdb.DuckDBPyConnection] = []
+
         def _work() -> QueryRows:
             con = _open(config.path, database)
+            opened.append(con)
             try:
                 return _rel_rows(con.sql(paginated))
             finally:
                 con.close()
 
-        return await asyncio.to_thread(_work)
+        try:
+            return await asyncio.to_thread(_work)
+        except asyncio.CancelledError:
+            # Cancelling the await leaves the thread running: stop its query.
+            for con in opened:
+                with suppress(duckdb.Error):
+                    con.interrupt()
+            raise
 
     async def run_query(
         self,

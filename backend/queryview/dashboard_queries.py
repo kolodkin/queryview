@@ -4,16 +4,22 @@ resolved and substituted here. Dashboard persistence lives in dashboards.py."""
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from .connect import _gated_session
 from .dashboard_params import Dialect, ParamError, apply_to_queries, missing, parse_params, resolve, substitute
 from .drivers import DRIVERS
-from .drivers.base import Driver, DriverConfig, Err, rows_to_columns
+from .drivers.base import Driver, DriverConfig, Err, RowsResult, rows_to_columns
 
 # Row cap per dashboard query (matches /api/clickhouse/query's ceiling), applied
 # as the LIMIT of the subselect wrapping each query.
 DASHBOARD_ROW_CAP = 1000
+
+# Most queries of one run in flight at once.
+# shortcut: per run, not per connection, so N runs at once make 5N queries;
+# share one limit per connection if a database starts refusing connections.
+DASHBOARD_CONCURRENCY = 5
 
 WAITING = "Waiting for a parameter choice."
 
@@ -61,19 +67,34 @@ async def run_queries_on(
     limit: int = DASHBOARD_ROW_CAP,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """Run named queries on one connection. Fail-fast: the first failing query
-    aborts the call (`reason`: query). On full success returns {"ok": True,
-    "results": {name: {col: [values, …]}}, "meta": {name: [{name, type}, …]}} —
-    column-oriented, ready for window.queries, values typed as the driver
-    returned them. `limit`/`offset` page each query."""
+    """Run named queries on one connection, DASHBOARD_CONCURRENCY at a time.
+    Fail-fast: the first failing query, in the order given, aborts the call
+    (`reason`: query) and cancels the ones still running. On full success
+    returns {"ok": True, "results": {name: {col: [values, …]}}, "meta": {name:
+    [{name, type}, …]}} — column-oriented, ready for window.queries, values
+    typed as the driver returned them. `limit`/`offset` page each query."""
+    slots = asyncio.Semaphore(DASHBOARD_CONCURRENCY)
+
+    async def one(sql: str) -> RowsResult | Err:
+        async with slots:
+            return await driver.run_query(config, sql, database, limit=limit, offset=offset, order_by=None)
+
+    tasks = {qname: asyncio.create_task(one(sql)) for qname, sql in queries.items()}
     results: dict[str, dict[str, list[Any]]] = {}
     meta: dict[str, list[dict[str, str]]] = {}
-    for qname, sql in queries.items():
-        r = await driver.run_query(config, sql, database, limit=limit, offset=offset, order_by=None)
-        if isinstance(r, Err):
-            return {"ok": False, "reason": "query", "message": f"{qname}: {r.message}"}
-        results[qname] = rows_to_columns(r.rows)
-        meta[qname] = [c._asdict() for c in r.rows.meta]
+    try:
+        for qname in queries:
+            r = await tasks.pop(qname)  # popped: its rows are not kept twice
+            if isinstance(r, Err):
+                return {"ok": False, "reason": "query", "message": f"{qname}: {r.message}"}
+            results[qname] = rows_to_columns(r.rows)
+            meta[qname] = [c._asdict() for c in r.rows.meta]
+    finally:
+        # A failure, or the caller gone: the rest are cancelled, which stops
+        # them wherever the driver can (drivers/duckdb.py interrupts its own).
+        for task in tasks.values():
+            task.cancel()
+        await asyncio.gather(*tasks.values(), return_exceptions=True)
     return {"ok": True, "results": results, "meta": meta}
 
 

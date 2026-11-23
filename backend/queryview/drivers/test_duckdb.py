@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from collections.abc import Coroutine
 from typing import Any, TypeVar
 
@@ -272,3 +273,20 @@ def test_test_and_connect_agree_on_a_comma_root(tmp_path):
     d = DuckDBDriver()
     assert _run(d.test(DuckConfig(str(comma))))["ok"] is False
     assert isinstance(_run(d.list_databases(DuckConfig(str(comma)))), Err)
+
+
+def test_a_cancelled_query_stops_in_its_thread(duck_path):
+    """Cancelling the await does not stop the thread: the query is interrupted,
+    or asyncio.run would wait here for it to finish."""
+
+    async def go():
+        heavy = "SELECT count(*) FROM range(100000000) a, range(100000000) b"
+        task = asyncio.create_task(DuckDBDriver().run_query(DuckConfig(duck_path), heavy, None, 1, 0, None))
+        await asyncio.sleep(0.3)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    started = time.monotonic()
+    asyncio.run(go())
+    assert time.monotonic() - started < 10
