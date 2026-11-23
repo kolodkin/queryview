@@ -1,5 +1,5 @@
 import { type Download, type Page } from "@playwright/test";
-import { dashboardFrame, expect, startViewer, test, type Dash, type Viewer } from "./fixtures";
+import { dashboardFrame, expect, holdRoute, startViewer, test, type Dash, type Viewer } from "./fixtures";
 
 // The viewer server (docs/viewer_server): display only, on its own entrypoint.
 
@@ -90,11 +90,7 @@ test("a push to the repo shows after the sync interval", async ({ page }) => {
 
 test("leaving a dashboard while it loads clears the loading line", async ({ page }) => {
   await open(page);
-  let release = () => {};
-  await page.route("**/api/run", async (route) => {
-    await new Promise<void>((resolve) => (release = resolve));
-    await route.continue();
-  });
+  const release = await holdRoute(page, "**/api/run");
   await page.getByTestId("viewer-dashboard").selectOption("items");
   await expect(page.getByTestId("viewer-loading")).toBeVisible();
   await page.getByTestId("viewer-dashboard").selectOption("");

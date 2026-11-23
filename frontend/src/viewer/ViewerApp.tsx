@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import {
   DashboardFrame,
+  answerSnapshot,
   answerWidget,
   listenToFrame,
   requestSnapshot,
@@ -147,9 +148,7 @@ function ViewerApp() {
     const widgets = new Set(widgetQueryNames(shown.dashboard.html))
     const own = shown.dashboard.queries.filter((q) => !widgets.has(q))
     return listenToFrame(() => [frameRef.current], {
-      onSnapshot: (snap, frame) => {
-        if (snapshotRef.current?.frame === frame) snapshotRef.current.done(snap)
-      },
+      onSnapshot: (snap, frame) => answerSnapshot(snapshotRef, snap, frame),
       onWidget: (req) =>
         answerWidget(
           req,
@@ -188,9 +187,7 @@ function ViewerApp() {
 
   // Download the dashboard as one static HTML file (docs/dashboard.md).
   function snapshot() {
-    const frame = frameRef.current
-    if (!frame || !shown) return
-    requestSnapshot(frame, shown.dashboard.name, snapshotRef, () => frameRef.current, setError)
+    if (shown) requestSnapshot(frameRef, shown.dashboard.name, snapshotRef, setError)
   }
 
   return (

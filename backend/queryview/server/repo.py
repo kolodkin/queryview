@@ -57,8 +57,8 @@ class Repo:
             if name in dashboards:
                 # One name, two folders: the name's own folder wins, else the first.
                 own = relpath == dashboard_reldir(name)
-                kept, skipped = (relpath, folders[name]) if own else (folders[name], relpath)
-                log.warning("skipping %s: the name %r is already used by %s", skipped, name, kept)
+                kept = relpath if own else folders[name]
+                log.warning("the name %r is in both %s and %s: keeping %s", name, folders[name], relpath, kept)
                 if not own:
                     continue
             dashboards[name], folders[name] = d, relpath

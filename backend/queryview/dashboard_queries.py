@@ -163,9 +163,8 @@ async def run_dashboard(sid: str, queries: dict[str, str], params: object, value
     """run_dashboard_on session `sid`'s connection and selected database."""
     declared = parse_params(params)
     if not queries and not any(p.options_sql for p in declared):
-        # Nothing touches the database, so no session is needed: a page of
-        # static selectors (or of widgets alone) still renders disconnected.
-        # No options_sql: the runner and dialect are never used.
+        # Nothing touches the database: no session, runner or dialect is used,
+        # so a page of static selectors still renders disconnected.
         resolved = await resolve(declared, values, _no_options, Dialect('"', False))
         return {"ok": True, "results": {}, "meta": {}, "params": resolved}
     s, err = await _gated_session(sid)

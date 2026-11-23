@@ -3,6 +3,7 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 
 import {
   DashboardFrame,
+  answerSnapshot,
   answerWidget,
   listenToFrame,
   markedRuns,
@@ -453,10 +454,7 @@ function DashboardView({
 
   // Download the dashboard as one static HTML file (docs/dashboard.md).
   function snapshot() {
-    const frame = frameRef.current
-    if (!frame || !active) return
-    const title = active.name || 'dashboard'
-    requestSnapshot(frame, title, snapshotRef, () => frameRef.current, setError)
+    if (active) requestSnapshot(frameRef, active.name || 'dashboard', snapshotRef, setError)
   }
 
   // Open `push` in place of the current dashboard (null: the store's copy of
@@ -501,9 +499,7 @@ function DashboardView({
     return listenToFrame(
       () => [frameRef.current, popupFrameRef.current],
       {
-        onSnapshot: (snap, frame) => {
-          if (snapshotRef.current?.frame === frame) snapshotRef.current.done(snap)
-        },
+        onSnapshot: (snap, frame) => answerSnapshot(snapshotRef, snap, frame),
         onWidget: (req) => answerWidget(req, post, setError),
         onSetParams: (values) => rerun(active, values),
       },
