@@ -102,8 +102,9 @@ function ViewerApp() {
     void (async () => {
       setShown(null)
       setError(null)
+      // Also ends a load this pick cancelled.
+      setLoading(Boolean(connection && dashboard))
       if (!connection || !dashboard) return
-      setLoading(true)
       const got = await getJson(`/api/dashboards/${encodeURIComponent(dashboard)}`)
       if (cancelled) return
       if (got.status !== 200) {

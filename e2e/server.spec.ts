@@ -88,6 +88,20 @@ test("a push to the repo shows after the sync interval", async ({ page }) => {
   }).toPass();
 });
 
+test("leaving a dashboard while it loads clears the loading line", async ({ page }) => {
+  await open(page);
+  let release = () => {};
+  await page.route("**/api/run", async (route) => {
+    await new Promise<void>((resolve) => (release = resolve));
+    await route.continue();
+  });
+  await page.getByTestId("viewer-dashboard").selectOption("items");
+  await expect(page.getByTestId("viewer-loading")).toBeVisible();
+  await page.getByTestId("viewer-dashboard").selectOption("");
+  await expect(page.getByTestId("viewer-loading")).toHaveCount(0);
+  release();
+});
+
 test("a dashboard that is gone says so", async ({ page }) => {
   await open(page, "?connection=local&name=gone");
   await expect(page.getByTestId("viewer-error")).toHaveText("Dashboard “gone” not found.");
