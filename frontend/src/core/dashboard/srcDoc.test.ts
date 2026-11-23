@@ -10,13 +10,12 @@ describe('buildSrcDoc', () => {
       'window.params = [{"name":"t","kind":"value","options":["a"],"value":"a"}];',
     )
     expect(doc).toContain('window.setParams = function')
-    expect(doc.endsWith('</script>\n<h1>hi</h1>')).toBe(true)
+    expect(doc.endsWith('</style>\n<h1>hi</h1>')).toBe(true)
   })
 
   test('the prologue marks the page while a re-run is in flight', () => {
     const doc = buildSrcDoc('', {})
-    expect(doc).toContain("setAttribute('data-qv-loading', '')")
-    expect(doc).toContain("removeAttribute('data-qv-loading')")
+    expect(doc).toContain("toggleAttribute('data-qv-loading', !!d.on)")
     expect(doc).toContain('html[data-qv-loading]::before')
   })
 

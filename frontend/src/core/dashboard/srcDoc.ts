@@ -21,6 +21,16 @@ function themeStyle(theme: QvTheme): string {
   return vars ? `<style>:root{${vars}}</style>\n` : ''
 }
 
+// While a re-run is in flight the page carries data-qv-loading: a bar runs
+// across its top (a lit segment sweeping over a faint track, clear of a rounded
+// frame's corners), and the page's own CSS can dim what is now stale.
+const LOADING_STYLE =
+  '<style>html[data-qv-loading]::before{content:"";position:fixed;z-index:2147483647;top:0;left:0;' +
+  'width:100%;height:4px;background:linear-gradient(90deg,transparent,var(--qv-accent,#818cf8) 35%,' +
+  'var(--qv-accent,#818cf8) 65%,transparent) no-repeat,rgba(129,140,248,.4);' +
+  'background-size:35% 100%,100% 100%;animation:qv-loading 1.2s linear infinite}' +
+  '@keyframes qv-loading{from{background-position:-30% 0,0 0}to{background-position:130% 0,0 0}}</style>\n'
+
 // The in-iframe half of the params channel, plus the bound values. The page
 // sends values only; the host substitutes them into the dashboard's own SQL and
 // posts results back, so the page re-renders without a reload and never handles
@@ -44,21 +54,7 @@ function bind() {
   });
 }
 document.addEventListener('DOMContentLoaded', bind);
-// While a re-run is in flight the page carries data-qv-loading: a bar runs
-// across its top, and its own CSS can dim what is now stale.
-document.addEventListener('DOMContentLoaded', function () {
-  var style = document.createElement('style');
-  style.textContent =
-    // A lit segment sweeping over a faint track, clear of a rounded frame's corners.
-    'html[data-qv-loading]::before{content:"";position:fixed;z-index:2147483647;top:0;left:0;' +
-    'width:100%;height:4px;background:linear-gradient(90deg,transparent,var(--qv-accent,#818cf8) 35%,' +
-    'var(--qv-accent,#818cf8) 65%,transparent) no-repeat,rgba(129,140,248,.4);' +
-    'background-size:35% 100%,100% 100%;animation:qv-loading 1.2s linear infinite}' +
-    '@keyframes qv-loading{from{background-position:-30% 0,0 0}to{background-position:130% 0,0 0}}';
-  document.head.append(style);
-});
 window.setParams = function (values) {
-  document.documentElement.setAttribute('data-qv-loading', '');
   parent.postMessage({ type: 'set-params', values: values }, '*');
 };
 // The page as static HTML, for the host's Snapshot: scripts out, canvases as
@@ -164,8 +160,9 @@ function snapshot() {
 window.addEventListener('message', function (e) {
   var d = e.data;
   if (d && d.type === 'qv-snapshot') { parent.postMessage(snapshot(), '*'); return; }
+  // The host says when a re-run starts and when the last one has answered.
+  if (d && d.type === 'qv-loading') { document.documentElement.toggleAttribute('data-qv-loading', !!d.on); return; }
   if (!d || d.type !== 'params-results') return;
-  document.documentElement.removeAttribute('data-qv-loading');
   // A failed run keeps the previous results on screen and reports the message.
   if (d.results) { window.queries = d.results; bind(); }
   if (d.params && d.params.length) window.params = d.params;
@@ -190,6 +187,7 @@ export function buildSrcDoc(
     themeStyle(theme) +
     `<script>window.queries = ${safe(results)};\nwindow.params = ${safe(params)};` +
     `${SET_PARAMS_HELPER}\n</script>\n` +
+    LOADING_STYLE +
     // The <qv-*> tags: loaded only by dashboards that use one, deferred so the
     // tags upgrade once the HTML, their <template> children included, is parsed.
     (/<qv-/i.test(html) ? `<script defer src="${__WIDGETS_URL__}"></script>\n` : '') +

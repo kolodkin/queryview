@@ -293,9 +293,10 @@ message)` then fires with the new `window.queries` and `window.params`
 iframe isn't reloaded, so the page keeps its state.
 
 While that re-run is in flight the page's `<html>` carries
-**`data-qv-loading`**, however it started (`setParams`, a `<qv-param>`). A
-thin bar runs across the top of the frame, and a dashboard can mark what is
-now stale with its own CSS, e.g. `[data-qv-loading] .panel { opacity: .5 }`.
+**`data-qv-loading`**, however it started (`setParams`, a `<qv-param>`,
+**Execute**), until the last one queued has answered. A thin bar runs across
+the top of the frame, and a dashboard can mark what is now stale with its own
+CSS, e.g. `[data-qv-loading] .panel { opacity: .5 }`.
 
 The page sends **values only, never SQL**, and the host answers only messages
 from the dashboard's own frame — so a dashboard's SQL stays what `queries`
