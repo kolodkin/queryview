@@ -86,16 +86,3 @@ def page_bounds(limit: object, offset: object) -> tuple[int, int]:
     default when absent or below 1), offset >= 0."""
     lim = _int(limit, PAGE_DEFAULT)
     return (PAGE_DEFAULT if lim < 1 else min(lim, PAGE_MAX)), max(0, _int(offset, 0))
-
-
-def clamp_paging(limit: object, offset: object) -> tuple[int, int]:
-    """Coerce/clamp limit & offset to safe ints: 0 <= limit <= MAX_LIMIT, offset >= 0."""
-    try:
-        lim = int(limit)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        lim = 100
-    try:
-        off = int(offset)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        off = 0
-    return max(0, min(lim, MAX_LIMIT)), max(0, off)

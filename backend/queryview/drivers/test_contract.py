@@ -122,9 +122,8 @@ def test_list_tables_accepts_union_flag(type_):
     assert "current" in inspect.signature(DRIVERS[type_].list_databases).parameters
 
 
-# MySQL builds its SQL after connecting: test_mysql.py checks it on a fake connection.
 @pytest.mark.parametrize("method", ["run_query", "export_csv"])
-@pytest.mark.parametrize("type_", [t for t in ALL if t != "mysql"])
+@pytest.mark.parametrize("type_", ALL)
 def test_sorting_by_a_name_with_the_quote_character_is_an_error(type_, method):
     """Not a silent skip: the rows would come back unsorted under a sorted header."""
     d = DRIVERS[type_]

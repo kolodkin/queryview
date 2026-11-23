@@ -56,8 +56,10 @@ class Repo:
             name, relpath = d["name"], entity["relpath"]
             if name in dashboards:
                 # One name, two folders: the name's own folder wins, else the first.
-                log.warning("%s: the name %r is already used by %s", relpath, name, folders[name])
-                if relpath != dashboard_reldir(name):
+                own = relpath == dashboard_reldir(name)
+                kept, skipped = (relpath, folders[name]) if own else (folders[name], relpath)
+                log.warning("skipping %s: the name %r is already used by %s", skipped, name, kept)
+                if not own:
                     continue
             dashboards[name], folders[name] = d, relpath
         # Swapped whole, so a request never sees half a refresh.

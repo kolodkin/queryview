@@ -1,11 +1,4 @@
-from queryview.validation import MAX_LIMIT, clamp_paging, dashboard_params_error, page_bounds
-
-
-def test_clamp_paging():
-    assert clamp_paging(50, 10) == (50, 10)
-    assert clamp_paging(-5, -5) == (0, 0)
-    assert clamp_paging(MAX_LIMIT + 1, 0) == (MAX_LIMIT, 0)
-    assert clamp_paging("x", None) == (100, 0)
+from queryview.validation import dashboard_params_error, page_bounds
 
 
 def test_dashboard_params_rules():
