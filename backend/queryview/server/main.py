@@ -18,7 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
 from ..dashboard_params import ParamError, apply_to_queries, parse_params
-from ..dashboard_queries import WAITING, clean_values, dialect_of, resolve_on, run_dashboard_on
+from ..dashboard_queries import NO_FAN_OUT, WAITING, clean_values, dialect_of, resolve_on, run_dashboard_on
 from ..drivers import DRIVERS
 from ..drivers.base import Err
 from ..drivers.clickhouse import close_client
@@ -115,7 +115,9 @@ def create_app(config: ServerConfig) -> FastAPI:
             ready = apply_to_queries({"q": template}, parse_params(dash["params"]), resolved, dialect_of(driver))
         except ParamError as e:
             return _fail(str(e))
-        return ready["q"] if ready else _fail(WAITING)
+        if not ready:
+            return _fail(WAITING)
+        return ready["q"] if isinstance(ready["q"], str) else _fail(NO_FAN_OUT)
 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:

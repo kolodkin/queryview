@@ -5,12 +5,22 @@ resolved and substituted here. Dashboard persistence lives in dashboards.py."""
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from typing import Any
 
 from .connect import _gated_session
-from .dashboard_params import Dialect, ParamError, apply_to_queries, missing, parse_params, resolve, substitute
+from .dashboard_params import (
+    Dialect,
+    ParamError,
+    apply_to_queries,
+    each_in,
+    missing,
+    parse_params,
+    resolve,
+    substitute,
+)
 from .drivers import DRIVERS
-from .drivers.base import Driver, DriverConfig, Err, RowsResult, rows_to_columns
+from .drivers.base import Driver, DriverConfig, Err, QueryRows, RowsResult, rows_to_columns
 
 # Row cap per dashboard query (matches /api/clickhouse/query's ceiling), applied
 # as the LIMIT of the subselect wrapping each query.
@@ -22,6 +32,7 @@ DASHBOARD_ROW_CAP = 1000
 DASHBOARD_CONCURRENCY = 5
 
 WAITING = "Waiting for a parameter choice."
+NO_FAN_OUT = "a widget cannot page a query run per value"
 
 
 def dialect_of(driver: Driver) -> Dialect:
@@ -54,6 +65,8 @@ def ready_sql(sql: str, params: object, values: dict[str, str], dialect: Dialect
     if missing(sql, declared, values):
         return None, WAITING
     try:
+        if each_in(sql, declared):
+            return None, NO_FAN_OUT
         return substitute(sql, declared, values, dialect), None
     except ParamError as e:
         return None, str(e)
@@ -63,7 +76,7 @@ async def run_queries_on(
     driver: Driver,
     config: DriverConfig,
     database: str | None,
-    queries: dict[str, str],
+    queries: Mapping[str, str | dict[str, str]],
     limit: int = DASHBOARD_ROW_CAP,
     offset: int = 0,
 ) -> dict[str, Any]:
@@ -72,23 +85,41 @@ async def run_queries_on(
     (`reason`: query) and cancels the ones still running. On full success
     returns {"ok": True, "results": {name: {col: [values, …]}}, "meta": {name:
     [{name, type}, …]}} — column-oriented, ready for window.queries, values
-    typed as the driver returned them. `limit`/`offset` page each query."""
+    typed as the driver returned them. `limit`/`offset` page each query.
+
+    A query given as `{value: sql}` runs every SQL and is the rows of all of
+    them, stacked in that order and cut at `limit`; the runs must return the
+    same columns. See docs/dashboard.md — "A query run once per value"."""
     slots = asyncio.Semaphore(DASHBOARD_CONCURRENCY)
 
     async def one(sql: str) -> RowsResult | Err:
         async with slots:
             return await driver.run_query(config, sql, database, limit=limit, offset=offset, order_by=None)
 
-    tasks = {qname: asyncio.create_task(one(sql)) for qname, sql in queries.items()}
+    # One run per SQL, labelled as an error names it: `sales`, `sales[eu]`.
+    runs = {
+        qname: {qname: sql} if isinstance(sql, str) else {f"{qname}[{value}]": s for value, s in sql.items()}
+        for qname, sql in queries.items()
+    }
+    tasks = {label: asyncio.create_task(one(sql)) for parts in runs.values() for label, sql in parts.items()}
     results: dict[str, dict[str, list[Any]]] = {}
     meta: dict[str, list[dict[str, str]]] = {}
     try:
-        for qname in queries:
-            r = await tasks.pop(qname)  # popped: its rows are not kept twice
-            if isinstance(r, Err):
-                return {"ok": False, "reason": "query", "message": f"{qname}: {r.message}"}
-            results[qname] = rows_to_columns(r.rows)
-            meta[qname] = [c._asdict() for c in r.rows.meta]
+        for qname, parts in runs.items():
+            stacked: QueryRows | None = None
+            for label in parts:
+                r = await tasks.pop(label)  # popped: its rows are not kept twice
+                if isinstance(r, Err):
+                    return {"ok": False, "reason": "query", "message": f"{label}: {r.message}"}
+                if stacked is None:
+                    stacked = r.rows
+                elif [c.name for c in r.rows.meta] != [c.name for c in stacked.meta]:
+                    return {"ok": False, "reason": "query", "message": f"{qname}: columns differ between values"}
+                else:
+                    stacked.data.extend(r.rows.data[: limit - len(stacked.data)])
+            stacked = stacked or QueryRows([], [])  # an `each` with no values
+            results[qname] = rows_to_columns(stacked)
+            meta[qname] = [c._asdict() for c in stacked.meta]
     finally:
         # A failure, or the caller gone: the rest are cancelled, which stops
         # them wherever the driver can (drivers/duckdb.py interrupts its own).

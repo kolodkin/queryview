@@ -8,6 +8,7 @@ import asyncio
 import pytest
 
 from queryview.dashboard_params import (
+    MAX_EACH,
     MAX_TEXT_PARAM,
     Dialect,
     Param,
@@ -337,3 +338,56 @@ def test_a_name_declared_twice_keeps_the_first():
     twice = [{"name": "col", "kind": "text"}, {"name": "col", "kind": "identifier", "options": ["city"]}]
     assert parse_params(twice) == [Param(name="col", kind="text", text="")]
     assert _sub("SELECT {col}", parse_params(twice), {"col": "secret"}) == "SELECT 'secret'"
+
+
+# --- An `each` param: a list nobody picks from; a query naming it runs per value ---
+
+REGION = Param("region", "each", options=("eu", "us"))
+
+
+def _apply(queries, params):
+    return apply_to_queries(queries, params, _resolve(params, {}), CH)
+
+
+def test_an_each_param_resolves_to_its_list_and_no_value():
+    assert _resolve([REGION], {"region": "us"}) == [
+        {"name": "region", "kind": "each", "options": ["eu", "us"], "value": ""}
+    ]
+
+
+def test_a_query_naming_an_each_param_becomes_one_sql_per_option():
+    out = _apply({"sales": "SELECT {region} FROM {region:identifier}", "totals": "SELECT 1"}, [REGION])
+    assert out == {"sales": {"eu": "SELECT 'eu' FROM `eu`", "us": "SELECT 'us' FROM `us`"}, "totals": "SELECT 1"}
+
+
+def test_a_query_naming_two_each_params_is_an_error():
+    params = [REGION, Param("year", "each", options=("2025",))]
+    with pytest.raises(ParamError, match="sales: one each param per query"):
+        _apply({"sales": "SELECT {region}, {year}"}, params)
+
+
+def test_more_than_a_hundred_values_is_an_error():
+    many = Param("n", "each", options=tuple(str(i) for i in range(MAX_EACH + 1)))
+    with pytest.raises(ParamError, match="n: more than 100 values"):
+        _resolve([many], {})
+
+
+def test_an_options_sql_cannot_use_an_each_param():
+    picker = Param("city", "value", options_sql="SELECT city FROM t WHERE region = {region}")
+    with pytest.raises(ParamError, match="city: options_sql cannot use the each param region"):
+        _resolve([REGION, picker], {})
+
+
+def test_an_each_param_lists_from_other_params():
+    async def run(sql: str):
+        assert sql == "SELECT region FROM t WHERE note = 'x'"
+        return ["eu"]
+
+    each = Param("region", "each", options_sql="SELECT region FROM t WHERE note = {note}")
+    out = _resolve([Param("note", "text", text="x"), each], {}, run)
+    assert out[1]["options"] == ["eu"]
+
+
+def test_parses_an_each_param():
+    assert parse_params([{"name": "region", "kind": "each", "options": ["eu", "us"]}]) == [REGION]
+    assert parse_params([{"name": "region", "kind": "each"}]) == []

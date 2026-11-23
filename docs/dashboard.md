@@ -248,6 +248,7 @@ FROM {table} GROUP BY value, category
 | `identifier` | a quoted table/column, in the connection's own quoting | `{field}` → `"city"` (`` `city` `` on ClickHouse) |
 | `dimension` | a checkbox: its own column when checked, `''` when not | `{category}` → `"category"` / `''` |
 | `text` | whatever was typed, as a quoted string literal | `{note}` → `'o''k'` |
+| `each` | every option in turn, as a `value` does: see [below](#a-query-run-once-per-value) | `{region}` → `'eu'`, then `'us'` |
 
 A `text` param is free input:
 
@@ -274,6 +275,36 @@ starts empty and every query that needs it is held back until a choice is made.
 reference another param (`{table}`), so a field list can follow the selected
 table; params resolve in dependency order, a cycle is an error, and one whose
 dependency is still unchosen simply has no options yet.
+
+## A query run once per value
+
+An **`each`** param is a list nobody picks from. A query that names it runs
+once per option, up to five at a time, and its result is the rows of every
+run, stacked in the list's order. A heavy query over many partitions (a
+database per tenant, a table per region) becomes several small ones:
+
+```yaml
+params:
+  - name: region
+    kind: each
+    options_sql: SELECT DISTINCT region FROM orders ORDER BY region
+```
+
+```sql
+SELECT {region} AS region, count() AS orders FROM orders WHERE region = {region}
+```
+
+- Needs `options` or `options_sql`, takes no `default`, and holds no value:
+  `<qv-param>` draws nothing for it. At most 100 options.
+- Its `options_sql` may reference other params, never another `each`; no other
+  param's `options_sql` may reference it. A query names at most one.
+- The runs must return the same columns, in name and order.
+- A failing run fails the query, named with its value: `sales[eu]: …`. So list
+  only the values the query can run on.
+- No options: an empty result with no columns.
+- The 1,000-row cap applies to each run and to the stacked rows, which keep
+  the first 1,000.
+- A [widget](#widgets) cannot page such a query.
 
 ## Changing parameters: `window.params` and `setParams`
 

@@ -7,6 +7,7 @@ See docs/dashboard.md — "Dashboard parameters".
     identifier  a table/column: {field} -> "city"
     dimension   an optional GROUP BY column: checked -> its own column, else ''
     text        whatever the user typed, as a literal: {note} -> 'o''k'
+    each        a list nobody picks from: a query naming it runs once per option
 
 Pure: no session, request or driver. The caller passes the dialect and a
 runner for `options_sql`."""
@@ -21,7 +22,10 @@ from typing import Any
 # The longest text a page may send into a query.
 MAX_TEXT_PARAM = 10_000
 
-KINDS = ("value", "identifier", "dimension", "text")
+# The most options an `each` param may fan a query out to.
+MAX_EACH = 100
+
+KINDS = ("value", "identifier", "dimension", "text", "each")
 CASTS = ("literal", "identifier")
 # `{name}` substitutes per the param's kind; `{name:literal}` / `{name:identifier}`
 # override it for that one spot: a table is an identifier in `FROM {table}` but
@@ -184,6 +188,8 @@ def resolve_order(params: list[Param]) -> list[Param]:
         visiting.add(p.name)
         for dep in placeholders_in(p.options_sql or ""):
             if dep in by_name:
+                if by_name[dep].kind == "each":
+                    raise ParamError(f"{p.name}: options_sql cannot use the each param {dep}")
                 visit(by_name[dep])
         visiting.discard(p.name)
         done.add(p.name)
@@ -195,13 +201,14 @@ def resolve_order(params: list[Param]) -> list[Param]:
 
 
 def missing(sql: str, params: list[Param], values: dict[str, str]) -> list[str]:
-    """The declared params a query still needs a value for. Dimensions and text
-    never count: an unchecked one is off, and an empty text is a value."""
+    """The declared params a query still needs a value for. Dimensions, text
+    and each never count: an unchecked one is off, an empty text is a value,
+    and an each is given every option in turn."""
     by_name = {p.name: p for p in params}
     return [
         name
         for name in placeholders_in(sql)
-        if name in by_name and by_name[name].kind not in ("dimension", "text") and not values.get(name)
+        if name in by_name and by_name[name].kind not in ("dimension", "text", "each") and not values.get(name)
     ]
 
 
@@ -229,7 +236,11 @@ async def resolve(params: list[Param], values: dict[str, str], run: Runner, dial
                 settle(p, [], "")
                 continue
             options = [option_text(v) for v in await run(substitute(p.options_sql, params, chosen, dialect))]
-        if p.kind == "dimension":
+        if p.kind == "each":
+            if len(options) > MAX_EACH:
+                raise ParamError(f"{p.name}: more than {MAX_EACH} values")
+            settle(p, options, "")
+        elif p.kind == "dimension":
             settle(p, options, want if want is not None and _is_checked(want) else "")
         elif want and want in options:
             settle(p, options, want)
@@ -238,14 +249,34 @@ async def resolve(params: list[Param], values: dict[str, str], run: Runner, dial
     return resolved
 
 
+def each_in(sql: str, params: list[Param]) -> str | None:
+    """The `each` param a query names, if any. Raises on two: their values
+    would multiply."""
+    kinds = {p.name: p.kind for p in params}
+    names = [n for n in placeholders_in(sql) if kinds.get(n) == "each"]
+    if len(names) > 1:
+        raise ParamError("one each param per query")
+    return names[0] if names else None
+
+
 def apply_to_queries(
     queries: dict[str, str], params: list[Param], resolved: list[dict[str, Any]], dialect: Dialect
-) -> dict[str, str]:
+) -> dict[str, str | dict[str, str]]:
     """The queries with the selections substituted. A query whose selectors
-    aren't all chosen yet is left out rather than run half-blank."""
+    aren't all chosen yet is left out rather than run half-blank. One naming an
+    `each` param is `{option: sql}`, a SQL per option in the list's order."""
     values = {p["name"]: p["value"] for p in resolved}
-    return {
-        name: substitute(sql, params, values, dialect)
-        for name, sql in queries.items()
-        if not missing(sql, params, values)
-    }
+    options = {p["name"]: p["options"] for p in resolved}
+    out: dict[str, str | dict[str, str]] = {}
+    for name, sql in queries.items():
+        if missing(sql, params, values):
+            continue
+        try:
+            each = each_in(sql, params)
+        except ParamError as e:
+            raise ParamError(f"{name}: {e}") from None
+        if each is None:
+            out[name] = substitute(sql, params, values, dialect)
+        else:
+            out[name] = {o: substitute(sql, params, {**values, each: o}, dialect) for o in options[each]}
+    return out

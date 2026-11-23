@@ -47,3 +47,10 @@ def test_dashboard_params_selector_rules():
 def test_dashboard_params_rejects_a_name_declared_twice():
     twice = [{"name": "col", "kind": "text"}, {"name": "col", "kind": "identifier", "options": ["city"]}]
     assert dashboard_params_error(twice) == "invalid params[1] name 'col' is declared twice"
+
+
+def test_an_each_param_is_a_list_with_no_default():
+    assert dashboard_params_error([{"name": "region", "kind": "each", "options": ["eu"]}]) is None
+    assert dashboard_params_error([{"name": "region", "kind": "each"}]) is not None
+    with_default = [{"name": "region", "kind": "each", "options": ["eu"], "default": "none"}]
+    assert "takes no default" in str(dashboard_params_error(with_default))

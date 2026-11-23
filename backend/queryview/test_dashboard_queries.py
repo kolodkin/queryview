@@ -7,7 +7,14 @@ from __future__ import annotations
 import asyncio
 
 import queryview.connect as connect
-from queryview.dashboard_queries import DASHBOARD_CONCURRENCY, clean_values, run_dashboard, run_dashboard_queries
+from queryview.dashboard_params import Dialect
+from queryview.dashboard_queries import (
+    DASHBOARD_CONCURRENCY,
+    clean_values,
+    ready_sql,
+    run_dashboard,
+    run_dashboard_queries,
+)
 from queryview.drivers import DRIVERS
 from queryview.drivers.base import Column, DatabasesResult, Err, QueryRows, RowsResult
 
@@ -171,3 +178,68 @@ def test_a_failing_query_stops_the_ones_still_running(monkeypatch):
     r = asyncio.run(run_dashboard_queries("s-par2", {"bad": "fail", "slow": "SELECT 1"}))
     assert r == {"ok": False, "reason": "query", "message": "bad: bad sql"}
     assert driver.finished == [] and driver.running == 0
+
+
+# --- A query run once per value of an `each` param (docs/dashboard.md) ---
+
+EACH = [{"name": "region", "kind": "each", "options": ["eu", "us", "ap"]}]
+
+
+class _RegionDriver(_RowsDriver):
+    """One row per run, naming the value its SQL carries; `us` answers last."""
+
+    async def run_query(self, c, sql, database, limit, offset, order_by):
+        if "bad" in sql:
+            return Err("bad sql")
+        if "WHERE 0" in sql:
+            return RowsResult(QueryRows([Column("region", "String")], []))
+        if "us" in sql:
+            await asyncio.sleep(0.01)
+        cols = [Column("other" if "odd" in sql and "ap" in sql else "region", "String")]
+        return RowsResult(QueryRows(cols, [[sql.split("'")[1]]] * (600 if "many" in sql else 1)))
+
+
+def _each(monkeypatch, sid, queries, params=EACH):
+    _connected(monkeypatch, sid, _RegionDriver())
+    return asyncio.run(run_dashboard(sid, queries, params, {}))
+
+
+def test_a_query_per_value_stacks_its_rows_in_the_lists_order(monkeypatch):
+    out = _each(monkeypatch, "s-each", {"sales": "SELECT {region}", "one": "SELECT 'x'"})
+    assert out["results"] == {"sales": {"region": ["eu", "us", "ap"]}, "one": {"region": ["x"]}}
+    assert out["meta"]["sales"] == [{"name": "region", "type": "String"}]
+
+
+def test_a_failing_value_is_named(monkeypatch):
+    out = _each(
+        monkeypatch,
+        "s-each-bad",
+        {"sales": "SELECT {region}"},
+        [{"name": "region", "kind": "each", "options": ["eu", "bad"]}],
+    )
+    assert (out["ok"], out["message"]) == (False, "sales[bad]: bad sql")
+
+
+def test_values_must_return_the_same_columns(monkeypatch):
+    out = _each(monkeypatch, "s-each-cols", {"sales": "SELECT {region} -- odd"})
+    assert (out["ok"], out["message"]) == (False, "sales: columns differ between values")
+
+
+def test_no_values_is_an_empty_result(monkeypatch):
+    out = _each(
+        monkeypatch,
+        "s-each-none",
+        {"sales": "SELECT {region}"},
+        [{"name": "region", "kind": "each", "options_sql": "SELECT 'none' WHERE 0"}],
+    )
+    assert (out["results"], out["meta"]) == ({"sales": {}}, {"sales": []})
+
+
+def test_the_stacked_rows_keep_the_first_of_the_cap(monkeypatch):
+    out = _each(monkeypatch, "s-each-cap", {"sales": "SELECT {region} -- many"})
+    assert out["results"]["sales"] == {"region": ["eu"] * 600 + ["us"] * 400}
+
+
+def test_a_widget_cannot_page_a_query_run_per_value():
+    sql, why = ready_sql("SELECT {region}", EACH, {}, Dialect('"', False))
+    assert (sql, why) == (None, "a widget cannot page a query run per value")

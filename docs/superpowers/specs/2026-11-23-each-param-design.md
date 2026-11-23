@@ -86,7 +86,7 @@ a dashboard whose table holds the rows of every value.
 - Results that appear value by value as each run finishes.
 - Paging or sorting a fan-out query in a widget.
 
-## Open for the reader
+## Decided
 
-1. Fail the whole query on one failing value (above), or skip it and say so?
-2. Is 100 values the right ceiling?
+1. One failing value fails the whole query.
+2. 100 values is the ceiling.
