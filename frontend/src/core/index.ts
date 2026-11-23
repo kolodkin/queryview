@@ -36,6 +36,7 @@ export { DashboardFrame } from './dashboard/DashboardFrame'
 export {
   answerWidget,
   listenToFrame,
+  markedRuns,
   widgetPage,
   type FrameHandlers,
   type WidgetPost,

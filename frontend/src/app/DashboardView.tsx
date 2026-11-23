@@ -5,6 +5,7 @@ import {
   DashboardFrame,
   answerWidget,
   listenToFrame,
+  markedRuns,
   requestSnapshot,
   valuesOf,
   widgetPage,
@@ -440,20 +441,15 @@ function DashboardView({
       return
     }
     // Nothing edited: Execute refreshes everything.
-    const answer = await rerun(active, null, only)
-    if (!answer) return
+    const answer = await marked(() => rerun(active, null, only))
     // The page keeps its last results; the failure shows above it.
-    setError(answer.ok ? null : String(answer.message))
-    broadcast(answer)
+    if (answer) setError(answer.ok ? null : String(answer.message))
   }
 
   // A re-run's results go to the dashboard's frame and the query popup's at
   // the same moment: their tables re-query on it, and an identical page they
   // both show runs once (widgetHost.ts).
-  function broadcast(answer: Record<string, unknown>) {
-    for (const f of [frameRef.current, popupFrameRef.current])
-      f?.contentWindow?.postMessage(answer, '*')
-  }
+  const [marked] = useState(() => markedRuns(() => [frameRef.current, popupFrameRef.current]))
 
   // Download the dashboard as one static HTML file (docs/dashboard.md).
   function snapshot() {
@@ -502,13 +498,17 @@ function DashboardView({
       return sharedPost(runOn ?? '', `/api/db/${kind}`, body)
     }
     // The dashboard's frame and the query popup's are answered alike.
-    return listenToFrame(() => [frameRef.current, popupFrameRef.current], {
-      onSnapshot: (snap, frame) => {
-        if (snapshotRef.current?.frame === frame) snapshotRef.current.done(snap)
+    return listenToFrame(
+      () => [frameRef.current, popupFrameRef.current],
+      {
+        onSnapshot: (snap, frame) => {
+          if (snapshotRef.current?.frame === frame) snapshotRef.current.done(snap)
+        },
+        onWidget: (req) => answerWidget(req, post, setError),
+        onSetParams: (values) => rerun(active, values),
       },
-      onWidget: (req) => answerWidget(req, post, setError),
-      onSetParams: (values) => rerun(active, values),
-    })
+      marked,
+    )
     // rerun reads only refs beyond its arguments.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, runOn])

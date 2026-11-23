@@ -292,6 +292,12 @@ message)` then fires with the new `window.queries` and `window.params`
 (`message` is set when the run failed and the previous results were kept). The
 iframe isn't reloaded, so the page keeps its state.
 
+While that re-run is in flight the page's `<html>` carries
+**`data-qv-loading`**, however it started (`setParams`, a `<qv-param>`,
+**Execute**), until the last one queued has answered. A thin bar runs across
+the top of the frame, and a dashboard can mark what is now stale with its own
+CSS, e.g. `[data-qv-loading] .panel { opacity: .5 }`.
+
 The page sends **values only, never SQL**, and the host answers only messages
 from the dashboard's own frame — so a dashboard's SQL stays what `queries`
 declares, reviewable in `queries.yaml`.
@@ -321,7 +327,7 @@ stands at the current parameters. Print the file for a PDF.
   under a caption of its row count, limit, offset and order. Raise its
   **Limit** first for more rows.
 - A canvas chart becomes an image; a dropdown, its chosen value.
-- Refused while a widget is still loading.
+- Refused while the dashboard or a widget is still loading.
 - The file runs no script and redirects nowhere, whatever the dashboard's
   HTML contains: the host puts a script-blocking policy ahead of the frame's
   text. Stylesheets, fonts and images from elsewhere are still fetched when

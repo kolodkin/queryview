@@ -21,6 +21,19 @@ function themeStyle(theme: QvTheme): string {
   return vars ? `<style>:root{${vars}}</style>\n` : ''
 }
 
+// While a re-run is in flight the page carries data-qv-loading: a bar runs
+// across its top, and the page's own CSS can dim what is now stale. A faint
+// track with a lit segment sweeping over it, moved by transform so it costs no
+// repaint, and 4px so it clears a rounded frame's corners.
+const LOADING_STYLE =
+  '<style>html[data-qv-loading]::before,html[data-qv-loading]::after{content:"";position:fixed;' +
+  'z-index:2147483647;top:0;left:0;height:4px;pointer-events:none}' +
+  'html[data-qv-loading]::before{width:100%;background:rgba(129,140,248,.4)}' +
+  'html[data-qv-loading]::after{width:35%;background:linear-gradient(90deg,transparent,' +
+  'var(--qv-accent,#818cf8) 35%,var(--qv-accent,#818cf8) 65%,transparent);' +
+  'animation:qv-loading 1.2s linear infinite}' +
+  '@keyframes qv-loading{from{transform:translateX(-100%)}to{transform:translateX(100vw)}}</style>\n'
+
 // The in-iframe half of the params channel, plus the bound values. The page
 // sends values only; the host substitutes them into the dashboard's own SQL and
 // posts results back, so the page re-renders without a reload and never handles
@@ -78,13 +91,15 @@ function snapshot() {
         if (el.shadowRoot) { roots.push(el.shadowRoot); walk(el.shadowRoot); }
       });
     })(document);
-    // No rows yet: a widget mid-query, or a qv-* tag the bundle has not upgraded
-    // (once the page has loaded, one still undefined is unknown to it and stays).
-    if ((document.readyState !== 'complete' && Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
+    // Stale or no rows yet: a re-run in flight, a widget mid-query, or a qv-* tag
+    // the bundle has not upgraded (once the page has loaded, one still undefined
+    // is unknown to it and stays).
+    if (document.documentElement.hasAttribute('data-qv-loading') ||
+        (document.readyState !== 'complete' && Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
           return el.localName.indexOf('qv-') === 0;
         })) ||
         roots.some(function (root) { return root.querySelector('[data-qv-busy]'); })) {
-      return { type: 'qv-snapshot-result', message: 'A widget is still loading. Take the snapshot when it has finished.' };
+      return { type: 'qv-snapshot-result', message: 'The dashboard is still loading. Take the snapshot when it has finished.' };
     }
     var scopes = [document].concat(roots);
     // Canvases are read before anything moves: one layout, and the size each
@@ -148,6 +163,8 @@ function snapshot() {
 window.addEventListener('message', function (e) {
   var d = e.data;
   if (d && d.type === 'qv-snapshot') { parent.postMessage(snapshot(), '*'); return; }
+  // The host says when a re-run starts and when the last one has answered.
+  if (d && d.type === 'qv-loading') { document.documentElement.toggleAttribute('data-qv-loading', !!d.on); return; }
   if (!d || d.type !== 'params-results') return;
   // A failed run keeps the previous results on screen and reports the message.
   if (d.results) { window.queries = d.results; bind(); }
@@ -173,6 +190,7 @@ export function buildSrcDoc(
     themeStyle(theme) +
     `<script>window.queries = ${safe(results)};\nwindow.params = ${safe(params)};` +
     `${SET_PARAMS_HELPER}\n</script>\n` +
+    LOADING_STYLE +
     // The <qv-*> tags: loaded only by dashboards that use one, deferred so the
     // tags upgrade once the HTML, their <template> children included, is parsed.
     (/<qv-/i.test(html) ? `<script defer src="${__WIDGETS_URL__}"></script>\n` : '') +
