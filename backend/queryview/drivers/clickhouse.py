@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
+import weakref
 from dataclasses import asdict, dataclass
 from typing import Any, ClassVar, Self, TypeVar
 
@@ -108,6 +110,18 @@ class ChRows(RowsResult, ChResult):
 
 R = TypeVar("R", bound=ChResult)
 
+# One client per event loop, so queries reuse its open connections: a new
+# connection per query is a round trip each, a second on a slow link.
+_clients: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx.AsyncClient] = weakref.WeakKeyDictionary()
+
+
+def _client() -> httpx.AsyncClient:
+    loop = asyncio.get_running_loop()
+    client = _clients.get(loop)
+    if client is None:
+        client = _clients[loop] = httpx.AsyncClient()
+    return client
+
 
 async def ch_fetch(
     c: ChConfig,
@@ -116,14 +130,13 @@ async def ch_fetch(
     database: str | None = None,
     settings: dict[str, str] | None = None,
     write: bool = False,
-    client: httpx.AsyncClient | None = None,
+    timeout: httpx.Timeout | None = None,
 ) -> str | Err:
-    """Run a query against the ClickHouse HTTP interface (Basic auth, the query timeout)
-    and return the body as text. `clause` appends a `FORMAT` clause; `database`
+    """Run a query against the ClickHouse HTTP interface (Basic auth, the query timeout
+    unless `timeout` says otherwise) and return the body as text. `clause` appends a `FORMAT` clause; `database`
     scopes the query; `settings` are passed as URL parameters. Queries go as a
     GET, which ClickHouse treats as read-only — that is what keeps every other
-    path from writing; `write` sends the query as a POST body instead. `client`
-    reuses a caller's connection across several queries."""
+    path from writing; `write` sends the query as a POST body instead."""
     url = f"http://{c.host}:{c.port}/"
     q = f"{query}\nFORMAT {clause}" if clause else query
     # Every query gets a query_id, named in errors to trace it in system.query_log, and
@@ -136,17 +149,12 @@ async def ch_fetch(
         params["database"] = database
     auth = (c.username, c.password)
 
-    async def send(cl: httpx.AsyncClient) -> httpx.Response:
-        if write:
-            return await cl.post(url, params=params, content=q.encode(), auth=auth)
-        return await cl.get(url, params={"query": q, **params}, auth=auth)
-
+    limit = timeout or query_timeout.get()
     try:
-        if client is not None:
-            res = await send(client)
+        if write:
+            res = await _client().post(url, params=params, content=q.encode(), auth=auth, timeout=limit)
         else:
-            async with httpx.AsyncClient(timeout=query_timeout.get()) as own:
-                res = await send(own)
+            res = await _client().get(url, params={"query": q, **params}, auth=auth, timeout=limit)
     except httpx.TimeoutException:
         return Err(f"connection timed out (query_id {query_id})")
     except httpx.HTTPError as err:
@@ -163,10 +171,10 @@ async def ch_query(
     kind: type[R],
     database: str | None = None,
     settings: dict[str, str] | None = None,
-    client: httpx.AsyncClient | None = None,
+    timeout: httpx.Timeout | None = None,
 ) -> R | Err:
     """Run `query` asking for `kind`'s format and decode the body into it."""
-    text = await ch_fetch(c, query, kind.clause, database, {**kind.settings, **(settings or {})}, client=client)
+    text = await ch_fetch(c, query, kind.clause, database, {**kind.settings, **(settings or {})}, timeout=timeout)
     if isinstance(text, Err):
         return text
     return kind.from_text(text)
@@ -274,8 +282,7 @@ class ClickHouseDriver:
         }
         connect = query_timeout.get()
         timeout = httpx.Timeout(connect, read=RUN_SQL_TIMEOUT_SECONDS + connect)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            return await ch_query(config, sql, ChRows, database, settings, client=client)
+        return await ch_query(config, sql, ChRows, database, settings, timeout=timeout)
 
     async def export_csv(
         self,
@@ -298,23 +305,22 @@ class ClickHouseDriver:
         return FieldsResult([{"name": row[0], "type": row[1]} for row in r.data])
 
     async def execute_script(self, config: ChConfig, sql: str, database: str | None) -> list[StatementResult]:
-        # One HTTP client for the script, and one server session so SET and
-        # temporary tables carry from statement to statement; a statement may
-        # run far longer than a read-only probe before it is given up on.
+        # One server session, so SET and temporary tables carry from statement
+        # to statement; a statement may run far longer than a read-only probe
+        # before it is given up on.
         settings = {**SCRIPT_SETTINGS, "session_id": uuid.uuid4().hex, "session_timeout": str(SCRIPT_TIMEOUT_SECONDS)}
         timeout = httpx.Timeout(query_timeout.get(), read=SCRIPT_TIMEOUT_SECONDS)
-        async with httpx.AsyncClient(timeout=timeout) as client:
 
-            async def run_one(stmt: str) -> StatementResult:
-                text = await ch_fetch(config, stmt, database=database, settings=settings, write=True, client=client)
-                if isinstance(text, Err):
-                    return StatementResult(stmt, False, message=text.message)
-                if not text:  # DDL/DML: nothing comes back
-                    return StatementResult(stmt, True, status="OK")
-                rows = ChRows.from_text(text)
-                if isinstance(rows, Err):
-                    # The statement chose its own FORMAT: show its text as-is.
-                    return StatementResult(stmt, True, status=text)
-                return StatementResult(stmt, True, rows=rows.rows)
+        async def run_one(stmt: str) -> StatementResult:
+            text = await ch_fetch(config, stmt, database=database, settings=settings, write=True, timeout=timeout)
+            if isinstance(text, Err):
+                return StatementResult(stmt, False, message=text.message)
+            if not text:  # DDL/DML: nothing comes back
+                return StatementResult(stmt, True, status="OK")
+            rows = ChRows.from_text(text)
+            if isinstance(rows, Err):
+                # The statement chose its own FORMAT: show its text as-is.
+                return StatementResult(stmt, True, status=text)
+            return StatementResult(stmt, True, rows=rows.rows)
 
-            return await run_script(sql, run_one)
+        return await run_script(sql, run_one)
