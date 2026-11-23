@@ -96,20 +96,20 @@ async def run_queries_on(
         async with slots:
             return await driver.run_query(config, sql, database, limit=limit, offset=offset, order_by=None)
 
-    # One run per SQL, labelled as an error names it: `sales`, `sales[eu]`.
-    runs = {
-        qname: {qname: sql} if isinstance(sql, str) else {f"{qname}[{value}]": s for value, s in sql.items()}
-        for qname, sql in queries.items()
-    }
-    tasks = {label: asyncio.create_task(one(sql)) for parts in runs.values() for label, sql in parts.items()}
+    # One run per SQL: a plain query's under None, a fan-out's under each value.
+    runs = {qname: {None: sql} if isinstance(sql, str) else sql for qname, sql in queries.items()}
+    tasks = {(q, v): asyncio.create_task(one(sql)) for q, parts in runs.items() for v, sql in parts.items()}
     results: dict[str, dict[str, list[Any]]] = {}
     meta: dict[str, list[dict[str, str]]] = {}
     try:
         for qname, parts in runs.items():
             stacked: QueryRows | None = None
-            for label in parts:
-                r = await tasks.pop(label)  # popped: its rows are not kept twice
+            for value in parts:
+                if stacked is not None and len(stacked.data) >= limit:
+                    break  # full: the values left are cancelled below, unread
+                r = await tasks.pop((qname, value))  # popped: its rows are not kept twice
                 if isinstance(r, Err):
+                    label = qname if value is None else f"{qname}[{value}]"
                     return {"ok": False, "reason": "query", "message": f"{label}: {r.message}"}
                 if stacked is None:
                     stacked = r.rows

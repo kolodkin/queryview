@@ -164,7 +164,7 @@ def substitute(sql: str, params: list[Param], values: dict[str, str], dialect: D
             if cast == "identifier":
                 raise ParamError(f"{{{name}}} is text: it cannot be an identifier")
             return _quote_literal(raw or "", dialect)
-        if not raw:
+        if not raw and not (p.kind == "each" and raw == ""):  # an each's option may be empty
             raise ParamError(f"no value selected for {{{name}}}")
         as_identifier = cast == "identifier" if cast else p.kind == "identifier"
         return _quote_identifier(raw, name, dialect) if as_identifier else _quote_literal(raw, dialect)
@@ -237,6 +237,7 @@ async def resolve(params: list[Param], values: dict[str, str], run: Runner, dial
                 continue
             options = [option_text(v) for v in await run(substitute(p.options_sql, params, chosen, dialect))]
         if p.kind == "each":
+            options = list(dict.fromkeys(options))  # a repeated option runs once
             if len(options) > MAX_EACH:
                 raise ParamError(f"{p.name}: more than {MAX_EACH} values")
             settle(p, options, "")
@@ -267,6 +268,7 @@ def apply_to_queries(
     `each` param is `{option: sql}`, a SQL per option in the list's order."""
     values = {p["name"]: p["value"] for p in resolved}
     options = {p["name"]: p["options"] for p in resolved}
+    by_name = {p.name: p for p in params}
     out: dict[str, str | dict[str, str]] = {}
     for name, sql in queries.items():
         if missing(sql, params, values):
@@ -277,6 +279,8 @@ def apply_to_queries(
             raise ParamError(f"{name}: {e}") from None
         if each is None:
             out[name] = substitute(sql, params, values, dialect)
+        elif missing(by_name[each].options_sql or "", params, values):
+            continue  # its list waits on a choice, so the query does too
         else:
             out[name] = {o: substitute(sql, params, {**values, each: o}, dialect) for o in options[each]}
     return out

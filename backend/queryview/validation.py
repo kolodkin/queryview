@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from .dashboard_params import MAX_EACH, placeholders_in
+
 MAX_LIMIT = 10000
 
 
@@ -61,6 +63,9 @@ def dashboard_params_error(raw: object) -> str | None:
             continue
         if kind == "each" and entry.get("default") is not None:
             return f"invalid {label} an each param takes no default"
+        options = entry.get("options")
+        if kind == "each" and isinstance(options, list) and len(options) > MAX_EACH:
+            return f"invalid {label} an each param takes no more than {MAX_EACH} options"
         if entry.get("default") not in (None, "none"):
             return f"invalid {label} default must be 'none' when given"
         if kind == "dimension" and entry.get("options") is None and entry.get("options_sql") is None:
@@ -68,6 +73,12 @@ def dashboard_params_error(raw: object) -> str | None:
         err = _selector_error(entry, label)
         if err:
             return err
+    eaches = {e["name"] for e in raw if e.get("kind") == "each"}
+    for e in raw:
+        sql = e.get("options_sql")
+        used = eaches.intersection(placeholders_in(sql)) if isinstance(sql, str) else None
+        if used:
+            return f"invalid params: {e['name']}: options_sql cannot use the each param {min(used)}"
     return None
 
 

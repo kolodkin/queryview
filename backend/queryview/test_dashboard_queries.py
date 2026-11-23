@@ -243,3 +243,19 @@ def test_the_stacked_rows_keep_the_first_of_the_cap(monkeypatch):
 def test_a_widget_cannot_page_a_query_run_per_value():
     sql, why = ready_sql("SELECT {region}", EACH, {}, Dialect('"', False))
     assert (sql, why) == (None, "a widget cannot page a query run per value")
+
+
+def test_a_query_named_like_a_runs_label_is_its_own(monkeypatch):
+    out = _each(monkeypatch, "s-each-name", {"sales": "SELECT {region}", "sales[eu]": "SELECT 'x'"})
+    assert out["results"] == {"sales": {"region": ["eu", "us", "ap"]}, "sales[eu]": {"region": ["x"]}}
+
+
+def test_values_past_a_full_cap_are_not_waited_for(monkeypatch):
+    # `ap` would fail on its columns; the cap is full before it is read.
+    out = _each(
+        monkeypatch,
+        "s-each-full",
+        {"sales": "SELECT {region} -- many odd"},
+        [{"name": "region", "kind": "each", "options": ["eu", "us", "ap"]}],
+    )
+    assert out["ok"] and len(out["results"]["sales"]["region"]) == 1000

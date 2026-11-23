@@ -391,3 +391,18 @@ def test_an_each_param_lists_from_other_params():
 def test_parses_an_each_param():
     assert parse_params([{"name": "region", "kind": "each", "options": ["eu", "us"]}]) == [REGION]
     assert parse_params([{"name": "region", "kind": "each"}]) == []
+
+
+def test_an_empty_option_is_a_value_like_any_other():
+    out = _apply({"sales": "SELECT {region}"}, [Param("region", "each", options=("", "eu"))])
+    assert out == {"sales": {"": "SELECT ''", "eu": "SELECT 'eu'"}}
+
+
+def test_a_repeated_option_runs_once():
+    assert _resolve([Param("region", "each", options=("eu", "eu", "us"))], {})[0]["options"] == ["eu", "us"]
+
+
+def test_a_query_waits_while_its_each_list_waits_on_a_choice():
+    country = Param("country", "value", options=("de",), auto_select=False)
+    each = Param("region", "each", options_sql="SELECT region FROM t WHERE country = {country}")
+    assert _apply({"sales": "SELECT {region}", "one": "SELECT 1"}, [country, each]) == {"one": "SELECT 1"}

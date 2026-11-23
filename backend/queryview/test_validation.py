@@ -54,3 +54,13 @@ def test_an_each_param_is_a_list_with_no_default():
     assert dashboard_params_error([{"name": "region", "kind": "each"}]) is not None
     with_default = [{"name": "region", "kind": "each", "options": ["eu"], "default": "none"}]
     assert "takes no default" in str(dashboard_params_error(with_default))
+
+
+def test_an_each_param_is_checked_when_pushed():
+    many = [{"name": "n", "kind": "each", "options": list(range(101))}]
+    assert "no more than 100 options" in str(dashboard_params_error(many))
+    used = [
+        {"name": "region", "kind": "each", "options": ["eu"]},
+        {"name": "city", "options_sql": "SELECT city FROM t WHERE region = {region}"},
+    ]
+    assert "cannot use the each param region" in str(dashboard_params_error(used))
