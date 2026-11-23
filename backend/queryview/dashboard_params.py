@@ -164,7 +164,7 @@ def substitute(sql: str, params: list[Param], values: dict[str, str], dialect: D
             if cast == "identifier":
                 raise ParamError(f"{{{name}}} is text: it cannot be an identifier")
             return _quote_literal(raw or "", dialect)
-        if not raw and not (p.kind == "each" and raw == ""):  # an each's option may be empty
+        if raw is None or (raw == "" and p.kind != "each"):  # an each's option may be empty
             raise ParamError(f"no value selected for {{{name}}}")
         as_identifier = cast == "identifier" if cast else p.kind == "identifier"
         return _quote_identifier(raw, name, dialect) if as_identifier else _quote_literal(raw, dialect)
@@ -250,14 +250,14 @@ async def resolve(params: list[Param], values: dict[str, str], run: Runner, dial
     return resolved
 
 
-def each_in(sql: str, params: list[Param]) -> str | None:
+def each_in(sql: str, params: list[Param]) -> Param | None:
     """The `each` param a query names, if any. Raises on two: their values
     would multiply."""
-    kinds = {p.name: p.kind for p in params}
-    names = [n for n in placeholders_in(sql) if kinds.get(n) == "each"]
-    if len(names) > 1:
+    eaches = {p.name: p for p in params if p.kind == "each"}
+    found = [eaches[n] for n in placeholders_in(sql) if n in eaches]
+    if len(found) > 1:
         raise ParamError("one each param per query")
-    return names[0] if names else None
+    return found[0] if found else None
 
 
 def apply_to_queries(
@@ -268,7 +268,6 @@ def apply_to_queries(
     `each` param is `{option: sql}`, a SQL per option in the list's order."""
     values = {p["name"]: p["value"] for p in resolved}
     options = {p["name"]: p["options"] for p in resolved}
-    by_name = {p.name: p for p in params}
     out: dict[str, str | dict[str, str]] = {}
     for name, sql in queries.items():
         if missing(sql, params, values):
@@ -279,8 +278,8 @@ def apply_to_queries(
             raise ParamError(f"{name}: {e}") from None
         if each is None:
             out[name] = substitute(sql, params, values, dialect)
-        elif missing(by_name[each].options_sql or "", params, values):
+        elif missing(each.options_sql or "", params, values):
             continue  # its list waits on a choice, so the query does too
         else:
-            out[name] = {o: substitute(sql, params, {**values, each: o}, dialect) for o in options[each]}
+            out[name] = {o: substitute(sql, params, {**values, each.name: o}, dialect) for o in options[each.name]}
     return out

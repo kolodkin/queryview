@@ -105,9 +105,11 @@ async def run_queries_on(
         for qname, parts in runs.items():
             stacked: QueryRows | None = None
             for value in parts:
+                task = tasks.pop((qname, value))  # popped: its rows are not kept twice
                 if stacked is not None and len(stacked.data) >= limit:
-                    break  # full: the values left are cancelled below, unread
-                r = await tasks.pop((qname, value))  # popped: its rows are not kept twice
+                    task.cancel()  # full: the values left free their slots unread
+                    continue
+                r = await task
                 if isinstance(r, Err):
                     label = qname if value is None else f"{qname}[{value}]"
                     return {"ok": False, "reason": "query", "message": f"{label}: {r.message}"}

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from .dashboard_params import MAX_EACH, placeholders_in
+from .dashboard_params import KINDS, MAX_EACH, ParamError, parse_params, resolve_order
 
 MAX_LIMIT = 10000
 
@@ -26,9 +26,6 @@ def _selector_error(entry: object, label: str) -> str | None:
     return None
 
 
-DASHBOARD_PARAM_KINDS = ("value", "identifier", "dimension", "text", "each")
-
-
 def dashboard_params_error(raw: object) -> str | None:
     """Validate a dashboard's `params` (see docs/dashboard.md#dashboard-parameters):
     the selector rules, plus a `kind` and an optional `default: none`. A
@@ -45,8 +42,8 @@ def dashboard_params_error(raw: object) -> str | None:
         if not isinstance(entry, dict):
             return f"invalid {label} must be a mapping"
         kind = entry.get("kind", "value")
-        if kind not in DASHBOARD_PARAM_KINDS:
-            return f"invalid {label} kind must be one of {', '.join(DASHBOARD_PARAM_KINDS)}"
+        if kind not in KINDS:
+            return f"invalid {label} kind must be one of {', '.join(KINDS)}"
         name = entry.get("name")
         if not isinstance(name, str) or not name:
             return f"invalid {label} name must be a non-empty string"
@@ -61,11 +58,11 @@ def dashboard_params_error(raw: object) -> str | None:
             if default is not None and not isinstance(default, str):
                 return f"invalid {label} default must be a string"
             continue
-        if kind == "each" and entry.get("default") is not None:
-            return f"invalid {label} an each param takes no default"
-        options = entry.get("options")
-        if kind == "each" and isinstance(options, list) and len(options) > MAX_EACH:
-            return f"invalid {label} an each param takes no more than {MAX_EACH} options"
+        if kind == "each":
+            if entry.get("default") is not None:
+                return f"invalid {label} an each param takes no default"
+            if isinstance(entry.get("options"), list) and len(entry["options"]) > MAX_EACH:
+                return f"invalid {label} an each param takes no more than {MAX_EACH} options"
         if entry.get("default") not in (None, "none"):
             return f"invalid {label} default must be 'none' when given"
         if kind == "dimension" and entry.get("options") is None and entry.get("options_sql") is None:
@@ -73,12 +70,10 @@ def dashboard_params_error(raw: object) -> str | None:
         err = _selector_error(entry, label)
         if err:
             return err
-    eaches = {e["name"] for e in raw if e.get("kind") == "each"}
-    for e in raw:
-        sql = e.get("options_sql")
-        used = eaches.intersection(placeholders_in(sql)) if isinstance(sql, str) else None
-        if used:
-            return f"invalid params: {e['name']}: options_sql cannot use the each param {min(used)}"
+    try:
+        resolve_order(parse_params(raw))  # a cycle, or an options_sql using an each
+    except ParamError as e:
+        return f"invalid params: {e}"
     return None
 
 

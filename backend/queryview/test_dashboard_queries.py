@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 
 import queryview.connect as connect
-from queryview.dashboard_params import Dialect
 from queryview.dashboard_queries import (
     DASHBOARD_CONCURRENCY,
     clean_values,
@@ -17,6 +16,7 @@ from queryview.dashboard_queries import (
 )
 from queryview.drivers import DRIVERS
 from queryview.drivers.base import Column, DatabasesResult, Err, QueryRows, RowsResult
+from queryview.test_dashboard_params import PG
 
 
 class _RowsDriver:
@@ -241,7 +241,7 @@ def test_the_stacked_rows_keep_the_first_of_the_cap(monkeypatch):
 
 
 def test_a_widget_cannot_page_a_query_run_per_value():
-    sql, why = ready_sql("SELECT {region}", EACH, {}, Dialect('"', False))
+    sql, why = ready_sql("SELECT {region}", EACH, {}, PG)
     assert (sql, why) == (None, "a widget cannot page a query run per value")
 
 
@@ -256,6 +256,5 @@ def test_values_past_a_full_cap_are_not_waited_for(monkeypatch):
         monkeypatch,
         "s-each-full",
         {"sales": "SELECT {region} -- many odd"},
-        [{"name": "region", "kind": "each", "options": ["eu", "us", "ap"]}],
     )
     assert out["ok"] and len(out["results"]["sales"]["region"]) == 1000
