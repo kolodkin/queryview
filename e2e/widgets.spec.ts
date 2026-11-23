@@ -7,12 +7,43 @@ import {
   connect,
   executeSql,
   expect,
+  holdRoute,
   mcpCall,
   openDashboard,
   openNewQuery,
   queryPopupFrame,
   test,
 } from "./fixtures";
+
+test("the frame marks itself while a re-run is in flight", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const frame = await openDashboard(page, baseURL, {
+    name: "loading-mark",
+    html:
+      "<style>body{background:#0c1124;color:#fff;font-size:40px}[data-qv-loading] #v{opacity:.2}</style>" +
+      '<qv-param name="pick"></qv-param><b id="v" data-qv-query="q" data-qv-column="name"></b>',
+    queries: { q: "SELECT name FROM items WHERE name = {pick}" },
+    params: [{ name: "pick", options_sql: "SELECT name FROM items ORDER BY id" }],
+  });
+  await expect(frame.locator("#v")).toHaveText("alpha");
+  await expect(frame.locator("html")).not.toHaveAttribute("data-qv-loading");
+
+  const release = await holdRoute(page, "**/api/runqueries");
+  await frame.getByTestId("qv-param").selectOption("beta");
+  await expect(frame.locator("html")).toHaveAttribute("data-qv-loading", "");
+  await expect(frame.locator("#v")).toHaveText("alpha"); // the old value, marked stale
+  // The bar is drawn, and the dashboard's own rule applies.
+  const bar = await frame.locator("html").evaluate((el) => {
+    const track = getComputedStyle(el, "::before");
+    return [track.height, getComputedStyle(el, "::after").animationName].join(" ");
+  });
+  expect(bar).toBe("4px qv-loading");
+  await expect(frame.locator("#v")).toHaveCSS("opacity", "0.2");
+
+  release();
+  await expect(frame.locator("#v")).toHaveText("beta");
+  await expect(frame.locator("html")).not.toHaveAttribute("data-qv-loading");
+});
 
 test("a text param takes what is typed, as a literal", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
