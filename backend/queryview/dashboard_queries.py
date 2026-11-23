@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from .connect import _gated_session
-from .dashboard_params import Dialect, ParamError, apply_to_queries, missing, parse_params, resolve, substitute
+from .dashboard_params import Dialect, Param, ParamError, apply_to_queries, missing, parse_params, resolve, substitute
 from .drivers import DRIVERS
 from .drivers.base import Driver, DriverConfig, Err, rows_to_columns
 
@@ -78,10 +78,10 @@ async def run_queries_on(
 
 
 async def resolve_on(
-    driver: Driver, config: DriverConfig, database: str | None, params: object, values: dict[str, str]
+    driver: Driver, config: DriverConfig, database: str | None, params: list[Param], values: dict[str, str]
 ) -> list[dict[str, Any]]:
-    """A dashboard's selectors resolved on one connection: its options_sql run
-    there, each value kept only while its options offer it. Raises ParamError."""
+    """Selectors resolved on one connection: their options_sql run there, each
+    value kept only while its options offer it. Raises ParamError."""
 
     async def options(sql: str) -> list[Any]:
         r = await driver.run_query(config, sql, database, limit=DASHBOARD_ROW_CAP, offset=0, order_by=None)
@@ -89,7 +89,7 @@ async def resolve_on(
             raise ParamError(r.message)
         return [row[0] if row else None for row in r.rows.data]
 
-    return await resolve(parse_params(params), values, options, dialect_of(driver))
+    return await resolve(params, values, options, dialect_of(driver))
 
 
 async def run_dashboard_on(
@@ -105,8 +105,9 @@ async def run_dashboard_on(
     [{name, kind, options, value}] — also on a failing query, so the page keeps
     its selectors. A bad declaration or value fails with `reason`: params."""
     try:
-        resolved = await resolve_on(driver, config, database, params, values)
-        runnable = apply_to_queries(queries, parse_params(params), resolved, dialect_of(driver))
+        declared = parse_params(params)
+        resolved = await resolve_on(driver, config, database, declared, values)
+        runnable = apply_to_queries(queries, declared, resolved, dialect_of(driver))
     except ParamError as e:
         return _params_error(str(e))
     return {**await run_queries_on(driver, config, database, runnable), "params": resolved}

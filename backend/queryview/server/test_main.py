@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from queryview import serving
+from queryview.drivers.sqlite import SqliteDriver
 from queryview.gitsync import GitSyncError
 from queryview.server.config import ServerConfig, load_config
 from queryview.server.main import create_app
@@ -367,3 +368,26 @@ def test_an_unexpected_sync_error_does_not_stop_polling(tmp_path, dash_repo, mon
                 break
             time.sleep(0.05)  # the poll runs on the app's own thread
         assert calls["n"] > 2 and len(c.get("/api/dashboards").json()) == 2
+
+
+def test_a_widget_page_runs_only_the_options_its_query_needs(client, dash_repo, monkeypatch):
+    by = {"name": "by", "options_sql": "SELECT DISTINCT region FROM orders ORDER BY 1"}
+    unused = {"name": "unused", "options_sql": "SELECT DISTINCT amount FROM orders ORDER BY 1"}
+    queries = {"rows": "SELECT * FROM orders WHERE region = {by}", "plain": "SELECT * FROM orders"}
+    wide = {"name": "wide", "html": "<p>wide</p>", "queries": queries, "params": [by, unused]}
+    _show(client, dash_repo, wide)
+    ran: list[str] = []
+    run_query = SqliteDriver.run_query
+
+    async def counted(self, config, sql, *args, **kwargs):
+        ran.append(sql)
+        return await run_query(self, config, sql, *args, **kwargs)
+
+    monkeypatch.setattr(SqliteDriver, "run_query", counted)
+    on = {"connection": "local", "dashboard": "wide"}
+    r = client.post("/api/query", json={**on, "query": "rows", "values": {"by": "us", "unused": "10"}})
+    assert r.json()["data"] == [["us", 20]]
+    assert ran == [by["options_sql"], "SELECT * FROM orders WHERE region = 'us'"]
+    ran.clear()
+    assert client.post("/api/query", json={**on, "query": "plain"}).status_code == 200
+    assert ran == ["SELECT * FROM orders"]

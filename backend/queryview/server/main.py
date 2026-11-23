@@ -17,7 +17,7 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
-from ..dashboard_params import ParamError, apply_to_queries, parse_params
+from ..dashboard_params import ParamError, apply_to_queries, needed, parse_params
 from ..dashboard_queries import WAITING, clean_values, dialect_of, resolve_on, run_dashboard_on
 from ..drivers import DRIVERS
 from ..drivers.base import Err
@@ -106,11 +106,11 @@ def create_app(config: ServerConfig) -> FastAPI:
         if template is None:
             return _fail("unknown query", 404)
         driver = DRIVERS[conn.type]
+        # Only the selectors this query needs: each options_sql is a query.
+        declared = needed(template, parse_params(dash["params"]))
         try:
-            resolved = await resolve_on(
-                driver, conn.config, conn.database, dash["params"], clean_values(body.get("values"))
-            )
-            ready = apply_to_queries({"q": template}, parse_params(dash["params"]), resolved, dialect_of(driver))
+            resolved = await resolve_on(driver, conn.config, conn.database, declared, clean_values(body.get("values")))
+            ready = apply_to_queries({"q": template}, declared, resolved, dialect_of(driver))
         except ParamError as e:
             return _fail(str(e))
         return ready["q"] if ready else _fail(WAITING)
