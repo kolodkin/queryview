@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -31,7 +30,9 @@ from queryview.drivers.clickhouse import (
     ChRows,
     ChText,
     ClickHouseDriver,
+    _client,
     ch_fetch,
+    close_client,
 )
 
 JSON_COMPACT = (
@@ -292,6 +293,12 @@ def test_run_sql_sends_statement_as_written_with_server_limits(monkeypatch):
     assert s["max_execution_time"] == "60"
 
 
+def _transport(monkeypatch, handler) -> None:
+    """Answer the driver's HTTP requests with `handler`."""
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr("queryview.drivers.clickhouse._client", lambda: client)
+
+
 def test_ch_fetch_sends_query_id_and_names_it_in_errors(monkeypatch):
     seen = {}
 
@@ -299,8 +306,7 @@ def test_ch_fetch_sends_query_id_and_names_it_in_errors(monkeypatch):
         seen.update(req.url.params)
         return httpx.Response(500, text="boom")
 
-    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    monkeypatch.setattr("queryview.drivers.clickhouse._client", lambda: client)
+    _transport(monkeypatch, handler)
     r = asyncio.run(ch_fetch(CFG, "SELECT 1"))
     assert len(seen["query_id"]) == 32 and seen["cancel_http_readonly_queries_on_client_close"] == "1"
     assert isinstance(r, Err) and f"query_id {seen['query_id']}" in r.message
@@ -311,40 +317,62 @@ def test_requests_connect_within_the_query_timeout(monkeypatch):
     gets its own limit), take the session's query timeout."""
     seen = []
 
-    class FakeClient:
-        async def get(self, url, params, auth, timeout):
-            seen.append(timeout)
-            return SimpleNamespace(text=JSON_COMPACT, is_success=True, status_code=200)
+    def handler(req):
+        seen.append(req.extensions["timeout"])
+        return httpx.Response(200, text=JSON_COMPACT)
 
-    monkeypatch.setattr("queryview.drivers.clickhouse._client", FakeClient)
+    _transport(monkeypatch, handler)
     token = query_timeout.set(45)
     try:
         assert asyncio.run(ch_fetch(CFG, "SELECT 1")) == JSON_COMPACT
         assert isinstance(asyncio.run(ClickHouseDriver().run_sql(CFG, "SELECT 1", "db", 10)), RowsResult)
     finally:
         query_timeout.reset(token)
-    assert seen[0] == 45
-    assert seen[1].connect == 45 and seen[1].read == RUN_SQL_TIMEOUT_SECONDS + 45
+    assert seen[0]["connect"] == 45 and seen[0]["read"] == 45
+    assert seen[1]["connect"] == 45 and seen[1]["read"] == RUN_SQL_TIMEOUT_SECONDS + 45
 
 
-def test_queries_share_one_connection():
-    """Each query used to open its own connection, a round trip on a slow link."""
+def test_a_read_is_sent_again_when_its_kept_connection_was_closed(monkeypatch):
+    """A write is not: the server may have run it."""
+    calls = []
+
+    def handler(req):
+        calls.append(req.method)
+        if len(calls) == 1:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        return httpx.Response(200, text="1")
+
+    _transport(monkeypatch, handler)
+    assert asyncio.run(ch_fetch(CFG, "SELECT 1")) == "1"
+    assert calls == ["GET", "GET"]
+    calls.clear()
+    r = asyncio.run(ch_fetch(CFG, "INSERT INTO t VALUES (1)", write=True))
+    assert isinstance(r, Err) and calls == ["POST"]
+
+
+def test_queries_share_one_connection_and_no_cookies():
+    """Each query used to open its own connection, a round trip on a slow link.
+    The client they now share serves every session, so it keeps no cookie."""
     opened = 0
 
     async def serve(reader, writer):
         nonlocal opened
         opened += 1
         while await reader.readuntil(b"\r\n\r\n"):
-            writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 1\r\n\r\n1")
+            writer.write(b"HTTP/1.1 200 OK\r\nSet-Cookie: proxy=one-users-session\r\nContent-Length: 1\r\n\r\n1")
             await writer.drain()
 
     async def go():
         server = await asyncio.start_server(serve, "127.0.0.1", 0)
         cfg = ChConfig("127.0.0.1", server.sockets[0].getsockname()[1], "u", "p")
         try:
-            return [await ch_fetch(cfg, "SELECT 1"), await ch_fetch(cfg, "SELECT 1")]
+            out = [await ch_fetch(cfg, "SELECT 1"), await ch_fetch(cfg, "SELECT 1")]
+            assert not _client().cookies.jar
+            return out
         finally:
+            await close_client()
             server.close()
+            await server.wait_closed()
 
     assert asyncio.run(go()) == ["1", "1"]
     assert opened == 1

@@ -72,8 +72,8 @@ class _SeenDriver(_RowsDriver):
         return await super().run_query(c, sql, database, limit, offset, order_by)
 
 
-def _connected(monkeypatch, sid: str) -> _SeenDriver:
-    driver = _SeenDriver()
+def _connected(monkeypatch, sid: str, driver=None):
+    driver = driver or _SeenDriver()
     monkeypatch.setitem(DRIVERS, "rowsfake", driver)
     asyncio.run(connect.connect_new(sid, sid, {"v": 1}, "rowsfake"))
     return driver
@@ -157,15 +157,8 @@ class _SlowDriver(_RowsDriver):
         return RowsResult(QueryRows([Column("n", "Int32")], [[1]]))
 
 
-def _slow(monkeypatch, sid: str) -> _SlowDriver:
-    driver = _SlowDriver()
-    monkeypatch.setitem(DRIVERS, "rowsfake", driver)
-    asyncio.run(connect.connect_new(sid, sid, {"v": 1}, "rowsfake"))
-    return driver
-
-
 def test_queries_run_together_up_to_the_limit_and_keep_their_order(monkeypatch):
-    driver = _slow(monkeypatch, "s-par1")
+    driver = _connected(monkeypatch, "s-par1", _SlowDriver())
     names = [f"q{i}" for i in range(DASHBOARD_CONCURRENCY + 3)]
     r = asyncio.run(run_dashboard_queries("s-par1", {n: f"SELECT {n}" for n in names}))
     assert r["ok"] is True
@@ -174,7 +167,7 @@ def test_queries_run_together_up_to_the_limit_and_keep_their_order(monkeypatch):
 
 
 def test_a_failing_query_stops_the_ones_still_running(monkeypatch):
-    driver = _slow(monkeypatch, "s-par2")
+    driver = _connected(monkeypatch, "s-par2", _SlowDriver())
     r = asyncio.run(run_dashboard_queries("s-par2", {"bad": "fail", "slow": "SELECT 1"}))
     assert r == {"ok": False, "reason": "query", "message": "bad: bad sql"}
     assert driver.finished == [] and driver.running == 0

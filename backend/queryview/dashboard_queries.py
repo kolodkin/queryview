@@ -17,6 +17,8 @@ from .drivers.base import Driver, DriverConfig, Err, RowsResult, rows_to_columns
 DASHBOARD_ROW_CAP = 1000
 
 # Most queries of one run in flight at once.
+# shortcut: per run, not per connection, so N runs at once make 5N queries;
+# share one limit per connection if a database starts refusing connections.
 DASHBOARD_CONCURRENCY = 5
 
 WAITING = "Waiting for a parameter choice."
@@ -81,14 +83,15 @@ async def run_queries_on(
     results: dict[str, dict[str, list[Any]]] = {}
     meta: dict[str, list[dict[str, str]]] = {}
     try:
-        for qname, task in tasks.items():
-            r = await task
+        for qname in queries:
+            r = await tasks.pop(qname)  # popped: its rows are not kept twice
             if isinstance(r, Err):
                 return {"ok": False, "reason": "query", "message": f"{qname}: {r.message}"}
             results[qname] = rows_to_columns(r.rows)
             meta[qname] = [c._asdict() for c in r.rows.meta]
     finally:
-        # A failure, or the caller gone: nothing is left running.
+        # A failure, or the caller gone: the rest are cancelled, which stops
+        # them wherever the driver can (drivers/duckdb.py interrupts its own).
         for task in tasks.values():
             task.cancel()
         await asyncio.gather(*tasks.values(), return_exceptions=True)

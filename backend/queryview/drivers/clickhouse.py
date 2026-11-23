@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-import weakref
 from dataclasses import asdict, dataclass
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 from typing import Any, ClassVar, Self, TypeVar
 
 import httpx
@@ -110,17 +110,29 @@ class ChRows(RowsResult, ChResult):
 
 R = TypeVar("R", bound=ChResult)
 
-# One client per event loop, so queries reuse its open connections: a new
-# connection per query is a round trip each, a second on a slow link.
-_clients: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, httpx.AsyncClient] = weakref.WeakKeyDictionary()
+# One client, so queries reuse its open connections: a new connection per query
+# is a round trip each, a second on a slow link. It belongs to the loop that
+# made it; a later loop (a test's asyncio.run) gets its own.
+_shared: tuple[asyncio.AbstractEventLoop, httpx.AsyncClient] | None = None
 
 
 def _client() -> httpx.AsyncClient:
+    global _shared
     loop = asyncio.get_running_loop()
-    client = _clients.get(loop)
-    if client is None:
-        client = _clients[loop] = httpx.AsyncClient()
-    return client
+    if _shared is None or _shared[0] is not loop:
+        # Every session shares it, so it keeps no cookies: one a proxy set for
+        # one user must not ride along with another's query.
+        no_cookies = CookieJar(DefaultCookiePolicy(allowed_domains=[]))
+        _shared = (loop, httpx.AsyncClient(cookies=no_cookies))
+    return _shared[1]
+
+
+async def close_client() -> None:
+    """Close the shared client, at shutdown."""
+    global _shared
+    if _shared is not None and _shared[0] is asyncio.get_running_loop():
+        client, _shared = _shared[1], None
+        await client.aclose()
 
 
 async def ch_fetch(
@@ -149,12 +161,22 @@ async def ch_fetch(
         params["database"] = database
     auth = (c.username, c.password)
 
-    limit = timeout or query_timeout.get()
+    request = _client().build_request(
+        "POST" if write else "GET",
+        url,
+        params=params if write else {"query": q, **params},
+        content=q.encode() if write else None,
+        timeout=timeout or query_timeout.get(),
+    )
     try:
-        if write:
-            res = await _client().post(url, params=params, content=q.encode(), auth=auth, timeout=limit)
-        else:
-            res = await _client().get(url, params={"query": q, **params}, auth=auth, timeout=limit)
+        try:
+            res = await _client().send(request, auth=auth)
+        except httpx.RemoteProtocolError:
+            # A kept-alive connection the server closed as we wrote to it. A
+            # read is safe to send again; a write may have run, so it is not.
+            if write:
+                raise
+            res = await _client().send(request, auth=auth)
     except httpx.TimeoutException:
         return Err(f"connection timed out (query_id {query_id})")
     except httpx.HTTPError as err:
