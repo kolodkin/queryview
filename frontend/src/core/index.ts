@@ -36,11 +36,12 @@ export { DashboardFrame } from './dashboard/DashboardFrame'
 export {
   answerWidget,
   listenToFrame,
+  markedRuns,
   widgetPage,
   type FrameHandlers,
   type WidgetPost,
 } from './dashboard/frameHost'
-export { parseSnapshotResult, snapshotDocument, type SnapshotResult } from './dashboard/snapshot'
+export { requestSnapshot, type PendingSnapshot } from './dashboard/snapshot'
 export { buildSrcDoc, type DashboardResults, type QvTheme, type QvToken } from './dashboard/srcDoc'
 export { parseParamsRequest, valuesOf, withKeptText, type ResolvedParam } from './dashboard/params'
 export {

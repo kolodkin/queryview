@@ -186,6 +186,8 @@ def test_session_state_rebuilds_from_the_row_after_the_cache_is_dropped(monkeypa
     out = _run(connect.get_session(rec.id))
     assert out["connected"] is True
     assert out["name"] == "reporting"
+    # Quoting is the backend's alone: the page gets no dialect details.
+    assert "ident_quote" not in out and "backslash_escapes" not in out
 
 
 def test_disconnect_clears_the_connection_durably(monkeypatch):

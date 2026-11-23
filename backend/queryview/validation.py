@@ -68,6 +68,26 @@ def dashboard_params_error(raw: object) -> str | None:
     return None
 
 
+# A widget page's bounds: /api/db/query's, and the viewer server's /api/query.
+PAGE_DEFAULT, PAGE_MAX = 100, 1000
+
+
+def _int(value: object, default: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def page_bounds(limit: object, offset: object) -> tuple[int, int]:
+    """A request's limit and offset as safe ints: 1 <= limit <= PAGE_MAX (the
+    default when absent or below 1), offset >= 0."""
+    lim = _int(limit, PAGE_DEFAULT)
+    return (PAGE_DEFAULT if lim < 1 else min(lim, PAGE_MAX)), max(0, _int(offset, 0))
+
+
 def clamp_paging(limit: object, offset: object) -> tuple[int, int]:
     """Coerce/clamp limit & offset to safe ints: 0 <= limit <= MAX_LIMIT, offset >= 0."""
     try:

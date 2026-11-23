@@ -38,6 +38,12 @@ def clean_values(raw: object) -> dict[str, str]:
     return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str) and _sendable(k) and _sendable(v)}
 
 
+def resolved_part(r: dict[str, Any]) -> dict[str, Any]:
+    """A run's resolved selectors as its reply carries them, on success or
+    failure: absent when the run failed before resolving."""
+    return {"params": r["params"]} if "params" in r else {}
+
+
 def _params_error(message: str) -> dict[str, Any]:
     return {"ok": False, "reason": "params", "message": message}
 

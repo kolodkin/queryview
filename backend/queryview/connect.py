@@ -595,9 +595,6 @@ async def get_session(sid: str) -> dict[str, Any]:
         "database": s.database,
         **({"root": s.root} if s.root else {}),
         **({"databases_truncated": True} if s.truncated else {}),
-        # How this dialect quotes a table/column (dashboard `identifier` params).
-        "ident_quote": DRIVERS[s.type].ident_quote,
-        "backslash_escapes": DRIVERS[s.type].backslash_escapes,
         "scope": "session" if sc else "saved",
         "created_by": sc.created_by if sc else "user",
         "locked": s.locked,
