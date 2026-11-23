@@ -91,7 +91,8 @@ session id) exposes:
 A dashboard never names a [connection](./connect.md): it runs on the
 **viewing** session's connection and selected database. So
 a dashboard is portable across sessions, instances and git sync; opened in a
-disconnected session it asks you to connect. Select a database first, or
+disconnected session it asks you to connect, unless nothing in it queries the
+database. Select a database first, or
 fully-qualify tables as `db.table`.
 
 The REST mirror `POST /api/dashboards` takes the inline fields (plus optional
