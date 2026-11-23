@@ -8,7 +8,7 @@ import asyncio
 import yaml
 from fastapi.testclient import TestClient
 
-from queryview.main import app
+from queryview.conftest import app
 
 
 def _run(coro):

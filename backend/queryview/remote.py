@@ -1,6 +1,6 @@
 """In-memory push hub for remote control: one message queue per armed browser
 channel, keyed by the session id the channel belongs to. SSE framing and disconnect handling live
-in main.py."""
+in app.py."""
 
 from __future__ import annotations
 

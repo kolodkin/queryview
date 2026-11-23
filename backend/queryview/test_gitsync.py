@@ -773,6 +773,22 @@ def test_rename_changing_only_the_case(git_env):
     assert _html("ua coverage") is None and _html("UA Coverage") == "<p>c</p>"
 
 
+def test_case_only_rename_leaves_a_dashboard_named_like_its_temp_folder(git_env):
+    _run(gitsync.save(_default_ws(), _dash("ua reach", "<p>c</p>")))
+    _run(gitsync.save(_default_ws(), _dash("ua reach.renaming", "<p>other</p>")))
+    _run(gitsync.rename(_default_ws(), "ua reach", "UA Reach"))
+    assert sorted(_repo_files(git_env)) == sorted(
+        f"{dashboard_reldir(name)}/{f}" for name in ("UA Reach", "ua reach.renaming") for f in DASHBOARD_FILES
+    )
+    shown = subprocess.run(
+        ["git", "show", f"main:{dashboard_reldir('UA Reach')}/dashboard.html"],
+        cwd=git_env,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "<p>c</p>" in shown
+
+
 def test_rename_never_committed_makes_no_commit(git_env):
     _save("ua draft", "<p>d</p>")
     r = _run(gitsync.rename(_default_ws(), "ua draft", "ua draft 2"))

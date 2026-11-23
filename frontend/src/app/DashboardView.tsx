@@ -1,33 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 
 import {
   DashboardFrame,
-  applyToQueries,
-  parseDashboardParams,
-  parseParamsRequest,
-  parseSnapshotResult,
-  parseWidgetRequest,
-  rejectedWidgetReply,
-  resolveParams,
+  answerWidget,
+  downloadText,
+  listenToFrame,
   snapshotDocument,
   type SnapshotResult,
+  valuesOf,
+  widgetPage,
   widgetQueryNames,
-  type DashboardParam,
-  type Dialect,
+  withKeptText,
   type DashboardResults,
-  type QueryRunner,
   type ResolvedParam,
+  type WidgetPost,
 } from '../core'
 import ExportImportControls from './controls/ExportImportControls'
 import GitSyncControls from './controls/GitSyncControls'
 import { apiFetch, postJson } from './api'
 import { CopyName } from './controls/CopyName'
-import { downloadText } from './yamlio'
 import DashboardSqlPanel from './DashboardSqlPanel'
 import { announceGitSync, gitStatus, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
-import { answerWidget, type WidgetSql } from './widgetHost'
+import { queryViewHtml, sharedPost } from './widgetHost'
 
 // A dashboard names no connection: it runs on the viewing session's.
 export type DashboardPush = {
@@ -47,23 +43,39 @@ function runError(data: { reason?: string; message?: string }): string {
   return data.message ?? 'Failed to run queries.'
 }
 
-// Run named SQL on the session's connection; shared by the load, the params'
-// options_sql, and set-params re-runs.
-const runQueries: QueryRunner = async (queries) => {
+type RunReply =
+  | { ok: true; results: DashboardResults; params: ResolvedParam[] }
+  // `params` survives a failing query, so the page keeps its selectors.
+  | { ok: false; message: string; params?: ResolvedParam[] }
+
+// Run a dashboard's query templates on the session's connection. The backend
+// resolves the selectors from `values`, substitutes, and holds back a query
+// still waiting on a choice (`default: none`); shared by the load, set-params
+// and Execute.
+async function runDashboard(
+  queries: Record<string, string>,
+  params: unknown[] | undefined,
+  values: Record<string, string>,
+): Promise<RunReply> {
+  // Nothing to resolve or run (a page of widgets alone): no request, so it
+  // still renders in a disconnected session.
+  if (!params?.length && !Object.keys(queries).length) return { ok: true, results: {}, params: [] }
   try {
-    const res = await postJson('/api/runqueries', { queries })
+    const res = await postJson('/api/runqueries', { queries, params: params ?? [], values })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok || !data.ok) return { ok: false, message: runError(data) }
-    return { ok: true, results: (data.results ?? {}) as DashboardResults }
+    const resolved = data.params as ResolvedParam[] | undefined
+    if (!res.ok || !data.ok) return { ok: false, message: runError(data), params: resolved }
+    return {
+      ok: true,
+      results: (data.results ?? {}) as DashboardResults,
+      params: resolved ?? [],
+    }
   } catch {
     return { ok: false, message: 'Failed to run queries.' }
   }
 }
 
-// The frame paints its own backdrop; match the app's instead of white.
-const NEW_QUERY_HTML =
-  '<style>body{margin:0;background:#0c1124}</style>' +
-  '<qv-select-view query="main"></qv-select-view>'
+const NEW_QUERY_HTML = queryViewHtml('main')
 
 // The session view holding the unsaved New query draft, so it survives leaving
 // the page and a reload (docs/session.md).
@@ -87,50 +99,25 @@ function withoutWidgetQueries(
   return Object.fromEntries(Object.entries(queries).filter(([name]) => !owned.has(name)))
 }
 
-// Run a dashboard's own (non-widget) queries with the selections applied. A
-// query still waiting on an unchosen selector (`default: none`) is held back;
-// the page gets it once it calls setParams.
-async function runOwnQueries(
-  queries: Record<string, string>,
-  html: string,
-  declared: DashboardParam[],
-  resolved: ResolvedParam[],
-  dialect: Dialect,
-): ReturnType<QueryRunner> {
-  const runnable = applyToQueries(withoutWidgetQueries(queries, html), declared, resolved, dialect)
-  return Object.keys(runnable).length ? runQueries(runnable) : { ok: true, results: {} }
-}
-
 // The dashboard page (`/dashboard?name=x`). Picks a saved dashboard (dropdown or
-// `?name=`), resolves its params, runs its queries via /api/runqueries on the
-// session's connection and selected database, and renders the agent HTML in a
+// `?name=`), runs its queries via /api/runqueries (which resolves its params)
+// on the session's connection and selected database, and renders the agent HTML in a
 // sandboxed iframe with results as `window.queries` and selectors as
 // `window.params`. A pushed dashboard renders without a refetch.
 function DashboardView({
   pushed,
   onPushConsumed,
   runOn,
-  identQuote = '"',
-  backslashEscapes = false,
   remoteId = null,
 }: {
   pushed?: DashboardPush | null
   onPushConsumed?: () => void
   // The session's connection and database; a change re-runs the queries.
   runOn?: string | null
-  // The connection's identifier quote, for `identifier` params.
-  identQuote?: string
-  // Whether backslash escapes in the connection's dialect.
-  backslashEscapes?: boolean
-  // The armed remote session, for the SQL panel's edit lock.
+  // The armed remote session, for the query popup's edit lock.
   remoteId?: string | null
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
-  // How the connection quotes identifiers and string literals.
-  const dialect = useMemo<Dialect>(
-    () => ({ quote: identQuote, backslashEscapes }),
-    [identQuote, backslashEscapes],
-  )
   const name = searchParams.get('name') ?? ''
 
   const [dashboards, setDashboards] = useState<DashboardSummary[]>([])
@@ -150,14 +137,17 @@ function DashboardView({
   // The selectors as last resolved (load or set-params): what a widget's
   // query is substituted with.
   const resolvedRef = useRef<ResolvedParam[]>([])
+  const rerunQueue = useRef<Promise<unknown>>(Promise.resolve())
   const frameRef = useRef<HTMLIFrameElement>(null)
+  // The query popup's results frame, answered like the dashboard's own.
+  const popupFrameRef = useRef<HTMLIFrameElement>(null)
   // A Snapshot waiting for the frame's serialized document.
   const snapshotRef = useRef<{
     frame: HTMLIFrameElement
     done: (r: SnapshotResult) => void
   } | null>(null)
   // The SQL as last run (load or Execute). The frame's widgets and param
-  // re-runs use this, so a half-typed edit in the SQL panel never runs.
+  // re-runs use this, so a half-typed edit in the query popup never runs.
   const executedRef = useRef<Record<string, string>>({})
   // The page-query results the frame holds as `window.queries`.
   const shownRef = useRef<DashboardResults>({})
@@ -166,7 +156,7 @@ function DashboardView({
   // The object last known to equal the store's copy: Save has nothing to
   // write while `active` is it.
   const savedRef = useRef<DashboardPush | null>(null)
-  const [showSql, setShowSql] = useState(() => localPush !== null)
+  const [showSql, setShowSql] = useState(false)
   // Bumped per load, keying the frame: a draft reloads from memory with the
   // same HTML and results, which alone would leave the old frame (and its
   // widgets' rows from the previous database) in place.
@@ -360,20 +350,15 @@ function DashboardView({
 
       setLoading(true)
       try {
-        const declared = parseDashboardParams(dash.params)
-        const resolved = await resolveParams(declared, {}, runQueries, dialect)
-        if (cancelled) return
-        setParams(resolved)
-        resolvedRef.current = resolved
-        const r = await runOwnQueries(executed, dash.html, declared, resolved, dialect)
+        const r = await runDashboard(withoutWidgetQueries(executed, dash.html), dash.params, {})
         if (cancelled) return
         if (r.ok) {
+          setParams(r.params)
+          resolvedRef.current = r.params
           setResults(r.results)
           shownRef.current = r.results
           setLoadSeq((n) => n + 1)
         } else setError(r.message)
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to run queries.')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -383,72 +368,95 @@ function DashboardView({
     return () => {
       cancelled = true
     }
-  }, [name, localPush, runOn, reloadNonce, dialect])
+  }, [name, localPush, runOn, reloadNonce])
 
   // Re-run the open dashboard's own queries, as last executed, and build the
   // message the frame expects. `values` are fresh selections to resolve; null
   // keeps the current ones (the SQL changed, not the params).
   // `only` limits the run to those queries (the ones Execute changed); the
   // frame keeps the rest, and only widgets over those re-query.
-  async function rerun(
+  // One at a time, in the order asked: a re-run starts from what the one
+  // before it resolved (a typed text), and the frame gets the answers in order.
+  function rerun(
     dash: DashboardPush,
     values: Record<string, string> | null,
     only: string[] | null = null,
+  ): Promise<Record<string, unknown> | null> {
+    // Null once the dashboard was switched: a run whose turn comes after that
+    // would overwrite the new one's refs, and its answer is for a frame now gone.
+    const frame = frameRef.current
+    const run = async () => {
+      if (frameRef.current !== frame) return null
+      const answer = await rerunNow(dash, values, only)
+      return frameRef.current === frame ? answer : null
+    }
+    const answer = rerunQueue.current.then(run, run)
+    rerunQueue.current = answer
+    return answer
+  }
+
+  async function rerunNow(
+    dash: DashboardPush,
+    values: Record<string, string> | null,
+    only: string[] | null,
   ): Promise<Record<string, unknown>> {
-    const declared = parseDashboardParams(dash.params)
-    let resolved = resolvedRef.current
-    try {
-      if (values) {
-        resolved = await resolveParams(declared, values, runQueries, dialect, resolved)
-        resolvedRef.current = resolved
-      }
-      const executed = executedRef.current
-      const queries = only ? Object.fromEntries(only.map((n) => [n, executed[n]])) : executed
-      const r = await runOwnQueries(queries, dash.html, declared, resolved, dialect)
-      if (!r.ok) return { type: 'params-results', ok: false, message: r.message, params: resolved }
-      // window.queries is replaced whole: keep what this run left alone.
-      shownRef.current = only ? { ...shownRef.current, ...r.results } : r.results
-      return {
-        type: 'params-results',
-        ok: true,
-        results: shownRef.current,
-        params: resolved,
-        queries: only,
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to run queries.'
-      return { type: 'params-results', ok: false, message, params: [] }
+    // Fresh selections, with any text the page left out; else the current ones.
+    const sent = values ? withKeptText(values, resolvedRef.current) : valuesOf(resolvedRef.current)
+    const executed = executedRef.current
+    const queries = only ? Object.fromEntries(only.map((n) => [n, executed[n]])) : executed
+    const r = await runDashboard(withoutWidgetQueries(queries, dash.html), dash.params, sent)
+    if (r.params) resolvedRef.current = r.params
+    if (!r.ok)
+      return { type: 'params-results', ok: false, message: r.message, params: r.params ?? [] }
+    // window.queries is replaced whole: keep what this run left alone.
+    shownRef.current = only ? { ...shownRef.current, ...r.results } : r.results
+    return {
+      type: 'params-results',
+      ok: true,
+      results: shownRef.current,
+      params: r.params,
+      queries: only,
     }
   }
 
-  // An edit in the SQL panel. Kept in a ref too, so a reload (a database
+  // An edit in the query popup. Kept in a ref too, so a reload (a database
   // switch) keeps it in the editor; nothing runs it until Execute.
   function editQuery(query: string, sql: string) {
     if (!active) return
     const next = { ...active, queries: { ...active.queries, [query]: sql } }
     editedRef.current = next
     setActive(next)
-    // Queued; written when the SQL panel is left (its edit lock flushes).
+    // Queued; written when the query popup is left (its edit lock flushes).
     if (!next.name) patchView(VIEW, { draft: { html: next.html, queries: next.queries } })
   }
 
-  // Execute from the SQL panel: post into the live frame rather than rebuild
+  // Execute from the query popup: post into the live frame rather than rebuild
   // it, so the page keeps its state; its widgets re-query on the same message.
   async function execute() {
     if (!active) return
     const before = executedRef.current
     const changed = Object.keys(active.queries).filter((n) => active.queries[n] !== before[n])
     executedRef.current = active.queries
+    const only = changed.length ? changed : null
     const frame = frameRef.current
     if (!frame) {
       setReloadNonce((n) => n + 1)
       return
     }
     // Nothing edited: Execute refreshes everything.
-    const answer = await rerun(active, null, changed.length ? changed : null)
+    const answer = await rerun(active, null, only)
+    if (!answer) return
     // The page keeps its last results; the failure shows above it.
     setError(answer.ok ? null : String(answer.message))
-    frame.contentWindow?.postMessage(answer, '*')
+    broadcast(answer)
+  }
+
+  // A re-run's results go to the dashboard's frame and the query popup's at
+  // the same moment: their tables re-query on it, and an identical page they
+  // both show runs once (widgetHost.ts).
+  function broadcast(answer: Record<string, unknown>) {
+    for (const f of [frameRef.current, popupFrameRef.current])
+      f?.contentWindow?.postMessage(answer, '*')
   }
 
   // Download the dashboard as one static HTML file. Only the frame can read
@@ -479,7 +487,7 @@ function DashboardView({
     setLocalPush(push)
   }
 
-  // Unsaved scratch: one widget over one query, the SQL panel open.
+  // Unsaved scratch: one widget over one query, the query popup open.
   function newQuery(sql = '', replace = false) {
     reopen({
       name: '',
@@ -493,53 +501,34 @@ function DashboardView({
     setShowSql(true)
   }
 
-  // Answer the page's setParams: values only, and only from this dashboard's
-  // own frame. The SQL is the dashboard's, substituted here, so the page never
-  // issues SQL of its own.
+  // Answer the open dashboard's frame: its setParams (values only), its
+  // widgets and its snapshot. The SQL is the dashboard's own, substituted by
+  // the backend, so the page never issues SQL of its own.
   useEffect(() => {
     if (!active) return
-    const declared = parseDashboardParams(active.params)
-    // One of this dashboard's queries, with the current selections applied.
-    function sqlFor(query: string): WidgetSql {
+    const params = active.params ?? []
+    // Run or describe one of this dashboard's queries with the current selections.
+    const post: WidgetPost = async (kind, req) => {
       // hasOwn: a name like `constructor` must not find Object's own.
-      if (!Object.hasOwn(executedRef.current, query)) return { message: `Unknown query “${query}”` }
-      const sql = executedRef.current[query]
-      if (!sql.trim()) return { message: 'Enter a query.' }
-      const applied = applyToQueries({ [query]: sql }, declared, resolvedRef.current, dialect)
-      return query in applied
-        ? { sql: applied[query] }
-        : { message: 'Waiting for a parameter choice.' }
+      if (!Object.hasOwn(executedRef.current, req.query))
+        return { ok: false, message: `Unknown query “${req.query}”` }
+      const query = executedRef.current[req.query]
+      if (!query.trim()) return { ok: false, message: 'Enter a query.' }
+      const body = { query, params, values: valuesOf(resolvedRef.current), ...widgetPage(req) }
+      // Shared: the same page asked for by both frames runs once.
+      return sharedPost(runOn ?? '', `/api/db/${kind}`, body)
     }
-    async function onMessage(e: MessageEvent) {
-      const frame = frameRef.current
-      if (!frame || e.source !== frame.contentWindow) return
-      const snap = parseSnapshotResult(e.data)
-      if (snap) {
+    // The dashboard's frame and the query popup's are answered alike.
+    return listenToFrame(() => [frameRef.current, popupFrameRef.current], {
+      onSnapshot: (snap, frame) => {
         if (snapshotRef.current?.frame === frame) snapshotRef.current.done(snap)
-        return
-      }
-      if (!active) return
-      const widget = parseWidgetRequest(e.data)
-      if (widget) {
-        const reply = await answerWidget(widget, sqlFor, setError)
-        if (reply) frame.contentWindow?.postMessage(reply, '*')
-        return
-      }
-      const rejected = rejectedWidgetReply(e.data)
-      if (rejected) {
-        frame.contentWindow?.postMessage(rejected, '*')
-        return
-      }
-      const values = parseParamsRequest(e.data)
-      if (!values) return
-      const answer = await rerun(active, values)
-      frame.contentWindow?.postMessage(answer, '*')
-    }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-    // rerun reads only refs and the dialect beyond its arguments.
+      },
+      onWidget: (req) => answerWidget(req, post, setError),
+      onSetParams: (values) => rerun(active, values),
+    })
+    // rerun reads only refs beyond its arguments.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, dialect])
+  }, [active, runOn])
 
   return (
     // mt clears the floating header when the page is taller than the window.
@@ -577,14 +566,6 @@ function DashboardView({
         {active?.name && <CopyName name={active.name} testid="dashboard-copy" />}
         <button
           type="button"
-          data-testid="dashboard-new-query"
-          onClick={() => newQuery()}
-          className="glass-btn px-3 py-2 text-sm font-medium"
-        >
-          New query
-        </button>
-        <button
-          type="button"
           data-testid="dashboard-save"
           onClick={() => void save()}
           disabled={!active || saving || active === savedRef.current}
@@ -613,9 +594,9 @@ function DashboardView({
         <button
           type="button"
           data-testid="dashboard-edit-queries"
-          onClick={() => setShowSql((v) => !v)}
+          onClick={() => setShowSql(true)}
           disabled={!active}
-          className={`px-3 py-2 text-sm font-medium ${showSql ? 'glass-btn-primary' : 'glass-btn'}`}
+          className="glass-btn px-3 py-2 text-sm font-medium"
         >
           Edit queries
         </button>
@@ -657,7 +638,10 @@ function DashboardView({
           queries={active.queries}
           onChange={editQuery}
           onExecute={() => void execute()}
+          onClose={() => setShowSql(false)}
           remoteId={remoteId}
+          frameRef={popupFrameRef}
+          loadSeq={loadSeq}
         />
       )}
 

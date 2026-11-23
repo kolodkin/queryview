@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from queryview import remote, sessions
+from queryview.conftest import app
 from queryview.connect import _data_dir, _save_active_connection
 from queryview.dashboards import (
     delete_dashboard,
@@ -21,7 +22,6 @@ from queryview.dashboards import (
 )
 from queryview.drivers.clickhouse import ChConfig
 from queryview.gitsync import save_and_push
-from queryview.main import app
 from queryview.mcp_server import push_dashboard
 from queryview.workspaces import DEFAULT_WORKSPACE, resolve
 
@@ -259,6 +259,13 @@ def test_mcp_push_dashboard_reads_dir(tmp_path):
 
         (tmp_path / "dashboard.html").symlink_to(_data_dir() / "queryview.db")
         assert "data dir" in _run(push_dashboard(rid, dir=str(tmp_path)))["message"]
+        (tmp_path / "dashboard.html").unlink()
+        # Nor to a file outside the folder: only the folder's own files are read.
+        outside = tmp_path.with_name(f"{tmp_path.name}-outside.html")
+        outside.write_text("<p>elsewhere</p>", encoding="utf-8")
+        (tmp_path / "queries.yaml").write_text("sales: SELECT 1\n", encoding="utf-8")
+        (tmp_path / "dashboard.html").symlink_to(outside)
+        assert "cannot read dashboard.html" in _run(push_dashboard(rid, dir=str(tmp_path)))["message"]
         (tmp_path / "dashboard.html").unlink()
         (tmp_path / "dashboard.html").write_text("<p>from disk</p>", encoding="utf-8")
         (tmp_path / "queries.yaml").write_text("- not a map\n", encoding="utf-8")

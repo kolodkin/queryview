@@ -9,12 +9,12 @@
   "scripts": {
     "setup": "uv sync && npm install",
     "up": "./scripts/dev.sh",
-    "backend": "uv run uvicorn queryview.main:app --reload --port 8000",
+    "backend": "uv run queryview --api-only --reload --host 127.0.0.1 --port 8000",
     "frontend": "npm run dev -w frontend",
     "dev": "concurrently -n backend,frontend -c blue,magenta \"npm run backend\" \"npm run frontend\"",
-    "debug": "concurrently -k -n backend,frontend,widgets -c blue,magenta,cyan \"SERVE_STATIC=1 uv run uvicorn queryview.main:app --reload --port ${PORT:-8000}\" \"npm exec -w frontend -- vite build --watch --emptyOutDir false\" \"npm exec -w frontend -- vite build -c vite.widgets.config.ts --watch\"",
+    "debug": "concurrently -k -n backend,frontend,widgets -c blue,magenta,cyan \"uv run queryview --reload --host 127.0.0.1 --port ${PORT:-8000}\" \"npm exec -w frontend -- vite build --watch --emptyOutDir false\" \"npm exec -w frontend -- vite build -c vite.widgets.config.ts --watch\"",
     "build": "npm run build -w frontend",
-    "start": "SERVE_STATIC=1 uv run queryview-backend",
+    "start": "uv run queryview",
     "preview": "npm run build && npm run start",
     "e2e": "npm run build:e2e -w frontend && playwright test"
   },

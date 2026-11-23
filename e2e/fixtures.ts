@@ -183,19 +183,35 @@ export async function openDashboard(page: Page, baseURL: string | undefined, das
   return dashboardFrame(page);
 }
 
-/** Open a New query draft (ad-hoc SQL: one `<qv-select-view>` under the SQL
- * panel) from wherever the test is; returns the draft's frame. */
+/** The results frame inside the Edit queries popup. */
+export const queryPopupFrame = (page: Page): FrameLocator => page.frameLocator('[data-testid="dash-sql-frame"]');
+
+/** Close the Edit queries popup. Waits two frames: the dashboard's frame is
+ * out of process, and a click sent to it before the browser has drawn the
+ * popup's removal still lands on the popup's backdrop and is lost. */
+export async function closeQueries(page: Page): Promise<void> {
+  await page.getByTestId("dash-sql-close").click();
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+}
+
+/** Open a New query draft (ad-hoc SQL: one `<qv-select-view>`) from wherever
+ * the test is, as `/dashboard?new` does, without a reload; closes the query
+ * popup it opens with and returns the draft's frame. */
 export async function openNewQuery(page: Page): Promise<FrameLocator> {
-  await page.getByTestId("nav-dashboard").click();
-  await page.getByTestId("dashboard-new-query").click();
-  await expect(page.getByTestId("dash-sql")).toBeVisible();
+  await page.evaluate(() => {
+    history.pushState(null, "", "/dashboard?new");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await closeQueries(page);
   return dashboardFrame(page);
 }
 
-/** Type SQL into the dashboard's SQL panel and Execute it. */
+/** Type SQL into the Edit queries popup, Execute it and close the popup. */
 export async function executeSql(page: Page, sql: string): Promise<void> {
+  await page.getByTestId("dashboard-edit-queries").click();
   await page.getByTestId("dash-sql").fill(sql);
   await page.getByTestId("dash-sql-execute").click();
+  await closeQueries(page);
 }
 
 /** Arm remote control via the agent popover and return the session id the
@@ -267,9 +283,13 @@ export async function connect(page: Page, c: DriverCase, seed: string): Promise<
   await expect(page.getByTestId("connection-status")).toContainText(c.pathField ? c.id : `· ${chDb()}`);
 }
 
-/** Start `queryview-backend` on a free port and a throwaway DATA_DIR. */
-async function startBackend(): Promise<{ url: string; stop: () => Promise<void> }> {
-  const bin = join(VENV_BIN, "queryview-backend");
+/** Start a server (`queryview`, `queryview-server`) on a free port and
+ * a throwaway DATA_DIR, with `env(dataDir)` added to its environment. */
+async function startServer(
+  name: string,
+  env: (dataDir: string) => Promise<Record<string, string>> | Record<string, string> = () => ({}),
+): Promise<{ url: string; dataDir: string; stop: () => Promise<void> }> {
+  const bin = join(VENV_BIN, name);
   if (!existsSync(bin)) throw new Error(`${bin} not found: run \`uv sync\` first`);
   const port = await new Promise<number>((ok) => {
     const srv = createServer().listen(0, () => {
@@ -281,7 +301,7 @@ async function startBackend(): Promise<{ url: string; stop: () => Promise<void> 
   const logPath = join(dataDir, "backend.log");
   const log = createWriteStream(logPath);
   const proc = spawn(bin, [], {
-    env: { ...process.env, SERVE_STATIC: "1", PORT: String(port), DATA_DIR: dataDir },
+    env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, ...(await env(dataDir)) },
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stdout.pipe(log);
@@ -303,14 +323,71 @@ async function startBackend(): Promise<{ url: string; stop: () => Promise<void> 
       (r) => r.ok,
       () => false,
     );
-    if (up) return { url, stop };
+    if (up) return { url, dataDir, stop };
     if (proc.exitCode !== null || Date.now() > deadline) {
       const output = readFileSync(logPath, "utf-8");
       await stop();
-      throw new Error(`backend did not come up:\n${output}`);
+      throw new Error(`${name} did not come up:\n${output}`);
     }
     await new Promise((r) => setTimeout(r, 100));
   }
+}
+
+// --- The viewer server (docs/viewer_server) ------------------------------------
+
+const git = (cwd: string, ...args: string[]) => promisify(execFile)("git", args, { cwd });
+
+export type Viewer = {
+  url: string;
+  /** Commit and push dashboards to the repo the server shows (`remove`: names to delete). */
+  push(dashboards: Dash[], remove?: string[]): Promise<void>;
+  stop(): Promise<void>;
+};
+
+/** Start `queryview-server` showing a fresh local repo holding `dashboards`,
+ * on two SQLite connections: `local` (the `items` table) and `other` (the
+ * same table, one row). It fetches every second. */
+export async function startViewer(dashboards: Dash[]): Promise<Viewer> {
+  let author = "";
+  const push = async (changed: Dash[], remove: string[] = []) => {
+    for (const d of changed) {
+      const dir = join(author, "dashboards", d.name);
+      mkdirSync(dir, { recursive: true });
+      // JSON is YAML: no dumper needed.
+      writeFileSync(join(dir, "meta.yaml"), JSON.stringify({ name: d.name, params: d.params ?? [] }));
+      writeFileSync(join(dir, "dashboard.html"), d.html);
+      writeFileSync(join(dir, "queries.yaml"), JSON.stringify(d.queries));
+    }
+    for (const name of remove) rmSync(join(author, "dashboards", name), { recursive: true });
+    await git(author, "add", "-A");
+    await git(author, "-c", "user.name=author", "-c", "user.email=author@example.internal", "commit", "-m", "dashboards");
+    await git(author, "push", "origin", "HEAD:main");
+  };
+  const server = await startServer("queryview-server", async (dataDir) => {
+    const remote = join(dataDir, "remote.git");
+    author = join(dataDir, "author");
+    await git(dataDir, "init", "--bare", "-b", "main", remote);
+    await git(dataDir, "init", "-b", "main", author);
+    await git(author, "remote", "add", "origin", remote);
+    await push(dashboards);
+    const local = join(dataDir, "local.sqlite");
+    const other = join(dataDir, "other.sqlite");
+    await dbExec("sqlite", local, ITEMS_DDL("items"), ITEMS_ROWS("items"));
+    await dbExec("sqlite", other, ITEMS_DDL("items"), "INSERT INTO items VALUES (9,'omega')");
+    const config = join(dataDir, "server.yaml");
+    writeFileSync(
+      config,
+      JSON.stringify({
+        git: { remote, sync_interval: 1 },
+        connections: [
+          { name: "local", type: "sqlite", path: local },
+          { name: "other", type: "sqlite", path: other },
+        ],
+      }),
+    );
+    return { QV_CONFIG: config };
+  });
+  return { url: server.url, push, stop: server.stop };
 }
 
 // --- Fixtures --------------------------------------------------------------
@@ -346,7 +423,9 @@ export const test = base.extend<
    * connections, workspaces or sessions; only the database servers are shared. */
   backendURL: [
     async ({}, use) => {
-      const backend = process.env.BASE_URL ? { url: process.env.BASE_URL, stop: async () => {} } : await startBackend();
+      const backend = process.env.BASE_URL
+        ? { url: process.env.BASE_URL, stop: async () => {} }
+        : await startServer("queryview");
       try {
         // The suite saves, renames and deletes freely: never on someone's ~/.queryview.
         if (process.env.BASE_URL) {

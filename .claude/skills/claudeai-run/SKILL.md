@@ -5,9 +5,10 @@ description: Start the local backing services (ClickHouse, PostgreSQL, MySQL) ne
 
 # claudeai-run Skill
 
-Brings up the local e2e backing services. Binaries and on-disk state are installed
-once by `claudeai/setup.sh` and survive a container resume, but the processes
-don't — so each session must restart them. That's what `claudeai/run.sh` does.
+Brings up the local e2e backing services. `claudeai/run.sh` calls one
+`claudeai/setup_<svc>.sh` per service; each installs its binary and on-disk state
+under `.cache/` when missing, then starts it. That state survives a container
+resume, but the processes don't — so each session must run it again.
 
 ## Preflight: web environment only
 
@@ -29,7 +30,7 @@ deliberate local run can override with `CLAUDEAI_ALLOW_LOCAL=1`.
 claudeai/run.sh
 ```
 
-Idempotently starts (reusing anything already up):
+Idempotently starts (reusing anything already up, installing anything missing):
 
 1. **ClickHouse** — `:8123` (standalone binary in `.cache/clickhouse`, user `default`, no password)
 2. **PostgreSQL** — `:5432` (cluster in `.cache/pgdata`, trust auth, superuser `postgres`)
@@ -57,12 +58,8 @@ claudeai/run.sh stop   # reverse dependency order
 
 ## If a service won't start
 
-`run.sh` only starts what `setup.sh` installed. A "binary/cluster missing … run
-claudeai/setup_<svc>.sh first" error means the install is gone (fresh container):
-
-```bash
-claudeai/setup.sh   # then re-run claudeai/run.sh
-```
+To start over, stop the services, delete that service's files under `.cache/`,
+then re-run `claudeai/run.sh`.
 
 Per-service logs: `.cache/clickhouse.log`, `.cache/postgres.log`, `.cache/mysql.log`,
 `.cache/git-daemon.log`.

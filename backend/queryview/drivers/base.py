@@ -234,10 +234,13 @@ def select_all_sql(table: str, quote: str) -> str:
     return f"SELECT * FROM {quote}{escaped}{quote}"
 
 
-def build_order_by(order_by: list[dict[str, Any]] | None, quote: str) -> str:
-    """`ORDER BY` clause from `[{"name","dir"}]`. Names are `quote`-quoted (any
-    embedded quote doubled) and directions whitelisted to ASC/DESC, so malformed
-    input can't inject SQL. Empty/absent input yields no clause."""
+def build_order_by(order_by: list[dict[str, Any]] | None, quote: str, backslash_escapes: bool = False) -> str:
+    """`ORDER BY` clause from `[{"name","dir"}]`. Names are `quote`-quoted and
+    directions whitelisted to ASC/DESC. A name holding the quote character (or
+    a backslash, where the dialect escapes with it) can't be trusted through
+    string assembly and no real name carries one, so it is skipped like any
+    malformed entry: the same rule dashboard params use. Empty/absent input
+    yields no clause."""
     if not order_by:
         return ""
     parts: list[str] = []
@@ -247,12 +250,13 @@ def build_order_by(order_by: list[dict[str, Any]] | None, quote: str) -> str:
         name = col.get("name")
         if not isinstance(name, str) or not name:
             continue
+        if quote in name or (backslash_escapes and "\\" in name):
+            continue
         raw_dir = col.get("dir")
         direction = raw_dir.upper() if isinstance(raw_dir, str) else ""
         if direction not in ("ASC", "DESC"):
             direction = "ASC"
-        escaped = name.replace(quote, quote + quote)
-        parts.append(f"{quote}{escaped}{quote} {direction}")
+        parts.append(f"{quote}{name}{quote} {direction}")
     if not parts:
         return ""
     return "ORDER BY " + ", ".join(parts)

@@ -1,6 +1,6 @@
 """Connection domain: the SQLModel/SQLite connection store (configs encrypted
 at rest) and per-session active connections. No HTTP concerns here — operations
-return plain results that main.py maps to responses. Per-backend execution is
+return plain results that app.py maps to responses. Per-backend execution is
 delegated to the driver registry; nothing here is ClickHouse-specific."""
 
 from __future__ import annotations
@@ -270,7 +270,7 @@ def _now_ms() -> int:
 # never carry one, so the agent is refused on a locked connection whichever way
 # it comes in; session connections are never locked.
 
-# The X-QV-Token of the request being served (main.py's middleware sets it);
+# The X-QV-Token of the request being served (app.py's middleware sets it);
 # None inside an MCP tool call.
 request_token: ContextVar[str | None] = ContextVar("request_token", default=None)
 

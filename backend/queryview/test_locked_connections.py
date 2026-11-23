@@ -11,8 +11,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from queryview import connect, mcp_server, remote, sessions
+from queryview.conftest import app
 from queryview.connect import _db_path, _hash_passphrase, _passphrase_matches
-from queryview.main import app
 
 
 def _run(coro):

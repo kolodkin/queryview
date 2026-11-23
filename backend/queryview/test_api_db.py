@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from queryview import connect, sessions
-from queryview.main import app
+from queryview.conftest import app
 
 
 def _row(sid: str) -> sessions.SessionRec:
@@ -280,3 +280,82 @@ def test_requests_run_within_the_session_query_timeout(monkeypatch, tmp_path):
         asyncio.run(sessions.patch_session(sid, ui={"app": {"queryTimeout": bad}}))
         assert c.post("/api/db/query", json={"query": "SELECT 1", "limit": 1, "offset": 0}).json()["ok"] is True
     assert seen == [("test", 45), ("list", 45), ("query", 45), *[("query", 30)] * 4]
+
+
+# --- Dashboard params: substituted here, not in the browser (docs/dashboard.md#dashboard-parameters) ---
+
+REGION = [{"name": "r", "options": ["eu", "us"]}]
+
+
+def _duck(tmp_path, sid: str) -> TestClient:
+    c = TestClient(app, headers={"X-QV-Session": sid})
+    r = c.post("/api/db/connect", json={"type": "duckdb", "name": sid, "path": str(tmp_path / f"{sid}.duckdb")})
+    assert r.json()["ok"], r.text
+    # A query opens the file read-only, so it must exist first.
+    assert c.post("/api/db/execute", json={"sql": "CREATE TABLE t (id INTEGER)"}).json()["ok"]
+    return c
+
+
+def test_runqueries_with_params_returns_resolved_params(tmp_path):
+    c = _duck(tmp_path, "params-run")
+    r = c.post("/api/runqueries", json={"queries": {"q": "SELECT {r} AS v"}, "params": REGION, "values": {"r": "us"}})
+    assert r.status_code == 200, r.text
+    assert r.json()["results"] == {"q": {"v": ["us"]}}
+    assert r.json()["params"] == [{"name": "r", "kind": "value", "options": ["eu", "us"], "value": "us"}]
+
+
+def test_runqueries_with_params_allows_no_queries(tmp_path):
+    c = _duck(tmp_path, "params-empty")
+    r = c.post("/api/runqueries", json={"queries": {}, "params": REGION})
+    assert r.status_code == 200, r.text
+    assert r.json()["results"] == {} and r.json()["params"][0]["value"] == "eu"
+
+
+def test_runqueries_without_params_is_unchanged(tmp_path):
+    c = _duck(tmp_path, "params-none")
+    assert c.post("/api/runqueries", json={"queries": {}}).status_code == 400
+    r = c.post("/api/runqueries", json={"queries": {"q": "SELECT '{r}' AS v"}})
+    assert r.json()["results"] == {"q": {"v": ["{r}"]}} and "params" not in r.json()
+
+
+def test_runqueries_bad_param_is_a_400_and_a_failing_query_keeps_the_selectors(tmp_path):
+    c = _duck(tmp_path, "params-bad")
+    r = c.post("/api/runqueries", json={"queries": {"q": "SELECT {r:nope}"}, "params": REGION})
+    assert r.status_code == 400 and r.json()["message"] == "unknown cast for {r}: nope"
+    r = c.post("/api/runqueries", json={"queries": {"q": "SELECT nope_col, {r}"}, "params": REGION})
+    assert r.status_code == 400 and r.json()["params"][0]["value"] == "eu"
+
+
+def test_db_query_substitutes_values(tmp_path):
+    c = _duck(tmp_path, "params-query")
+    r = c.post("/api/db/query", json={"query": "SELECT {r} AS v", "params": REGION, "values": {"r": "eu"}})
+    assert r.status_code == 200 and r.json()["data"] == [["eu"]], r.text
+    r = c.post(
+        "/api/db/query", json={"query": "SELECT {r} AS v", "params": REGION, "values": {"r": "eu"}, "format": "csv"}
+    )
+    assert r.json()["output"].splitlines() == ["v", "eu"]
+
+
+def test_db_query_waits_for_a_choice(tmp_path):
+    c = _duck(tmp_path, "params-wait")
+    r = c.post("/api/db/query", json={"query": "SELECT {r} AS v", "params": REGION, "values": {}})
+    assert r.status_code == 400 and r.json() == {"ok": False, "message": "Waiting for a parameter choice."}
+
+
+def test_db_describe_substitutes_values(tmp_path):
+    c = _duck(tmp_path, "params-describe")
+    r = c.post("/api/db/describe", json={"query": "SELECT {r} AS v", "params": REGION, "values": {"r": "eu"}})
+    assert r.status_code == 200 and [f["name"] for f in r.json()["fields"]] == ["v"], r.text
+
+
+def test_a_bad_value_is_a_400(tmp_path):
+    c = _duck(tmp_path, "params-ident")
+    body = {"query": "SELECT {r:identifier}", "params": REGION, "values": {"r": 'a"b'}}
+    for path in ("/api/db/query", "/api/db/describe"):
+        r = c.post(path, json=body)
+        assert r.status_code == 400 and r.json()["message"] == 'invalid identifier for {r}: a"b'
+
+
+def test_a_query_with_params_still_needs_a_session():
+    r = TestClient(app).post("/api/db/query", json={"query": "SELECT {r}", "params": REGION, "values": {"r": "eu"}})
+    assert r.status_code == 409

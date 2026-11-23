@@ -92,12 +92,13 @@ function snapshot() {
         if (el.shadowRoot) { roots.push(el.shadowRoot); walk(el.shadowRoot); }
       });
     })(document);
-    // Stale or no rows yet: a re-run in flight, a widget mid-query, or a qv-*
-    // tag the bundle has not upgraded.
+    // Stale or no rows yet: a re-run in flight, a widget mid-query, or a qv-* tag
+    // the bundle has not upgraded (once the page has loaded, one still undefined
+    // is unknown to it and stays).
     if (document.documentElement.hasAttribute('data-qv-loading') ||
-        Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
+        (document.readyState !== 'complete' && Array.prototype.some.call(document.querySelectorAll(':not(:defined)'), function (el) {
           return el.localName.indexOf('qv-') === 0;
-        }) ||
+        })) ||
         roots.some(function (root) { return root.querySelector('[data-qv-busy]'); })) {
       return { type: 'qv-snapshot-result', message: 'The dashboard is still loading. Take the snapshot when it has finished.' };
     }
