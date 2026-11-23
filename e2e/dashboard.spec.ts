@@ -2,7 +2,7 @@
 // driver, so these run once on DuckDB (no service).
 import { readFileSync } from "node:fs";
 
-import { DUCK, api, armRemote, closeQueries, connect, dashboardFrame, expect, openDashboard, test } from "./fixtures";
+import { DUCK, api, armRemote, closeQueries, connect, dashboardFrame, expect, holdRoute, openDashboard, test } from "./fixtures";
 
 // Reads window.queries and writes a value into the DOM, so the test can
 // assert the injected results reached the agent HTML. Styled as large,
@@ -211,12 +211,7 @@ test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, 
 
 test("Snapshot is refused while a widget is loading", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
-  let release = () => {};
-  const held = new Promise<void>((r) => (release = r));
-  await page.route("**/api/db/query", async (route) => {
-    await held;
-    await route.continue();
-  });
+  const release = await holdRoute(page, "**/api/db/query");
   const frame = await openDashboard(page, baseURL, {
     name: "loading",
     html: '<qv-select-view query="rows"></qv-select-view>',
@@ -224,7 +219,7 @@ test("Snapshot is refused while a widget is loading", async ({ page, seeds, base
   });
   await expect(frame.getByTestId("qv-select-view")).toBeVisible();
   await page.getByTestId("dashboard-snapshot").click();
-  await expect(page.getByTestId("dashboard-error")).toContainText("A widget is still loading");
+  await expect(page.getByTestId("dashboard-error")).toContainText("The dashboard is still loading");
 
   release();
   await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(3);

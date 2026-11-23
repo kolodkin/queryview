@@ -70,14 +70,40 @@ export type FrameHandlers = {
   onSetParams(values: Record<string, string>): Promise<Record<string, unknown> | null>
 }
 
+// A re-run's answer, or null when it was dropped.
+type Rerun = () => Promise<Record<string, unknown> | null>
+export type MarkedRun = (run: Rerun) => Promise<Record<string, unknown> | null>
+
+// Runs a re-run for `frames`: they carry the loading mark from its start until
+// the last one still running has answered, and each answer is posted to them all.
+export function markedRuns(frames: () => (HTMLIFrameElement | null)[]): MarkedRun {
+  const all = (message: unknown) => {
+    for (const f of frames()) f?.contentWindow?.postMessage(message, '*')
+  }
+  let running = 0
+  return async (run) => {
+    running++
+    all({ type: 'qv-loading', on: true })
+    try {
+      const answer = await run()
+      if (answer) all(answer)
+      return answer
+    } finally {
+      if (--running === 0) all({ type: 'qv-loading', on: false })
+    }
+  }
+}
+
 // Dispatch the messages of the frames showing one dashboard (its page, and any
 // other view of its queries) to `handlers`, ignoring every other window: a
 // frame sends values and names only, never SQL. A widget is answered in the
-// frame that asked; a re-run's results go to every frame at once, so their
-// tables re-query together. Returns the unsubscribe.
+// frame that asked; a re-run's results, and the loading mark around it, go to
+// every frame at once, so their tables re-query together. Returns the unsubscribe.
 export function listenToFrame(
   frames: () => (HTMLIFrameElement | null)[],
   handlers: FrameHandlers,
+  // The host's own, when it also starts re-runs itself (the app's Execute).
+  marked: MarkedRun = markedRuns(frames),
 ): () => void {
   async function onMessage(e: MessageEvent) {
     const source = frames().find((f) => f && e.source === f.contentWindow)
@@ -95,8 +121,7 @@ export function listenToFrame(
     if (rejected) return reply(rejected)
     const values = parseParamsRequest(e.data)
     if (!values) return
-    const answer = await handlers.onSetParams(values)
-    if (answer) for (const f of frames()) f?.contentWindow?.postMessage(answer, '*')
+    await marked(() => handlers.onSetParams(values))
   }
   window.addEventListener('message', onMessage)
   return () => window.removeEventListener('message', onMessage)
