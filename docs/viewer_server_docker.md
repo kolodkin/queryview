@@ -21,5 +21,5 @@ docker run -d --name queryview-server \
 
 ## Related docs
 
-- [README.md](./system/viewer_server.md) — the viewer server and its config file.
-- [../docker.md](docker.md) — the image, and running the app from it.
+- [viewer_server.md](./system/viewer_server.md) — the viewer server and its config file.
+- [docker.md](docker.md) — the image, and running the app from it.

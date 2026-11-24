@@ -22,6 +22,6 @@ falls back to its default and never reaches the SQL.
 
 ## Related docs
 
-- [README.md](../system/viewer_server.md) — the viewer server.
-- [../api.md](api.md) — the app's API.
-- [../dashboard.md](../system/dashboard.md#dashboard-parameters) — parameters and how they are substituted.
+- [viewer_server.md](../system/viewer_server.md) — the viewer server.
+- [api.md](api.md) — the app's API.
+- [dashboard.md](../system/dashboard.md#dashboard-parameters) — parameters and how they are substituted.

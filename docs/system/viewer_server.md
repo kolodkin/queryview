@@ -92,5 +92,5 @@ repo appears within `sync_interval`, with nothing to click.
 - [dashboard.md](dashboard.md) — what a dashboard is and how it renders.
 - [gitsync.md](gitsync.md) — how dashboards reach the repo, and its URL form.
 - [connect.md](connect.md) — drivers and their connection fields.
-- [docker.md](../viewer_server_docker.md) — running the server.
-- [api.md](../architecture/viewer_server_api.md) — its endpoints.
+- [viewer_server_docker.md](../viewer_server_docker.md) — running the server.
+- [viewer_server_api.md](../architecture/viewer_server_api.md) — its endpoints.
