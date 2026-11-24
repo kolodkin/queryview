@@ -75,7 +75,7 @@ sequenceDiagram
     Srv-->>New: session state with your last edits
 ```
 
-The `/api/sessions/*` shapes are in [api.md](../system/api.md). Connection and database
+The `/api/sessions/*` shapes are in [api.md](./api.md). Connection and database
 are not among them — `/api/db/connect`, `/open` and `/database` write those
 through, so connection changes keep one path.
 
