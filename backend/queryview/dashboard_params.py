@@ -71,46 +71,64 @@ def option_text(v: Any) -> str:
     return str(v)
 
 
+def _parse_entry(o: dict[str, Any], name: str) -> Param | None:
+    """One declaration as a Param, or None when it is malformed."""
+    kind = "value" if o.get("kind") is None else o["kind"]
+    if kind not in KINDS:
+        return None
+    default = o.get("default")
+    auto_select = default != "none"
+    options = o.get("options")
+    has_options = isinstance(options, list)
+    sql = o["options_sql"].strip() if isinstance(o.get("options_sql"), str) else ""
+    if has_options and sql:
+        return None  # ambiguous
+    if kind == "text":
+        if has_options or sql:
+            return None  # free input has no list to pick from
+        text = default if auto_select and isinstance(default, str) else ""
+        return Param(name, kind, auto_select=auto_select, text=text)
+    if sql:
+        return Param(name, kind, options_sql=sql, auto_select=auto_select)
+    if has_options:
+        texts = tuple(option_text(v) for v in options if v is not None and not isinstance(v, (dict, list)))
+        return Param(name, kind, options=texts, auto_select=auto_select) if texts else None
+    if kind == "dimension":
+        return Param(name, kind, auto_select=auto_select)  # a checkbox: no option list
+    return None
+
+
+def parse_params_dropping(raw: object) -> tuple[list[Param], list[tuple[int, bool]]]:
+    """parse_params, plus what it left out: each dropped entry's index and
+    whether it was dropped for repeating a name."""
+    if not isinstance(raw, list):
+        return [], []
+    out: list[Param] = []
+    dropped: list[tuple[int, bool]] = []
+    seen: set[str] = set()
+    for i, o in enumerate(raw):
+        name = o.get("name") if isinstance(o, dict) else None
+        if not isinstance(name, str) or not name:
+            dropped.append((i, False))
+            continue
+        # One declaration per name, the first: a value must be checked and
+        # substituted under the same one.
+        if name in seen:
+            dropped.append((i, True))
+            continue
+        seen.add(name)
+        p = _parse_entry(o, name)
+        if p is None:
+            dropped.append((i, False))
+        else:
+            out.append(p)
+    return out, dropped
+
+
 def parse_params(raw: object) -> list[Param]:
     """The `params` list. Defensive: a malformed entry is dropped, so a broken
     declaration costs one selector, not the dashboard."""
-    if not isinstance(raw, list):
-        return []
-    out: list[Param] = []
-    seen: set[str] = set()
-    for o in raw:
-        if not isinstance(o, dict):
-            continue
-        name = o.get("name")
-        # One declaration per name, the first: a value must be checked and
-        # substituted under the same one.
-        if not isinstance(name, str) or not name or name in seen:
-            continue
-        seen.add(name)
-        kind = "value" if o.get("kind") is None else o["kind"]
-        if kind not in KINDS:
-            continue
-        default = o.get("default")
-        auto_select = default != "none"
-        options = o.get("options")
-        has_options = isinstance(options, list)
-        sql = o["options_sql"].strip() if isinstance(o.get("options_sql"), str) else ""
-        if has_options and sql:
-            continue  # ambiguous
-        if kind == "text":
-            if has_options or sql:
-                continue  # free input has no list to pick from
-            text = default if auto_select and isinstance(default, str) else ""
-            out.append(Param(name, kind, auto_select=auto_select, text=text))
-        elif sql:
-            out.append(Param(name, kind, options_sql=sql, auto_select=auto_select))
-        elif has_options:
-            texts = tuple(option_text(v) for v in options if v is not None and not isinstance(v, (dict, list)))
-            if texts:
-                out.append(Param(name, kind, options=texts, auto_select=auto_select))
-        elif kind == "dimension":
-            out.append(Param(name, kind, auto_select=auto_select))  # a checkbox: no option list
-    return out
+    return parse_params_dropping(raw)[0]
 
 
 def placeholders_in(sql: str) -> list[str]:

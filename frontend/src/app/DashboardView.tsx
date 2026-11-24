@@ -46,11 +46,9 @@ function runError(data: { reason?: string; message?: string }): string {
 
 type RunReply =
   // `warning` names the params the backend left out as malformed; the rest still ran.
-  (
-    | { ok: true; results: DashboardResults; params: ResolvedParam[] }
-    // `params` survives a failing query, so the page keeps its selectors.
-    | { ok: false; message: string; params?: ResolvedParam[] }
-  ) & { warning?: string }
+  | { ok: true; results: DashboardResults; params: ResolvedParam[]; warning?: string }
+  // `params` survives a failing query, so the page keeps its selectors.
+  | { ok: false; message: string; params?: ResolvedParam[]; warning?: string }
 
 // Run a dashboard's query templates on the session's connection. The backend
 // resolves the selectors from `values`, substitutes, and holds back a query
@@ -166,8 +164,8 @@ function DashboardView({
   // widgets' rows from the previous database) in place.
   const [loadSeq, setLoadSeq] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  // The malformed params the last run left out: a standing fact about the
-  // dashboard, not the outcome of an action, so no action's success clears it.
+  // The malformed params the load left out: a standing fact about the
+  // dashboard, not the outcome of an action, so it is set once per load.
   const [warning, setWarning] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -415,7 +413,6 @@ function DashboardView({
     const queries = only ? Object.fromEntries(only.map((n) => [n, executed[n]])) : executed
     const r = await runDashboard(withoutWidgetQueries(queries, dash.html), dash.params, sent)
     if (r.params) resolvedRef.current = r.params
-    setWarning(r.warning ?? null)
     if (!r.ok)
       return { type: 'params-results', ok: false, message: r.message, params: r.params ?? [] }
     // window.queries is replaced whole: keep what this run left alone.

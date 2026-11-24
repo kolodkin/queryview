@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from .dashboard_params import parse_params
+from .dashboard_params import KINDS, parse_params_dropping
 
 MAX_LIMIT = 10000
 
@@ -26,12 +26,14 @@ def _selector_error(entry: object, label: str) -> str | None:
     return None
 
 
-DASHBOARD_PARAM_KINDS = ("value", "identifier", "dimension", "text")
-
-
 def _shown(name: str) -> str:
     """A param's name as a message carries it: quoted, and cut when very long."""
     return repr(name if len(name) <= 40 else name[:40] + "…")
+
+
+def _name_of(entry: object) -> str | None:
+    name = entry.get("name") if isinstance(entry, dict) else None
+    return name if isinstance(name, str) and name else None
 
 
 def _entry_error(entry: object, label: str) -> str | None:
@@ -39,13 +41,13 @@ def _entry_error(entry: object, label: str) -> str | None:
     (e.g. "params[0]") and, once the name is known, the name."""
     if not isinstance(entry, dict):
         return f"invalid {label} must be a mapping"
-    name = entry.get("name")
-    if not isinstance(name, str) or not name:
+    name = _name_of(entry)
+    if name is None:
         return f"invalid {label} name must be a non-empty string"
     label = f"{label} {_shown(name)}"
     kind = entry.get("kind", "value")
-    if kind not in DASHBOARD_PARAM_KINDS:
-        return f"invalid {label} kind must be one of {', '.join(DASHBOARD_PARAM_KINDS)}"
+    if kind not in KINDS:
+        return f"invalid {label} kind must be one of {', '.join(KINDS)}"
     if kind == "text":
         # Free input: an optional opening text, no list to pick from.
         if entry.get("options") is not None or entry.get("options_sql") is not None:
@@ -61,9 +63,8 @@ def _entry_error(entry: object, label: str) -> str | None:
     return _selector_error(entry, label)
 
 
-def _name_of(entry: object) -> str | None:
-    name = entry.get("name") if isinstance(entry, dict) else None
-    return name if isinstance(name, str) and name else None
+def _twice(label: str, name: str) -> str:
+    return f"invalid {label} {_shown(name)} is declared twice"
 
 
 def dashboard_params_error(raw: object) -> str | None:
@@ -80,7 +81,7 @@ def dashboard_params_error(raw: object) -> str | None:
         label = f"params[{i}]"
         name = _name_of(entry)
         if name is not None and name in names:
-            return f"invalid {label} {_shown(name)} is declared twice"
+            return _twice(label, name)
         err = _entry_error(entry, label)
         if err:
             return err
@@ -97,19 +98,14 @@ def dashboard_params_dropped(raw: object) -> list[str]:
         return []
     if not isinstance(raw, list):
         return ["invalid params: must be a list of selector specs"]
-    dropped: list[str] = []
-    names: set[str] = set()
-    for i, entry in enumerate(raw):
+    messages: list[str] = []
+    for i, repeated in parse_params_dropping(raw)[1]:
         label = f"params[{i}]"
-        name = _name_of(entry)
-        if name is not None and name in names:
-            dropped.append(f"invalid {label} {_shown(name)} is declared twice")
-            continue
-        if name is not None:
-            names.add(name)  # as parse_params: a malformed first still takes the name
-        if not parse_params([entry]):
-            dropped.append(_entry_error(entry, label) or f"invalid {label} is left out")
-    return dropped
+        if repeated:
+            messages.append(_twice(label, raw[i]["name"]))
+        else:
+            messages.append(_entry_error(raw[i], label) or f"invalid {label} is left out")
+    return messages
 
 
 # A widget page's bounds: /api/db/query's, and the viewer server's /api/query.
