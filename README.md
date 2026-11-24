@@ -81,6 +81,7 @@ and let [git sync](docs/system/gitsync.md) do it.
 - [session.md](docs/system/session.md) — sessions: what a tab remembers, refresh and
   new-tab behaviour, the session switcher.
 - [query.md](docs/system/query.md) — querying: pagination, the results grid, CSV.
+- [scripts.md](docs/system/scripts.md) — the SQL scratchpad: scripts run as written.
 - [explorer.md](docs/system/explorer.md) — the table navigator.
 - [dashboard.md](docs/system/dashboard.md) — dashboards and how agents author them.
 - [workspace.md](docs/system/workspace.md) — workspaces.

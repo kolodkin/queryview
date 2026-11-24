@@ -7,7 +7,9 @@ description: Use when a change alters behavior in this repo, before writing its 
 
 Every behavior has a statement in a doc of record, and a test that names the
 statement's ID (at unit, a test beside the module). A change walks down the
-docs, writing a failing test at each layer, then up the tests.
+docs, writing a failing test at each layer, then up the tests. When a
+`docs/superpowers/` plan splits the work into tasks, each task follows this
+skill.
 
 | Layer | Doc of record | Proved in |
 |---|---|---|
@@ -49,7 +51,10 @@ location is support, not proof.
 2. **Go down, one layer at a time, from the entry to unit.** At each layer
    above unit:
    - write or edit the statement in its doc of record (load `docs-writing`);
-   - give it an ID, or keep its existing one;
+   - give it an ID, or keep its existing one. How fine an ID is, is a
+     judgment: give one per behavior a reader would call a separate promise.
+     On a system page, give IDs to what a user can see; test an edge case of
+     one behavior under the same ID, or at integration or unit;
    - write a test that names the ID and fails now (load `testing`). A changed
      number or default is a changed statement: its test asserts the new value.
      The failing test may be an existing one whose assertion changes.
@@ -69,6 +74,7 @@ location is support, not proof.
    6. `e2e/acceptance.spec.ts`;
    7. `uv run python scripts/vmodel_check.py` (also a pre-commit hook). It must
       exit 0; `--strict` also fails on the untagged pages and tests it lists.
+      Once the report shows no gaps, `--strict` goes into the pre-commit hook.
 5. **A failure goes across before it goes down.** Read the failing test's
    paired statement first: is the statement wrong, or the code? Fix that one.
 

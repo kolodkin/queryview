@@ -12,7 +12,9 @@
   says how.
 - The viewer server (`queryview-server`) follows the same layers. Its docs
   never go in an app page; an app page only links in.
-- A new page joins the docs list at the end of `README.md`.
+- A new page joins the `README.md` docs list under its layer's heading. A page
+  with no layer (it states nothing a test in the repo can prove) goes at the
+  root of `docs/`.
 - **A design is written before it is built**, as
   `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` (the
   `superpowers:brainstorming` shape), and the user reads it first. Never into

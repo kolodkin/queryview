@@ -54,7 +54,7 @@ for (const c of CASES) {
 }
 
 // req: requirements/queryview/open-database
-test("queryview e2e", async ({ page }) => {
+test("connect, pick a database, find it reconnected after a reload", async ({ page }) => {
   // loads the app and shows the heading
   await openConnect(page);
   await expect(page.locator("h1")).toHaveText("QueryView");
