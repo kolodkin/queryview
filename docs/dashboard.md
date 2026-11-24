@@ -22,7 +22,9 @@ agent-authored HTML, which renders inside an isolated iframe.
   while the open dashboard is the store's copy (no draft, agent push or
   SQL-panel edit);
 - **Rename** and **Delete** — for a saved dashboard; Rename asks for the new
-  name and keeps unsaved SQL-panel edits, Delete asks to confirm;
+  name and keeps unsaved SQL-panel edits, Delete asks to confirm. A new name
+  [its git-sync folder can't hold](./gitsync.md#repository-layout) is refused
+  with the reason, on Save too;
 - **Edit queries** — the [SQL panel](#the-sql-panel);
 - **Snapshot** — downloads the dashboard as a [static file](#snapshot);
 - a **sandboxed iframe** that renders the selected dashboard.

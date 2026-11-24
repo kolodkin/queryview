@@ -100,7 +100,7 @@ the UI.
 | GET    | `/api/git/status`  | `?workspace=`                                    | Whether the workspace has a git remote configured, and the conflicts the last sync recorded. `{configured, conflicts: [{kind, name}]}`. |
 | POST   | `/api/git/sync`    | `{workspace?}`                                   | Merge the repo in (see [gitsync.md](./gitsync.md#merge-in)). `{ok, imported, conflicts}`; no remote → `409`. |
 | GET    | `/api/git/history` | `?kind=&name=&before=&limit=10&workspace=` | The entity's revisions, newest first. `{ok, revisions: [{sha, date, message}], has_more}`. |
-| POST   | `/api/git/restore` | `{kind, name, ref?, workspace?}`                | Overwrite the local DB row with the entity's content at `ref`. `{ok, restored, sha}`. |
+| POST   | `/api/git/restore` | `{kind, name, ref?, workspace?}`                | Overwrite the local DB row with the entity's content at `ref`. `{ok, restored, sha}`. Bringing back a name [its folder can't hold](./gitsync.md#repository-layout) → `400` / `409`, as on Save. |
 
 `kind` is `"dashboard"`;
 `workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_history` and
