@@ -94,7 +94,7 @@ None yet: `docs/requirements/` holds what a user needs.
 - [api.md](docs/architecture/api.md) — the full HTTP endpoint reference.
 - [viewer_server_api.md](docs/architecture/viewer_server_api.md) — the viewer server's endpoints.
 
-### No layer
+### Deployment
 
 - [docker.md](docs/docker.md) — running the container image and persisting its state.
 - [viewer_server_docker.md](docs/viewer_server_docker.md) — running the viewer server from the image.

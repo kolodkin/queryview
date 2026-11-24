@@ -4,8 +4,9 @@
 server whose one page (`/`) shows the dashboards of a git repo on database
 connections from a config file. It renders them as the app's
 [dashboard page](dashboard.md) does. Viewers pick a connection and a
-dashboard; they cannot edit, connect or run SQL of their own. Its docs live
-in this folder: [docker.md](../viewer_server_docker.md) runs it, [api.md](../architecture/viewer_server_api.md) lists its
+dashboard; they cannot edit, connect or run SQL of their own.
+[viewer_server_docker.md](../viewer_server_docker.md) runs it,
+[viewer_server_api.md](../architecture/viewer_server_api.md) lists its
 endpoints. For how dashboards reach the repo see [gitsync.md](gitsync.md).
 
 ```
