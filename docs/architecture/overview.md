@@ -29,6 +29,9 @@ FastAPI app --> git sync;  viewer server runs as its own process
 
 # Contracts
 
+<!-- req: architecture/overview/session-scoped-api -->
+A data request names its session in the `X-QV-Session` header; without a session it answers `409`. A session-only connection is visible to its own session alone, and the session's stored `ui` settings and database reach the driver. See [sessions.md](./sessions.md).
+
 <!-- req: architecture/overview/driver-contract -->
 Every registered driver answers the shared operations (parse, config round trip, tables, fields, rows, text, databases) with the same typed results or an error.
 

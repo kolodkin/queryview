@@ -1,6 +1,8 @@
 """The /api/db surface: unknown type is a 400; validation errors are 400;
 the old /api/clickhouse paths are gone (404)."""
 
+# req: architecture/overview/session-scoped-api
+
 from __future__ import annotations
 
 import asyncio
