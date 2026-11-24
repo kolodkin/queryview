@@ -1,6 +1,6 @@
 # MCP tools and channels
 
-The MCP tools and the channel they push through, cut from [mcp.md](../system/mcp.md).
+The MCP tools and the channel they push through. Connecting an agent and arming a session are in [mcp.md](../system/mcp.md).
 
 ## Tools
 
@@ -89,8 +89,11 @@ tool above while a session is on it (`connection is locked`), and refuses REST
 calls without the tab's unlock token too, so copying a session id into
 `/api/db/query` gets the agent nowhere.
 
+<!-- req: architecture/mcp/remote-channel -->
 **Arming is the gate, not the id.** Disarming closes the channel, and any later
-push fails with `unknown or inactive session`. The id is stable across refreshes
+push fails with `unknown or inactive session`.
+
+The id is stable across refreshes
 and re-arms, so the command you copy stops changing under you; equally, an id
 you have shared stays usable whenever that session is armed.
 

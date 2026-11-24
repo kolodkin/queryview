@@ -1,6 +1,6 @@
 # Decisions
 
-Decisions behind two features: the credential choices cut from [creds.md](../system/creds.md) and the folder-mode listing choice cut from [explorer.md](../system/explorer.md).
+The decisions behind how credentials are protected ([creds.md](../system/creds.md)) and how folder mode lists folders ([explorer.md](../system/explorer.md)).
 
 ## Design decisions
 

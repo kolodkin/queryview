@@ -1,11 +1,11 @@
 # Session storage
 
-How a session is stored, cut from [session.md](../system/session.md).
+How a session is stored. What a session is to a user is in [session.md](../system/session.md).
 
 ## How it is stored
 
 One row per session in SQLite (`sessions`), alongside connections and workspaces
-— see [connect.md](./storage.md#storage--migrations).
+— see [storage.md](./storage.md#storage--migrations).
 
 ```sql
 id              TEXT PRIMARY KEY  -- also the agent channel id

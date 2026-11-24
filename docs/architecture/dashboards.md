@@ -1,6 +1,6 @@
 # Dashboard internals
 
-How a dashboard's queries run and how its HTML is isolated, cut from [dashboard.md](../system/dashboard.md).
+How a dashboard's queries run and how its HTML is isolated. Building and using a dashboard is in [dashboard.md](../system/dashboard.md).
 
 ## Running the queries: `/api/runqueries`
 

@@ -2,8 +2,6 @@
 tab holding its unlock token; the agent (MCP tools, or REST without the token)
 is refused. See docs/system/connect.md#locked-connections."""
 
-# req: architecture/overview/locked-refuses-both
-
 from __future__ import annotations
 
 import asyncio
@@ -55,6 +53,7 @@ def test_hash_verifies_and_never_stores_the_passphrase():
     assert _hash_passphrase("x") != _hash_passphrase("x"), "a fresh salt per lock"
 
 
+# req: architecture/overview/locked-refuses-both
 def test_lock_keeps_the_locking_tab_working_and_shuts_out_everyone_else():
     c = _connected("lock-duck")
     # A space can't appear in base64, so the plaintext never hides in the hash by chance.
@@ -90,6 +89,7 @@ def test_lock_keeps_the_locking_tab_working_and_shuts_out_everyone_else():
     assert c.post("/api/db/query", json={"query": "SELECT 1"}).status_code == 403
 
 
+# req: architecture/overview/locked-refuses-both
 def test_mcp_tools_are_refused_on_a_locked_connection():
     c = _connected("lock-mcp-duck")
     assert c.post("/api/db/lock", json={"name": "lock-mcp-duck", "passphrase": "pw"}).json()["ok"]

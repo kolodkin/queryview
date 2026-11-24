@@ -1,8 +1,6 @@
 """The /api/db surface: unknown type is a 400; validation errors are 400;
 the old /api/clickhouse paths are gone (404)."""
 
-# req: architecture/overview/session-scoped-api
-
 from __future__ import annotations
 
 import asyncio
@@ -88,6 +86,7 @@ def test_execute_runs_a_script_per_statement(tmp_path):
     assert all(isinstance(x["elapsed_ms"], int) for x in results)
 
 
+# req: architecture/api/session-scoped-api
 def test_session_only_connect_lists_for_its_session_only():
     c = TestClient(app, headers={"X-QV-Session": "session-only-test"})
     other = TestClient(app, headers={"X-QV-Session": "session-only-other"})
@@ -99,6 +98,7 @@ def test_session_only_connect_lists_for_its_session_only():
     assert "so-duck" not in {x["name"] for x in other.get("/api/db/connections").json()["connections"]}
 
 
+# req: architecture/api/session-scoped-api
 def test_folder_connection_lands_on_root_with_tables_and_union(tmp_path):
     for name in ("a.csv", "b.csv"):
         (tmp_path / name).write_text("id\n1\n")
@@ -246,6 +246,7 @@ def test_reopening_a_picker_less_connection_goes_back_to_its_last_table(tmp_path
     assert c.get("/api/session").json()["table"] == "refunds"
 
 
+# req: architecture/api/session-scoped-api
 def test_requests_run_within_the_session_query_timeout(monkeypatch, tmp_path):
     """The **Timeout** chip's value in the session's `ui` blob reaches the
     driver on the connect probe and on each query; a value the chip could not

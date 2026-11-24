@@ -11,7 +11,7 @@ wheel shipped — under `uvx`, inside uv's *cache*, where a `uv cache clean` or 
 version bump silently takes the DB with it.
 """
 
-# req: architecture/overview/data-dir
+# req: architecture/storage/data-dir
 
 from __future__ import annotations
 

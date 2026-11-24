@@ -1,11 +1,13 @@
 # Storage and CI
 
-Where connections live and how they are kept: the SQLite data directory, migrations, the `connections` table, config encryption and CI, cut from [connect.md](../system/connect.md).
+Where connections live and how they are kept: the SQLite data directory, migrations, the `connections` table, config encryption and CI. Connecting from the app is in [connect.md](../system/connect.md).
 
 ## Storage & migrations
 
+<!-- req: architecture/storage/data-dir -->
 State lives in one data directory (`DATA_DIR`, defaulting to `~/.queryview`),
 whose SQLite file is `db.sqlite`.
+
 The backend is **single-process** — SQLite is single-writer, so one process owns
 the file, and no cross-process migration lock is needed. The schema is owned by
 **Alembic**: on startup the FastAPI lifespan runs `alembic upgrade head` (via

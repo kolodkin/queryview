@@ -15,9 +15,12 @@ passphrase.
 **Sessions:** every `/api/*` request names its session with an `X-QV-Session`
 header; there is no session cookie. A session is a persisted row holding one
 tab's UI state — route, connection, database, workspace, view settings — so two
-tabs can be on two different connections at once. `/session`, `/connect`,
-`/open` and `/database` act on the header's session. Saved connections are
-shared (SQLite). See [session.md](../system/session.md).
+tabs can be on two different connections at once.
+
+<!-- req: architecture/api/session-scoped-api -->
+`/session`, `/connect`, `/open` and `/database` act on the header's session.
+
+Saved connections are shared (SQLite). See [session.md](../system/session.md).
 
 | Method | Path                        | Body                                   | Description |
 | ------ | --------------------------- | -------------------------------------- | ----------- |
