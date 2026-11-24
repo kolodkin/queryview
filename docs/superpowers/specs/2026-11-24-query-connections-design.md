@@ -223,14 +223,15 @@ These were not discussed; each is open to correction.
 - A deleted or renamed connection leaves its dashboards failing with
   `unknown connection`.
 
-## Open
+## Order against one run for a dashboard page
 
-- **Order against
-  [one run for a dashboard page](./2026-11-24-one-run-per-page-design.md).**
-  That pending design replaces `/api/runqueries` and the widget requests with
-  one `/api/run` and per-query status. This design is written against the
-  entry and the lookup, which both run paths share, but the plan differs by
-  which lands first.
+[That pending design](./2026-11-24-one-run-per-page-design.md) replaces
+`/api/runqueries` and the widget requests with one `/api/run`. None of it is
+built, so this lands first, on today's endpoints. *(My call, not discussed.)*
+The entry, its accessors, the lookup and the per-param dialect are shared by
+both run paths; only the few lines that read entries from a request are
+rewritten later. The one-run plan must carry map entries through its shared
+run, as it already must for `each`.
 
 ## Left to the builder
 
