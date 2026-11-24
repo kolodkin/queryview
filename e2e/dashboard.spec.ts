@@ -67,7 +67,7 @@ test("a malformed param is named above the dashboard, which still renders", asyn
     await route.fulfill({ json: { ...stored, params: [{ name: "region", kind: "dropdown", options: ["eu"] }] } });
   });
   await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
-  await expect(page.getByTestId("dashboard-error")).toContainText("invalid params[0] kind must be one of");
+  await expect(page.getByTestId("dashboard-error")).toContainText("invalid params[0] 'region' kind must be one of");
   await expect(dashboardFrame(page).locator("#out")).toHaveText("alpha,beta,gamma");
   await shot("malformed param message");
 });

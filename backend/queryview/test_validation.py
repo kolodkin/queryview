@@ -39,7 +39,7 @@ def test_dashboard_params_selector_rules():
 
 def test_dashboard_params_rejects_a_name_declared_twice():
     twice = [{"name": "col", "kind": "text"}, {"name": "col", "kind": "identifier", "options": ["city"]}]
-    assert dashboard_params_error(twice) == "invalid params[1] name 'col' is declared twice"
+    assert dashboard_params_error(twice) == "invalid params[1] 'col' is declared twice"
 
 
 def test_page_bounds():
@@ -47,3 +47,16 @@ def test_page_bounds():
     assert page_bounds(0, -5) == (100, 0)
     assert page_bounds(5000, "7") == (1000, 7)
     assert page_bounds(True, [1]) == (100, 0)
+
+
+def test_dashboard_params_errors_name_the_param():
+    def err(**entry):
+        return dashboard_params_error([{"name": "region", **entry}])
+
+    assert err(kind="dropdown") == "invalid params[0] 'region' kind must be one of value, identifier, dimension, text"
+    assert err() == "invalid params[0] 'region' must declare exactly one of options or options_sql"
+    assert err(options=[]) == "invalid params[0] 'region' options must be a non-empty list"
+    assert err(options=["a"], default="x") == "invalid params[0] 'region' default must be 'none' when given"
+    assert err(kind="text", options=["a"]) == "invalid params[0] 'region' a text param takes no options"
+    # No usable name to show.
+    assert dashboard_params_error([{"kind": "dropdown"}]) == "invalid params[0] name must be a non-empty string"

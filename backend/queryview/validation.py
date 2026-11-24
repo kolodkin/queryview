@@ -41,14 +41,15 @@ def dashboard_params_error(raw: object) -> str | None:
         label = f"params[{i}]"
         if not isinstance(entry, dict):
             return f"invalid {label} must be a mapping"
-        kind = entry.get("kind", "value")
-        if kind not in DASHBOARD_PARAM_KINDS:
-            return f"invalid {label} kind must be one of {', '.join(DASHBOARD_PARAM_KINDS)}"
         name = entry.get("name")
         if not isinstance(name, str) or not name:
             return f"invalid {label} name must be a non-empty string"
+        label = f"{label} {name!r}"  # every later message names the param
+        kind = entry.get("kind", "value")
+        if kind not in DASHBOARD_PARAM_KINDS:
+            return f"invalid {label} kind must be one of {', '.join(DASHBOARD_PARAM_KINDS)}"
         if name in names:
-            return f"invalid {label} name {name!r} is declared twice"
+            return f"invalid {label} is declared twice"
         names.add(name)
         if kind == "text":
             # Free input: an optional opening text, no list to pick from.
