@@ -45,10 +45,12 @@ function runError(data: { reason?: string; message?: string }): string {
 }
 
 type RunReply =
-  // `warning` names a malformed param the backend left out; the rest still ran.
-  | { ok: true; results: DashboardResults; params: ResolvedParam[]; warning?: string }
-  // `params` survives a failing query, so the page keeps its selectors.
-  | { ok: false; message: string; params?: ResolvedParam[] }
+  // `warning` names the params the backend left out as malformed; the rest still ran.
+  (
+    | { ok: true; results: DashboardResults; params: ResolvedParam[] }
+    // `params` survives a failing query, so the page keeps its selectors.
+    | { ok: false; message: string; params?: ResolvedParam[] }
+  ) & { warning?: string }
 
 // Run a dashboard's query templates on the session's connection. The backend
 // resolves the selectors from `values`, substitutes, and holds back a query
@@ -67,11 +69,8 @@ async function runDashboard(
     const data = await res.json().catch(() => ({}))
     const resolved = data.params as ResolvedParam[] | undefined
     const warning = typeof data.warning === 'string' ? data.warning : undefined
-    if (!res.ok || !data.ok) {
-      // The param comes first: the query's own error would not point at it.
-      const message = [warning, runError(data)].filter(Boolean).join(' — ')
-      return { ok: false, message, params: resolved }
-    }
+    if (!res.ok || !data.ok)
+      return { ok: false, message: runError(data), params: resolved, warning }
     return {
       ok: true,
       results: (data.results ?? {}) as DashboardResults,
@@ -167,6 +166,9 @@ function DashboardView({
   // widgets' rows from the previous database) in place.
   const [loadSeq, setLoadSeq] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  // The malformed params the last run left out: a standing fact about the
+  // dashboard, not the outcome of an action, so no action's success clears it.
+  const [warning, setWarning] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   // Bumped after a git restore to re-trigger the load effect below without
@@ -341,6 +343,7 @@ function DashboardView({
 
     async function resolve() {
       setError(null)
+      setWarning(null)
       setResults(null)
       setActive(null)
       if (!name && localPush?.name !== '') return
@@ -363,8 +366,8 @@ function DashboardView({
           setResults(r.results)
           shownRef.current = r.results
           setLoadSeq((n) => n + 1)
-          if (r.warning) setError(r.warning)
         } else setError(r.message)
+        setWarning(r.warning ?? null)
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -412,6 +415,7 @@ function DashboardView({
     const queries = only ? Object.fromEntries(only.map((n) => [n, executed[n]])) : executed
     const r = await runDashboard(withoutWidgetQueries(queries, dash.html), dash.params, sent)
     if (r.params) resolvedRef.current = r.params
+    setWarning(r.warning ?? null)
     if (!r.ok)
       return { type: 'params-results', ok: false, message: r.message, params: r.params ?? [] }
     // window.queries is replaced whole: keep what this run left alone.
@@ -637,6 +641,15 @@ function DashboardView({
           {dashboards.length
             ? 'Pick a dashboard to view it.'
             : 'No dashboards yet. An agent can create one with the push_dashboard tool.'}
+        </p>
+      )}
+
+      {warning && (
+        <p
+          className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-200"
+          data-testid="dashboard-warning"
+        >
+          {warning}
         </p>
       )}
 

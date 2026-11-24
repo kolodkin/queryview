@@ -337,6 +337,10 @@ def test_runqueries_names_a_malformed_param_and_still_runs(tmp_path):
     r = c.post("/api/runqueries", json={"queries": {"q": "SELECT {bad}"}, "params": params})
     assert r.status_code == 400 and r.json()["warning"].startswith("invalid params[0]")
     assert "warning" not in c.post("/api/runqueries", json={"queries": {}, "params": REGION}).json()
+    # Every dropped entry is named; one reading keeps is not, though saving would refuse it.
+    two = [{"name": "a", "kind": "x"}, {"name": "b", "kind": "y"}, {"name": "kept", "options": ["v"], "default": "v"}]
+    warning = c.post("/api/runqueries", json={"queries": {}, "params": two}).json()["warning"]
+    assert "params[0] 'a'" in warning and "params[1] 'b'" in warning and "kept" not in warning
 
 
 def test_db_query_substitutes_values(tmp_path):

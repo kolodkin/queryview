@@ -47,7 +47,7 @@ from .drivers import DRIVERS
 from .drivers.clickhouse import close_client
 from .mcp_server import mcp
 from .serving import serve_static
-from .validation import dashboard_params_error, page_bounds
+from .validation import dashboard_params_dropped, dashboard_params_error, page_bounds
 
 
 async def _read_json(request: Request) -> Any:
@@ -564,9 +564,9 @@ async def run_queries(request: Request):
         r = await run_dashboard_queries(request.state.sid, queries)
     resolved = resolved_part(r)
     # Reading drops a malformed param rather than refuse the dashboard; say which, as saving would.
-    warning = dashboard_params_error(b["params"]) if with_params else None
-    if warning:
-        resolved["warning"] = warning
+    dropped = dashboard_params_dropped(b["params"]) if with_params else []
+    if dropped:
+        resolved["warning"] = "; ".join(dropped)
     if not r["ok"]:
         # Not connected / no database: the session must act first, not the request.
         status = 400 if r.get("reason") in ("query", "params") else 409

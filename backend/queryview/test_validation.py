@@ -1,9 +1,7 @@
-from queryview.validation import dashboard_params_error, page_bounds
+from queryview.validation import dashboard_params_dropped, dashboard_params_error, page_bounds
 
 
 def test_dashboard_params_rules():
-    from queryview.validation import dashboard_params_error
-
     assert dashboard_params_error(None) is None
     assert dashboard_params_error([{"name": "d", "kind": "dimension"}]) is None  # a checkbox: no options
     assert (
@@ -25,8 +23,6 @@ def test_dashboard_params_rules():
 def test_dashboard_params_selector_rules():
     """The selector rules a value/identifier param shares: a name and exactly
     one non-empty source of options."""
-    from queryview.validation import dashboard_params_error
-
     assert dashboard_params_error([{"name": "env", "options": ["prod", "staging"]}]) is None
     assert dashboard_params_error("notalist") is not None
     assert dashboard_params_error(["not a mapping"]) is not None
@@ -60,3 +56,32 @@ def test_dashboard_params_errors_name_the_param():
     assert err(kind="text", options=["a"]) == "invalid params[0] 'region' a text param takes no options"
     # No usable name to show.
     assert dashboard_params_error([{"kind": "dropdown"}]) == "invalid params[0] name must be a non-empty string"
+
+
+def test_dropped_names_every_entry_reading_leaves_out():
+    params = [
+        {"name": "a", "kind": "dropdown", "options": ["x"]},
+        {"name": "ok", "options": ["x"]},
+        {"name": "b", "options": []},
+        {"name": "ok", "options": ["y"]},
+        "nope",
+    ]
+    assert dashboard_params_dropped(params) == [
+        "invalid params[0] 'a' kind must be one of value, identifier, dimension, text",
+        "invalid params[2] 'b' options must be a non-empty list",
+        "invalid params[3] 'ok' is declared twice",
+        "invalid params[4] must be a mapping",
+    ]
+
+
+def test_dropped_is_silent_about_what_reading_keeps():
+    # Saving refuses these, but reading keeps the selector: nothing to report.
+    assert dashboard_params_dropped([{"name": "r", "options": ["a", "b"], "default": "x"}]) == []
+    assert dashboard_params_dropped([{"name": "r", "options": ["a"]}, {"name": "d", "kind": "dimension"}]) == []
+    assert dashboard_params_dropped(None) == [] and dashboard_params_dropped([]) == []
+    assert dashboard_params_dropped("nope") == ["invalid params: must be a list of selector specs"]
+
+
+def test_messages_cut_a_very_long_name():
+    message = dashboard_params_error([{"name": "n" * 500, "kind": "x"}]) or ""
+    assert len(message) < 200 and "n" * 40 in message

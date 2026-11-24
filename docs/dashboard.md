@@ -267,9 +267,9 @@ An identifier containing the quote character, or a backslash on ClickHouse, is
 rejected. Write option values as they are stored (`CORP\alice`); never
 pre-escape them.
 
-Saving refuses a malformed declaration. One that reaches a stored dashboard
-anyway (a hand edit in the repo) is left out when it opens, and the dashboard
-page names it above the dashboard.
+Saving refuses a malformed declaration. One already in a stored dashboard
+(saved before a rule existed) is left out when it opens, and the dashboard
+page names each one above the dashboard.
 
 `options` and `options_sql`
 are mutually exclusive (a `dimension` needs neither), and the first option is
