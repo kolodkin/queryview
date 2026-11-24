@@ -29,7 +29,7 @@ before `push_dashboard`.
   in the `window.queries` shape, `params` as `[{name, kind, options, value}]`.
   A query waiting on a choice is left out of `results`, as on the page.
   Failure: `{"ok": False, "message"}`, plus `params` when they resolved.
-- `limit` caps the rows of each query, 0..`DASHBOARD_ROW_CAP`; it is threaded
+- `limit` caps the rows of each query, 1..`DASHBOARD_ROW_CAP`; it is threaded
   through `run_dashboard` and `run_dashboard_on` to `run_queries_on`, default
   unchanged for the page.
 - Gate: `_gated_session`, as today, so a locked connection, a disconnected
