@@ -83,7 +83,7 @@ Backend unit tests live beside the code they test inside `backend/queryview`,
 and ship in the wheel:
 
 ```bash
-uv run --group test pytest backend/queryview
+uv run --group test pytest backend/queryview scripts
 ```
 
 The e2e suite is [Playwright Test](https://playwright.dev/docs/intro) in

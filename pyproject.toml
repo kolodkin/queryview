@@ -44,7 +44,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["backend/queryview"]
+testpaths = ["backend/queryview", "scripts"]
 
 [tool.ruff]
 line-length = 120
