@@ -57,7 +57,7 @@ test("dashboard push and reopen", async ({ page, seeds, baseURL, shot }) => {
   await shot("reopened from store");
 });
 
-test("a malformed param is named above the dashboard, which still renders", async ({ page, seeds, baseURL }) => {
+test("a malformed param is named above the dashboard, which still renders", async ({ page, seeds, baseURL, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const name = `odd ${crypto.randomUUID().slice(0, 6)}`;
   await api(`${baseURL}/api/dashboards`, { json: { name, html: DASHBOARD_HTML, queries: { items: "SELECT name FROM items ORDER BY id" } } });
@@ -69,6 +69,7 @@ test("a malformed param is named above the dashboard, which still renders", asyn
   await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
   await expect(page.getByTestId("dashboard-error")).toContainText("invalid params[0] kind must be one of");
   await expect(dashboardFrame(page).locator("#out")).toHaveText("alpha,beta,gamma");
+  await shot("malformed param message");
 });
 
 test("dashboard runqueries error shows banner", async ({ page, seeds, baseURL, shot }) => {
