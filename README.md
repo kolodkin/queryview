@@ -76,7 +76,7 @@ None yet: `docs/requirements/` holds what a user needs.
 ### System
 
 - [queryview.md](docs/system/queryview.md) — the Connect page and the app's pages.
-- [connect.md](docs/system/connect.md) — connections, drivers, storage.
+- [connect.md](docs/system/connect.md) — connections, drivers, locking and reconnecting.
 - [creds.md](docs/system/creds.md) — how connection credentials are stored and protected.
 - [session.md](docs/system/session.md) — sessions: what a tab remembers, refresh and
   new-tab behaviour, the session switcher.
@@ -86,13 +86,18 @@ None yet: `docs/requirements/` holds what a user needs.
 - [workspace.md](docs/system/workspace.md) — workspaces.
 - [gitsync.md](docs/system/gitsync.md) — git backup, history and restore.
 - [export-import.md](docs/system/export-import.md) — YAML export and import.
-- [mcp.md](docs/system/mcp.md) — connecting an agent, its tools, and who names and saves.
+- [mcp.md](docs/system/mcp.md) — connecting an agent, arming a session, and who names and saves.
 - [viewer_server.md](docs/system/viewer_server.md) — the display-only viewer server.
 
 ### Architecture
 
 - [api.md](docs/architecture/api.md) — the full HTTP endpoint reference.
 - [viewer_server_api.md](docs/architecture/viewer_server_api.md) — the viewer server's endpoints.
+- [storage.md](docs/architecture/storage.md) — the data directory, migrations, connection table, encryption, CI.
+- [sessions.md](docs/architecture/sessions.md) — how a session is stored.
+- [mcp.md](docs/architecture/mcp.md) — the MCP tools and the channel behind arming.
+- [dashboards.md](docs/architecture/dashboards.md) — running a dashboard's queries and its sandbox.
+- [decisions.md](docs/architecture/decisions.md) — design decisions for credentials and folder mode.
 
 ### Deployment
 

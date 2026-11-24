@@ -8,26 +8,7 @@ reconnects whichever one it was last on.
 
 ## Storage & migrations
 
-State lives in one data directory (`DATA_DIR`, defaulting to `~/.queryview`),
-whose SQLite file is `db.sqlite`.
-The backend is **single-process** — SQLite is single-writer, so one process owns
-the file, and no cross-process migration lock is needed. The schema is owned by
-**Alembic**: on startup the FastAPI lifespan runs `alembic upgrade head` (via
-`connect._ensure_schema()`) before serving any request, so an Alembic-managed DB
-is migrated forward in place rather than rebuilt. Migrations ship inside the
-package (`backend/queryview/migrations/`). To author a new revision after
-changing a model, from `backend/`:
-
-```
-DATA_DIR=/tmp/qv-dev uv run alembic revision --autogenerate -m "describe change"
-```
-
-Review the generated script (column changes use batch mode for SQLite) and
-commit it; the app applies it on next start.
-
-> A DB predating Alembic (created by the old `create_all`, so it has no
-> `alembic_version` table) is not upgraded automatically — delete it and let the
-> app recreate it on next start.
+How connections are stored, encrypted and migrated is in [storage.md](../architecture/storage.md#storage--migrations).
 
 ## Drivers
 
@@ -142,44 +123,11 @@ failed re-list keeps the list on screen.
 
 ## Persistence (SQLite)
 
-Connection details are stored via SQLModel in the SQLite database (see
-[Storage & migrations](#storage--migrations)). Schema (the `connections` table):
-
-```sql
-CREATE TABLE connections (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  name           TEXT NOT NULL UNIQUE,
-  type           TEXT NOT NULL,   -- selects the driver (clickhouse | postgres | mysql | duckdb | sqlite)
-  config         TEXT NOT NULL,   -- base64(AES-GCM(json.dumps(driver config)))
-  database       TEXT,            -- last selected database (nullable)
-  last_active_at INTEGER NOT NULL -- unix ms; when it was last opened
-);
-```
-
-- **Connect** upserts the row by `name` and bumps `last_active_at`.
-- **Selecting a database** updates `database` for that row.
-- `last_active_at` orders the saved cards, most recent first.
-
-Driver-specific fields (host/port/user/pass for ClickHouse, Postgres and MySQL, a file
-path for DuckDB) are not columns — each driver serializes its own config to a
-dict that is JSON-encoded and stored encrypted in `config`. Adding a future
-driver needs no schema change.
+The `connections` table is described in [storage.md](../architecture/storage.md#persistence-sqlite).
 
 ## Config encryption
 
-The whole `config` blob is **encrypted at rest** with AES-256-GCM; the stored
-value is `base64(iv ‖ ciphertext)` (AES-GCM appends its 16-byte tag to the
-ciphertext), never plaintext. Storing the entire config (not just a password
-field) keeps the storage layer secret-agnostic. The key is resolved once and
-memoized on first use:
-
-- `DB_ENCRYPTION_KEY` — base64 of 32 bytes, if set (use this in CI/shared envs);
-- otherwise a key is generated and written to `encryption.key` in the data dir
-  (gitignored, mode `600`).
-
-If the key changes (or a row predates encryption) the value can't be decrypted;
-a session on that connection reads as disconnected and the user reconnects,
-which re-encrypts it with the current key.
+The stored config is encrypted at rest; see [storage.md](../architecture/storage.md#config-encryption).
 
 ## Session connections
 
@@ -199,7 +147,7 @@ restarts (the session then reads as disconnected).
 - The agent may switch to any unlocked ClickHouse, Postgres or MySQL connection and
   pick the database of whichever unlocked one it is on; it may add (also
   ClickHouse, Postgres or MySQL only: DuckDB and SQLite read local files) and remove
-  only its own. See [mcp.md](./mcp.md#tools).
+  only its own. See [mcp.md](../architecture/mcp.md#tools).
 - This keeps a cooperating agent in its lane; it is not a security boundary.
   For one, lock the connection.
 
@@ -302,7 +250,4 @@ interface with HTTP Basic auth, within the session's
 
 ## CI
 
-CI runs a real `clickhouse/clickhouse-server` service container so the e2e suite
-exercises an actual connection: it asserts that connecting succeeds, a database
-can be selected, the indicator shows `<connection> · <database>`, and a query
-against a seeded `test` database returns its rows.
+What CI exercises is in [storage.md](../architecture/storage.md#ci).

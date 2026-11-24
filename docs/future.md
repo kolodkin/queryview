@@ -6,7 +6,7 @@ doc.
 
 ## run_sql: server-side file access
 
-An agent's [`run_sql`](./system/mcp.md#tools) runs read-only, but read-only only
+An agent's [`run_sql`](./architecture/mcp.md#tools) runs read-only, but read-only only
 blocks writes to tables. On MySQL, `SELECT … INTO OUTFILE` and `INTO DUMPFILE`
 still write files on the database server, and `LOAD_FILE()` reads them, when
 the login has the FILE privilege. `secure_file_priv` limits where, and an
