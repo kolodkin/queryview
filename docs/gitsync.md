@@ -32,15 +32,22 @@ for that case is in [docker.md](./docker.md#git-sync).
 ## Repository layout
 
 ```
-dashboards/{name}/meta.yaml        # name, params (when declared)
 dashboards/{name}/dashboard.html   # the HTML, verbatim
 dashboards/{name}/queries.yaml     # {query_name: SQL}
+dashboards/{name}/meta.yaml        # params, only when declared
 ```
 
-File names are percent-encoded where needed; the canonical name lives inside
-the YAML. A dashboard needs all three files (the HTML and queries may be
-empty): a dir missing one is a hand edit, so **Restore** returns 404 naming
-the file and a sync skips it.
+The folder is the dashboard's name, percent-encoded where needed; a `name`
+key in `meta.yaml` is ignored. A dashboard needs `dashboard.html` and
+`queries.yaml` (either may be empty): a dir missing one is a hand edit, so
+**Restore** returns 404 naming the file and a sync skips it. A sync also
+skips a folder the encoding would not write, such as `a%41` for `aA`.
+
+A name new to the workspace must fit that folder, with or without a remote:
+
+- over 255 bytes once encoded, it is refused as too long;
+- differing from another dashboard's name only by letter case, it is refused,
+  as the two would share a folder on a case-insensitive disk.
 
 ## Merge-in
 

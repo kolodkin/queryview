@@ -621,7 +621,7 @@ def _remove_from_remote(remote, tmp_path, relpath: str) -> None:
 
 
 def test_restore_of_a_dashboard_missing_a_file_is_404(git_env, tmp_path):
-    """A dashboard dir is readable only with all three files: a hand-edited
+    """A dashboard dir is readable only with both required files: a hand-edited
     repo missing one must not restore the rest over the local dashboard."""
     from queryview.dashboards import get_dashboard, upsert_dashboard
 

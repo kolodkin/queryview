@@ -365,7 +365,7 @@ export async function startViewer(dashboards: Dash[]): Promise<Viewer> {
       const dir = join(author, "dashboards", d.name);
       mkdirSync(dir, { recursive: true });
       // JSON is YAML: no dumper needed.
-      writeFileSync(join(dir, "meta.yaml"), JSON.stringify({ name: d.name, params: d.params ?? [] }));
+      writeFileSync(join(dir, "meta.yaml"), JSON.stringify({ params: d.params ?? [] }));
       writeFileSync(join(dir, "dashboard.html"), d.html);
       writeFileSync(join(dir, "queries.yaml"), JSON.stringify(d.queries));
     }

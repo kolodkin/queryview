@@ -55,7 +55,9 @@ pair for the whole active workspace.
 `kind` is `"dashboard"` or `"workspace"`; `name` is required for a
 dashboard; `workspace` defaults to the fallback workspace.
 Errors: `400` malformed document or missing arguments, `404` unknown
-entity/workspace.
+entity/workspace. Import also refuses a new name
+[its git-sync folder can't hold](./gitsync.md#repository-layout): `400` too
+long, `409` a case twin of a saved dashboard or of an earlier entry.
 
 ## Related docs
 
