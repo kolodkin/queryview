@@ -139,10 +139,10 @@ its transport: what to add to the request.
   sort), and a `<qv-param>` holds its param's value. React inside the element
   re-runs it when an input changes. Authors write nothing extra: the page
   sets the inputs.
-- **What has no element** gets a node in the page instead, a React component
-  rendering nothing: each of the page's own queries (read through
-  `window.queries`) and each param whose options depend on another param.
-  Its inputs are the values of the params it uses.
+- **What has no element** is an entry in the page's run state instead: each
+  of the page's own queries (read through `window.queries`) and each param
+  whose options depend on another param. Its inputs are the values of the
+  params it uses, and it is judged stale by the same rule an element applies.
 - **A node asks when its inputs change.** Each result records the values it
   was run with, as the server resolved them. A node asks again only when its
   current inputs differ from those, so a value the server already corrected
@@ -231,7 +231,11 @@ These were not discussed; each is open to correction.
 - Per-query status instead of fail-fast for the whole call.
 - The dependency map travels in every run reply, not in a separate call.
 - The page's own queries, and params whose options depend on another param,
-  are nodes in the page that render nothing: they have no element.
+  have no element: they are entries in the page's run state, not components.
+- A widget's inputs also include its query's revision, which the page raises
+  when Execute re-runs that query: the SQL changed, the params did not.
+- A widget names itself in its asks (`view`), so the page keeps one latest
+  page per widget.
 - A widget's ask carries no values; the page supplies them.
 - A result records the values it was run with, and a node asks only when its
   inputs differ from them.
