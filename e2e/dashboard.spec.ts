@@ -127,6 +127,17 @@ test("dashboard params resolve and rerun through setParams", async ({ page, seed
   await expect(frame.locator("#out")).toHaveText("beta");
 });
 
+test("a query naming an each param is the rows of every value", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  await openDashboard(page, baseURL, {
+    name: "per value",
+    html: PARAMS_HTML,
+    queries: { items: "SELECT name FROM items WHERE name = {n}" },
+    params: [{ name: "n", kind: "each", options_sql: "SELECT name FROM items ORDER BY id" }],
+  });
+  await expect(dashboardFrame(page).locator("#out")).toHaveText("alpha,beta,gamma");
+});
+
 test("rename and delete a saved dashboard", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const tag = crypto.randomUUID().slice(0, 6);
