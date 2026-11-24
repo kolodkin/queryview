@@ -133,17 +133,24 @@ One core module, used by both pages (`DashboardView`, `ViewerApp`), holds the
 tree and is the only code that calls the run endpoint. A page passes in only
 its transport: what to add to the request.
 
-- **Nodes.** One React component per param and one per query view, rendering
-  nothing. A param node's inputs are the values of the params its
-  `options_sql` references. A query view's inputs are the values of the
-  params its query uses, plus its page: limit, offset and sort. A table
-  widget is a query view; so is each of the page's own queries.
+- **Nodes are the elements on the page.** *(Decided.)* The wiring from `uses`
+  is applied to the DOM: a `<qv-select-view>` receives the values of the
+  params its query uses as its inputs, next to its page (limit, offset,
+  sort), and a `<qv-param>` holds its param's value. React inside the element
+  re-runs it when an input changes. Authors write nothing extra: the page
+  sets the inputs.
+- **What has no element** gets a node in the page instead, a React component
+  rendering nothing: each of the page's own queries (read through
+  `window.queries`) and each param whose options depend on another param.
+  Its inputs are the values of the params it uses.
 - **A node asks when its inputs change.** Each result records the values it
   was run with, as the server resolved them. A node asks again only when its
   current inputs differ from those, so a value the server already corrected
   does not cause a second run.
-- **Batching.** The asks of one render are collected and sent as one run
-  call: param nodes become `resolve`, query views become `queries`.
+- **Batching.** The asks that follow one change are collected and sent as one
+  run call: param nodes become `resolve`, queries become `queries`. Asks from
+  elements in the frame arrive as messages, so the batch waits for them
+  before it is sent.
 - **Load.** Nothing is known yet, so the first call asks for everything:
   `resolve: "all"` and every query view on the page. The server resolves the
   whole chain in that one call, and its `uses` map gives every node its
@@ -157,22 +164,28 @@ its transport: what to add to the request.
 
 ### Widgets and the frame
 
+- The frame is given `uses` and the param values when it is built, and again
+  with each reply. Each widget element takes from them the values of the
+  params its query uses; those are its inputs.
+- A widget asks the page by message when an input or its page changes. The
+  ask carries the query's name and page only, as today: the page holds the
+  values, so a frame cannot send one of its own.
 - On load the page reads each `<qv-select-view>` tag's `query`, `limit` and
-  `order-by` from the dashboard's HTML (it already reads `query`) and creates
-  a query view for each, so the first call includes each widget's first page.
-- A widget still asks the page by message, as today. The page answers from
-  the matching view when it holds that page, and otherwise creates the view,
-  which asks through the batch. A widget the HTML does not show, such as one
-  a script creates, is answered this way. Two frames asking for the same page
-  share one view, which replaces `sharedPost`.
+  `order-by` from the dashboard's HTML (it already reads `query`), so the
+  first call includes each widget's first page. When the widget mounts and
+  asks, the page answers from that result.
+- A widget the HTML does not show, such as one a script creates, asks the
+  same way and is answered through the batch. Two frames asking for the same
+  page of the same query share one result, which replaces `sharedPost`.
 - A widget's columns come from its result's `meta`; the describe request is
-  answered from the view.
-- A view holds only the latest page it ran, so paging back asks the database
-  again, as today, and nothing grows with pages visited.
+  answered from the result.
+- The page holds only the latest result per widget page asked for, so paging
+  back asks the database again, as today, and nothing grows with pages
+  visited.
 - After a call, the page posts its own queries' results and the params to the
-  frame as today, naming the queries that ran. Only widgets over those
-  queries ask again. A param change returns those widgets to their first
-  page, keeping their sort and page size.
+  frame as today. A widget whose inputs did not change does not ask again. A
+  param change returns the widgets it reaches to their first page, keeping
+  their sort and page size.
 - Execute with nothing edited, and a connection or database switch, run
   everything again.
 
@@ -217,8 +230,9 @@ These were not discussed; each is open to correction.
 - The endpoint is named `/api/run` in both servers.
 - Per-query status instead of fail-fast for the whole call.
 - The dependency map travels in every run reply, not in a separate call.
-- Nodes are React components that render nothing, one per param and per
-  query view.
+- The page's own queries, and params whose options depend on another param,
+  are nodes in the page that render nothing: they have no element.
+- A widget's ask carries no values; the page supplies them.
 - A result records the values it was run with, and a node asks only when its
   inputs differ from them.
 - First pages are found by reading widget tags from the HTML; anything missed
