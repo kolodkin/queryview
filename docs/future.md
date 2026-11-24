@@ -70,17 +70,6 @@ no picker and lists only what `SHOW TABLES` returns.
   substituting by hand. The backend substitutes
   ([dashboard.md](./dashboard.md#dashboard-parameters)), so a tool that runs a
   dashboard's queries for given values is a thin wrapper.
-- **One run for the whole page.** A table widget asks for its rows in a
-  request of its own, apart from the run that loads the page's other queries
-  ([dashboard.md](./dashboard.md#running-the-queries-apirunqueries)). On the
-  [viewer server](./viewer_server/README.md) each of those requests checks its
-  values against the params' options again, running every `options_sql` the
-  widget's query uses; the app skips the check, so the two differ. A single
-  run would resolve the params once and run every query on the page, the
-  widgets' first pages included, with the same logic in the app and the viewer
-  server; the page loader hands each widget its result. Open: how a widget's
-  next page, sort and CSV export reuse the resolved values without resolving
-  again.
 - **Tabs that work in a snapshot.** A dashboard's own tabs switch by script,
   so a snapshot freezes on the tab that was open. A built-in `<qv-tabs>`
   that switches without script would work in the file; authors can get the
