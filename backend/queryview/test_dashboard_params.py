@@ -1,4 +1,4 @@
-"""Dashboard param rules (docs/dashboard.md#dashboard-parameters): parsing,
+"""Dashboard param rules (docs/system/dashboard.md#dashboard-parameters): parsing,
 substitution per dialect, dependency order and option resolution."""
 
 from __future__ import annotations

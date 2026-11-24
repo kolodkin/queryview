@@ -96,7 +96,7 @@ async def run_queries_on(
 
     A query given as `{value: sql}` runs every SQL and is the rows of all of
     them, stacked in that order and cut at `limit`; the runs must return the
-    same columns. See docs/dashboard.md — "A query run once per value"."""
+    same columns. See docs/system/dashboard.md — "A query run once per value"."""
     slots = asyncio.Semaphore(DASHBOARD_CONCURRENCY)
 
     async def one(sql: str) -> RowsResult | Err:

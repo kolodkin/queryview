@@ -87,7 +87,7 @@ async function lockCall(
   }
 }
 
-// Lock a saved connection behind a passphrase (docs/connect.md#locked-connections).
+// Lock a saved connection behind a passphrase (docs/system/connect.md#locked-connections).
 export const lockConnection = (name: string, passphrase: string) =>
   lockCall('POST', '/api/db/lock', name, passphrase)
 // Exchange the passphrase for this tab's unlock token on a locked connection.

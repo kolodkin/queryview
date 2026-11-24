@@ -13,7 +13,7 @@ login and assumes it is reachable only from localhost — don't expose its port.
 **Give QueryView only read-only, least-privilege database credentials — never
 production write credentials.** It is an agent-driven analytic tool, and the
 agent can run any statement the credentials allow, writes included; see
-[creds.md](docs/creds.md).
+[creds.md](docs/system/creds.md).
 
 ## Quick start
 
@@ -36,7 +36,7 @@ Prefer Docker? See [docker.md](docs/docker.md).
 
 ## What you can do
 
-Ask your agent ([MCP usage](docs/mcp.md)) — it drives the page for you in your open tab at
+Ask your agent ([MCP usage](docs/system/mcp.md)) — it drives the page for you in your open tab at
 http://localhost:8000. Or do it by hand on that page:
 
 | Ask your agent | Or open this page | What happens |
@@ -52,12 +52,12 @@ Beyond those pages:
 
 - **Workspaces** group your saved dashboards, and each can sync to
   its own git remote for backup, history and restore —
-  [workspace.md](docs/workspace.md), [gitsync.md](docs/gitsync.md).
+  [workspace.md](docs/system/workspace.md), [gitsync.md](docs/system/gitsync.md).
 - **YAML export/import** moves a single query, a dashboard, or a whole
   workspace between instances with no git involved —
-  [export-import.md](docs/export-import.md).
+  [export-import.md](docs/system/export-import.md).
 - **MCP** lets an agent query your databases and author dashboards — see
-  [mcp.md](docs/mcp.md).
+  [mcp.md](docs/system/mcp.md).
 
 ## Where your data lives
 
@@ -65,25 +65,39 @@ All state lives in one data directory, `~/.queryview` on every OS, relocated
 with `DATA_DIR`. Inside are the SQLite store `db.sqlite`, the local
 password-encryption key `encryption.key`, and the workspace git-sync clones
 under `gitsync/`. Back that directory up — or give each workspace a git remote
-and let [git sync](docs/gitsync.md) do it.
+and let [git sync](docs/system/gitsync.md) do it.
 
 ## Documentation
 
-- [queryview.md](docs/queryview.md) — the Connect page and the app's pages.
-- [connect.md](docs/connect.md) — connections, drivers, storage.
-- [session.md](docs/session.md) — sessions: what a tab remembers, refresh and
+### Requirements
+
+None yet: `docs/requirements/` holds what a user needs.
+
+### System
+
+- [queryview.md](docs/system/queryview.md) — the Connect page and the app's pages.
+- [connect.md](docs/system/connect.md) — connections, drivers, storage.
+- [creds.md](docs/system/creds.md) — how connection credentials are stored and protected.
+- [session.md](docs/system/session.md) — sessions: what a tab remembers, refresh and
   new-tab behaviour, the session switcher.
-- [query.md](docs/query.md) — querying: pagination, the results grid, CSV.
-- [explorer.md](docs/explorer.md) — the table navigator.
-- [dashboard.md](docs/dashboard.md) — dashboards and how agents author them.
-- [workspace.md](docs/workspace.md) — workspaces.
-- [gitsync.md](docs/gitsync.md) — git backup, history and restore.
-- [export-import.md](docs/export-import.md) — YAML export and import.
-- [mcp.md](docs/mcp.md) — connecting an agent, its tools, and who names and saves.
-- [api.md](docs/api.md) — the full HTTP endpoint reference.
+- [query.md](docs/system/query.md) — querying: pagination, the results grid, CSV.
+- [explorer.md](docs/system/explorer.md) — the table navigator.
+- [dashboard.md](docs/system/dashboard.md) — dashboards and how agents author them.
+- [workspace.md](docs/system/workspace.md) — workspaces.
+- [gitsync.md](docs/system/gitsync.md) — git backup, history and restore.
+- [export-import.md](docs/system/export-import.md) — YAML export and import.
+- [mcp.md](docs/system/mcp.md) — connecting an agent, its tools, and who names and saves.
+- [viewer_server.md](docs/system/viewer_server.md) — the display-only viewer server.
+
+### Architecture
+
+- [api.md](docs/architecture/api.md) — the full HTTP endpoint reference.
+- [viewer_server_api.md](docs/architecture/viewer_server_api.md) — the viewer server's endpoints.
+
+### No layer
+
 - [docker.md](docs/docker.md) — running the container image and persisting its state.
-- [viewer_server/](docs/viewer_server/README.md) — the display-only viewer server: its own docs folder.
-- [creds.md](docs/creds.md) — how connection credentials are stored and protected.
+- [viewer_server_docker.md](docs/viewer_server_docker.md) — running the viewer server from the image.
 
 ## Contributing
 

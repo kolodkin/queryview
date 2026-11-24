@@ -12,7 +12,7 @@ working on it; [README.md](README.md) covers running it.
 ├── backend/         # Python FastAPI + SQLModel app exposing /api/* (queryview package)
 ├── frontend/        # Vite + React + TS + Tailwind v4 SPA (npm workspace)
 ├── e2e/             # Playwright (TypeScript) browser tests
-├── docs/            # Feature and API documentation
+├── docs/            # Docs by V-model layer: requirements, system, architecture
 ├── pyproject.toml   # Backend deps + console script + `test` group (uv)
 └── package.json     # npm workspace root: dev orchestration, frontend build, e2e
 ```

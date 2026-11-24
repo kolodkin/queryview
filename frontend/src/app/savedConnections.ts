@@ -9,7 +9,7 @@ export type SavedConnection = {
   type: string
   database: string | null
   last_active_at: number
-  // "session": this session's memory only, never saved (docs/connect.md).
+  // "session": this session's memory only, never saved (docs/system/connect.md).
   scope?: 'saved' | 'session'
   created_by?: 'user' | 'agent'
   // Passphrase-locked: opening it asks for the passphrase; the agent is kept off.

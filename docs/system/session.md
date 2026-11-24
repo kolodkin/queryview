@@ -89,7 +89,7 @@ sleeping laptop) is kept — it may wake.
 
 A running tab is never moved silently. A sleeping laptop or a frozen tab can
 still let a claim lapse and another tab take its session. Its next heartbeat (sent
-with `keep`, see [api.md](./api.md)) gets a `409`: the tab greys out and stops
+with `keep`, see [api.md](../architecture/api.md)) gets a `409`: the tab greys out and stops
 writing until you pick **Use it here** (the other tab then greys out) or **New
 session**. Any session change re-syncs the whole shell.
 
@@ -218,6 +218,6 @@ sequenceDiagram
     Srv-->>New: session state with your last edits
 ```
 
-The `/api/sessions/*` shapes are in [api.md](./api.md). Connection and database
+The `/api/sessions/*` shapes are in [api.md](../architecture/api.md). Connection and database
 are not among them — `/api/db/connect`, `/open` and `/database` write those
 through, so connection changes keep one path.

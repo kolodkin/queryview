@@ -56,5 +56,5 @@ CRUD stays API/UI-only because it is admin configuration involving secrets.
 
 - [gitsync.md](./gitsync.md) — backup & restore mechanics.
 - [dashboard.md](./dashboard.md) — dashboards.
-- [api.md](./api.md) — backend JSON API.
-- [future.md](./future.md) — planned work.
+- [api.md](../architecture/api.md) — backend JSON API.
+- [future.md](../future.md) — planned work.

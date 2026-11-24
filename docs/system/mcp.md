@@ -45,7 +45,7 @@ Without a copied id the agent works in a [tab](#tabs) of its own.
 ## Agent skill
 
 The server publishes one skill over the MCP Skills extension,
-`skill://queryview/SKILL.md` ([source](../backend/queryview/skills/queryview/SKILL.md)):
+`skill://queryview/SKILL.md` ([source](../../backend/queryview/skills/queryview/SKILL.md)):
 the default workflow for tabs, connections, SQL and dashboards.
 Naming a tool overrides it.
 
@@ -161,8 +161,8 @@ new id.
 
 ## Related docs
 
-- [api.md](./api.md) — backend JSON API.
+- [api.md](../architecture/api.md) — backend JSON API.
 - [session.md](./session.md) — sessions and agent tabs.
 - [dashboard.md](./dashboard.md) — how agents author dashboards.
 - [query.md](./query.md) — querying: pagination, the results grid, CSV.
-- [docker.md](./docker.md) — port mapping when running the container.
+- [docker.md](../docker.md) — port mapping when running the container.

@@ -50,7 +50,7 @@ letter instead.
 A saved card that fails to open reports the error under the cards.
 When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`
 fails, the error suggests `host.docker.internal` (see
-[Connecting to databases on your machine](./docker.md#connecting-to-databases-on-your-machine)).
+[Connecting to databases on your machine](../docker.md#connecting-to-databases-on-your-machine)).
 
 ## Concepts
 

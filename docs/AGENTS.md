@@ -1,12 +1,18 @@
 # Docs
 
-- `docs/` is the doc of record: one page per feature, describing what the app
-  does today. Before adding or editing a page, load the project `docs-writing`
-  skill.
+- `docs/` is the doc of record: what the app does today. Before adding or
+  editing a page, load the project `docs-writing` skill.
+- One folder per layer:
+  - `docs/requirements/`: what a user needs; no design, no screen detail.
+  - `docs/system/`: one page per feature, what a user can see or do.
+  - `docs/architecture/`: components, contracts between them, storage,
+    interface references.
+- A page holds one layer's content. A statement a test proves carries a
+  `<!-- req: <id> -->` comment on the line above it; the project `vmodel` skill
+  says how.
+- The viewer server (`queryview-server`) follows the same layers. Its docs
+  never go in an app page; an app page only links in.
 - A new page joins the docs list at the end of `README.md`.
-- The viewer server (`queryview-server`) has its own folder,
-  `docs/viewer_server/`, one page per topic (`api.md`, `docker.md`, …). Its
-  docs go there, never as a section of an app page; an app page only links in.
 - **A design is written before it is built**, as
   `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` (the
   `superpowers:brainstorming` shape), and the user reads it first. Never into

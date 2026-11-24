@@ -1,5 +1,5 @@
 """The viewer server's config: one YAML file naming the git repo to show and
-the connections to show it on. See docs/viewer_server.
+the connections to show it on. See docs/system/viewer_server.md.
 
 Every fault raises ConfigError with a message safe to print: it names the
 path or the connection, never a field's value."""

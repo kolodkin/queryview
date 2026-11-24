@@ -1,7 +1,7 @@
 // The session client: attach/heartbeat/release, the in-memory mirror every view
 // reads, and queued write-back. The server owns the state; this module keeps
 // a local copy so the UI renders from it synchronously and a patch in flight is
-// never something the user waits on. See docs/session.md.
+// never something the user waits on. See docs/system/session.md.
 
 import { apiFetch, postJson } from './api'
 import { SESSION_KEY, TAB_KEY, tabRead, tabWrite } from './tabStorage'

@@ -1,5 +1,5 @@
 // Client for the /api/export and /api/import YAML endpoints (see
-// docs/export-import.md). Export downloads a self-describing YAML document;
+// docs/system/export-import.md). Export downloads a self-describing YAML document;
 // import posts one back — the document's `kind` decides what gets written.
 
 import { apiFetch } from './api'

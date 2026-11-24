@@ -125,7 +125,7 @@ backplane.
 ## API
 
 `/api/db/query` (a page of rows, or CSV), `/api/db/describe` (output columns)
-and `/api/remote/lock` (the edit lock): see [api.md](./api.md). Queries run on
+and `/api/remote/lock` (the edit lock): see [api.md](../architecture/api.md). Queries run on
 the session's connection and selected database, within its
 [query timeout](./queryview.md#query-timeout).
 
@@ -134,4 +134,4 @@ the session's connection and selected database, within its
 - [dashboard.md](./dashboard.md) — dashboards, the SQL panel and the widgets.
 - [scripts.md](./scripts.md) — the Scripts page: a `;`-separated script run as written, writes included.
 - [explorer.md](./explorer.md) — browsing tables with the same grid.
-- [api.md](./api.md) — the full backend JSON API.
+- [api.md](../architecture/api.md) — the full backend JSON API.

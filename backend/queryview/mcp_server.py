@@ -409,7 +409,7 @@ async def push_dashboard(
     placeholders (kinds value / identifier / dimension / text / each, `options`
     or `options_sql`, `default: none`; a query naming an `each` runs once per
     option, rows stacked); the page gets them as `window.params` and
-    re-runs with `window.setParams({...})`. See docs/dashboard.md.
+    re-runs with `window.setParams({...})`. See docs/system/dashboard.md.
 
     The HTML may use `<qv-select-view query="name">` (a paged results table
     over that query, with `<template column="col">` children designing cells
@@ -509,7 +509,7 @@ def _push_failed(message: str) -> dict[str, Any]:
 @mcp.tool()
 async def new_tab(name: str, ctx: Context) -> dict[str, Any]:
     """A fresh QueryView session for your work and the link that shows it (see
-    docs/mcp.md, "Tabs"). Open `url` in the user's browser yourself: `open
+    docs/system/mcp.md, "Tabs"). Open `url` in the user's browser yourself: `open
     <url>` on macOS, `xdg-open <url>` on Linux; otherwise give the user the
     link. The tab lists as "Agent › <name>", arms itself on load and is gone
     once closed. Connect it with use_connection or add_connection, then push

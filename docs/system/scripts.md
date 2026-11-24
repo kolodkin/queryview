@@ -132,7 +132,7 @@ Keep an agent off file connections you wouldn't hand it the filesystem for.
 
 ## API
 
-`POST /api/db/execute` — see [api.md](./api.md).
+`POST /api/db/execute` — see [api.md](../architecture/api.md).
 
 ## Related docs
 

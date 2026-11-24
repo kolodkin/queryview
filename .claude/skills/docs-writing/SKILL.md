@@ -11,8 +11,13 @@ running shortify on the pages you touched.
 
 ## House style
 
-- One page per feature, `docs/<feature>.md`; a change to an existing feature
-  is a section on its page. Copy the shape of the nearest existing page.
+- Pick the layer first: `docs/requirements/` (what a user needs; no design, no
+  screen detail), `docs/system/` (one page per feature, what a user can see or
+  do), `docs/architecture/` (components, contracts, storage, interface
+  references). A page holds one layer's content. A change to an existing
+  feature is a section on its page. Copy the shape of the nearest page.
+- A statement a test proves carries a `<!-- req: <id> -->` comment on the line
+  above it; the project `vmodel` skill says how.
 - Present tense, describing current behavior.
   No history ("now", "previously", "since vX"); proposals go in `future.md`
   and move into the feature's page when they ship.
@@ -20,9 +25,9 @@ running shortify on the pages you touched.
   links the neighboring pages a reader may have meant instead.
 - UI labels are **bold**, exactly as the screen shows them. A page about a
   screen may open with a layout sketch; the `devpowers:ui-sketch` skill draws it.
-- `api.md` is the endpoint reference. A feature page's `## API` section names
-  its endpoints and links there, as `scripts.md` does; bodies and responses are
-  not repeated.
+- `docs/architecture/api.md` is the endpoint reference. A feature page's
+  `## API` section names its endpoints and links there, as `scripts.md` does;
+  bodies and responses are not repeated.
 - Links are relative, `./page.md#anchor`. Code is named only when the reader
   must open it, as a module or package path. Code and docstrings that back-link
   a heading quote it word for word, so grep for the old text when renaming one.

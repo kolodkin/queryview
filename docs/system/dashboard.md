@@ -100,7 +100,7 @@ fully-qualify tables as `db.table`.
 
 The REST mirror `POST /api/dashboards` takes the inline fields (plus optional
 `session_id`) and drives the same persist-and-push path (used by the e2e suite).
-See [api.md](./api.md) for the full endpoint list.
+See [api.md](../architecture/api.md) for the full endpoint list.
 
 ## Pushing from a folder
 
@@ -403,5 +403,5 @@ the session id.
 - [queryview.md](./queryview.md) — the pages and the Connect page.
 - [query.md](./query.md) — pagination, the results grid, CSV, the edit lock.
 - [mcp.md](./mcp.md) — arming a session, the session id, the MCP server.
-- [api.md](./api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
+- [api.md](../architecture/api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
 - [connect.md](./connect.md) — connections and their stored database.

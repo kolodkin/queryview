@@ -1,8 +1,8 @@
 # Viewer server API
 
-The [viewer server](./README.md) (`queryview-server`) is a separate app with
+The [viewer server](../system/viewer_server.md) (`queryview-server`) is a separate app with
 its own, smaller API. No session header; none of the app's
-[routes](../api.md) exist on it.
+[routes](api.md) exist on it.
 A body names a `connection` and a `dashboard`, never SQL. Errors are
 `{ok:false, message}`: `404` for an unknown connection, dashboard or query
 name, `400` for a bad body, a bad value or a failing query.
@@ -22,6 +22,6 @@ falls back to its default and never reaches the SQL.
 
 ## Related docs
 
-- [README.md](./README.md) — the viewer server.
-- [../api.md](../api.md) — the app's API.
-- [../dashboard.md](../dashboard.md#dashboard-parameters) — parameters and how they are substituted.
+- [README.md](../system/viewer_server.md) — the viewer server.
+- [../api.md](api.md) — the app's API.
+- [../dashboard.md](../system/dashboard.md#dashboard-parameters) — parameters and how they are substituted.

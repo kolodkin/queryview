@@ -1,7 +1,7 @@
 // Saved cards edit and delete, and passphrase-locked connections: the tab that
 // knows the passphrase keeps working, the agent is refused on every path, and a
 // lock survives a reload but asks again in a fresh tab
-// (docs/connect.md#locked-connections).
+// (docs/system/connect.md#locked-connections).
 import type { Page } from "@playwright/test";
 import {
   DUCK,

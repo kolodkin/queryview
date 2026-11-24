@@ -125,7 +125,7 @@ function ConnectionList({
 // Long connections list hundreds of databases, so it carries the landing
 // picker's filter; a picker-less driver gets just Disconnect. A DuckDB folder
 // connection lists one level at a time: the current folder's subfolders plus
-// `..`, under the folder's full path (docs/explorer.md).
+// `..`, under the folder's full path (docs/system/explorer.md).
 function DatabaseMenu({
   connection,
   connections,
