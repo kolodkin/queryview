@@ -33,6 +33,6 @@ repos:
       - id: vmodel-check
         name: vmodel check
         language: system
-        entry: uv run python scripts/vmodel_check.py
+        entry: uv run --no-project python scripts/vmodel_check.py
         pass_filenames: false
         always_run: true

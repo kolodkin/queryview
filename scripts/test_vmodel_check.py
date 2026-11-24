@@ -122,3 +122,21 @@ def test_untagged_repo_exits_zero(tmp_path):
     root = repo(tmp_path, {"docs/dashboard.md": "text\n", "e2e/app.spec.ts": "test('x', () => {})\n"})
     assert main(["--root", str(root)]) == 0
     assert main(["--root", str(root), "--strict"]) == 1
+
+
+def test_an_error_fails_without_strict(tmp_path):
+    assert main(["--root", str(repo(tmp_path, {"docs/system/dash.md": "text\n", "e2e/dash.spec.ts": SPEC}))]) == 1
+
+
+def test_errors_print_after_gaps(tmp_path, capsys):
+    root = repo(tmp_path, {"docs/system/empty.md": "text\n", "e2e/dash.spec.ts": SPEC})
+    main(["--root", str(root)])
+    lines = capsys.readouterr().out.splitlines()
+    kinds = [ln.split(":")[0] for ln in lines if ln.startswith(("gap:", "error:"))]
+    assert kinds == sorted(kinds, key=lambda k: k == "error") and "gap" in kinds and "error" in kinds
+
+
+def test_a_root_without_docs_fails_with_one_line(tmp_path, capsys):
+    assert main(["--root", str(tmp_path)]) != 0
+    out = capsys.readouterr()
+    assert out.out == "" and out.err.strip() == f"error: {tmp_path} has no docs/ directory"

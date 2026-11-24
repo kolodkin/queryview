@@ -143,15 +143,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     ap.add_argument("--strict", action="store_true", help="fail on gaps too")
     args = ap.parse_args(argv)
+    if not (args.root / "docs").is_dir():
+        print(f"error: {args.root} has no docs/ directory", file=sys.stderr)
+        return 2
     report = check(args.root)
     for layer, ids in report.matrix.items():
         print(f"{layer} ({LAYER_DIRS[layer]}): {len(ids)} IDs")
         for id_, tests in ids.items():
             print(f"  {id_}: {', '.join(tests) or '-'}")
-    for e in report.errors:
-        print(f"error: {e}")
     for g in report.gaps:
         print(f"gap: {g}")
+    for e in report.errors:  # last, so a failing hook ends on them
+        print(f"error: {e}")
     return 1 if report.errors or (args.strict and report.gaps) else 0
 
 
