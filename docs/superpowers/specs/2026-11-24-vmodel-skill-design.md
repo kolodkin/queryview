@@ -13,8 +13,8 @@ skill drives each change down the docs and back up the tests.
 | Layer | Doc of record | Tests |
 |---|---|---|
 | User | `docs/requirements.md` | `e2e/acceptance.spec.ts` |
-| System | feature pages: `docs/*.md`, `docs/viewer_server/*.md` | the other `e2e/*.spec.ts` |
-| Integration | `docs/architecture.md` | backend test files that carry an ID |
+| System | the feature pages | the other `e2e/*.spec.ts` |
+| Integration | `docs/architecture.md` | backend and frontend test files that name an integration ID |
 | Unit | the module's docstring or header comment | the test file beside the module |
 
 ## Goals
@@ -46,13 +46,29 @@ skill drives each change down the docs and back up the tests.
 - The slow browser suite grows a test per sentence of a feature page.
 - A second source of truth: a doc statement repeated in another layer's doc.
 
+## Which layer a doc is in
+
+Every page under `docs/`, outside `docs/superpowers/`, opens with a comment
+that declares its layer:
+
+```md
+<!-- layer: system -->
+```
+
+- `user`: `requirements.md`.
+- `system`: a feature page.
+- `integration`: `architecture.md`.
+- `none`: a page that states no behavior a test in the repo can prove:
+  `future.md`, `AGENTS.md`, the `viewer_server/README.md` index, and the two
+  Docker pages, which the release workflow's image smoke test covers.
+
 ## IDs and markers
 
 An ID is the doc's path under `docs/` without `.md`, a slash, and a short
 kebab-case slug: `dashboard/param-rerun`, `requirements/run-sql`,
-`viewer_server/api/no-sql-accepted`, `architecture/session-channel`. The path
-gives the layer; the slug names the statement. An ID is never renamed once a
-test names it.
+`viewer_server/api/no-sql-accepted`, `architecture/session-channel`. The
+page's declared layer is the ID's layer; the slug names the statement. An ID
+is never renamed once a test names it.
 
 A doc defines an ID with an HTML comment on the line above the statement:
 
@@ -85,8 +101,8 @@ of one behavior are tests under the same ID, or integration and unit tests.
 
 - `e2e/acceptance.spec.ts` is user.
 - Any other `e2e/*.spec.ts` is system.
-- A backend or frontend test file that names an `architecture/` ID is
-  integration.
+- A backend or frontend test file that names an ID of an integration page is
+  integration. A support marker for another layer's ID does not count.
 - Any other backend or frontend test file is unit, and must sit beside the
   module it is named after: `test_sessions.py` beside `sessions.py`,
   `rows.test.ts` beside `rows.ts` or `rows.tsx`.
@@ -106,17 +122,16 @@ It fails on:
 - an ID defined twice;
 - a marker in a test that names an ID no doc defines;
 - an ID with no test file naming it in its paired location;
-- an `architecture/` or feature-page ID whose only tests are in
-  `e2e/acceptance.spec.ts`, or the reverse;
 - a unit test file whose paired module has no docstring (Python) or leading
   comment (TypeScript).
 
 It reports, without failing:
 
-- docs of record that define no ID;
+- pages with no layer declaration;
+- pages with a layer other than `none` that define no ID;
 - test files in `e2e/` that name no ID;
-- backend and frontend test files that neither name an ID nor pair with a
-  module.
+- backend and frontend test files that neither name an integration ID nor
+  pair with a module.
 
 `--strict` turns the report into failures. The script prints the matrix: per
 layer, each ID and the test files that name it.
@@ -211,6 +226,10 @@ These are the author's calls, not decisions the user made:
   is what keeps the browser suite from growing.
 - The check works per file, not per test: it does not verify that every single
   test has a marker above it.
+- A page declares its own layer, and `none` is the one exemption; the script
+  holds no list of pages.
+- The Docker pages are `none`: their proof is the release workflow, outside
+  the test trees.
 - Broken couplings fail at once; missing ones only report until migration
   ends.
 
