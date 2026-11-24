@@ -5,14 +5,20 @@ description: Use when adding, changing or running tests in this repo — backend
 
 # Testing
 
-Three layers. Put a test in the lowest one that can observe the behavior,
-and start from the nearest existing test file: it shows the call shapes.
+Four layers. Put a test in the lowest one that can observe the behavior,
+and start from the nearest existing test file: it shows the call shapes. The
+`vmodel` skill says which layers a change needs.
 
-| Layer | Tests | Lives | Run |
+| Layer | Tests | Lives | Proves |
 |---|---|---|---|
-| Backend unit | stores, drivers, API routes, MCP tools via `TestClient` | beside the module: `backend/queryview/test_<module>.py`, `backend/queryview/drivers/test_<driver>.py` | `uv run --group test pytest backend/queryview` |
-| Frontend unit | pure TS logic in `frontend/src` (no React rendering) | beside the module: `<module>.test.ts` | `npm test -w frontend` |
-| e2e | user flows through the browser and the real `/mcp/` endpoint | `e2e/<feature>.spec.ts` | `npm run e2e` |
+| Unit | one module's logic | beside the module, named after it | the module's docstring |
+| Integration | routes, stores, MCP tools, drivers working together | `backend/queryview/test_*.py`, `frontend/src/**/*.test.ts`, naming an `architecture/` ID | `docs/architecture/` |
+| System | one feature through the browser | `e2e/<feature>.spec.ts` | `docs/system/` |
+| User | a user requirement end to end | `e2e/acceptance.spec.ts` | `docs/requirements/` |
+
+Run backend tests with `uv run --group test pytest backend/queryview`,
+frontend ones with `npm test -w frontend`, and the browser suite with
+`npm run e2e`.
 
 Backend tests ship in the wheel and run from the installed package in the
 release workflow, so a test may import only from `queryview` and its own

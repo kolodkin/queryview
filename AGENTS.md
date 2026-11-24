@@ -24,6 +24,8 @@
 
 Before adding or changing a test, load the project `testing` skill: it says
 which layer a test belongs in, where it lives, and which fixtures to reuse.
+Before a change that alters behavior, load the project `vmodel` skill: it ties
+each test to the doc statement it proves.
 
 # Conventions
 
