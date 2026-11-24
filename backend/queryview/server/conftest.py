@@ -23,7 +23,7 @@ class DashRepo:
         subprocess.run(["git", *args], cwd=self.author, check=True, capture_output=True)
 
     def commit(self, dashboards: list[dict] = (), remove: list[str] = (), raw: dict[str, str] | None = None) -> None:  # type: ignore[assignment]
-        """Commit and push: `dashboards` written as their three repo files,
+        """Commit and push: `dashboards` written as their repo files,
         `remove` (names) deleted, `raw` ({path: text}) written as is."""
         for d in dashboards:
             for fname, text in dashboard_to_files(d).items():

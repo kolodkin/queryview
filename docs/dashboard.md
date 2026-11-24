@@ -23,7 +23,9 @@ agent-authored HTML, which renders inside an isolated iframe.
   SQL-panel edit);
 - **Rename** and **Delete** — for a saved dashboard; Rename asks for the new
   name and keeps unsaved SQL-panel edits, Delete asks to confirm. Both are
-  the user's: no [MCP tool](./mcp.md#naming-and-saving) does either;
+  the user's: no [MCP tool](./mcp.md#naming-and-saving) does either. A new
+  name [its git-sync folder can't hold](./gitsync.md#repository-layout) is
+  refused with the reason, on Save too;
 - **Edit queries** — the [SQL panel](#the-sql-panel);
 - **Snapshot** — downloads the dashboard as a [static file](#snapshot);
 - a **sandboxed iframe** that renders the selected dashboard.
@@ -116,7 +118,9 @@ sales-overview/
   meta.yaml        optional: name, params
 ```
 
-The layout is a dashboard's folder in [workspace git](./gitsync.md). `dir` is
+The layout is a dashboard's folder in [workspace git](./gitsync.md), except
+for the name: git takes it from the folder, a draft from `meta.yaml` or the
+inline `name`. `dir` is
 an absolute path outside QueryView's data directory; only these three
 names are read, and none through a symlink. Inline `name` and `params` win
 over `meta.yaml`; `dir` together with `html` or `queries` is refused.

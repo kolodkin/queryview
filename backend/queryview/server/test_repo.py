@@ -65,9 +65,17 @@ def test_an_empty_remote_lists_nothing(dash_repo):
     assert _run(repo.refresh()) is True and repo.names() == ["sales"]
 
 
+def test_a_dashboard_without_meta_yaml_is_named_by_its_folder(dash_repo):
+    plain = {"dashboards/plain%2Feu/dashboard.html": "<p>p</p>", "dashboards/plain%2Feu/queries.yaml": "{}\n"}
+    dash_repo.commit(raw=plain)
+    repo = _repo(dash_repo)
+    _run(repo.refresh())
+    assert repo.get("plain/eu") == {"name": "plain/eu", "html": "<p>p</p>", "queries": {}, "params": []}
+
+
 def test_a_malformed_dashboard_is_skipped(dash_repo):
     bad = {
-        "dashboards/bad/meta.yaml": "name: [",
+        "dashboards/bad/meta.yaml": "params: [",
         "dashboards/bad/dashboard.html": "",
         "dashboards/bad/queries.yaml": "",
     }
@@ -104,14 +112,11 @@ def test_fetch_errors_hide_the_token(clone_base):
     assert "tok-example" not in str(e.value)
 
 
-def test_two_folders_with_one_name_are_logged_and_the_names_own_folder_wins(dash_repo, caplog):
-    copy = {
-        f"dashboards/sales_copy/{f}": text for f, text in dashboard_to_files({**SALES, "html": "<p>copy</p>"}).items()
-    }
-    older = {f"dashboards/a-sales/{f}": text for f, text in dashboard_to_files({**SALES, "html": "<p>a</p>"}).items()}
-    dash_repo.commit([SALES], raw={**copy, **older})
+def test_a_copied_folder_is_its_own_dashboard(dash_repo):
+    """The folder is the name, so a copy can't share one with its source."""
+    files = dashboard_to_files({**SALES, "html": "<p>copy</p>"})
+    dash_repo.commit([SALES], raw={f"dashboards/sales_copy/{f}": text for f, text in files.items()})
     repo = _repo(dash_repo)
-    with caplog.at_level("WARNING", logger="queryview.server"):
-        _run(repo.refresh())
-    assert repo.names() == ["sales"] and repo.get("sales") == SALES
-    assert "dashboards/sales_copy" in caplog.text and "dashboards/a-sales" in caplog.text
+    _run(repo.refresh())
+    assert repo.names() == ["sales", "sales_copy"] and repo.get("sales") == SALES
+    assert repo.get("sales_copy") == {**SALES, "name": "sales_copy", "html": "<p>copy</p>"}

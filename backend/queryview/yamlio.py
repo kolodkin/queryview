@@ -10,16 +10,19 @@ Docs: docs/export-import.md."""
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import unquote
 
 import yaml
 
+from .dashboards import get_dashboard, list_dashboards, list_dashboards_full, upsert_dashboards
 from .validation import dashboard_params_error
 from .workspaces import WorkspaceRec
 
 
 class YamlIOError(Exception):
     """Export/import failure carrying an HTTP-ish status for the API layer:
-    400 malformed document, 404 entity not found."""
+    400 malformed document or a name too long, 404 entity not found, 409 a
+    name taken."""
 
     def __init__(self, message: str, status: int = 400):
         super().__init__(message)
@@ -52,9 +55,9 @@ _SAFE = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._ -"
 
 def slug(name: str) -> str:
     """Filesystem-safe name: percent-encode (UTF-8) anything outside
-    [A-Za-z0-9._ -] plus a leading dot. Used for export download filenames and
-    gitsync repo paths; the canonical name lives inside the YAML — readers
-    trust the file content, never the path."""
+    [A-Za-z0-9._ -] plus a leading dot. Used for export download filenames,
+    whose readers trust the file content and never the name, and for gitsync
+    repo folders, where the folder is the dashboard's name (`unslug`)."""
     out: list[str] = []
     for i, ch in enumerate(name):
         if ch in _SAFE and not (ch == "." and i == 0):
@@ -62,6 +65,31 @@ def slug(name: str) -> str:
         else:
             out.append("".join(f"%{b:02X}" for b in ch.encode("utf-8")))
     return "".join(out)
+
+
+def unslug(folder: str) -> str | None:
+    """The name `slug` writes as `folder`, or None for any other spelling, so
+    two folders never decode to one name, and for a blank name."""
+    name = unquote(folder)
+    return name if name.strip() and slug(name) == folder else None
+
+
+_MAX_FOLDER_BYTES = 255  # one path component, on every common filesystem
+
+
+def name_error(name: str, others: list[str]) -> tuple[int, str] | None:
+    """Why a dashboard named `name` can't join `others`, as (HTTP status,
+    message); None when it can, or is already one of them. A name must fit a
+    repo folder and stay apart from the others on a case-insensitive disk."""
+    folder = slug(name)
+    if name in others:
+        return None
+    if len(folder) > _MAX_FOLDER_BYTES:
+        return 400, f"dashboard name is too long: {len(folder)} bytes encoded, at most {_MAX_FOLDER_BYTES}"
+    twin = next((o for o in others if slug(o).lower() == folder.lower()), None)
+    if twin is not None:
+        return 409, f"dashboard {twin!r} already exists: names must differ by more than letter case"
+    return None
 
 
 # --- Entity <-> mapping codec (shared with gitsync) -------------------------
@@ -161,8 +189,6 @@ async def export(kind: str, name: str, ws: WorkspaceRec) -> tuple[str, str]:
 
 
 async def export_dashboard(name: str, workspace_id: int) -> str:
-    from .dashboards import get_dashboard
-
     d = await get_dashboard(name, workspace_id)
     if d is None:
         raise YamlIOError(f"dashboard {name!r} not found", status=404)
@@ -172,8 +198,6 @@ async def export_dashboard(name: str, workspace_id: int) -> str:
 async def export_workspace(workspace_id: int) -> str:
     """The whole workspace (every dashboard) as one bundle. Empty workspaces
     export a valid, importable empty bundle."""
-    from .dashboards import list_dashboards_full
-
     dashboards = await list_dashboards_full(workspace_id)
     return dump_yaml({"kind": "workspace", "dashboards": [dashboard_to_data(d) for d in dashboards]})
 
@@ -181,12 +205,17 @@ async def export_workspace(workspace_id: int) -> str:
 async def import_text(text: str, workspace_id: int) -> dict[str, Any]:
     """Import a document into a workspace, upserting by name. The whole
     document is validated before the first write, so a malformed file changes
-    nothing; the dashboards then write in a single transaction. Returns
-    {'kind', 'dashboards'}, the latter a count."""
-    from .dashboards import upsert_dashboards
-
+    nothing; the dashboards then write in a single transaction. A name new
+    to the workspace must pass `name_error`, against the entries before it
+    too. Returns {'kind', 'dashboards'}, the latter a count."""
     kind, payload = parse_document(text)
     dashboards = payload["dashboards"] if kind == "workspace" else [payload]
+    names = [d["name"] for d in await list_dashboards(workspace_id)]
+    for d in dashboards:
+        err = name_error(d["name"], names)
+        if err is not None:
+            raise YamlIOError(err[1], status=err[0])
+        names.append(d["name"])
     if dashboards:
         await upsert_dashboards(dashboards, workspace_id=workspace_id)
     return {"kind": kind, "dashboards": len(dashboards)}

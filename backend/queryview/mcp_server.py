@@ -491,7 +491,7 @@ def _read_dashboard_dir(path: str) -> dict[str, Any]:
             texts[fname] = p.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             raise ValueError(f"cannot read {fname} in `dir` (a UTF-8 file up to {_DIR_FILE_MAX} bytes)") from None
-    return gitsync.dashboard_from_files(texts, require_name=False)
+    return gitsync.dashboard_from_files(texts)
 
 
 # Agents edit saved entities or push unnamed drafts; only the user names one.

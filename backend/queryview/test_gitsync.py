@@ -15,7 +15,7 @@ import pytest
 from queryview import gitsync, workspaces
 from queryview.dashboards import delete_dashboard, get_dashboard, upsert_dashboard
 from queryview.gitsync import (
-    DASHBOARD_FILES,
+    _REQUIRED_FILES,
     GitSyncError,
     dashboard_from_files,
     dashboard_reldir,
@@ -39,14 +39,14 @@ def test_dashboard_files_round_trip():
         "params": [],
     }
     files = dashboard_to_files(d)
-    assert set(files) == set(DASHBOARD_FILES)
+    assert set(files) == {"dashboard.html", "queries.yaml"}  # the folder holds the name
     assert files["dashboard.html"] == d["html"]  # verbatim
-    assert dashboard_from_files(files) == d
+    assert dashboard_from_files(files) == {**d, "name": None}
 
 
 def test_dashboard_from_files_rejects_malformed_meta():
     with pytest.raises(GitSyncError):
-        dashboard_from_files({"meta.yaml": "connection: x", "dashboard.html": "", "queries.yaml": ""})
+        dashboard_from_files({"meta.yaml": "params: [", "dashboard.html": "", "queries.yaml": ""})
 
 
 # The git_env fixture (bare repo + redirected clone base) lives in conftest.py.
@@ -138,11 +138,7 @@ def test_store_dashboard_touches_only_its_dir(git_env):
     ).stdout
     files = [line for line in out.splitlines() if line.strip()]
     assert files and all(f.startswith("dashboards/gs dash/") for f in files)
-    assert set(files) == {
-        "dashboards/gs dash/meta.yaml",
-        "dashboards/gs dash/dashboard.html",
-        "dashboards/gs dash/queries.yaml",
-    }
+    assert set(files) == {"dashboards/gs dash/dashboard.html", "dashboards/gs dash/queries.yaml"}
 
 
 def test_store_unreachable_remote_raises_without_init(tmp_path, clone_base):
@@ -550,7 +546,7 @@ def test_an_older_meta_yaml_naming_a_connection_still_reads():
         {"meta.yaml": "name: legacy\nconnection: reporting-db\n", "dashboard.html": "<p/>", "queries.yaml": "{}"}
     )
     assert d == {"name": "legacy", "html": "<p/>", "queries": {}, "params": []}
-    assert "connection" not in dashboard_to_files(d)["meta.yaml"]
+    assert "meta.yaml" not in dashboard_to_files(d)
 
 
 def test_dashboard_params_round_trip_through_meta_yaml():
@@ -560,10 +556,10 @@ def test_dashboard_params_round_trip_through_meta_yaml():
     ]
     d = {"name": "p", "html": "<p/>", "queries": {"q": "SELECT {by_region} FROM {table}"}, "params": params}
     files = dashboard_to_files(d)
-    assert "params:" in files["meta.yaml"]
-    assert dashboard_from_files(files) == d
-    # A params-free dashboard keeps its meta.yaml to the name alone.
-    assert dashboard_to_files({**d, "params": []})["meta.yaml"].strip() == "name: p"
+    assert files["meta.yaml"].startswith("params:")  # nothing else, the name included
+    assert dashboard_from_files(files) == {**d, "name": None}
+    # A params-free dashboard has no meta.yaml at all.
+    assert "meta.yaml" not in dashboard_to_files({**d, "params": []})
 
 
 def test_malformed_dashboard_params_are_rejected():
@@ -625,7 +621,7 @@ def _remove_from_remote(remote, tmp_path, relpath: str) -> None:
 
 
 def test_restore_of_a_dashboard_missing_a_file_is_404(git_env, tmp_path):
-    """A dashboard dir is readable only with all three files: a hand-edited
+    """A dashboard dir is readable only with both required files: a hand-edited
     repo missing one must not restore the rest over the local dashboard."""
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
@@ -656,17 +652,18 @@ def test_sync_skips_a_dashboard_missing_a_file(git_env, other_instance, tmp_path
     assert _run(get_dashboard("gs halfdash", _default_ws_id())) is None
 
 
-def test_restore_of_a_dashboard_missing_meta_names_the_file(git_env, tmp_path):
+def test_restore_reads_a_dashboard_without_meta_yaml(git_env, tmp_path):
     from queryview.dashboards import upsert_dashboard
 
-    _run(upsert_dashboard("gs nometa", "<html/>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
+    params = [{"name": "by_region", "kind": "dimension"}]
+    _run(upsert_dashboard("gs nometa", "<html/>", {"q": "SELECT 1"}, params, workspace_id=_default_ws_id()))
     _run(_astore(_default_ws(), "gs nometa"))
     _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs nometa')}/meta.yaml")
 
-    with pytest.raises(GitSyncError) as e:
-        _run(gitsync.restore(_default_ws(), "dashboard", "gs nometa"))
+    _run(gitsync.restore(_default_ws(), "dashboard", "gs nometa"))
 
-    assert e.value.status == 404 and "meta.yaml" in str(e.value)
+    d = _run(get_dashboard("gs nometa", _default_ws_id()))
+    assert d is not None and d["params"] == [] and d["html"] == "<html/>"
     with pytest.raises(GitSyncError) as e:
         _run(gitsync.restore(_default_ws(), "dashboard", "gs never stored"))
     assert e.value.status == 404 and str(e.value) == "dashboard 'gs never stored' not found at origin/main"
@@ -750,15 +747,12 @@ def test_rename_moves_folder_in_one_commit(git_env):
     assert r["committed"] is True and log.count("\n") == before + 1
     assert "rename dashboard ua sales → ua sales 2026" in log
     files = _repo_files(git_env)
-    assert f"{dashboard_reldir('ua sales 2026')}/meta.yaml" in files
+    assert f"{dashboard_reldir('ua sales 2026')}/queries.yaml" in files
     assert not any(f.startswith(dashboard_reldir("ua sales") + "/") for f in files)
-    meta = subprocess.run(
-        ["git", "show", f"main:{dashboard_reldir('ua sales 2026')}/meta.yaml"],
-        cwd=git_env,
-        capture_output=True,
-        text=True,
-    ).stdout
-    assert "name: ua sales 2026" in meta
+    moved = subprocess.run(
+        ["git", "show", "--name-status", "-M", "--format=", "main"], cwd=git_env, capture_output=True, text=True
+    ).stdout.split("\n")
+    assert all(line.startswith("R100\t") for line in moved if line)  # nothing rewritten
     assert _html("ua sales") is None and _html("ua sales 2026") == "<p>s</p>"
 
 
@@ -768,8 +762,8 @@ def test_rename_changing_only_the_case(git_env):
     r = _run(gitsync.rename(_default_ws(), "ua coverage", "UA Coverage"))
     assert r["committed"] is True
     files = _repo_files(git_env)
-    assert f"{dashboard_reldir('UA Coverage')}/meta.yaml" in files
-    assert f"{dashboard_reldir('ua coverage')}/meta.yaml" not in files
+    assert f"{dashboard_reldir('UA Coverage')}/queries.yaml" in files
+    assert f"{dashboard_reldir('ua coverage')}/queries.yaml" not in files
     assert _html("ua coverage") is None and _html("UA Coverage") == "<p>c</p>"
 
 
@@ -778,7 +772,7 @@ def test_case_only_rename_leaves_a_dashboard_named_like_its_temp_folder(git_env)
     _run(gitsync.save(_default_ws(), _dash("ua reach.renaming", "<p>other</p>")))
     _run(gitsync.rename(_default_ws(), "ua reach", "UA Reach"))
     assert sorted(_repo_files(git_env)) == sorted(
-        f"{dashboard_reldir(name)}/{f}" for name in ("UA Reach", "ua reach.renaming") for f in DASHBOARD_FILES
+        f"{dashboard_reldir(name)}/{f}" for name in ("UA Reach", "ua reach.renaming") for f in _REQUIRED_FILES
     )
     shown = subprocess.run(
         ["git", "show", f"main:{dashboard_reldir('UA Reach')}/dashboard.html"],
@@ -914,4 +908,136 @@ def test_rename_ignores_a_stray_target_dir_in_the_clone(git_env):
     (stray / "leftover.txt").write_text("x")
     _run(gitsync.rename(_default_ws(), "ua src", "ua dst"))
     files = [f for f in _repo_files(git_env) if f.startswith(dashboard_reldir("ua dst") + "/")]
-    assert sorted(f.rsplit("/", 1)[1] for f in files) == sorted(DASHBOARD_FILES)
+    assert sorted(f.rsplit("/", 1)[1] for f in files) == sorted(_REQUIRED_FILES)
+
+
+def _legacy(wd: Path, folder: str, meta: str) -> None:
+    """A dashboard folder as written by hand or by a QueryView that kept the name in meta.yaml."""
+    d = wd / "dashboards" / folder
+    d.mkdir(parents=True)
+    (d / "meta.yaml").write_text(meta, encoding="utf-8")
+    (d / "dashboard.html").write_text("<p>l</p>", encoding="utf-8")
+    (d / "queries.yaml").write_text("{}\n", encoding="utf-8")
+
+
+def test_the_folder_names_the_dashboard(git_env, tmp_path):
+    _run(gitsync.save(_default_ws(), _dash("fn seed", "<p>s</p>")))  # an empty remote has no main
+    _hand_edit(git_env, tmp_path, lambda wd: _legacy(wd, "fn folder", "name: fn other\n"))
+    r = _run(gitsync.sync(_default_ws()))
+    assert r["imported"] == [{"kind": "dashboard", "name": "fn folder"}]
+    assert _html("fn folder") == "<p>l</p>" and _html("fn other") is None
+
+
+def test_a_folder_slug_would_not_write_is_skipped(git_env, tmp_path, caplog):
+    _run(gitsync.save(_default_ws(), _dash("fn seed", "<p>s</p>")))
+    _hand_edit(git_env, tmp_path, lambda wd: _legacy(wd, "fn%41", "name: fnA\n"))
+    assert _run(gitsync.sync(_default_ws()))["imported"] == []
+    assert _html("fnA") is None
+    assert "dashboards/fn%41" in caplog.text  # said, not silent
+
+
+def test_a_name_key_in_a_repo_meta_yaml_is_ignored_whatever_it_holds(git_env, tmp_path):
+    _run(gitsync.save(_default_ws(), _dash("fn seed", "<p>s</p>")))
+    _hand_edit(git_env, tmp_path, lambda wd: _legacy(wd, "fn num", "name: 2024\n"))
+    assert _run(gitsync.sync(_default_ws()))["imported"] == [{"kind": "dashboard", "name": "fn num"}]
+
+
+def test_a_params_free_dashboard_has_no_meta_yaml(git_env):
+    _run(gitsync.save(_default_ws(), _dash("fn plain", "<p>p</p>")))
+    assert f"{dashboard_reldir('fn plain')}/meta.yaml" not in _repo_files(git_env)
+
+
+def test_renaming_an_older_folder_reads_under_the_new_name(other_instance, git_env, tmp_path):
+    _run(gitsync.save(_default_ws(), _dash("fn seed", "<p>s</p>")))
+    _hand_edit(git_env, tmp_path, lambda wd: _legacy(wd, "fn old", "name: fn old\n"))
+    _run(gitsync.sync(_default_ws()))
+    _run(gitsync.rename(_default_ws(), "fn old", "fn new"))
+    imported = _run(gitsync.sync(other_instance))["imported"]
+    assert {"kind": "dashboard", "name": "fn new"} in imported
+    assert {"kind": "dashboard", "name": "fn old"} not in imported
+
+
+def test_save_refuses_a_case_twin_and_an_overlong_name(git_env):
+    _run(gitsync.save(_default_ws(), _dash("nc Sales", "<p>a</p>")))
+    before = _remote_log(git_env)
+    for name, status in [("nc sales", 409), ("n" * 256, 400)]:
+        with pytest.raises(GitSyncError) as e:
+            _run(gitsync.save(_default_ws(), _dash(name, "<p>b</p>")))
+        assert e.value.status == status and _html(name) is None
+    assert _remote_log(git_env) == before
+
+
+def test_save_without_a_remote_refuses_them_too():
+    _run(gitsync.save(_default_ws(), _dash("nc Local", "<p>a</p>")))
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.save(_default_ws(), _dash("nc local", "<p>b</p>")))
+    assert e.value.status == 409 and _html("nc local") is None
+
+
+def test_an_existing_twin_can_still_be_saved():
+    _save("nc Pair", "<p>1</p>")
+    _save("nc pair", "<p>2</p>")
+    try:
+        _run(gitsync.save(_default_ws(), _dash("nc pair", "<p>3</p>")))
+        assert _html("nc pair") == "<p>3</p>"
+    finally:  # a twin pair would stop later tests importing this workspace's export elsewhere
+        _run(delete_dashboard("nc pair", workspace_id=_default_ws_id()))
+
+
+def test_rename_refuses_a_twin_of_another_dashboard(git_env):
+    _run(gitsync.save(_default_ws(), _dash("nc One", "<p>1</p>")))
+    _run(gitsync.save(_default_ws(), _dash("nc two", "<p>2</p>")))
+    for new, status in [("nc one", 409), ("n" * 256, 400)]:
+        with pytest.raises(GitSyncError) as e:
+            _run(gitsync.rename(_default_ws(), "nc two", new))
+        assert e.value.status == status
+    assert _html("nc two") == "<p>2</p>"
+
+
+def test_rename_without_a_remote_refuses_a_twin():
+    _save("nc Solo", "<p>1</p>")
+    _save("nc duo", "<p>2</p>")
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.rename(_default_ws(), "nc duo", "nc solo"))
+    assert e.value.status == 409 and _html("nc duo") == "<p>2</p>"
+
+
+def test_a_twin_another_instance_pushed_is_seen(other_instance, git_env):
+    _run(gitsync.save(other_instance, _dash("nc Remote", "<p>r</p>")))
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.save(_default_ws(), _dash("nc remote", "<p>l</p>")))
+    assert e.value.status == 409 and _html("nc remote") is None
+
+
+def test_a_save_cannot_add_a_twin_of_a_folder_the_repo_holds(other_instance, git_env):
+    """A case-only rename elsewhere leaves this instance its old row: saving
+    that row must not put a second folder beside the renamed one."""
+    _run(gitsync.save(_default_ws(), _dash("ft sales", "<p>s</p>")))
+    _run(gitsync.sync(other_instance))
+    _run(gitsync.rename(_default_ws(), "ft sales", "FT Sales"))
+    before = _remote_log(git_env)
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.save(other_instance, _dash("ft sales", "<p>edited</p>")))
+    assert e.value.status == 409 and "FT Sales" in str(e.value)
+    assert _remote_log(git_env) == before
+    assert f"{dashboard_reldir('ft sales')}/queries.yaml" not in _repo_files(git_env)
+
+
+def test_twin_folders_the_repo_already_holds_can_both_be_saved(git_env, tmp_path):
+    _run(gitsync.save(_default_ws(), _dash("ft seed", "<p>s</p>")))
+    _hand_edit(git_env, tmp_path, lambda wd: [_legacy(wd, f, "{}\n") for f in ("ft Pair", "ft pair")])
+    try:
+        _run(gitsync.sync(_default_ws()))
+        assert _run(gitsync.save(_default_ws(), _dash("ft pair", "<p>new</p>")))["committed"] is True
+    finally:
+        for name in ("ft Pair", "ft pair"):
+            _run(delete_dashboard(name, workspace_id=_default_ws_id()))
+
+
+def test_restore_refuses_a_twin_of_a_saved_dashboard(git_env):
+    old = _run(gitsync.save(_default_ws(), _dash("ft Back", "<p>1</p>")))["sha"]
+    _run(gitsync.delete(_default_ws(), "ft Back"))
+    _run(gitsync.save(_default_ws(), _dash("ft back", "<p>2</p>")))
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.restore(_default_ws(), "dashboard", "ft Back", ref=old))
+    assert e.value.status == 409 and _html("ft Back") is None
