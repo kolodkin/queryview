@@ -15,6 +15,7 @@ from urllib.parse import unquote
 
 import yaml
 
+from .dashboards import get_dashboard, list_dashboards, list_dashboards_full, upsert_dashboards
 from .validation import dashboard_params_error
 from .workspaces import WorkspaceRec
 
@@ -189,8 +190,6 @@ async def export(kind: str, name: str, ws: WorkspaceRec) -> tuple[str, str]:
 
 
 async def export_dashboard(name: str, workspace_id: int) -> str:
-    from .dashboards import get_dashboard
-
     d = await get_dashboard(name, workspace_id)
     if d is None:
         raise YamlIOError(f"dashboard {name!r} not found", status=404)
@@ -200,8 +199,6 @@ async def export_dashboard(name: str, workspace_id: int) -> str:
 async def export_workspace(workspace_id: int) -> str:
     """The whole workspace (every dashboard) as one bundle. Empty workspaces
     export a valid, importable empty bundle."""
-    from .dashboards import list_dashboards_full
-
     dashboards = await list_dashboards_full(workspace_id)
     return dump_yaml({"kind": "workspace", "dashboards": [dashboard_to_data(d) for d in dashboards]})
 
@@ -209,12 +206,17 @@ async def export_workspace(workspace_id: int) -> str:
 async def import_text(text: str, workspace_id: int) -> dict[str, Any]:
     """Import a document into a workspace, upserting by name. The whole
     document is validated before the first write, so a malformed file changes
-    nothing; the dashboards then write in a single transaction. Returns
-    {'kind', 'dashboards'}, the latter a count."""
-    from .dashboards import upsert_dashboards
-
+    nothing; the dashboards then write in a single transaction. A name new
+    to the workspace must pass `name_error`, against the entries before it
+    too. Returns {'kind', 'dashboards'}, the latter a count."""
     kind, payload = parse_document(text)
     dashboards = payload["dashboards"] if kind == "workspace" else [payload]
+    names = [d["name"] for d in await list_dashboards(workspace_id)]
+    for d in dashboards:
+        err = name_error(d["name"], names)
+        if err is not None:
+            raise YamlIOError(err[1], status=err[0])
+        names.append(d["name"])
     if dashboards:
         await upsert_dashboards(dashboards, workspace_id=workspace_id)
     return {"kind": kind, "dashboards": len(dashboards)}

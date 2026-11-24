@@ -172,3 +172,24 @@ def test_import_validates_before_writing(default_ws_id):
     with pytest.raises(YamlIOError):
         _run(import_text(doc, default_ws_id))
     assert _run(get_dashboard("good entry", default_ws_id)) is None
+
+
+def test_import_refuses_a_case_twin(default_ws_id):
+    from queryview.dashboards import get_dashboard, upsert_dashboard
+
+    _run(upsert_dashboard("imp sales", "<p>s</p>", {}, workspace_id=default_ws_id))
+    doc = yaml.safe_dump({"kind": "dashboard", "name": "Imp sales", "html": "<p>x</p>", "queries": {}})
+    with pytest.raises(YamlIOError) as e:
+        _run(import_text(doc, default_ws_id))
+    assert e.value.status == 409
+    assert _run(get_dashboard("Imp sales", default_ws_id)) is None
+
+
+def test_import_refuses_twins_inside_one_bundle(default_ws_id):
+    from queryview.dashboards import get_dashboard
+
+    entries = [{"name": n, "html": "<p>x</p>", "queries": {}} for n in ("imp A", "imp a")]
+    with pytest.raises(YamlIOError) as e:
+        _run(import_text(yaml.safe_dump({"kind": "workspace", "dashboards": entries}), default_ws_id))
+    assert e.value.status == 409
+    assert _run(get_dashboard("imp A", default_ws_id)) is None and _run(get_dashboard("imp a", default_ws_id)) is None

@@ -951,3 +951,54 @@ def test_renaming_an_older_folder_reads_under_the_new_name(other_instance, git_e
     imported = _run(gitsync.sync(other_instance))["imported"]
     assert {"kind": "dashboard", "name": "fn new"} in imported
     assert {"kind": "dashboard", "name": "fn old"} not in imported
+
+
+def test_save_refuses_a_case_twin_and_an_overlong_name(git_env):
+    _run(gitsync.save(_default_ws(), _dash("nc Sales", "<p>a</p>")))
+    before = _remote_log(git_env)
+    for name, status in [("nc sales", 409), ("n" * 256, 400)]:
+        with pytest.raises(GitSyncError) as e:
+            _run(gitsync.save(_default_ws(), _dash(name, "<p>b</p>")))
+        assert e.value.status == status and _html(name) is None
+    assert _remote_log(git_env) == before
+
+
+def test_save_without_a_remote_refuses_them_too():
+    _run(gitsync.save(_default_ws(), _dash("nc Local", "<p>a</p>")))
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.save(_default_ws(), _dash("nc local", "<p>b</p>")))
+    assert e.value.status == 409 and _html("nc local") is None
+
+
+def test_an_existing_twin_can_still_be_saved():
+    _save("nc Pair", "<p>1</p>")
+    _save("nc pair", "<p>2</p>")
+    _run(gitsync.save(_default_ws(), _dash("nc pair", "<p>3</p>")))
+    assert _html("nc pair") == "<p>3</p>"
+    # A twin pair would stop later tests importing this workspace's export elsewhere.
+    _run(delete_dashboard("nc pair", workspace_id=_default_ws_id()))
+
+
+def test_rename_refuses_a_twin_of_another_dashboard(git_env):
+    _run(gitsync.save(_default_ws(), _dash("nc One", "<p>1</p>")))
+    _run(gitsync.save(_default_ws(), _dash("nc two", "<p>2</p>")))
+    for new, status in [("nc one", 409), ("n" * 256, 400)]:
+        with pytest.raises(GitSyncError) as e:
+            _run(gitsync.rename(_default_ws(), "nc two", new))
+        assert e.value.status == status
+    assert _html("nc two") == "<p>2</p>"
+
+
+def test_rename_without_a_remote_refuses_a_twin():
+    _save("nc Solo", "<p>1</p>")
+    _save("nc duo", "<p>2</p>")
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.rename(_default_ws(), "nc duo", "nc solo"))
+    assert e.value.status == 409 and _html("nc duo") == "<p>2</p>"
+
+
+def test_a_twin_another_instance_pushed_is_seen(other_instance, git_env):
+    _run(gitsync.save(other_instance, _dash("nc Remote", "<p>r</p>")))
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.save(_default_ws(), _dash("nc remote", "<p>l</p>")))
+    assert e.value.status == 409 and _html("nc remote") is None

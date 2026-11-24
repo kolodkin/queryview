@@ -146,6 +146,19 @@ def test_dashboards_rename_route():
     assert client.post(f"/api/dashboards/{old}/rename", json={"new_name": "x"}).status_code == 404
 
 
+def test_save_and_rename_answer_a_name_the_repo_folder_cannot_hold():
+    """The server refuses the name and says why: the UI shows `message` as is."""
+    client = TestClient(app)
+    for name in ("api Sales", "api other"):
+        _post_dash(client, name)
+    twin = client.post("/api/dashboards", json={"name": "api sales", "html": "<p>x</p>", "queries": {}})
+    assert twin.status_code == 409 and "letter case" in twin.json()["message"]
+    long = client.post("/api/dashboards/api other/rename", json={"new_name": "n" * 256})
+    assert long.status_code == 400 and "too long" in long.json()["message"]
+    assert client.get("/api/dashboards/api sales").status_code == 404
+    assert client.get("/api/dashboards/api other").status_code == 200
+
+
 def test_dashboards_delete_route():
     client = TestClient(app)
     name = f"del {uuid.uuid4().hex}"

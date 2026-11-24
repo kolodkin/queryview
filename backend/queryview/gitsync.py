@@ -22,12 +22,13 @@ from .dashboards import (
     _dashboard_event,
     delete_dashboard,
     get_dashboard,
+    list_dashboards,
     rename_dashboard,
     set_commit_sha,
     upsert_dashboard,
 )
 from .workspaces import WorkspaceRec, split_credential
-from .yamlio import YamlIOError, dashboard_from_data, dump_yaml, slug, unslug
+from .yamlio import YamlIOError, dashboard_from_data, dump_yaml, name_error, slug, unslug
 
 
 class GitSyncError(Exception):
@@ -504,11 +505,23 @@ def _forget(ws: WorkspaceRec, name: str, rename_to: str | None = None) -> bool:
     return had
 
 
+async def _check_new_name(ws: WorkspaceRec, name: str, old: str | None = None) -> None:
+    """Refuse a name new to the workspace that a repo folder can't hold
+    (yamlio.name_error). `old`, a name being renamed away, doesn't count.
+    Synced, `stage` calls this after the merge, so the repo's names are in;
+    unsynced, `stage` never runs and `after` calls it."""
+    others = [d["name"] for d in await list_dashboards(ws.id) if d["name"] != old]
+    err = name_error(name, others)
+    if err is not None:
+        raise GitSyncError(err[1], status=err[0])
+
+
 async def save(ws: WorkspaceRec, d: dict[str, Any]) -> dict[str, Any]:
     """A user's Save of dashboard `d` (get_dashboard's shape)."""
     name, relpath = d["name"], dashboard_reldir(d["name"])
 
     async def stage(wd: Path, head: str | None) -> bool:
+        await _check_new_name(ws, name)
         ddir = wd / relpath
         if ddir.exists():
             shutil.rmtree(ddir)
@@ -519,6 +532,8 @@ async def save(ws: WorkspaceRec, d: dict[str, Any]) -> dict[str, Any]:
         return True
 
     async def after(wd: Path | None, committed: bool) -> None:
+        if wd is None:
+            await _check_new_name(ws, name)
         # Synced, the repo now holds exactly this content: a new commit or, unchanged, an older one.
         sha = await _last_commit(wd, "HEAD", relpath) if wd is not None else None
         await upsert_dashboard(name, d["html"], d["queries"], d.get("params"), workspace_id=ws.id, commit_sha=sha)
@@ -555,6 +570,7 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
     async def stage(wd: Path, head: str | None) -> bool:
         nonlocal moved_matches_row
         local = await _load_entity(ws, old)
+        await _check_new_name(ws, new, old)
         if await get_dashboard(new, ws.id) is not None:
             raise GitSyncError(f"dashboard {new!r} already exists", status=409)
         if head and await _tree_files(wd, head, dst):
@@ -575,6 +591,8 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
         return True
 
     async def after(wd: Path | None, committed: bool) -> None:
+        if wd is None:
+            await _check_new_name(ws, new, old)
         holds_row = wd is not None and committed and moved_matches_row
         sha = (await _git("rev-parse", "HEAD", cwd=wd)).strip() if holds_row else None
         await _db_or_status(rename_dashboard(old, new, workspace_id=ws.id, commit_sha=sha))
