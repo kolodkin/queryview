@@ -171,6 +171,23 @@ def test_runqueries_on_a_disconnected_session_is_409():
     assert r.json()["ok"] is False and r.json()["reason"] == "no-session"
 
 
+def test_runqueries_resolves_static_params_on_a_disconnected_session():
+    """Nothing here touches a database, so the page still renders."""
+    client = TestClient(app)
+    params = [
+        {"name": "region", "options": ["eu", "us"]},
+        {"name": "by_city", "kind": "dimension"},
+        {"name": "note", "kind": "text", "default": "hi"},
+    ]
+    r = client.post("/api/runqueries", json={"queries": {}, "params": params, "values": {"region": "us"}})
+    assert r.status_code == 200, r.text
+    assert r.json()["results"] == {}
+    assert [(p["name"], p["value"]) for p in r.json()["params"]] == [("region", "us"), ("by_city", ""), ("note", "hi")]
+    # An options_sql needs the connection.
+    sql = [{"name": "region", "options_sql": "SELECT 'eu'"}]
+    assert client.post("/api/runqueries", json={"queries": {}, "params": sql}).status_code == 409
+
+
 def test_dashboards_upsert_requires_fields():
     client = TestClient(app)
     r = client.post("/api/dashboards", json={"name": "x"})  # no html

@@ -92,7 +92,8 @@ session id) exposes:
 A dashboard never names a [connection](./connect.md): it runs on the
 **viewing** session's connection and selected database. So
 a dashboard is portable across sessions, instances and git sync; opened in a
-disconnected session it asks you to connect. Select a database first, or
+disconnected session it asks you to connect, unless nothing in it queries the
+database. Select a database first, or
 fully-qualify tables as `db.table`.
 
 The REST mirror `POST /api/dashboards` takes the inline fields (plus optional
@@ -267,6 +268,10 @@ identifier. The casts are `literal` and `identifier`; anything else is an error.
 An identifier containing the quote character, or a backslash on ClickHouse, is
 rejected. Write option values as they are stored (`CORP\alice`); never
 pre-escape them.
+
+Saving refuses a malformed declaration. One already in a stored dashboard
+(saved before a rule existed) is left out when it opens, and the dashboard
+page names each one above the dashboard.
 
 `options` and `options_sql`
 are mutually exclusive (a `dimension` needs neither), and the first option is

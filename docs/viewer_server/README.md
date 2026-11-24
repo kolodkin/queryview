@@ -63,6 +63,8 @@ repo appears within `sync_interval`, with nothing to click.
   never merges, commits or pushes.
 - A failed fetch is logged and the last good copy keeps serving.
 - A dashboard whose files don't parse is skipped; the others still show.
+- Two folders declaring one `name` show as one dashboard: the folder named
+  after it wins, else the first, and the log names both.
 - A page already open keeps what it loaded; a reload or a new pick shows the
   change.
 

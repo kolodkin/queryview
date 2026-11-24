@@ -1,16 +1,7 @@
-from queryview.validation import MAX_LIMIT, clamp_paging, dashboard_params_error
-
-
-def test_clamp_paging():
-    assert clamp_paging(50, 10) == (50, 10)
-    assert clamp_paging(-5, -5) == (0, 0)
-    assert clamp_paging(MAX_LIMIT + 1, 0) == (MAX_LIMIT, 0)
-    assert clamp_paging("x", None) == (100, 0)
+from queryview.validation import dashboard_params_dropped, dashboard_params_error, page_bounds
 
 
 def test_dashboard_params_rules():
-    from queryview.validation import dashboard_params_error
-
     assert dashboard_params_error(None) is None
     assert dashboard_params_error([{"name": "d", "kind": "dimension"}]) is None  # a checkbox: no options
     assert (
@@ -32,8 +23,6 @@ def test_dashboard_params_rules():
 def test_dashboard_params_selector_rules():
     """The selector rules a value/identifier param shares: a name and exactly
     one non-empty source of options."""
-    from queryview.validation import dashboard_params_error
-
     assert dashboard_params_error([{"name": "env", "options": ["prod", "staging"]}]) is None
     assert dashboard_params_error("notalist") is not None
     assert dashboard_params_error(["not a mapping"]) is not None
@@ -46,7 +35,59 @@ def test_dashboard_params_selector_rules():
 
 def test_dashboard_params_rejects_a_name_declared_twice():
     twice = [{"name": "col", "kind": "text"}, {"name": "col", "kind": "identifier", "options": ["city"]}]
-    assert dashboard_params_error(twice) == "invalid params[1] name 'col' is declared twice"
+    assert dashboard_params_error(twice) == "invalid params[1] 'col' is declared twice"
+
+
+def test_page_bounds():
+    assert page_bounds(50, 10) == (50, 10)
+    assert page_bounds(0, -5) == (100, 0)
+    assert page_bounds(5000, "7") == (1000, 7)
+    assert page_bounds(True, [1]) == (100, 0)
+
+
+def test_dashboard_params_errors_name_the_param():
+    def err(**entry):
+        return dashboard_params_error([{"name": "region", **entry}])
+
+    assert (
+        err(kind="dropdown")
+        == "invalid params[0] 'region' kind must be one of value, identifier, dimension, text, each"
+    )
+    assert err() == "invalid params[0] 'region' must declare exactly one of options or options_sql"
+    assert err(options=[]) == "invalid params[0] 'region' options must be a non-empty list"
+    assert err(options=["a"], default="x") == "invalid params[0] 'region' default must be 'none' when given"
+    assert err(kind="text", options=["a"]) == "invalid params[0] 'region' a text param takes no options"
+    # No usable name to show.
+    assert dashboard_params_error([{"kind": "dropdown"}]) == "invalid params[0] name must be a non-empty string"
+
+
+def test_dropped_names_every_entry_reading_leaves_out():
+    params = [
+        {"name": "a", "kind": "dropdown", "options": ["x"]},
+        {"name": "ok", "options": ["x"]},
+        {"name": "b", "options": []},
+        {"name": "ok", "options": ["y"]},
+        "nope",
+    ]
+    assert dashboard_params_dropped(params) == [
+        "invalid params[0] 'a' kind must be one of value, identifier, dimension, text, each",
+        "invalid params[2] 'b' options must be a non-empty list",
+        "invalid params[3] 'ok' is declared twice",
+        "invalid params[4] must be a mapping",
+    ]
+
+
+def test_dropped_is_silent_about_what_reading_keeps():
+    # Saving refuses these, but reading keeps the selector: nothing to report.
+    assert dashboard_params_dropped([{"name": "r", "options": ["a", "b"], "default": "x"}]) == []
+    assert dashboard_params_dropped([{"name": "r", "options": ["a"]}, {"name": "d", "kind": "dimension"}]) == []
+    assert dashboard_params_dropped(None) == [] and dashboard_params_dropped([]) == []
+    assert dashboard_params_dropped("nope") == ["invalid params: must be a list of selector specs"]
+
+
+def test_messages_cut_a_very_long_name():
+    message = dashboard_params_error([{"name": "n" * 500, "kind": "x"}]) or ""
+    assert len(message) < 200 and "n" * 40 in message
 
 
 def test_an_each_param_is_a_list_with_no_default():

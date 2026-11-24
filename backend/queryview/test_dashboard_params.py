@@ -15,6 +15,7 @@ from queryview.dashboard_params import (
     ParamError,
     apply_to_queries,
     missing,
+    needed,
     option_text,
     parse_params,
     placeholders_in,
@@ -338,6 +339,18 @@ def test_a_name_declared_twice_keeps_the_first():
     twice = [{"name": "col", "kind": "text"}, {"name": "col", "kind": "identifier", "options": ["city"]}]
     assert parse_params(twice) == [Param(name="col", kind="text", text="")]
     assert _sub("SELECT {col}", parse_params(twice), {"col": "secret"}) == "SELECT 'secret'"
+
+
+def test_needed_follows_options_sql_and_skips_the_rest():
+    params = parse_params(
+        [
+            {"name": "db", "options": ["sales_reporting"]},
+            {"name": "table", "kind": "identifier", "options_sql": "SELECT name FROM tables WHERE db = {db}"},
+            {"name": "other", "options_sql": "SELECT 1"},
+        ]
+    )
+    assert [p.name for p in needed("SELECT * FROM {table} WHERE x = '{nope}'", params)] == ["db", "table"]
+    assert needed("SELECT 1", params) == []
 
 
 # --- An `each` param: a list nobody picks from; a query naming it runs per value ---

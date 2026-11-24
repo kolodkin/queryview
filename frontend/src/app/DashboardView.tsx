@@ -3,17 +3,17 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 
 import {
   DashboardFrame,
+  answerSnapshot,
   answerWidget,
-  downloadText,
   listenToFrame,
   markedRuns,
-  snapshotDocument,
-  type SnapshotResult,
+  requestSnapshot,
   valuesOf,
   widgetPage,
   widgetQueryNames,
   withKeptText,
   type DashboardResults,
+  type PendingSnapshot,
   type ResolvedParam,
   type WidgetPost,
 } from '../core'
@@ -45,9 +45,10 @@ function runError(data: { reason?: string; message?: string }): string {
 }
 
 type RunReply =
-  | { ok: true; results: DashboardResults; params: ResolvedParam[] }
+  // `warning` names the params the backend left out as malformed; the rest still ran.
+  | { ok: true; results: DashboardResults; params: ResolvedParam[]; warning?: string }
   // `params` survives a failing query, so the page keeps its selectors.
-  | { ok: false; message: string; params?: ResolvedParam[] }
+  | { ok: false; message: string; params?: ResolvedParam[]; warning?: string }
 
 // Run a dashboard's query templates on the session's connection. The backend
 // resolves the selectors from `values`, substitutes, and holds back a query
@@ -65,11 +66,14 @@ async function runDashboard(
     const res = await postJson('/api/runqueries', { queries, params: params ?? [], values })
     const data = await res.json().catch(() => ({}))
     const resolved = data.params as ResolvedParam[] | undefined
-    if (!res.ok || !data.ok) return { ok: false, message: runError(data), params: resolved }
+    const warning = typeof data.warning === 'string' ? data.warning : undefined
+    if (!res.ok || !data.ok)
+      return { ok: false, message: runError(data), params: resolved, warning }
     return {
       ok: true,
       results: (data.results ?? {}) as DashboardResults,
       params: resolved ?? [],
+      warning,
     }
   } catch {
     return { ok: false, message: 'Failed to run queries.' }
@@ -143,10 +147,7 @@ function DashboardView({
   // The query popup's results frame, answered like the dashboard's own.
   const popupFrameRef = useRef<HTMLIFrameElement>(null)
   // A Snapshot waiting for the frame's serialized document.
-  const snapshotRef = useRef<{
-    frame: HTMLIFrameElement
-    done: (r: SnapshotResult) => void
-  } | null>(null)
+  const snapshotRef = useRef<PendingSnapshot | null>(null)
   // The SQL as last run (load or Execute). The frame's widgets and param
   // re-runs use this, so a half-typed edit in the query popup never runs.
   const executedRef = useRef<Record<string, string>>({})
@@ -163,6 +164,9 @@ function DashboardView({
   // widgets' rows from the previous database) in place.
   const [loadSeq, setLoadSeq] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  // The malformed params the load left out: a standing fact about the
+  // dashboard, not the outcome of an action, so it is set once per load.
+  const [warning, setWarning] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   // Bumped after a git restore to re-trigger the load effect below without
@@ -337,6 +341,7 @@ function DashboardView({
 
     async function resolve() {
       setError(null)
+      setWarning(null)
       setResults(null)
       setActive(null)
       if (!name && localPush?.name !== '') return
@@ -360,6 +365,7 @@ function DashboardView({
           shownRef.current = r.results
           setLoadSeq((n) => n + 1)
         } else setError(r.message)
+        setWarning(r.warning ?? null)
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -455,25 +461,9 @@ function DashboardView({
   // both show runs once (widgetHost.ts).
   const [marked] = useState(() => markedRuns(() => [frameRef.current, popupFrameRef.current]))
 
-  // Download the dashboard as one static HTML file. Only the frame can read
-  // its page, so it serializes itself; its answer is untrusted text, wrapped
-  // behind a policy that blocks every script (docs/dashboard.md).
+  // Download the dashboard as one static HTML file (docs/dashboard.md).
   function snapshot() {
-    const frame = frameRef.current
-    if (!frame || !active || snapshotRef.current?.frame === frame) return
-    const unanswered = { message: 'The dashboard did not answer the snapshot request.' }
-    snapshotRef.current?.done(unanswered) // one left by a dashboard since closed: it says nothing
-    const title = active.name || 'dashboard'
-    const done = (r: SnapshotResult) => {
-      snapshotRef.current = null
-      clearTimeout(timer)
-      if (frameRef.current !== frame) return // the dashboard was switched meanwhile
-      setError('html' in r ? null : r.message)
-      if ('html' in r) downloadText(`${title}.html`, snapshotDocument(r.html, title), 'text/html')
-    }
-    const timer = setTimeout(() => done(unanswered), 5000)
-    snapshotRef.current = { frame, done }
-    frame.contentWindow?.postMessage({ type: 'qv-snapshot' }, '*')
+    if (active) requestSnapshot(frameRef, active.name || 'dashboard', snapshotRef, setError)
   }
 
   // Open `push` in place of the current dashboard (null: the store's copy of
@@ -518,9 +508,7 @@ function DashboardView({
     return listenToFrame(
       () => [frameRef.current, popupFrameRef.current],
       {
-        onSnapshot: (snap, frame) => {
-          if (snapshotRef.current?.frame === frame) snapshotRef.current.done(snap)
-        },
+        onSnapshot: (snap, frame) => answerSnapshot(snapshotRef, snap, frame),
         onWidget: (req) => answerWidget(req, post, setError),
         onSetParams: (values) => rerun(active, values),
       },
@@ -650,6 +638,15 @@ function DashboardView({
           {dashboards.length
             ? 'Pick a dashboard to view it.'
             : 'No dashboards yet. An agent can create one with the push_dashboard tool.'}
+        </p>
+      )}
+
+      {warning && (
+        <p
+          className="rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-center text-sm text-amber-200"
+          data-testid="dashboard-warning"
+        >
+          {warning}
         </p>
       )}
 

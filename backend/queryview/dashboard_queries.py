@@ -11,6 +11,7 @@ from typing import Any
 from .connect import _gated_session
 from .dashboard_params import (
     Dialect,
+    Param,
     ParamError,
     apply_to_queries,
     each_in,
@@ -53,6 +54,12 @@ def clean_values(raw: object) -> dict[str, str]:
     if not isinstance(raw, dict):
         return {}
     return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str) and _sendable(k) and _sendable(v)}
+
+
+def resolved_part(r: dict[str, Any]) -> dict[str, Any]:
+    """A run's resolved selectors as its reply carries them, on success or
+    failure: absent when the run failed before resolving."""
+    return {"params": r["params"]} if "params" in r else {}
 
 
 def _params_error(message: str) -> dict[str, Any]:
@@ -132,10 +139,10 @@ async def run_queries_on(
 
 
 async def resolve_on(
-    driver: Driver, config: DriverConfig, database: str | None, params: object, values: dict[str, str]
+    driver: Driver, config: DriverConfig, database: str | None, params: list[Param], values: dict[str, str]
 ) -> list[dict[str, Any]]:
-    """A dashboard's selectors resolved on one connection: its options_sql run
-    there, each value kept only while its options offer it. Raises ParamError."""
+    """Selectors resolved on one connection: their options_sql run there, each
+    value kept only while its options offer it. Raises ParamError."""
 
     async def options(sql: str) -> list[Any]:
         r = await driver.run_query(config, sql, database, limit=DASHBOARD_ROW_CAP, offset=0, order_by=None)
@@ -143,7 +150,7 @@ async def resolve_on(
             raise ParamError(r.message)
         return [row[0] if row else None for row in r.rows.data]
 
-    return await resolve(parse_params(params), values, options, dialect_of(driver))
+    return await resolve(params, values, options, dialect_of(driver))
 
 
 async def run_dashboard_on(
@@ -159,8 +166,9 @@ async def run_dashboard_on(
     [{name, kind, options, value}] — also on a failing query, so the page keeps
     its selectors. A bad declaration or value fails with `reason`: params."""
     try:
-        resolved = await resolve_on(driver, config, database, params, values)
-        runnable = apply_to_queries(queries, parse_params(params), resolved, dialect_of(driver))
+        declared = parse_params(params)
+        resolved = await resolve_on(driver, config, database, declared, values)
+        runnable = apply_to_queries(queries, declared, resolved, dialect_of(driver))
     except ParamError as e:
         return _params_error(str(e))
     return {**await run_queries_on(driver, config, database, runnable), "params": resolved}
@@ -181,8 +189,18 @@ async def run_dashboard_queries(
     return await run_queries_on(DRIVERS[s.type], s.config, s.database, queries, limit, offset)
 
 
+async def _no_options(sql: str) -> list[Any]:
+    return []
+
+
 async def run_dashboard(sid: str, queries: dict[str, str], params: object, values: dict[str, str]) -> dict[str, Any]:
     """run_dashboard_on session `sid`'s connection and selected database."""
+    declared = parse_params(params)
+    if not queries and not any(p.options_sql for p in declared):
+        # Nothing touches the database: no session, runner or dialect is used,
+        # so a page of static selectors still renders disconnected.
+        resolved = await resolve(declared, values, _no_options, Dialect('"', False))
+        return {"ok": True, "results": {}, "meta": {}, "params": resolved}
     s, err = await _gated_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
