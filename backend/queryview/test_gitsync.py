@@ -15,7 +15,7 @@ import pytest
 from queryview import gitsync, workspaces
 from queryview.dashboards import delete_dashboard, get_dashboard, upsert_dashboard
 from queryview.gitsync import (
-    DASHBOARD_FILES,
+    _REQUIRED_FILES,
     GitSyncError,
     dashboard_from_files,
     dashboard_reldir,
@@ -713,9 +713,6 @@ def _repo_files(remote) -> list[str]:
     ).stdout.splitlines()
 
 
-_PLAIN_FILES = DASHBOARD_FILES[1:]  # a params-free dashboard has no meta.yaml
-
-
 def _dash(name: str, html: str) -> dict:
     return {"name": name, "html": html, "queries": {"q": "SELECT 1"}, "params": []}
 
@@ -775,7 +772,7 @@ def test_case_only_rename_leaves_a_dashboard_named_like_its_temp_folder(git_env)
     _run(gitsync.save(_default_ws(), _dash("ua reach.renaming", "<p>other</p>")))
     _run(gitsync.rename(_default_ws(), "ua reach", "UA Reach"))
     assert sorted(_repo_files(git_env)) == sorted(
-        f"{dashboard_reldir(name)}/{f}" for name in ("UA Reach", "ua reach.renaming") for f in _PLAIN_FILES
+        f"{dashboard_reldir(name)}/{f}" for name in ("UA Reach", "ua reach.renaming") for f in _REQUIRED_FILES
     )
     shown = subprocess.run(
         ["git", "show", f"main:{dashboard_reldir('UA Reach')}/dashboard.html"],
@@ -911,7 +908,7 @@ def test_rename_ignores_a_stray_target_dir_in_the_clone(git_env):
     (stray / "leftover.txt").write_text("x")
     _run(gitsync.rename(_default_ws(), "ua src", "ua dst"))
     files = [f for f in _repo_files(git_env) if f.startswith(dashboard_reldir("ua dst") + "/")]
-    assert sorted(f.rsplit("/", 1)[1] for f in files) == sorted(_PLAIN_FILES)
+    assert sorted(f.rsplit("/", 1)[1] for f in files) == sorted(_REQUIRED_FILES)
 
 
 def _legacy(wd: Path, folder: str, meta: str) -> None:

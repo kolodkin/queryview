@@ -9,7 +9,6 @@ Docs: docs/export-import.md."""
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from typing import Any
 from urllib.parse import unquote
 
@@ -78,11 +77,10 @@ def unslug(folder: str) -> str | None:
 _MAX_FOLDER_BYTES = 255  # one path component, on every common filesystem
 
 
-def name_error(name: str, others: Iterable[str]) -> tuple[int, str] | None:
+def name_error(name: str, others: list[str]) -> tuple[int, str] | None:
     """Why a dashboard named `name` can't join `others`, as (HTTP status,
     message); None when it can, or is already one of them. A name must fit a
     repo folder and stay apart from the others on a case-insensitive disk."""
-    others = list(others)
     folder = slug(name)
     if name in others:
         return None

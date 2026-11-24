@@ -47,7 +47,7 @@ class Repo:
         dashboards: dict[str, dict[str, Any]] = {}
         for entity in await _repo_entities(wd, head) if head else []:
             try:
-                d = await _read_repo_entity(wd, head, entity["relpath"])  # type: ignore[arg-type]
+                d = await _read_repo_entity(wd, head, entity["relpath"], entity["files"])  # type: ignore[arg-type]
             except GitSyncError as e:
                 log.warning("skipping %s: %s", entity["relpath"], e)
                 continue

@@ -72,18 +72,18 @@ def dashboard_to_files(d: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def dashboard_from_files(files: dict[str, str], named: bool = True) -> dict[str, Any]:
-    """Inverse of dashboard_to_files. `name` is what meta.yaml gives, else
-    None: an agent's draft folder names the saved dashboard it edits there.
-    named=False reads a repo folder, where a `name` key is ignored."""
+def dashboard_from_files(files: dict[str, str], name: str | None = None) -> dict[str, Any]:
+    """Inverse of dashboard_to_files, named `name`: a repo folder's name.
+    Without one, the name is what meta.yaml gives, else None: an agent's draft
+    folder names the saved dashboard it edits there."""
     try:
         meta = yaml.safe_load(files.get("meta.yaml", ""))
         queries = yaml.safe_load(files["queries.yaml"])
     except yaml.YAMLError as e:
         raise GitSyncError(f"malformed dashboard file: {e}") from e
     data = {**(meta if isinstance(meta, dict) else {}), "html": files["dashboard.html"], "queries": queries}
-    if not named:
-        data.pop("name", None)
+    if name is not None:
+        data["name"] = name
     try:
         return dashboard_from_data(data, require_html=False, require_name=False)
     except YamlIOError as e:
@@ -329,32 +329,30 @@ async def _tree_files(wd: Path, ref: str, *paths: str) -> dict[str, str]:
 
 async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]]:
     """The dashboards in the tree at `ref` (under `paths` if given), each with
-    an id that changes whenever any of its files does. Anything else in the
-    repo is ignored."""
+    the files it has and an id that changes whenever any of them does.
+    Anything else in the repo is ignored."""
     files = await _tree_files(wd, ref, *paths)
     found = []
     for fpath in files:
         parts = fpath.split("/")
         if len(parts) == 3 and parts[0] == "dashboards" and parts[2] == "queries.yaml":
             ddir = f"dashboards/{parts[1]}"
-            if f"{ddir}/dashboard.html" not in files:
+            present = [f for f in DASHBOARD_FILES if f"{ddir}/{f}" in files]
+            if not set(_REQUIRED_FILES) <= set(present):
                 continue  # incomplete: a hand edit
             if unslug(parts[1]) is None:
                 log.warning("skipping %s: not a folder name QueryView writes", ddir)
                 continue
             oid = "+".join(files.get(f"{ddir}/{f}", "") for f in DASHBOARD_FILES)
-            found.append({"relpath": ddir, "oid": oid})
+            found.append({"relpath": ddir, "oid": oid, "files": present})
     return found
 
 
-async def _read_repo_entity(wd: Path, ref: str, relpath: str) -> dict[str, Any]:
+async def _read_repo_entity(wd: Path, ref: str, relpath: str, files: list[str]) -> dict[str, Any]:
     """A dashboard's content at `ref`, in the DB row shape, named by its
-    folder. The caller has checked `relpath` is a dashboard (_repo_entities)."""
-    present = await _tree_files(wd, ref, relpath)
-    texts = {
-        f: await _git("show", f"{ref}:{relpath}/{f}", cwd=wd) for f in DASHBOARD_FILES if f"{relpath}/{f}" in present
-    }
-    return {**dashboard_from_files(texts, named=False), "name": unslug(relpath.rpartition("/")[2])}
+    folder. `files` are those the folder holds (_repo_entities)."""
+    texts = {f: await _git("show", f"{ref}:{relpath}/{f}", cwd=wd) for f in files}
+    return dashboard_from_files(texts, name=unslug(relpath.rpartition("/")[2]))
 
 
 async def _last_commit(wd: Path, ref: str, relpath: str) -> str:
@@ -375,7 +373,7 @@ async def _merge(ws: WorkspaceRec, wd: Path, head: str) -> dict[str, Any]:
     found_conflicts: list[dict[str, Any]] = []
     for e in await _repo_entities(wd, head):
         try:
-            repo = await _read_repo_entity(wd, head, e["relpath"])
+            repo = await _read_repo_entity(wd, head, e["relpath"], e["files"])
         except GitSyncError:
             continue  # unreadable in the repo: nothing to import or compare
         name = repo["name"]
@@ -598,9 +596,10 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
             raise GitSyncError(f"dashboard {new!r} already exists", status=409)
         if head and await _tree_files(wd, head, dst):
             raise GitSyncError(f"dashboard {new!r} already exists in git", status=409)
-        if not (head and await _repo_entities(wd, head, src)):
+        found = await _repo_entities(wd, head, src) if head else []
+        if not (head and found):
             return False  # never committed: nothing for git to move
-        repo = await _read_repo_entity(wd, head, src)
+        repo = await _read_repo_entity(wd, head, src, found[0]["files"])
         moved_matches_row = dashboard_to_files(local) == dashboard_to_files(repo)
         (wd / dst).parent.mkdir(parents=True, exist_ok=True)
         if src.lower() == dst.lower():
@@ -712,11 +711,12 @@ async def restore(ws: WorkspaceRec, kind: str, name: str, ref: str | None = None
             tree = await _tree_files(wd, resolved, relpath)
         except GitSyncError:
             tree = {}
-        missing = [f for f in _REQUIRED_FILES if f"{relpath}/{f}" not in tree]
+        present = [f for f in DASHBOARD_FILES if f"{relpath}/{f}" in tree]
+        missing = [f for f in _REQUIRED_FILES if f not in present]
         if missing:
             what = f"is missing {missing[0]}" if tree else "not found"
             raise GitSyncError(f"dashboard {name!r} {what} at {resolved}", status=404)
-        data = await _read_repo_entity(wd, resolved, relpath)
+        data = await _read_repo_entity(wd, resolved, relpath, present)
         sha = await _last_commit(wd, resolved, relpath)
 
     # DB upsert happens outside the git lock — it doesn't touch the workdir.
