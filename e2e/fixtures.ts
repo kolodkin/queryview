@@ -242,6 +242,11 @@ export const tableRow = (page: Page, name: string) =>
   page.locator(`[data-testid="explorer-table"][data-table="${name}"]`);
 export const connCard = (page: Page, name: string) => page.locator(`[data-testid="conn-card"][data-conn="${name}"]`);
 
+/** Whether git sync is configured: the backend fixture points the default
+ * workspace at E2E_GIT_REMOTE when it is set. */
+export const gitConfigured = async (baseURL: string) =>
+  Boolean((await api(`${baseURL}/api/git/status`)).body.configured);
+
 export async function switchWorkspace(page: Page, ws: string): Promise<void> {
   await page.getByTestId("workspace-switcher").click();
   await page.getByTestId("workspace-option").filter({ hasText: ws }).click();

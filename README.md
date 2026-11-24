@@ -71,7 +71,7 @@ and let [git sync](docs/system/gitsync.md) do it.
 
 ### Requirements
 
-None yet: `docs/requirements/` holds what a user needs.
+- [queryview.md](docs/requirements/queryview.md) — what a user can do, and the design principles.
 
 ### System
 

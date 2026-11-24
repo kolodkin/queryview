@@ -1,6 +1,6 @@
-// Workspaces, YAML export/import, git sync and popovers: none needs a database.
-import { readFileSync } from "node:fs";
-import { DUCK, api, connect, dashboardFrame, expect, sessionId, switchWorkspace, test } from "./fixtures";
+// Workspaces, git sync controls and popovers: none needs a database. The YAML
+// and git round trips are in acceptance.spec.ts.
+import { api, expect, gitConfigured, sessionId, switchWorkspace, test } from "./fixtures";
 
 test("switcher isolates dashboards", async ({ page, baseURL }) => {
   // Uses a uniquely-named workspace and cleans it up so reruns are idempotent.
@@ -32,86 +32,15 @@ test("switcher isolates dashboards", async ({ page, baseURL }) => {
   }
 });
 
-test("dashboard export import round trip", async ({ page, baseURL, shot }, testInfo) => {
-  // Download a dashboard as YAML from the UI, drift the stored copy, then
-  // import the downloaded file back and verify it overwrote the drift.
-  const save = (v: number) =>
-    api(`${baseURL}/api/dashboards`, {
-      json: { name: "yio e2e", html: `<html><body>v${v}</body></html>`, queries: { q: `SELECT ${v}` } },
-    });
-  await save(1);
-
-  await page.goto("/dashboard?name=yio%20e2e");
-  await expect(page.getByTestId("yaml-export")).toBeEnabled();
-  await shot("dashboard with export-import controls");
-  const [download] = await Promise.all([page.waitForEvent("download"), page.getByTestId("yaml-export").click()]);
-  expect(download.suggestedFilename()).toBe("yio e2e.dashboard.yaml");
-  const saved = testInfo.outputPath(download.suggestedFilename());
-  await download.saveAs(saved);
-  const text = readFileSync(saved, "utf-8");
-  expect(text).toContain("kind: dashboard");
-  expect(text).toContain("v1");
-
-  // Drift the stored copy to v2, then import the downloaded v1 file back.
-  await save(2);
-  await page.getByTestId("yaml-import-file").setInputFiles(saved);
-  await expect(page.getByTestId("yaml-import")).toHaveText("Imported");
-  await shot("imported yaml overwrote the drifted copy");
-  const { body } = await api(`${baseURL}/api/dashboards/yio%20e2e`);
-  expect(body.html).toContain("v1");
-  expect(body.queries).toEqual({ q: "SELECT 1" });
-});
-
 // Git sync: in CI a loopback git daemon (start-git-daemon action) serves a
 // remote the backend fixture points the default workspace at, so the
-// save/restore round trip runs; on an unconfigured stack that test skips and
-// Restore renders disabled.
-const gitConfigured = async (baseURL: string) => Boolean((await api(`${baseURL}/api/git/status`)).body.configured);
-
+// save/restore round trip (acceptance.spec.ts) runs; on an unconfigured stack
+// that test skips and Restore renders disabled.
 test("git controls disabled when unconfigured", async ({ page, baseURL }) => {
   test.skip(await gitConfigured(baseURL!), "git sync is configured; disabled-state not applicable");
   await page.goto("/dashboard");
   await expect(page.getByTestId("git-restore-toggle")).toBeDisabled();
   await expect(page.getByTestId("git-commit")).toHaveCount(0); // Save commits
-});
-
-test("git save and restore dashboard round trip", async ({ page, baseURL, seeds, shot }) => {
-  test.skip(!(await gitConfigured(baseURL!)), "git sync is not configured for this stack");
-  // Unique per attempt: a CI retry shares the remote, which keeps the first
-  // attempt's commit.
-  const name = `gs e2e ${crypto.randomUUID().slice(0, 6)}`;
-  const save = (v: number) =>
-    api(`${baseURL}/api/dashboards`, {
-      json: { name, html: `<html><body>v${v}</body></html>`, queries: { q: `SELECT ${v}` } },
-    });
-
-  // Each Save is one commit; restore v1 from the revision list.
-  expect((await save(1)).body.committed).toBe(true);
-  await save(2);
-  // A YAML import overwrites the row outside git: the picker marks it until a restore.
-  const doc = `kind: dashboard\nname: ${name}\nhtml: <p>v3</p>\nqueries:\n  q: SELECT 3\n`;
-  expect((await fetch(`${baseURL}/api/import`, { method: "POST", body: doc })).ok).toBe(true);
-  // Connected, so the dashboard renders instead of asking for a database.
-  await connect(page, DUCK, await seeds.duckdb());
-  await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
-  await expect(dashboardFrame(page).locator("body")).toContainText("v3");
-  const option = page.getByTestId("dashboard-select").locator("option", { hasText: name });
-  await expect(option).toHaveText(`${name} · not in git`);
-  await shot("imported dashboard marked not in git");
-  page.on("dialog", (d) => d.accept());
-  await page.getByTestId("git-restore-toggle").click();
-  const rows = page.getByTestId("git-revision-row");
-  await expect(rows).toHaveCount(2);
-  await expect(rows.first()).toContainText(`store dashboard ${name}`);
-  await rows.last().getByTestId("git-revision-restore").click();
-  // The picker closes on a successful restore; only then check the store.
-  await expect(page.getByTestId("git-revisions")).toBeHidden();
-  await expect(option).toHaveText(name);
-  await expect(dashboardFrame(page).locator("body")).toContainText("v1");
-  await shot("restored dashboard no longer marked");
-  const { body } = await api(`${baseURL}/api/dashboards/${encodeURIComponent(name)}`);
-  expect(body.html).toContain("v1");
-  expect(body.queries).toEqual({ q: "SELECT 1" });
 });
 
 test("popovers close on outside click and escape", async ({ page }) => {
