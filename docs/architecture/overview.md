@@ -42,7 +42,7 @@ The MCP server is mounted at `/mcp/` in the same app; a slashless `/mcp` redirec
 An agent push reaches the tab through the channel keyed by that session's id, and is refused once the tab disarms the session. See [mcp.md](./mcp.md#how-it-works).
 
 <!-- req: architecture/overview/locked-refuses-both -->
-A locked connection refuses MCP tools and REST calls alike unless the call carries the unlock token, which only the locking tab holds.
+A locked connection refuses the MCP tools that query, push or switch it, and refuses a REST call that lacks the unlock token. See [connect.md](../system/connect.md#locked-connections).
 
 <!-- req: architecture/overview/data-dir -->
 All state (the SQLite store, the encryption key, the git-sync clones) lives under `DATA_DIR`, which defaults to `~/.queryview`. See [storage.md](./storage.md).
