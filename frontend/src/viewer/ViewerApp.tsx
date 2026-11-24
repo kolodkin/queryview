@@ -6,17 +6,17 @@ import { useEffect, useRef, useState } from 'react'
 
 import {
   DashboardFrame,
+  answerSnapshot,
   answerWidget,
-  downloadText,
   listenToFrame,
-  snapshotDocument,
+  requestSnapshot,
   valuesOf,
   widgetPage,
   widgetQueryNames,
   withKeptText,
   type DashboardResults,
+  type PendingSnapshot,
   type ResolvedParam,
-  type SnapshotResult,
 } from '../core'
 import { getJson, postJson } from './api'
 import {
@@ -50,7 +50,7 @@ function ViewerApp() {
   // The page-query results the frame holds as `window.queries`.
   const shownResultsRef = useRef<DashboardResults>({})
   // A Snapshot waiting for the frame's serialized document.
-  const snapshotRef = useRef<((r: SnapshotResult) => void) | null>(null)
+  const snapshotRef = useRef<PendingSnapshot | null>(null)
 
   // The lists, then the opening pick: the URL, else the last pick, else the
   // first connection. Back/forward re-reads the URL.
@@ -102,8 +102,9 @@ function ViewerApp() {
     void (async () => {
       setShown(null)
       setError(null)
+      // Also ends a load this pick cancelled.
+      setLoading(Boolean(connection && dashboard))
       if (!connection || !dashboard) return
-      setLoading(true)
       const got = await getJson(`/api/dashboards/${encodeURIComponent(dashboard)}`)
       if (cancelled) return
       if (got.status !== 200) {
@@ -147,7 +148,7 @@ function ViewerApp() {
     const widgets = new Set(widgetQueryNames(shown.dashboard.html))
     const own = shown.dashboard.queries.filter((q) => !widgets.has(q))
     return listenToFrame(() => [frameRef.current], {
-      onSnapshot: (snap) => snapshotRef.current?.(snap),
+      onSnapshot: (snap, frame) => answerSnapshot(snapshotRef, snap, frame),
       onWidget: (req) =>
         answerWidget(
           req,
@@ -184,26 +185,9 @@ function ViewerApp() {
     })
   }, [shown, connection])
 
-  // Download the dashboard as one static HTML file. Only the frame can read
-  // its page, so it serializes itself; its answer is untrusted text, wrapped
-  // behind a policy that blocks every script (docs/dashboard.md).
+  // Download the dashboard as one static HTML file (docs/dashboard.md).
   function snapshot() {
-    const frame = frameRef.current
-    if (!frame || !shown || snapshotRef.current) return
-    const title = shown.dashboard.name
-    const done = (r: SnapshotResult) => {
-      snapshotRef.current = null
-      clearTimeout(timer)
-      if (frameRef.current !== frame) return // the dashboard was switched meanwhile
-      setError('html' in r ? null : r.message)
-      if ('html' in r) downloadText(`${title}.html`, snapshotDocument(r.html, title), 'text/html')
-    }
-    const timer = setTimeout(
-      () => done({ message: 'The dashboard did not answer the snapshot request.' }),
-      5000,
-    )
-    snapshotRef.current = done
-    frame.contentWindow?.postMessage({ type: 'qv-snapshot' }, '*')
+    if (shown) requestSnapshot(frameRef, shown.dashboard.name, snapshotRef, setError)
   }
 
   return (

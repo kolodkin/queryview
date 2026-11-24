@@ -171,22 +171,20 @@ async def _fetch(
 _DUP_FIELDNAME = 1060
 
 
-async def _fetch_wrapped(
-    conn: Any, sql: str, order_by: list[dict[str, Any]] | None, limit: int, offset: int
-) -> tuple[Any, list[Any]]:
+async def _fetch_wrapped(conn: Any, sql: str, order_clause: str, limit: int, offset: int) -> tuple[Any, list[Any]]:
     """One page of `sql` through the paginating wrapper. A derived table needs
     unique column names, so `SELECT a.id, b.id …` runs as written instead,
     fetching through the page and dropping the rows before it."""
     try:
         description, rows, _ = await _fetch(
             conn,
-            wrap_paginated(sql, build_order_by(order_by, "`", backslash_escapes=True), limit, offset, alias="_qv"),
+            wrap_paginated(sql, order_clause, limit, offset, alias="_qv"),
             None,
             query_timeout.get(),
         )
         return description, rows
     except MySQLError as e:
-        if e.args[0] != _DUP_FIELDNAME or order_by:  # a column sort needs the wrapper
+        if e.args[0] != _DUP_FIELDNAME or order_clause:  # a column sort needs the wrapper
             raise
     # shortcut: reads every row before the page; alias the columns for deep pages.
     description, rows, _ = await _fetch(conn, sql.rstrip().rstrip(";"), offset + limit, query_timeout.get())
@@ -258,8 +256,9 @@ class MySqlDriver:
         order_by: list[dict[str, Any]] | None,
         decode_json: bool = True,
     ) -> QueryRows:
+        order_clause = build_order_by(order_by, "`", backslash_escapes=True)  # refused before connecting
         async with _connect(config, database) as conn:
-            description, rows = await _fetch_wrapped(conn, sql, order_by, limit, offset)
+            description, rows = await _fetch_wrapped(conn, sql, order_clause, limit, offset)
             return _to_rows(description, rows, decode_json)
 
     async def run_query(
@@ -306,7 +305,7 @@ class MySqlDriver:
         # No describe-only call in the protocol: a LIMIT 0 page returns just the columns.
         try:
             async with _connect(config, database) as conn:
-                description, _ = await _fetch_wrapped(conn, sql, None, 0, 0)
+                description, _ = await _fetch_wrapped(conn, sql, "", 0, 0)
                 return FieldsResult([{"name": c.name, "type": c.type} for c in _columns(description)])
         except Exception as e:  # noqa: BLE001
             return Err(error_message(e))

@@ -22,9 +22,10 @@ agent-authored HTML, which renders inside an isolated iframe.
   while the open dashboard is the store's copy (no draft, agent push or
   SQL-panel edit);
 - **Rename** and **Delete** — for a saved dashboard; Rename asks for the new
-  name and keeps unsaved SQL-panel edits, Delete asks to confirm. A new name
-  [its git-sync folder can't hold](./gitsync.md#repository-layout) is refused
-  with the reason, on Save too;
+  name and keeps unsaved SQL-panel edits, Delete asks to confirm. Both are
+  the user's: no [MCP tool](./mcp.md#naming-and-saving) does either. A new
+  name [its git-sync folder can't hold](./gitsync.md#repository-layout) is
+  refused with the reason, on Save too;
 - **Edit queries** — the [SQL panel](#the-sql-panel);
 - **Snapshot** — downloads the dashboard as a [static file](#snapshot);
 - a **sandboxed iframe** that renders the selected dashboard.
@@ -93,7 +94,8 @@ session id) exposes:
 A dashboard never names a [connection](./connect.md): it runs on the
 **viewing** session's connection and selected database. So
 a dashboard is portable across sessions, instances and git sync; opened in a
-disconnected session it asks you to connect. Select a database first, or
+disconnected session it asks you to connect, unless nothing in it queries the
+database. Select a database first, or
 fully-qualify tables as `db.table`.
 
 The REST mirror `POST /api/dashboards` takes the inline fields (plus optional
@@ -252,6 +254,7 @@ FROM {table} GROUP BY value, category
 | `identifier` | a quoted table/column, in the connection's own quoting | `{field}` → `"city"` (`` `city` `` on ClickHouse) |
 | `dimension` | a checkbox: its own column when checked, `''` when not | `{category}` → `"category"` / `''` |
 | `text` | whatever was typed, as a quoted string literal | `{note}` → `'o''k'` |
+| `each` | every option in turn, as a `value` does: see [below](#a-query-run-once-per-value) | `{region}` → `'eu'`, then `'us'` |
 
 A `text` param is free input:
 
@@ -270,6 +273,10 @@ An identifier containing the quote character, or a backslash on ClickHouse, is
 rejected. Write option values as they are stored (`CORP\alice`); never
 pre-escape them.
 
+Saving refuses a malformed declaration. One already in a stored dashboard
+(saved before a rule existed) is left out when it opens, and the dashboard
+page names each one above the dashboard.
+
 `options` and `options_sql`
 are mutually exclusive (a `dimension` needs neither), and the first option is
 chosen for you unless the param says **`default: none`** — then the selector
@@ -278,6 +285,38 @@ starts empty and every query that needs it is held back until a choice is made.
 reference another param (`{table}`), so a field list can follow the selected
 table; params resolve in dependency order, a cycle is an error, and one whose
 dependency is still unchosen simply has no options yet.
+
+## A query run once per value
+
+An **`each`** param is a list nobody picks from. A query that names it runs
+once per option, up to five at a time, and its result is the rows of every
+run, stacked in the list's order. A heavy query over many partitions (a
+database per tenant, a table per region) becomes several small ones:
+
+```yaml
+params:
+  - name: region
+    kind: each
+    options_sql: SELECT DISTINCT region FROM orders ORDER BY region
+```
+
+```sql
+SELECT {region} AS region, count() AS orders FROM orders WHERE region = {region}
+```
+
+- Needs `options` or `options_sql`, takes no `default`, and holds no value:
+  `<qv-param>` draws nothing for it. At most 100 options; a repeated one runs
+  once.
+- Its `options_sql` may reference other params, never another `each`; no other
+  param's `options_sql` may reference it. A query names at most one.
+- The runs must return the same columns, in name and order.
+- A failing run fails the query, named with its value: `sales[eu]: …`. So list
+  only the values the query can run on.
+- No options: an empty result with no columns.
+- The 1,000-row cap applies to each run and to the stacked rows, which keep
+  the first 1,000; values past a full cap are not run.
+- While its list waits on another param's choice, the query waits too.
+- A [widget](#widgets) cannot page such a query.
 
 ## Changing parameters: `window.params` and `setParams`
 

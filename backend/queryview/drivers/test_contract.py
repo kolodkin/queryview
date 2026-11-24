@@ -5,6 +5,7 @@ per-driver test modules."""
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import typing
 from dataclasses import dataclass
@@ -119,3 +120,13 @@ def test_list_tables_accepts_union_flag(type_):
     assert "limit" in inspect.signature(DRIVERS[type_].list_tables).parameters
     assert "limit" in inspect.signature(DRIVERS[type_].list_databases).parameters
     assert "current" in inspect.signature(DRIVERS[type_].list_databases).parameters
+
+
+@pytest.mark.parametrize("method", ["run_query", "export_csv"])
+@pytest.mark.parametrize("type_", ALL)
+def test_sorting_by_a_name_with_the_quote_character_is_an_error(type_, method):
+    """Not a silent skip: the rows would come back unsorted under a sorted header."""
+    d = DRIVERS[type_]
+    order_by = [{"name": f"a{d.ident_quote}b", "dir": "ASC"}]
+    r = asyncio.run(getattr(d, method)(SAMPLES[type_].config, "SELECT 1", None, 10, 0, order_by))
+    assert isinstance(r, Err) and "cannot sort by" in r.message, r

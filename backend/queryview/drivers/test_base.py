@@ -38,13 +38,16 @@ def test_build_order_by_quotes_and_whitelists_direction():
     assert build_order_by([{"bad": 1}], "`") == ""
 
 
-def test_order_by_skips_a_name_with_the_quote_character():
-    assert build_order_by([{"name": 'a"b'}, {"name": "c"}], '"') == 'ORDER BY "c" ASC'
-    assert build_order_by([{"name": "a`, (SELECT 1) -- "}], "`") == ""
+def test_order_by_refuses_a_name_with_the_quote_character():
+    with pytest.raises(ValueError, match="cannot sort by"):
+        build_order_by([{"name": 'a"b'}, {"name": "c"}], '"')
+    with pytest.raises(ValueError, match="cannot sort by"):
+        build_order_by([{"name": "a`, (SELECT 1) -- "}], "`")
 
 
-def test_order_by_skips_a_backslash_only_where_the_dialect_escapes():
-    assert build_order_by([{"name": "a\\"}], "`", backslash_escapes=True) == ""
+def test_order_by_refuses_a_backslash_only_where_the_dialect_escapes():
+    with pytest.raises(ValueError, match="cannot sort by"):
+        build_order_by([{"name": "a\\"}], "`", backslash_escapes=True)
     assert build_order_by([{"name": "a\\"}], '"') == 'ORDER BY "a\\" ASC'
 
 

@@ -7,6 +7,7 @@ See docs/dashboard.md — "Dashboard parameters".
     identifier  a table/column: {field} -> "city"
     dimension   an optional GROUP BY column: checked -> its own column, else ''
     text        whatever the user typed, as a literal: {note} -> 'o''k'
+    each        a list nobody picks from: a query naming it runs once per option
 
 Pure: no session, request or driver. The caller passes the dialect and a
 runner for `options_sql`."""
@@ -21,7 +22,10 @@ from typing import Any
 # The longest text a page may send into a query.
 MAX_TEXT_PARAM = 10_000
 
-KINDS = ("value", "identifier", "dimension", "text")
+# The most options an `each` param may fan a query out to.
+MAX_EACH = 100
+
+KINDS = ("value", "identifier", "dimension", "text", "each")
 CASTS = ("literal", "identifier")
 # `{name}` substitutes per the param's kind; `{name:literal}` / `{name:identifier}`
 # override it for that one spot: a table is an identifier in `FROM {table}` but
@@ -71,46 +75,64 @@ def option_text(v: Any) -> str:
     return str(v)
 
 
+def _parse_entry(o: dict[str, Any], name: str) -> Param | None:
+    """One declaration as a Param, or None when it is malformed."""
+    kind = "value" if o.get("kind") is None else o["kind"]
+    if kind not in KINDS:
+        return None
+    default = o.get("default")
+    auto_select = default != "none"
+    options = o.get("options")
+    has_options = isinstance(options, list)
+    sql = o["options_sql"].strip() if isinstance(o.get("options_sql"), str) else ""
+    if has_options and sql:
+        return None  # ambiguous
+    if kind == "text":
+        if has_options or sql:
+            return None  # free input has no list to pick from
+        text = default if auto_select and isinstance(default, str) else ""
+        return Param(name, kind, auto_select=auto_select, text=text)
+    if sql:
+        return Param(name, kind, options_sql=sql, auto_select=auto_select)
+    if has_options:
+        texts = tuple(option_text(v) for v in options if v is not None and not isinstance(v, (dict, list)))
+        return Param(name, kind, options=texts, auto_select=auto_select) if texts else None
+    if kind == "dimension":
+        return Param(name, kind, auto_select=auto_select)  # a checkbox: no option list
+    return None
+
+
+def parse_params_dropping(raw: object) -> tuple[list[Param], list[tuple[int, bool]]]:
+    """parse_params, plus what it left out: each dropped entry's index and
+    whether it was dropped for repeating a name."""
+    if not isinstance(raw, list):
+        return [], []
+    out: list[Param] = []
+    dropped: list[tuple[int, bool]] = []
+    seen: set[str] = set()
+    for i, o in enumerate(raw):
+        name = o.get("name") if isinstance(o, dict) else None
+        if not isinstance(name, str) or not name:
+            dropped.append((i, False))
+            continue
+        # One declaration per name, the first: a value must be checked and
+        # substituted under the same one.
+        if name in seen:
+            dropped.append((i, True))
+            continue
+        seen.add(name)
+        p = _parse_entry(o, name)
+        if p is None:
+            dropped.append((i, False))
+        else:
+            out.append(p)
+    return out, dropped
+
+
 def parse_params(raw: object) -> list[Param]:
     """The `params` list. Defensive: a malformed entry is dropped, so a broken
     declaration costs one selector, not the dashboard."""
-    if not isinstance(raw, list):
-        return []
-    out: list[Param] = []
-    seen: set[str] = set()
-    for o in raw:
-        if not isinstance(o, dict):
-            continue
-        name = o.get("name")
-        # One declaration per name, the first: a value must be checked and
-        # substituted under the same one.
-        if not isinstance(name, str) or not name or name in seen:
-            continue
-        seen.add(name)
-        kind = "value" if o.get("kind") is None else o["kind"]
-        if kind not in KINDS:
-            continue
-        default = o.get("default")
-        auto_select = default != "none"
-        options = o.get("options")
-        has_options = isinstance(options, list)
-        sql = o["options_sql"].strip() if isinstance(o.get("options_sql"), str) else ""
-        if has_options and sql:
-            continue  # ambiguous
-        if kind == "text":
-            if has_options or sql:
-                continue  # free input has no list to pick from
-            text = default if auto_select and isinstance(default, str) else ""
-            out.append(Param(name, kind, auto_select=auto_select, text=text))
-        elif sql:
-            out.append(Param(name, kind, options_sql=sql, auto_select=auto_select))
-        elif has_options:
-            texts = tuple(option_text(v) for v in options if v is not None and not isinstance(v, (dict, list)))
-            if texts:
-                out.append(Param(name, kind, options=texts, auto_select=auto_select))
-        elif kind == "dimension":
-            out.append(Param(name, kind, auto_select=auto_select))  # a checkbox: no option list
-    return out
+    return parse_params_dropping(raw)[0]
 
 
 def placeholders_in(sql: str) -> list[str]:
@@ -160,7 +182,7 @@ def substitute(sql: str, params: list[Param], values: dict[str, str], dialect: D
             if cast == "identifier":
                 raise ParamError(f"{{{name}}} is text: it cannot be an identifier")
             return _quote_literal(raw or "", dialect)
-        if not raw:
+        if raw is None or (raw == "" and p.kind != "each"):  # an each's option may be empty
             raise ParamError(f"no value selected for {{{name}}}")
         as_identifier = cast == "identifier" if cast else p.kind == "identifier"
         return _quote_identifier(raw, name, dialect) if as_identifier else _quote_literal(raw, dialect)
@@ -184,6 +206,8 @@ def resolve_order(params: list[Param]) -> list[Param]:
         visiting.add(p.name)
         for dep in placeholders_in(p.options_sql or ""):
             if dep in by_name:
+                if by_name[dep].kind == "each":
+                    raise ParamError(f"{p.name}: options_sql cannot use the each param {dep}")
                 visit(by_name[dep])
         visiting.discard(p.name)
         done.add(p.name)
@@ -194,14 +218,29 @@ def resolve_order(params: list[Param]) -> list[Param]:
     return ordered
 
 
+def needed(sql: str, params: list[Param]) -> list[Param]:
+    """The params a query references, and those their options_sql reference in
+    turn: all that resolving its values takes."""
+    by_name = {p.name: p for p in params}
+    names: set[str] = set()
+    todo = [sql]
+    while todo:
+        for name in placeholders_in(todo.pop()):
+            if name in by_name and name not in names:
+                names.add(name)
+                todo.append(by_name[name].options_sql or "")
+    return [p for p in params if p.name in names]
+
+
 def missing(sql: str, params: list[Param], values: dict[str, str]) -> list[str]:
-    """The declared params a query still needs a value for. Dimensions and text
-    never count: an unchecked one is off, and an empty text is a value."""
+    """The declared params a query still needs a value for. Dimensions, text
+    and each never count: an unchecked one is off, an empty text is a value,
+    and an each is given every option in turn."""
     by_name = {p.name: p for p in params}
     return [
         name
         for name in placeholders_in(sql)
-        if name in by_name and by_name[name].kind not in ("dimension", "text") and not values.get(name)
+        if name in by_name and by_name[name].kind not in ("dimension", "text", "each") and not values.get(name)
     ]
 
 
@@ -229,7 +268,12 @@ async def resolve(params: list[Param], values: dict[str, str], run: Runner, dial
                 settle(p, [], "")
                 continue
             options = [option_text(v) for v in await run(substitute(p.options_sql, params, chosen, dialect))]
-        if p.kind == "dimension":
+        if p.kind == "each":
+            options = list(dict.fromkeys(options))  # a repeated option runs once
+            if len(options) > MAX_EACH:
+                raise ParamError(f"{p.name}: more than {MAX_EACH} values")
+            settle(p, options, "")
+        elif p.kind == "dimension":
             settle(p, options, want if want is not None and _is_checked(want) else "")
         elif want and want in options:
             settle(p, options, want)
@@ -238,14 +282,36 @@ async def resolve(params: list[Param], values: dict[str, str], run: Runner, dial
     return resolved
 
 
+def each_in(sql: str, params: list[Param]) -> Param | None:
+    """The `each` param a query names, if any. Raises on two: their values
+    would multiply."""
+    eaches = {p.name: p for p in params if p.kind == "each"}
+    found = [eaches[n] for n in placeholders_in(sql) if n in eaches]
+    if len(found) > 1:
+        raise ParamError("one each param per query")
+    return found[0] if found else None
+
+
 def apply_to_queries(
     queries: dict[str, str], params: list[Param], resolved: list[dict[str, Any]], dialect: Dialect
-) -> dict[str, str]:
+) -> dict[str, str | dict[str, str]]:
     """The queries with the selections substituted. A query whose selectors
-    aren't all chosen yet is left out rather than run half-blank."""
+    aren't all chosen yet is left out rather than run half-blank. One naming an
+    `each` param is `{option: sql}`, a SQL per option in the list's order."""
     values = {p["name"]: p["value"] for p in resolved}
-    return {
-        name: substitute(sql, params, values, dialect)
-        for name, sql in queries.items()
-        if not missing(sql, params, values)
-    }
+    options = {p["name"]: p["options"] for p in resolved}
+    out: dict[str, str | dict[str, str]] = {}
+    for name, sql in queries.items():
+        if missing(sql, params, values):
+            continue
+        try:
+            each = each_in(sql, params)
+        except ParamError as e:
+            raise ParamError(f"{name}: {e}") from None
+        if each is None:
+            out[name] = substitute(sql, params, values, dialect)
+        elif missing(each.options_sql or "", params, values):
+            continue  # its list waits on a choice, so the query does too
+        else:
+            out[name] = {o: substitute(sql, params, {**values, each.name: o}, dialect) for o in options[each.name]}
+    return out

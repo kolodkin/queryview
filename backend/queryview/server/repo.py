@@ -51,7 +51,7 @@ class Repo:
             except GitSyncError as e:
                 log.warning("skipping %s: %s", entity["relpath"], e)
                 continue
-            dashboards[d["name"]] = d
+            dashboards[d["name"]] = d  # a folder is one name: no two share it
         # Swapped whole, so a request never sees half a refresh.
         self._dashboards, self._head, self._started = dashboards, head, True
         log.info("showing %d dashboards at %s", len(dashboards), head or "an empty repo")

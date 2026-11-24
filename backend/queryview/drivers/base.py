@@ -238,9 +238,9 @@ def build_order_by(order_by: list[dict[str, Any]] | None, quote: str, backslash_
     """`ORDER BY` clause from `[{"name","dir"}]`. Names are `quote`-quoted and
     directions whitelisted to ASC/DESC. A name holding the quote character (or
     a backslash, where the dialect escapes with it) can't be trusted through
-    string assembly and no real name carries one, so it is skipped like any
-    malformed entry: the same rule dashboard params use. Empty/absent input
-    yields no clause."""
+    string assembly, the same rule dashboard params use: it raises ValueError,
+    which the driver reports, rather than return rows unsorted. Other malformed
+    entries are skipped. Empty/absent input yields no clause."""
     if not order_by:
         return ""
     parts: list[str] = []
@@ -251,7 +251,7 @@ def build_order_by(order_by: list[dict[str, Any]] | None, quote: str, backslash_
         if not isinstance(name, str) or not name:
             continue
         if quote in name or (backslash_escapes and "\\" in name):
-            continue
+            raise ValueError(f"cannot sort by column {name!r}: its name holds a quote or backslash")
         raw_dir = col.get("dir")
         direction = raw_dir.upper() if isinstance(raw_dir, str) else ""
         if direction not in ("ASC", "DESC"):

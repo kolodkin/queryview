@@ -406,8 +406,9 @@ async def push_dashboard(
     `window.queries.sales.revenue`. Load chart libraries from a CDN if needed.
 
     `params` declares selectors substituted into the queries' `{name}`
-    placeholders (kinds value / identifier / dimension / text, `options` or
-    `options_sql`, `default: none`); the page gets them as `window.params` and
+    placeholders (kinds value / identifier / dimension / text / each, `options`
+    or `options_sql`, `default: none`; a query naming an `each` runs once per
+    option, rows stacked); the page gets them as `window.params` and
     re-runs with `window.setParams({...})`. See docs/dashboard.md.
 
     The HTML may use `<qv-select-view query="name">` (a paged results table

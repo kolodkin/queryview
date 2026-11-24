@@ -63,6 +63,9 @@ repo appears within `sync_interval`, with nothing to click.
   never merges, commits or pushes.
 - A failed fetch is logged and the last good copy keeps serving.
 - A dashboard whose files don't parse is skipped; the others still show.
+- A folder is one dashboard, [named by the folder](../gitsync.md#repository-layout):
+  a copied folder shows as its own dashboard, and one with a non-standard
+  name is skipped and logged.
 - A page already open keeps what it loaded; a reload or a new pick shows the
   change.
 

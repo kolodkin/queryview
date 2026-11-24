@@ -8,7 +8,7 @@ import shutil
 
 import pytest
 
-from queryview.gitsync import GitSyncError
+from queryview.gitsync import GitSyncError, dashboard_to_files
 from queryview.server.repo import Repo
 
 SALES = {"name": "sales", "html": "<p>hi</p>", "queries": {"q": "SELECT 1 AS n"}, "params": []}
@@ -110,3 +110,13 @@ def test_fetch_errors_hide_the_token(clone_base):
     with pytest.raises(GitSyncError) as e:
         _run(repo.refresh())
     assert "tok-example" not in str(e.value)
+
+
+def test_a_copied_folder_is_its_own_dashboard(dash_repo):
+    """The folder is the name, so a copy can't share one with its source."""
+    files = dashboard_to_files({**SALES, "html": "<p>copy</p>"})
+    dash_repo.commit([SALES], raw={f"dashboards/sales_copy/{f}": text for f, text in files.items()})
+    repo = _repo(dash_repo)
+    _run(repo.refresh())
+    assert repo.names() == ["sales", "sales_copy"] and repo.get("sales") == SALES
+    assert repo.get("sales_copy") == {**SALES, "name": "sales_copy", "html": "<p>copy</p>"}

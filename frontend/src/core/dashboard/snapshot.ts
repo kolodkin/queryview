@@ -3,6 +3,7 @@
 // See docs/dashboard.md.
 
 import { escapeHtml } from '../cells/cellView'
+import { downloadText } from '../download'
 
 // The largest document the host accepts from a frame, in characters.
 export const MAX_SNAPSHOT_CHARS = 50_000_000
@@ -36,4 +37,44 @@ export function snapshotDocument(html: string, title: string): string {
     // this catches every live one and leaves the words alone in text.
     html.replace(/http-equiv(?=\s*=)/gi, 'data-http-equiv')
   )
+}
+
+// A Snapshot waiting for a frame's serialized document.
+export type PendingSnapshot = { frame: HTMLIFrameElement; done: (r: SnapshotResult) => void }
+type Ref<T> = { current: T }
+
+// Download the dashboard in the frame on screen as one static HTML file,
+// `<title>.html`. Only the frame can read its page, so it serializes itself;
+// its answer is untrusted text, wrapped by snapshotDocument. `pending` holds
+// the request in flight, answered through answerSnapshot; an answer for a
+// frame since switched away says nothing.
+export function requestSnapshot(
+  frameRef: Ref<HTMLIFrameElement | null>,
+  title: string,
+  pending: Ref<PendingSnapshot | null>,
+  setError: (message: string | null) => void,
+): void {
+  const frame = frameRef.current
+  if (!frame || pending.current?.frame === frame) return
+  const unanswered = { message: 'The dashboard did not answer the snapshot request.' }
+  pending.current?.done(unanswered) // one left by a dashboard since closed: it says nothing
+  const done = (r: SnapshotResult) => {
+    pending.current = null
+    clearTimeout(timer)
+    if (frameRef.current !== frame) return
+    setError('html' in r ? null : r.message)
+    if ('html' in r) downloadText(`${title}.html`, snapshotDocument(r.html, title), 'text/html')
+  }
+  const timer = setTimeout(() => done(unanswered), 5000)
+  pending.current = { frame, done }
+  frame.contentWindow?.postMessage({ type: 'qv-snapshot' }, '*')
+}
+
+// A frame's answer: it settles the pending request only when that frame was asked.
+export function answerSnapshot(
+  pending: Ref<PendingSnapshot | null>,
+  result: SnapshotResult,
+  frame: HTMLIFrameElement,
+): void {
+  if (pending.current?.frame === frame) pending.current.done(result)
 }
