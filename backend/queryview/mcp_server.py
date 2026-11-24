@@ -11,7 +11,7 @@ from typing import Any
 
 from mcp.server.mcpserver import Context, MCPServer
 
-from . import gitsync, remote, sessions
+from . import dashboard_queries, gitsync, remote, sessions
 from .connect import (
     _data_dir,
     _gated_session,
@@ -463,6 +463,64 @@ async def push_dashboard(
             "database": await sessions.database_of(session_id),
         },
     )
+
+
+@mcp.tool()
+async def run_dashboard(
+    session_id: str,
+    queries: dict[str, str] | None = None,
+    params: list[dict[str, Any]] | None = None,
+    values: dict[str, str] | None = None,
+    dir: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Run a draft dashboard's queries on the session's connection and selected
+    database with `values` substituted into their `{name}` placeholders, as the
+    page itself would, returning the rows to the agent. Use it to test a
+    draft's queries before push_dashboard: nothing reaches the browser.
+
+    Returns {"ok": True, "database", "results": {query: {column: [values]}},
+    "meta": {query: [{name, type}]}, "params": [{name, kind, options, value}]}
+    (`results` is what the page reads as `window.queries`) or {"ok": False,
+    "message"}, with "params" when they resolved. A query waiting on a param
+    with no choice is absent from `results`. The run stops at the first failing
+    query, whose name opens the message.
+
+    Args:
+        session_id: The session id shown in the QueryView popover.
+        queries: Map of query name to SQL.
+        params: Optional selector specs, as push_dashboard takes them.
+        values: Map of param name to chosen value; a param left out, or given a
+            value its options do not offer, takes its default.
+        dir: Absolute path of a dashboard folder (see push_dashboard), instead
+            of `queries`. Inline `params` win over meta.yaml.
+        limit: Most rows of each query (default 100, max 1000).
+    """
+    if dir:
+        if queries is not None:
+            return {"ok": False, "message": "pass either `queries`, or `dir`"}
+        try:
+            d = await asyncio.to_thread(_read_dashboard_dir, dir)
+        except (ValueError, gitsync.GitSyncError) as e:
+            return {"ok": False, "message": str(e)}
+        queries = d["queries"]
+        params = d["params"] if params is None else params
+    if not queries:
+        return {"ok": False, "message": "pass `queries`, or `dir`"}
+    perr = dashboard_params_error(params)
+    if perr is not None:
+        return {"ok": False, "message": perr}
+    limit = max(1, min(limit, dashboard_queries.DASHBOARD_ROW_CAP))
+    r = await dashboard_queries.run_dashboard(
+        session_id, queries, params, dashboard_queries.clean_values(values), limit
+    )
+    if not r["ok"]:
+        return {"ok": False, "message": r["message"], **dashboard_queries.resolved_part(r)}
+    return {
+        "ok": True,
+        "database": await sessions.database_of(session_id),
+        **{k: r[k] for k in ("results", "meta", "params")},
+    }
 
 
 _DIR_FILE_MAX = 5_000_000  # bytes; far above any real dashboard

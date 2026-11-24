@@ -160,9 +160,10 @@ async def run_dashboard_on(
     queries: dict[str, str],
     params: object,
     values: dict[str, str],
+    limit: int = DASHBOARD_ROW_CAP,
 ) -> dict[str, Any]:
     """Resolve the selectors, then run the queries that are ready (one waiting
-    on a choice is left out). run_queries_on's reply plus "params":
+    on a choice is left out), `limit` rows of each at most. run_queries_on's reply plus "params":
     [{name, kind, options, value}] — also on a failing query, so the page keeps
     its selectors. A bad declaration or value fails with `reason`: params."""
     try:
@@ -171,7 +172,7 @@ async def run_dashboard_on(
         runnable = apply_to_queries(queries, declared, resolved, dialect_of(driver))
     except ParamError as e:
         return _params_error(str(e))
-    return {**await run_queries_on(driver, config, database, runnable), "params": resolved}
+    return {**await run_queries_on(driver, config, database, runnable, limit), "params": resolved}
 
 
 async def run_dashboard_queries(
@@ -193,7 +194,9 @@ async def _no_options(sql: str) -> list[Any]:
     return []
 
 
-async def run_dashboard(sid: str, queries: dict[str, str], params: object, values: dict[str, str]) -> dict[str, Any]:
+async def run_dashboard(
+    sid: str, queries: dict[str, str], params: object, values: dict[str, str], limit: int = DASHBOARD_ROW_CAP
+) -> dict[str, Any]:
     """run_dashboard_on session `sid`'s connection and selected database."""
     declared = parse_params(params)
     if not queries and not any(p.options_sql for p in declared):
@@ -204,7 +207,7 @@ async def run_dashboard(sid: str, queries: dict[str, str], params: object, value
     s, err = await _gated_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
-    return await run_dashboard_on(DRIVERS[s.type], s.config, s.database, queries, params, values)
+    return await run_dashboard_on(DRIVERS[s.type], s.config, s.database, queries, params, values, limit)
 
 
 async def session_sql(
