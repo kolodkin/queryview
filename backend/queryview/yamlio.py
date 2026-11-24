@@ -9,7 +9,9 @@ Docs: docs/export-import.md."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
+from urllib.parse import unquote
 
 import yaml
 
@@ -52,9 +54,9 @@ _SAFE = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._ -"
 
 def slug(name: str) -> str:
     """Filesystem-safe name: percent-encode (UTF-8) anything outside
-    [A-Za-z0-9._ -] plus a leading dot. Used for export download filenames and
-    gitsync repo paths; the canonical name lives inside the YAML — readers
-    trust the file content, never the path."""
+    [A-Za-z0-9._ -] plus a leading dot. Used for export download filenames,
+    whose readers trust the file content and never the name, and for gitsync
+    repo folders, where the folder is the dashboard's name (`unslug`)."""
     out: list[str] = []
     for i, ch in enumerate(name):
         if ch in _SAFE and not (ch == "." and i == 0):
@@ -62,6 +64,32 @@ def slug(name: str) -> str:
         else:
             out.append("".join(f"%{b:02X}" for b in ch.encode("utf-8")))
     return "".join(out)
+
+
+def unslug(folder: str) -> str | None:
+    """The name `slug` writes as `folder`, or None for any other spelling, so
+    two folders never decode to one name."""
+    name = unquote(folder)
+    return name if name and slug(name) == folder else None
+
+
+_MAX_FOLDER_BYTES = 255  # one path component, on every common filesystem
+
+
+def name_error(name: str, others: Iterable[str]) -> tuple[int, str] | None:
+    """Why a dashboard named `name` can't join `others`, as (HTTP status,
+    message); None when it can, or is already one of them. A name must fit a
+    repo folder and stay apart from the others on a case-insensitive disk."""
+    others = list(others)
+    folder = slug(name)
+    if name in others:
+        return None
+    if len(folder) > _MAX_FOLDER_BYTES:
+        return 400, f"dashboard name is too long: {len(folder)} bytes encoded, at most {_MAX_FOLDER_BYTES}"
+    twin = next((o for o in others if slug(o).lower() == folder.lower()), None)
+    if twin is not None:
+        return 409, f"dashboard {twin!r} already exists: names must differ by more than letter case"
+    return None
 
 
 # --- Entity <-> mapping codec (shared with gitsync) -------------------------

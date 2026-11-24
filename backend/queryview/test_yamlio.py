@@ -13,8 +13,10 @@ from queryview.yamlio import (
     export_dashboard,
     export_workspace,
     import_text,
+    name_error,
     parse_document,
     slug,
+    unslug,
 )
 
 
@@ -28,6 +30,25 @@ def test_slug_passthrough_and_encoding():
     assert slug("a/b") == "a%2Fb"
     assert slug(".hidden") == "%2Ehidden"
     assert slug("héllo") == "h%C3%A9llo"
+
+
+def test_unslug_inverts_slug_and_refuses_other_spellings():
+    for name in ["Sales 2026", ".hidden", "100% done", "a/b\\c", "销售", "x%41", ".."]:
+        assert unslug(slug(name)) == name
+    assert unslug("a%41") is None  # slug writes "aA"
+    assert unslug("%zz") is None and unslug("%FF") is None and unslug("a%2f") is None
+
+
+def test_name_error():
+    assert name_error("x" * 255, []) is None
+    too_long = name_error("x" * 256, [])
+    assert too_long is not None and too_long[0] == 400
+    non_ascii = name_error("é" * 43, [])  # 258 bytes encoded
+    assert non_ascii is not None and non_ascii[0] == 400
+    twin = name_error("Sales", ["sales"])
+    assert twin is not None and twin[0] == 409 and "'sales'" in twin[1]
+    assert name_error("sales", ["sales", "Sales"]) is None  # not new
+    assert name_error("É", ["é"]) is None  # folders differ on any filesystem
 
 
 # --- parse_document validation ---------------------------------------------
