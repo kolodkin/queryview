@@ -22,14 +22,16 @@ export function ParamSelect({ name }: { name: string }) {
   useEffect(() => onParamsResults(() => setParams([...(frame().params ?? [])])), [])
 
   const param = params.find((p) => p.name === name)
-  if (!param) return null
+  // An `each` is a list nobody picks from: its queries run on every option.
+  if (!param || param.kind === 'each') return null
 
   // Every selector's value goes along: the host re-defaults any it isn't sent.
   // Not a text's: the host keeps what was typed, which this copy may predate.
   function choose(value: string | boolean) {
     const values: Record<string, string | boolean> = {}
     for (const p of params) {
-      if (p.kind !== 'text') values[p.name] = p.kind === 'dimension' ? p.value !== '' : p.value
+      if (p.kind !== 'text' && p.kind !== 'each')
+        values[p.name] = p.kind === 'dimension' ? p.value !== '' : p.value
     }
     values[name] = value
     frame().setParams?.(values)

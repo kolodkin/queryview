@@ -4,7 +4,7 @@
 // (backend/queryview/dashboard_params.py); this side only shapes the values it
 // posts. See docs/dashboard.md, "Dashboard parameters".
 
-export type ParamKind = 'value' | 'identifier' | 'dimension' | 'text'
+export type ParamKind = 'value' | 'identifier' | 'dimension' | 'text' | 'each'
 
 // A selector with its option list resolved and a value chosen (or left empty) —
 // what the page receives as `window.params`.

@@ -49,7 +49,10 @@ def test_dashboard_params_errors_name_the_param():
     def err(**entry):
         return dashboard_params_error([{"name": "region", **entry}])
 
-    assert err(kind="dropdown") == "invalid params[0] 'region' kind must be one of value, identifier, dimension, text"
+    assert (
+        err(kind="dropdown")
+        == "invalid params[0] 'region' kind must be one of value, identifier, dimension, text, each"
+    )
     assert err() == "invalid params[0] 'region' must declare exactly one of options or options_sql"
     assert err(options=[]) == "invalid params[0] 'region' options must be a non-empty list"
     assert err(options=["a"], default="x") == "invalid params[0] 'region' default must be 'none' when given"
@@ -67,7 +70,7 @@ def test_dropped_names_every_entry_reading_leaves_out():
         "nope",
     ]
     assert dashboard_params_dropped(params) == [
-        "invalid params[0] 'a' kind must be one of value, identifier, dimension, text",
+        "invalid params[0] 'a' kind must be one of value, identifier, dimension, text, each",
         "invalid params[2] 'b' options must be a non-empty list",
         "invalid params[3] 'ok' is declared twice",
         "invalid params[4] must be a mapping",
@@ -85,3 +88,20 @@ def test_dropped_is_silent_about_what_reading_keeps():
 def test_messages_cut_a_very_long_name():
     message = dashboard_params_error([{"name": "n" * 500, "kind": "x"}]) or ""
     assert len(message) < 200 and "n" * 40 in message
+
+
+def test_an_each_param_is_a_list_with_no_default():
+    assert dashboard_params_error([{"name": "region", "kind": "each", "options": ["eu"]}]) is None
+    assert dashboard_params_error([{"name": "region", "kind": "each"}]) is not None
+    with_default = [{"name": "region", "kind": "each", "options": ["eu"], "default": "none"}]
+    assert "takes no default" in str(dashboard_params_error(with_default))
+
+
+def test_an_each_param_is_checked_when_pushed():
+    many = [{"name": "n", "kind": "each", "options": list(range(101))}]
+    assert "no more than 100 options" in str(dashboard_params_error(many))
+    used = [
+        {"name": "region", "kind": "each", "options": ["eu"]},
+        {"name": "city", "options_sql": "SELECT city FROM t WHERE region = {region}"},
+    ]
+    assert "cannot use the each param region" in str(dashboard_params_error(used))

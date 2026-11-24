@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from .dashboard_params import KINDS, parse_params_dropping
+from .dashboard_params import KINDS, MAX_EACH, ParamError, parse_params, parse_params_dropping, resolve_order
 
 MAX_LIMIT = 10000
 
@@ -56,6 +56,11 @@ def _entry_error(entry: object, label: str) -> str | None:
         if default is not None and not isinstance(default, str):
             return f"invalid {label} default must be a string"
         return None
+    if kind == "each":
+        if entry.get("default") is not None:
+            return f"invalid {label} an each param takes no default"
+        if isinstance(entry.get("options"), list) and len(entry["options"]) > MAX_EACH:
+            return f"invalid {label} an each param takes no more than {MAX_EACH} options"
     if entry.get("default") not in (None, "none"):
         return f"invalid {label} default must be 'none' when given"
     if kind == "dimension" and entry.get("options") is None and entry.get("options_sql") is None:
@@ -71,7 +76,8 @@ def dashboard_params_error(raw: object) -> str | None:
     """Validate a dashboard's `params` (see docs/dashboard.md#dashboard-parameters):
     the selector rules, plus a `kind` and an optional `default: none`. A
     `dimension` is a checkbox, so it needs no options; a `text` is free input
-    with an optional `default` string. None is no params."""
+    with an optional `default` string; an `each` is a list with no default.
+    None is no params."""
     if raw is None:
         return None
     if not isinstance(raw, list):
@@ -87,6 +93,10 @@ def dashboard_params_error(raw: object) -> str | None:
             return err
         if name is not None:
             names.add(name)
+    try:
+        resolve_order(parse_params(raw))  # a cycle, or an options_sql using an each
+    except ParamError as e:
+        return f"invalid params: {e}"
     return None
 
 

@@ -17,8 +17,16 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
-from ..dashboard_params import ParamError, apply_to_queries, needed, parse_params
-from ..dashboard_queries import WAITING, clean_values, dialect_of, resolve_on, resolved_part, run_dashboard_on
+from ..dashboard_params import ParamError, needed, parse_params
+from ..dashboard_queries import (
+    WAITING,
+    clean_values,
+    dialect_of,
+    ready_sql,
+    resolve_on,
+    resolved_part,
+    run_dashboard_on,
+)
 from ..drivers import DRIVERS
 from ..drivers.base import Err
 from ..drivers.clickhouse import close_client
@@ -101,10 +109,11 @@ def create_app(config: ServerConfig) -> FastAPI:
         declared = needed(template, parse_params(dash["params"]))
         try:
             resolved = await resolve_on(driver, conn.config, conn.database, declared, clean_values(body.get("values")))
-            ready = apply_to_queries({"q": template}, declared, resolved, dialect_of(driver))
         except ParamError as e:
             return _fail(str(e))
-        return ready["q"] if ready else _fail(WAITING)
+        values = {p["name"]: p["value"] for p in resolved}
+        sql, why = ready_sql(template, dash["params"], values, dialect_of(driver))
+        return sql if sql is not None else _fail(why or WAITING)
 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:

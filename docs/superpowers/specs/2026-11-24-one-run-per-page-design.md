@@ -42,7 +42,11 @@ frontend code.
 - No change to what a dashboard's HTML sees: `window.queries`,
   `window.params`, `setParams`, `<qv-select-view>` and `<qv-param>` keep their
   meaning.
-- No change to param semantics (kinds, `default: none`, casts, quoting).
+- No change to param semantics (kinds, `default: none`, casts, quoting). An
+  `each` param keeps its meaning: a page query naming one runs once per
+  option and stacks the rows, and a table widget over such a query is
+  refused, as today. This design predates `each`; the plan's tasks 1 and 2
+  must carry it through the shared run.
 
 ## Anti-goals
 
