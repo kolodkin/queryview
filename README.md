@@ -91,6 +91,7 @@ and let [git sync](docs/system/gitsync.md) do it.
 
 ### Architecture
 
+- [overview.md](docs/architecture/overview.md) — the components and the contracts between them.
 - [api.md](docs/architecture/api.md) — the full HTTP endpoint reference.
 - [viewer_server_api.md](docs/architecture/viewer_server_api.md) — the viewer server's endpoints.
 - [storage.md](docs/architecture/storage.md) — the data directory, migrations, connection table, encryption, CI.

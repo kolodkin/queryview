@@ -2,6 +2,8 @@
 tab holding its unlock token; the agent (MCP tools, or REST without the token)
 is refused. See docs/system/connect.md#locked-connections."""
 
+# req: architecture/overview/locked-refuses-both
+
 from __future__ import annotations
 
 import asyncio

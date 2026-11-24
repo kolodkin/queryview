@@ -3,6 +3,8 @@ driver to the registry (with a SAMPLES entry) automatically extends these
 checks. Driver-specific behavior (dialect SQL, real-DB queries) lives in the
 per-driver test modules."""
 
+# req: architecture/overview/driver-contract
+
 from __future__ import annotations
 
 import asyncio

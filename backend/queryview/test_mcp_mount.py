@@ -9,6 +9,8 @@ the MCP server never serves. These tests pin the redirect so the catch-all
 can't swallow it again.
 """
 
+# req: architecture/overview/mcp-mount
+
 from __future__ import annotations
 
 import pytest
