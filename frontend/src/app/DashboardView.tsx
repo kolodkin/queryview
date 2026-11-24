@@ -45,7 +45,8 @@ function runError(data: { reason?: string; message?: string }): string {
 }
 
 type RunReply =
-  | { ok: true; results: DashboardResults; params: ResolvedParam[] }
+  // `warning` names a malformed param the backend left out; the rest still ran.
+  | { ok: true; results: DashboardResults; params: ResolvedParam[]; warning?: string }
   // `params` survives a failing query, so the page keeps its selectors.
   | { ok: false; message: string; params?: ResolvedParam[] }
 
@@ -65,11 +66,17 @@ async function runDashboard(
     const res = await postJson('/api/runqueries', { queries, params: params ?? [], values })
     const data = await res.json().catch(() => ({}))
     const resolved = data.params as ResolvedParam[] | undefined
-    if (!res.ok || !data.ok) return { ok: false, message: runError(data), params: resolved }
+    const warning = typeof data.warning === 'string' ? data.warning : undefined
+    if (!res.ok || !data.ok) {
+      // The param comes first: the query's own error would not point at it.
+      const message = [warning, runError(data)].filter(Boolean).join(' — ')
+      return { ok: false, message, params: resolved }
+    }
     return {
       ok: true,
       results: (data.results ?? {}) as DashboardResults,
       params: resolved ?? [],
+      warning,
     }
   } catch {
     return { ok: false, message: 'Failed to run queries.' }
@@ -356,6 +363,7 @@ function DashboardView({
           setResults(r.results)
           shownRef.current = r.results
           setLoadSeq((n) => n + 1)
+          if (r.warning) setError(r.warning)
         } else setError(r.message)
       } finally {
         if (!cancelled) setLoading(false)

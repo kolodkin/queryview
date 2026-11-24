@@ -57,6 +57,20 @@ test("dashboard push and reopen", async ({ page, seeds, baseURL, shot }) => {
   await shot("reopened from store");
 });
 
+test("a malformed param is named above the dashboard, which still renders", async ({ page, seeds, baseURL }) => {
+  await connect(page, DUCK, await seeds.duckdb());
+  const name = `odd ${crypto.randomUUID().slice(0, 6)}`;
+  await api(`${baseURL}/api/dashboards`, { json: { name, html: DASHBOARD_HTML, queries: { items: "SELECT name FROM items ORDER BY id" } } });
+  // Saving refuses a malformed param, so one arrives as a hand edit would: in the stored copy.
+  await page.route(`**/api/dashboards/${encodeURIComponent(name)}?*`, async (route) => {
+    const stored = await (await route.fetch()).json();
+    await route.fulfill({ json: { ...stored, params: [{ name: "region", kind: "dropdown", options: ["eu"] }] } });
+  });
+  await page.goto(`/dashboard?name=${encodeURIComponent(name)}`);
+  await expect(page.getByTestId("dashboard-error")).toContainText("invalid params[0] kind must be one of");
+  await expect(dashboardFrame(page).locator("#out")).toHaveText("alpha,beta,gamma");
+});
+
 test("dashboard runqueries error shows banner", async ({ page, seeds, baseURL, shot }) => {
   // A dashboard whose query is invalid opens on a fail-fast error banner
   // instead of rendering the iframe.

@@ -563,6 +563,10 @@ async def run_queries(request: Request):
     else:
         r = await run_dashboard_queries(request.state.sid, queries)
     resolved = resolved_part(r)
+    # Reading drops a malformed param rather than refuse the dashboard; say which, as saving would.
+    warning = dashboard_params_error(b["params"]) if with_params else None
+    if warning:
+        resolved["warning"] = warning
     if not r["ok"]:
         # Not connected / no database: the session must act first, not the request.
         status = 400 if r.get("reason") in ("query", "params") else 409
