@@ -931,11 +931,18 @@ def test_the_folder_names_the_dashboard(git_env, tmp_path):
     assert _html("fn folder") == "<p>l</p>" and _html("fn other") is None
 
 
-def test_a_folder_slug_would_not_write_is_skipped(git_env, tmp_path):
+def test_a_folder_slug_would_not_write_is_skipped(git_env, tmp_path, caplog):
     _run(gitsync.save(_default_ws(), _dash("fn seed", "<p>s</p>")))
     _hand_edit(git_env, tmp_path, lambda wd: _legacy(wd, "fn%41", "name: fnA\n"))
     assert _run(gitsync.sync(_default_ws()))["imported"] == []
     assert _html("fnA") is None
+    assert "dashboards/fn%41" in caplog.text  # said, not silent
+
+
+def test_a_name_key_in_a_repo_meta_yaml_is_ignored_whatever_it_holds(git_env, tmp_path):
+    _run(gitsync.save(_default_ws(), _dash("fn seed", "<p>s</p>")))
+    _hand_edit(git_env, tmp_path, lambda wd: _legacy(wd, "fn num", "name: 2024\n"))
+    assert _run(gitsync.sync(_default_ws()))["imported"] == [{"kind": "dashboard", "name": "fn num"}]
 
 
 def test_a_params_free_dashboard_has_no_meta_yaml(git_env):
@@ -973,10 +980,11 @@ def test_save_without_a_remote_refuses_them_too():
 def test_an_existing_twin_can_still_be_saved():
     _save("nc Pair", "<p>1</p>")
     _save("nc pair", "<p>2</p>")
-    _run(gitsync.save(_default_ws(), _dash("nc pair", "<p>3</p>")))
-    assert _html("nc pair") == "<p>3</p>"
-    # A twin pair would stop later tests importing this workspace's export elsewhere.
-    _run(delete_dashboard("nc pair", workspace_id=_default_ws_id()))
+    try:
+        _run(gitsync.save(_default_ws(), _dash("nc pair", "<p>3</p>")))
+        assert _html("nc pair") == "<p>3</p>"
+    finally:  # a twin pair would stop later tests importing this workspace's export elsewhere
+        _run(delete_dashboard("nc pair", workspace_id=_default_ws_id()))
 
 
 def test_rename_refuses_a_twin_of_another_dashboard(git_env):
@@ -1002,3 +1010,37 @@ def test_a_twin_another_instance_pushed_is_seen(other_instance, git_env):
     with pytest.raises(GitSyncError) as e:
         _run(gitsync.save(_default_ws(), _dash("nc remote", "<p>l</p>")))
     assert e.value.status == 409 and _html("nc remote") is None
+
+
+def test_a_save_cannot_add_a_twin_of_a_folder_the_repo_holds(other_instance, git_env):
+    """A case-only rename elsewhere leaves this instance its old row: saving
+    that row must not put a second folder beside the renamed one."""
+    _run(gitsync.save(_default_ws(), _dash("ft sales", "<p>s</p>")))
+    _run(gitsync.sync(other_instance))
+    _run(gitsync.rename(_default_ws(), "ft sales", "FT Sales"))
+    before = _remote_log(git_env)
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.save(other_instance, _dash("ft sales", "<p>edited</p>")))
+    assert e.value.status == 409 and "FT Sales" in str(e.value)
+    assert _remote_log(git_env) == before
+    assert f"{dashboard_reldir('ft sales')}/queries.yaml" not in _repo_files(git_env)
+
+
+def test_twin_folders_the_repo_already_holds_can_both_be_saved(git_env, tmp_path):
+    _run(gitsync.save(_default_ws(), _dash("ft seed", "<p>s</p>")))
+    _hand_edit(git_env, tmp_path, lambda wd: [_legacy(wd, f, "{}\n") for f in ("ft Pair", "ft pair")])
+    try:
+        _run(gitsync.sync(_default_ws()))
+        assert _run(gitsync.save(_default_ws(), _dash("ft pair", "<p>new</p>")))["committed"] is True
+    finally:
+        for name in ("ft Pair", "ft pair"):
+            _run(delete_dashboard(name, workspace_id=_default_ws_id()))
+
+
+def test_restore_refuses_a_twin_of_a_saved_dashboard(git_env):
+    old = _run(gitsync.save(_default_ws(), _dash("ft Back", "<p>1</p>")))["sha"]
+    _run(gitsync.delete(_default_ws(), "ft Back"))
+    _run(gitsync.save(_default_ws(), _dash("ft back", "<p>2</p>")))
+    with pytest.raises(GitSyncError) as e:
+        _run(gitsync.restore(_default_ws(), "dashboard", "ft Back", ref=old))
+    assert e.value.status == 409 and _html("ft Back") is None

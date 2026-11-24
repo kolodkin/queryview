@@ -8,6 +8,7 @@ import asyncio
 import pytest
 import yaml
 
+from queryview.dashboards import get_dashboard, upsert_dashboard
 from queryview.yamlio import (
     YamlIOError,
     export_dashboard,
@@ -37,6 +38,7 @@ def test_unslug_inverts_slug_and_refuses_other_spellings():
         assert unslug(slug(name)) == name
     assert unslug("a%41") is None  # slug writes "aA"
     assert unslug("%zz") is None and unslug("%FF") is None and unslug("a%2f") is None
+    assert unslug(" ") is None  # a blank name can't be saved or opened by name
 
 
 def test_name_error():
@@ -71,8 +73,6 @@ def test_parse_rejects_invalid_yaml():
 def test_saved_queries_are_refused_not_ignored(default_ws_id):
     """The removed `query` kind, alone or inside a workspace bundle, fails
     with a message that says why — and writes nothing."""
-    from queryview.dashboards import get_dashboard
-
     query = "kind: query\ntype: clickhouse\nquery_name: x\nquery: SELECT 1\n"
     bundle = (
         "kind: workspace\n"
@@ -113,8 +113,6 @@ def test_parse_empty_workspace_bundle_is_valid():
 
 
 def test_dashboard_export_import_round_trip(default_ws_id):
-    from queryview.dashboards import get_dashboard, upsert_dashboard
-
     _run(
         upsert_dashboard(
             "yio dash",
@@ -138,7 +136,6 @@ def test_dashboard_export_import_round_trip(default_ws_id):
 
 def test_workspace_export_import_round_trip(default_ws_id, wipe_workspace_entities):
     """Export one workspace's whole content and import it into another."""
-    from queryview.dashboards import get_dashboard, upsert_dashboard
     from queryview.workspaces import create_workspace, delete_workspace, resolve
 
     params = [{"name": "region", "options": ["emea", "apac"]}]
@@ -166,8 +163,6 @@ def test_workspace_export_import_round_trip(default_ws_id, wipe_workspace_entiti
 
 def test_import_validates_before_writing(default_ws_id):
     """A workspace bundle with one bad entry writes nothing at all."""
-    from queryview.dashboards import get_dashboard
-
     doc = "kind: workspace\ndashboards:\n  - name: good entry\n    html: <p/>\n  - name: bad entry\n"
     with pytest.raises(YamlIOError):
         _run(import_text(doc, default_ws_id))
@@ -175,8 +170,6 @@ def test_import_validates_before_writing(default_ws_id):
 
 
 def test_import_refuses_a_case_twin(default_ws_id):
-    from queryview.dashboards import get_dashboard, upsert_dashboard
-
     _run(upsert_dashboard("imp sales", "<p>s</p>", {}, workspace_id=default_ws_id))
     doc = yaml.safe_dump({"kind": "dashboard", "name": "Imp sales", "html": "<p>x</p>", "queries": {}})
     with pytest.raises(YamlIOError) as e:
@@ -186,8 +179,6 @@ def test_import_refuses_a_case_twin(default_ws_id):
 
 
 def test_import_refuses_twins_inside_one_bundle(default_ws_id):
-    from queryview.dashboards import get_dashboard
-
     entries = [{"name": n, "html": "<p>x</p>", "queries": {}} for n in ("imp A", "imp a")]
     with pytest.raises(YamlIOError) as e:
         _run(import_text(yaml.safe_dump({"kind": "workspace", "dashboards": entries}), default_ws_id))

@@ -22,7 +22,8 @@ from .workspaces import WorkspaceRec
 
 class YamlIOError(Exception):
     """Export/import failure carrying an HTTP-ish status for the API layer:
-    400 malformed document, 404 entity not found."""
+    400 malformed document or a name too long, 404 entity not found, 409 a
+    name taken."""
 
     def __init__(self, message: str, status: int = 400):
         super().__init__(message)
@@ -69,9 +70,9 @@ def slug(name: str) -> str:
 
 def unslug(folder: str) -> str | None:
     """The name `slug` writes as `folder`, or None for any other spelling, so
-    two folders never decode to one name."""
+    two folders never decode to one name, and for a blank name."""
     name = unquote(folder)
-    return name if name and slug(name) == folder else None
+    return name if name.strip() and slug(name) == folder else None
 
 
 _MAX_FOLDER_BYTES = 255  # one path component, on every common filesystem
