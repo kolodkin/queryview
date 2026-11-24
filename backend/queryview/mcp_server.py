@@ -30,6 +30,7 @@ from .connect import (
 from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
 from .dashboards import _dashboard_event, get_dashboard
+from .drivers.base import RUN_SQL_TIMEOUT_SECONDS
 from .mcp_skills import SkillsExtension
 from .validation import dashboard_params_error
 
@@ -65,7 +66,6 @@ async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any
         sql: The SQL statement to run.
         limit: Most rows to return (default 1000, max 10000).
     """
-    from .drivers.base import RUN_SQL_TIMEOUT_SECONDS
     from .validation import MAX_LIMIT
 
     limit = max(0, min(limit, MAX_LIMIT))
@@ -465,12 +465,16 @@ async def push_dashboard(
     )
 
 
+# How long a whole run_dashboard may take: DuckDB's page queries have no timer of their own.
+RUN_DASHBOARD_TIMEOUT_SECONDS: float = RUN_SQL_TIMEOUT_SECONDS
+
+
 @mcp.tool()
 async def run_dashboard(
     session_id: str,
     queries: dict[str, str] | None = None,
     params: list[dict[str, Any]] | None = None,
-    values: dict[str, str] | None = None,
+    values: dict[str, Any] | None = None,
     dir: str | None = None,
     limit: int = 100,
 ) -> dict[str, Any]:
@@ -484,7 +488,7 @@ async def run_dashboard(
     (`results` is what the page reads as `window.queries`) or {"ok": False,
     "message"}, with "params" when they resolved. A query waiting on a param
     with no choice is absent from `results`. The run stops at the first failing
-    query, whose name opens the message.
+    query, whose name opens the message, and after a minute.
 
     Args:
         session_id: The session id shown in the QueryView popover.
@@ -511,9 +515,13 @@ async def run_dashboard(
     if perr is not None:
         return {"ok": False, "message": perr}
     limit = max(1, min(limit, dashboard_queries.DASHBOARD_ROW_CAP))
-    r = await dashboard_queries.run_dashboard(
-        session_id, queries, params, dashboard_queries.clean_values(values), limit
-    )
+    try:
+        async with asyncio.timeout(RUN_DASHBOARD_TIMEOUT_SECONDS):
+            r = await dashboard_queries.run_dashboard(
+                session_id, queries, params, dashboard_queries.clean_values(values), limit
+            )
+    except TimeoutError:
+        return {"ok": False, "message": f"dashboard run timed out after {RUN_DASHBOARD_TIMEOUT_SECONDS}s"}
     if not r["ok"]:
         return {"ok": False, "message": r["message"], **dashboard_queries.resolved_part(r)}
     return {

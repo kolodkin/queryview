@@ -163,7 +163,8 @@ async def run_dashboard_on(
     limit: int = DASHBOARD_ROW_CAP,
 ) -> dict[str, Any]:
     """Resolve the selectors, then run the queries that are ready (one waiting
-    on a choice is left out), `limit` rows of each at most. run_queries_on's reply plus "params":
+    on a choice is left out), `limit` rows of each at most. run_queries_on's
+    reply plus "params":
     [{name, kind, options, value}] — also on a failing query, so the page keeps
     its selectors. A bad declaration or value fails with `reason`: params."""
     try:

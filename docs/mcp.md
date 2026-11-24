@@ -111,7 +111,7 @@ you [armed](#arming-a-session).
   returning `{ok, database, results, meta, params}` to the agent: `results` in
   the `window.queries` shape, at most `limit` rows a query (max 1000). A param
   without a value takes its default. Stops at the first failing query, whose
-  name opens the `message`; nothing reaches the browser.
+  name opens the `message`, and after 60s; nothing reaches the browser.
 - `new_tab(name)` — a session of the agent's own; see [Tabs](#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
 - `git_history` / `git_restore` — list and restore a saved dashboard's
