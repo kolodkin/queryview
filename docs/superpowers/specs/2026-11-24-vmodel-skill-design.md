@@ -14,13 +14,15 @@ skill drives each change down the docs and back up the tests.
 |---|---|---|
 | User | `docs/requirements.md` | `e2e/acceptance.spec.ts` |
 | System | the feature pages | the other `e2e/*.spec.ts` |
-| Integration | `docs/architecture.md` and the interface pages | backend and frontend test files that name an integration ID |
+| Integration | `docs/architecture.md`, `docs/architecture/`, the interface pages | backend and frontend test files that name an integration ID |
 | Unit | the module's docstring or header comment | the test file beside the module |
 
 ## Goals
 
 - A statement in a doc of record carries a named ID, and at least one test in
   the paired location names that ID.
+- Every docs page holds one layer's content; a page that mixes layers is
+  split.
 - Every test file belongs to exactly one layer, and a script can tell which.
 - One check script reports the whole coupling and fails on a broken one.
 - A skill, `.claude/skills/vmodel/SKILL.md`, walks a change down and up the V.
@@ -57,13 +59,37 @@ that declares its layer:
 
 - `user`: `requirements.md`.
 - `system`: a feature page.
-- `integration`: `architecture.md` and the interface pages `api.md`,
-  `viewer_server/api.md` and `mcp.md`. The REST API and the MCP tools are the
-  contracts between the browser app, the agent and the backend, so backend
-  tests prove them. *(Decided by the user.)*
+- `integration`: `architecture.md`, the pages under `architecture/`, and the
+  interface pages `api.md` and `viewer_server/api.md`. The REST API and the
+  MCP tools are the contracts between the browser app, the agent and the
+  backend, so backend tests prove them. *(Decided by the user.)*
 - `none`: a page that states no behavior a test in the repo can prove:
   `future.md`, `AGENTS.md`, the `viewer_server/README.md` index, and the two
   Docker pages, which the release workflow's image smoke test covers.
+
+## Slicing the docs
+
+The docs may be cut up and moved to fit the layers *(decided by the user)*.
+Several feature pages mix what a user sees with how it is built, so a single
+layer declaration would be untrue. Each such page is split in this work,
+before anything is tagged:
+
+| Content today | Goes to | Layer |
+|---|---|---|
+| `queryview.md` "Design principles" | `requirements.md` | user |
+| `connect.md` "Storage & migrations", "Persistence (SQLite)", "Config encryption", "CI" | `architecture/` | integration |
+| `session.md` "How it is stored" | `architecture/` | integration |
+| `mcp.md` "Tools", "How it works" | `architecture/mcp.md` | integration |
+| `dashboard.md` "Running the queries", "Isolation & security" | `architecture/` | integration |
+| `creds.md` "Design decisions", `explorer.md` "Why folder mode lists one level at a time" | `architecture/` | integration |
+
+What stays on a feature page is what a user can see or do. `mcp.md` keeps the
+usage sections and stays a system page.
+
+- A section moves; it is not copied. The page it left links to its new home.
+- Code comments that quote a moved heading are updated in the same change.
+- `architecture.md` is the short map; the moved sections become pages under
+  `docs/architecture/`, one per component.
 
 ## IDs and markers
 
@@ -174,11 +200,11 @@ the step that needs them.
   each with its acceptance criteria. Seeded from the README's "What you can
   do" table and the three bullets under it, about nine requirements. No
   design, no screen detail; it links to the feature page that specifies each.
-- **`docs/architecture.md`**: the components (SPA, FastAPI app, session store,
+- **`docs/architecture.md`**: the map of the components (SPA, FastAPI app, session store,
   drivers, MCP server, remote channel, git sync, viewer server) and the
-  contract at each boundary, one ID per contract. A contract an interface
-  page already states is linked, not restated; so are the "How it works" and
-  "How it is stored" sections of the feature pages.
+  contract at each boundary, one ID per contract. A contract that an
+  interface page or a page under `architecture/` already states is linked,
+  not restated.
 
 Both join the docs list at the end of `README.md`.
 
@@ -196,7 +222,7 @@ Both join the docs list at the end of `README.md`.
 
 ## Migration
 
-The work ships with the two new pages fully tagged and their tests in place,
+The work ships with the docs sliced, and the two new pages fully tagged and their tests in place,
 so the user and integration layers are coupled from day one for what those
 pages state. The feature pages, the interface pages and the remaining test files start
 untagged and show in the report. The skill tags a statement and its tests whenever a change
@@ -229,6 +255,10 @@ These are the author's calls, not decisions the user made:
   is what keeps the browser suite from growing.
 - The check works per file, not per test: it does not verify that every single
   test has a marker above it.
+- Which sections move, as listed under [Slicing the docs](#slicing-the-docs),
+  and that the slicing is done in this work, not page by page later.
+- `mcp.md` is split: its tool reference is integration, its usage stays
+  system. The user's decision named the whole page as integration.
 - A page declares its own layer, and `none` is the one exemption; the script
   holds no list of pages.
 - The Docker pages are `none`: their proof is the release workflow, outside
@@ -242,3 +272,5 @@ These are the author's calls, not decisions the user made:
 - Which existing e2e tests move into `e2e/acceptance.spec.ts`.
 - Where the script's own test lives and how CI runs it.
 - How the 21 unpaired test files are resolved as they are tagged.
+- The page set under `docs/architecture/`, and any further mixed section the
+  table misses.
