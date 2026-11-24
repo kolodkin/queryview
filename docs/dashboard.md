@@ -116,7 +116,9 @@ sales-overview/
   meta.yaml        optional: name, params
 ```
 
-The layout is a dashboard's folder in [workspace git](./gitsync.md). `dir` is
+The layout is a dashboard's folder in [workspace git](./gitsync.md), except
+for the name: git takes it from the folder, a draft from `meta.yaml` or the
+inline `name`. `dir` is
 an absolute path outside QueryView's data directory; only these three
 names are read, and none through a symlink. Inline `name` and `params` win
 over `meta.yaml`; `dir` together with `html` or `queries` is refused.
