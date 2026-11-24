@@ -90,6 +90,8 @@ session id) exposes:
   writes it to the store. Returns
   `{ok, pushed, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
+- `run_dashboard` returns the rows of a draft's queries to the agent, to test
+  them before a push: see [mcp.md](./mcp.md#tools).
 
 A dashboard never names a [connection](./connect.md): it runs on the
 **viewing** session's connection and selected database. So

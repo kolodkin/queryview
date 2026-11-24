@@ -105,6 +105,13 @@ you [armed](#arming-a-session).
   `queries`. Returns
   `{ok, pushed, message, database}`; a disconnected session fails with
   `not connected`. See [dashboard.md](./dashboard.md).
+- `run_dashboard(session_id, queries?, params?, values?, dir?, limit?=100)` — run
+  a draft's queries with `values` substituted into their
+  [placeholders](./dashboard.md#dashboard-parameters), as the page would,
+  returning `{ok, database, results, meta, params}` to the agent: `results` in
+  the `window.queries` shape, at most `limit` rows a query (max 1000). A param
+  without a value takes its default. Stops at the first failing query, whose
+  name opens the `message`; nothing reaches the browser.
 - `new_tab(name)` — a session of the agent's own; see [Tabs](#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
 - `git_history` / `git_restore` — list and restore a saved dashboard's
