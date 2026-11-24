@@ -12,22 +12,22 @@ skill drives each change down the docs and back up the tests.
 
 | Layer | Doc of record | Tests |
 |---|---|---|
-| User | `docs/requirements.md` | `e2e/acceptance.spec.ts` |
-| System | the feature pages | the other `e2e/*.spec.ts` |
-| Integration | `docs/architecture.md`, `docs/architecture/`, the interface pages | backend and frontend test files that name an integration ID |
+| User | `docs/requirements/` | `e2e/acceptance.spec.ts` |
+| System | `docs/system/` | the other `e2e/*.spec.ts` |
+| Integration | `docs/architecture/` | backend and frontend test files that name an integration ID |
 | Unit | the module's docstring or header comment | the test file beside the module |
 
 ## Goals
 
 - A statement in a doc of record carries a named ID, and at least one test in
   the paired location names that ID.
-- Every docs page holds one layer's content; a page that mixes layers is
-  split.
+- `docs/` has one folder per layer, and every page in it holds that layer's
+  content only; a page that mixes layers is split.
 - Every test file belongs to exactly one layer, and a script can tell which.
 - One check script reports the whole coupling and fails on a broken one.
 - A skill, `.claude/skills/vmodel/SKILL.md`, walks a change down and up the V.
-- The two missing docs of record exist: `docs/requirements.md` and
-  `docs/architecture.md`.
+- The two missing docs of record exist: the user requirements and the
+  architecture overview.
 
 ## Non-goals
 
@@ -50,71 +50,68 @@ skill drives each change down the docs and back up the tests.
 
 ## Which layer a doc is in
 
-Every page under `docs/`, outside `docs/superpowers/`, opens with a comment
-that declares its layer:
+The folder gives the layer *(decided by the user)*:
 
-```md
-<!-- layer: system -->
-```
+- `docs/requirements/`: user. What a user needs, by area.
+- `docs/system/`: system. The feature pages: what a user can see or do.
+- `docs/architecture/`: integration. The components and their contracts,
+  including the interface references `api.md` and `mcp.md`. Backend tests
+  prove them *(decided by the user)*.
+- Pages left at the root of `docs/` have no layer and are never tagged:
+  `AGENTS.md`, `future.md` and the Docker pages, which the release workflow's
+  image smoke test covers. `docs/superpowers/` is ignored.
 
-- `user`: `requirements.md`.
-- `system`: a feature page.
-- `integration`: `architecture.md`, the pages under `architecture/`, and the
-  interface pages `api.md` and `viewer_server/api.md`. The REST API and the
-  MCP tools are the contracts between the browser app, the agent and the
-  backend, so backend tests prove them. *(Decided by the user.)*
-- `none`: a page that states no behavior a test in the repo can prove:
-  `future.md`, `AGENTS.md`, the `viewer_server/README.md` index, and the two
-  Docker pages, which the release workflow's image smoke test covers.
+The viewer server's pages follow the same split: its guide under `system/`,
+its API reference under `architecture/`, its Docker page at the root.
 
 ## Slicing the docs
 
 The docs may be cut up and moved to fit the layers *(decided by the user)*.
-Several feature pages mix what a user sees with how it is built, so a single
-layer declaration would be untrue. Each such page is split in this work,
-before anything is tagged:
+Every feature page moves into `docs/system/`. Several mix what a user sees
+with how it is built, so each of those is split in this work, before anything
+is tagged:
 
-| Content today | Goes to | Layer |
-|---|---|---|
-| `queryview.md` "Design principles" | `requirements.md` | user |
-| `connect.md` "Storage & migrations", "Persistence (SQLite)", "Config encryption", "CI" | `architecture/` | integration |
-| `session.md` "How it is stored" | `architecture/` | integration |
-| `mcp.md` "Tools", "How it works" | `architecture/mcp.md` | integration |
-| `dashboard.md` "Running the queries", "Isolation & security" | `architecture/` | integration |
-| `creds.md` "Design decisions", `explorer.md` "Why folder mode lists one level at a time" | `architecture/` | integration |
-
-What stays on a feature page is what a user can see or do. `mcp.md` keeps the
-usage sections and stays a system page.
+| Content today | Goes to |
+|---|---|
+| `queryview.md` "Design principles" | `requirements/` |
+| `api.md`, `viewer_server/api.md` | `architecture/` |
+| `mcp.md` "Tools", "How it works" | `architecture/mcp.md` |
+| `connect.md` "Storage & migrations", "Persistence (SQLite)", "Config encryption", "CI" | `architecture/` |
+| `session.md` "How it is stored" | `architecture/` |
+| `dashboard.md` "Running the queries", "Isolation & security" | `architecture/` |
+| `creds.md` "Design decisions", `explorer.md` "Why folder mode lists one level at a time" | `architecture/` |
 
 - A section moves; it is not copied. The page it left links to its new home.
-- Code comments that quote a moved heading are updated in the same change.
-- `architecture.md` is the short map; the moved sections become pages under
-  `docs/architecture/`, one per component.
+- Every link follows the move: about 200 relative links inside `docs/`, about
+  100 references in 50 files outside it (code comments, `README.md`), and the
+  headings those comments quote.
+- Links from outside the repo to the old page paths break. Accepted.
 
 ## IDs and markers
 
 An ID is the doc's path under `docs/` without `.md`, a slash, and a short
-kebab-case slug: `dashboard/param-rerun`, `requirements/run-sql`,
-`viewer_server/api/no-sql-accepted`, `architecture/session-channel`. The
-page's declared layer is the ID's layer; the slug names the statement. An ID
-is never renamed once a test names it.
+kebab-case slug: `system/dashboard/param-rerun`,
+`requirements/dashboards/live-data`, `architecture/remote/session-channel`.
+Its first segment is the layer; the slug names the statement. A slug is not
+reworded once a test names it. If a page moves, its IDs are renamed in the
+docs and the tests in the same change.
 
 A doc defines an ID with an HTML comment on the line above the statement:
 
 ```md
-<!-- req: dashboard/param-rerun -->
+<!-- req: system/dashboard/param-rerun -->
 A param change re-runs only the queries that use it.
 ```
 
 A test names it in a comment directly above the test or group it covers:
 
 ```ts
-// req: dashboard/param-rerun
+// req: system/dashboard/param-rerun
 test("a param change re-runs its query", ...)
 ```
 
 ```python
-# req: architecture/session-channel
+# req: architecture/remote/session-channel
 def test_push_reaches_the_armed_session(): ...
 ```
 
@@ -130,7 +127,7 @@ of one behavior are tests under the same ID, or integration and unit tests.
 
 - `e2e/acceptance.spec.ts` is user.
 - Any other `e2e/*.spec.ts` is system.
-- A backend or frontend test file that names an ID of an integration page is
+- A backend or frontend test file that names an `architecture/` ID is
   integration. A support marker for another layer's ID does not count.
 - Any other backend or frontend test file is unit, and must sit beside the
   module it is named after: `test_sessions.py` beside `sessions.py`,
@@ -149,6 +146,7 @@ code.
 It fails on:
 
 - an ID defined twice;
+- an ID whose prefix is not the path of the page that defines it;
 - a marker in a test that names an ID no doc defines;
 - an ID with no test file naming it in its paired location;
 - a unit test file whose paired module has no docstring (Python) or leading
@@ -156,10 +154,9 @@ It fails on:
 
 It reports, without failing:
 
-- pages with no layer declaration;
-- pages with a layer other than `none` that define no ID;
+- pages in a layer folder that define no ID;
 - test files in `e2e/` that name no ID;
-- backend and frontend test files that neither name an integration ID nor
+- backend and frontend test files that neither name an `architecture/` ID nor
   pair with a module.
 
 `--strict` turns the report into failures. The script prints the matrix: per
@@ -196,25 +193,26 @@ the step that needs them.
 
 ## The two new docs
 
-- **`docs/requirements.md`**: what a user needs from QueryView, one ID each,
+- **`docs/requirements/`**: what a user needs from QueryView, one ID each,
   each with its acceptance criteria. Seeded from the README's "What you can
-  do" table and the three bullets under it, about nine requirements. No
-  design, no screen detail; it links to the feature page that specifies each.
-- **`docs/architecture.md`**: the map of the components (SPA, FastAPI app, session store,
-  drivers, MCP server, remote channel, git sync, viewer server) and the
-  contract at each boundary, one ID per contract. A contract that an
-  interface page or a page under `architecture/` already states is linked,
-  not restated.
+  do" table and the three bullets under it, about nine requirements, on one
+  page or a few by area. No design, no screen detail; each links to the
+  system page that specifies it.
+- **`docs/architecture/overview.md`**: the map of the components (SPA,
+  FastAPI app, session store, drivers, MCP server, remote channel, git sync,
+  viewer server) and the contract at each boundary, one ID per contract. A
+  contract another architecture page already states is linked, not restated.
 
-Both join the docs list at the end of `README.md`.
+`README.md`'s docs list is regrouped by the three folders.
 
 ## Other files that change
 
 - `.claude/skills/testing/SKILL.md`: the layer table becomes the four layers
   above, with the marker rule.
-- `.claude/skills/docs-writing/SKILL.md` and `docs/AGENTS.md`: a statement a
-  test proves carries a `req:` comment; the two new pages are docs of record
-  that are not feature pages.
+- `.claude/skills/docs-writing/SKILL.md` and `docs/AGENTS.md`: the three
+  folders and what belongs in each replace "one page per feature" and the
+  `docs/viewer_server/` rule; a statement a test proves carries a `req:`
+  comment.
 - Root `AGENTS.md`: one line under Tests pointing at the `vmodel` skill.
 - `.pre-commit-config.yaml`: the local hook.
 - `e2e/acceptance.spec.ts`: one test per seeded requirement. An existing e2e
@@ -222,11 +220,11 @@ Both join the docs list at the end of `README.md`.
 
 ## Migration
 
-The work ships with the docs sliced, and the two new pages fully tagged and their tests in place,
-so the user and integration layers are coupled from day one for what those
-pages state. The feature pages, the interface pages and the remaining test files start
-untagged and show in the report. The skill tags a statement and its tests whenever a change
-touches them. `--strict` goes into the hook once the report is empty.
+The work ships with the docs moved and sliced, and the requirements and the
+architecture overview fully tagged with their tests in place. Every other page
+and test file starts untagged and shows in the report. The skill tags a
+statement and its tests whenever a change touches them. `--strict` goes into
+the hook once the report is empty.
 
 ## Approaches
 
@@ -250,19 +248,19 @@ These are the author's calls, not decisions the user made:
 - Acceptance tests live in their own file, not behind a Playwright tag, so the
   layer is known from the path and the set runs alone by path.
 - Unit tests pair by file name only, with no IDs.
-- A feature-page ID must be proven by a browser test; a backend test under the
-  same ID is support, not proof. This keeps the layers strict; ID granularity
-  is what keeps the browser suite from growing.
+- A system ID must be proven by a browser test; a backend test under the same
+  ID is support, not proof. This keeps the layers strict; ID granularity is
+  what keeps the browser suite from growing.
 - The check works per file, not per test: it does not verify that every single
   test has a marker above it.
+- The folder names: `requirements`, `system`, `architecture`.
+- Pages at the root of `docs/` have no layer; the Docker pages stay there
+  because their proof, the release workflow, is outside the test trees.
 - Which sections move, as listed under [Slicing the docs](#slicing-the-docs),
-  and that the slicing is done in this work, not page by page later.
-- `mcp.md` is split: its tool reference is integration, its usage stays
-  system. The user's decision named the whole page as integration.
-- A page declares its own layer, and `none` is the one exemption; the script
-  holds no list of pages.
-- The Docker pages are `none`: their proof is the release workflow, outside
-  the test trees.
+  and that the move is done in this work, not page by page later.
+- `mcp.md` is split: its tool reference goes to `architecture/`, its usage
+  stays in `system/`.
+- Test files are not moved or renamed to match; only docs are.
 - Broken couplings fail at once; missing ones only report until migration
   ends.
 
