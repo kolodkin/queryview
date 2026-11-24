@@ -6,8 +6,8 @@ description: Use when a change alters behavior in this repo, before writing its 
 # V-model
 
 Every behavior has a statement in a doc of record, and a test that names the
-statement's ID. A change walks down the docs, writing a failing test at each
-layer, then up the tests.
+statement's ID (at unit, a test beside the module). A change walks down the
+docs, writing a failing test at each layer, then up the tests.
 
 | Layer | Doc of record | Proved in |
 |---|---|---|
@@ -46,11 +46,16 @@ location is support, not proof.
    Logic inside one module: unit. Example: raising the maximum query timeout
    enters at system (`docs/system/queryview.md`, "Query timeout"); the bound
    check inside the module that applies it is unit.
-2. **Go down, one layer at a time, from the entry to unit.** At each layer:
+2. **Go down, one layer at a time, from the entry to unit.** At each layer
+   above unit:
    - write or edit the statement in its doc of record (load `docs-writing`);
    - give it an ID, or keep its existing one;
    - write a test that names the ID and fails now (load `testing`). A changed
      number or default is a changed statement: its test asserts the new value.
+     The failing test may be an existing one whose assertion changes.
+
+   At unit: edit the module's docstring or leading comment and the test beside
+   the module; no ID, no marker (`docs-writing` does not apply).
 
    For a layer the change does not alter, write one line: `Skipping <layer>:
    <why>.`
@@ -70,9 +75,9 @@ location is support, not proof.
 ## Tagging on touch
 
 Most pages and test files carry no IDs yet. The statement a change edits gets
-its ID in that change, and so does each test file it edits, even when the rest
-of the page stays untagged. "It had no marker before" is not a reason to leave
-it without one.
+its ID in that change, and so does each test file it edits (unit test files
+excepted), even when the rest of the page stays untagged. "It had no marker
+before" is not a reason to leave it without one.
 
 ## Not covered
 
