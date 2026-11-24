@@ -14,7 +14,7 @@ skill drives each change down the docs and back up the tests.
 |---|---|---|
 | User | `docs/requirements.md` | `e2e/acceptance.spec.ts` |
 | System | the feature pages | the other `e2e/*.spec.ts` |
-| Integration | `docs/architecture.md` | backend and frontend test files that name an integration ID |
+| Integration | `docs/architecture.md` and the interface pages | backend and frontend test files that name an integration ID |
 | Unit | the module's docstring or header comment | the test file beside the module |
 
 ## Goals
@@ -57,7 +57,10 @@ that declares its layer:
 
 - `user`: `requirements.md`.
 - `system`: a feature page.
-- `integration`: `architecture.md`.
+- `integration`: `architecture.md` and the interface pages `api.md`,
+  `viewer_server/api.md` and `mcp.md`. The REST API and the MCP tools are the
+  contracts between the browser app, the agent and the backend, so backend
+  tests prove them. *(Decided by the user.)*
 - `none`: a page that states no behavior a test in the repo can prove:
   `future.md`, `AGENTS.md`, the `viewer_server/README.md` index, and the two
   Docker pages, which the release workflow's image smoke test covers.
@@ -173,9 +176,9 @@ the step that needs them.
   design, no screen detail; it links to the feature page that specifies each.
 - **`docs/architecture.md`**: the components (SPA, FastAPI app, session store,
   drivers, MCP server, remote channel, git sync, viewer server) and the
-  contract at each boundary, one ID per contract. It links to the "How it
-  works" and "How it is stored" sections of the feature pages rather than
-  repeating them.
+  contract at each boundary, one ID per contract. A contract an interface
+  page already states is linked, not restated; so are the "How it works" and
+  "How it is stored" sections of the feature pages.
 
 Both join the docs list at the end of `README.md`.
 
@@ -195,8 +198,8 @@ Both join the docs list at the end of `README.md`.
 
 The work ships with the two new pages fully tagged and their tests in place,
 so the user and integration layers are coupled from day one for what those
-pages state. The feature pages and the remaining test files start untagged and
-show in the report. The skill tags a statement and its tests whenever a change
+pages state. The feature pages, the interface pages and the remaining test files start
+untagged and show in the report. The skill tags a statement and its tests whenever a change
 touches them. `--strict` goes into the hook once the report is empty.
 
 ## Approaches
