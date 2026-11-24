@@ -65,9 +65,17 @@ def test_an_empty_remote_lists_nothing(dash_repo):
     assert _run(repo.refresh()) is True and repo.names() == ["sales"]
 
 
+def test_a_dashboard_without_meta_yaml_is_named_by_its_folder(dash_repo):
+    plain = {"dashboards/plain%2Feu/dashboard.html": "<p>p</p>", "dashboards/plain%2Feu/queries.yaml": "{}\n"}
+    dash_repo.commit(raw=plain)
+    repo = _repo(dash_repo)
+    _run(repo.refresh())
+    assert repo.get("plain/eu") == {"name": "plain/eu", "html": "<p>p</p>", "queries": {}, "params": []}
+
+
 def test_a_malformed_dashboard_is_skipped(dash_repo):
     bad = {
-        "dashboards/bad/meta.yaml": "name: [",
+        "dashboards/bad/meta.yaml": "params: [",
         "dashboards/bad/dashboard.html": "",
         "dashboards/bad/queries.yaml": "",
     }

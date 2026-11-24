@@ -27,7 +27,7 @@ from .dashboards import (
     upsert_dashboard,
 )
 from .workspaces import WorkspaceRec, split_credential
-from .yamlio import YamlIOError, dashboard_from_data, dump_yaml, slug
+from .yamlio import YamlIOError, dashboard_from_data, dump_yaml, slug, unslug
 
 
 class GitSyncError(Exception):
@@ -43,8 +43,8 @@ class GitSyncError(Exception):
 # --- Serialization ---------------------------------------------------------
 # The entity <-> mapping codec (and the literal-block dumper and slug) lives
 # in yamlio.py, shared with YAML export/import; this section only owns the
-# repo file layout: a dashboard splits into meta.yaml / dashboard.html /
-# queries.yaml.
+# repo file layout: a dashboard is a folder named after it (`slug`), holding
+# dashboard.html, queries.yaml and, when it declares params, meta.yaml.
 
 
 def dashboard_reldir(name: str) -> str:
@@ -52,30 +52,33 @@ def dashboard_reldir(name: str) -> str:
 
 
 # Order matters: sync state records the oids joined in this order as "agreed".
+# meta.yaml is optional, the other two make a folder a dashboard.
 DASHBOARD_FILES = ("meta.yaml", "dashboard.html", "queries.yaml")
+_REQUIRED_FILES = DASHBOARD_FILES[1:]
 
 
 def dashboard_to_files(d: dict[str, Any]) -> dict[str, str]:
-    """A dashboard (as returned by get_dashboard) as its three repo files."""
+    """A dashboard (as returned by get_dashboard) as its repo files. Its name
+    is not among them: the folder carries it."""
     return {
-        # params only when declared, keeping params-free dashboards' meta.yaml as is.
-        "meta.yaml": dump_yaml({"name": d["name"], **({"params": d["params"]} if d.get("params") else {})}),
+        **({"meta.yaml": dump_yaml({"params": d["params"]})} if d.get("params") else {}),
         "dashboard.html": d["html"],
         "queries.yaml": dump_yaml(d["queries"] or {}),
     }
 
 
-def dashboard_from_files(files: dict[str, str], require_name: bool = True) -> dict[str, Any]:
-    """Inverse of dashboard_to_files. require_name=False reads an agent's draft
-    folder, where meta.yaml and its name are optional."""
+def dashboard_from_files(files: dict[str, str]) -> dict[str, Any]:
+    """Inverse of dashboard_to_files. `name` is None unless meta.yaml gives
+    one: an agent's draft folder naming the saved dashboard it edits, or a
+    repo folder written when the name lived there (its reader ignores it)."""
     try:
-        meta = yaml.safe_load(files["meta.yaml"] if require_name else files.get("meta.yaml", ""))
+        meta = yaml.safe_load(files.get("meta.yaml", ""))
         queries = yaml.safe_load(files["queries.yaml"])
     except yaml.YAMLError as e:
         raise GitSyncError(f"malformed dashboard file: {e}") from e
     data = {**(meta if isinstance(meta, dict) else {}), "html": files["dashboard.html"], "queries": queries}
     try:
-        return dashboard_from_data(data, require_html=False, require_name=require_name)
+        return dashboard_from_data(data, require_html=False, require_name=False)
     except YamlIOError as e:
         raise GitSyncError(str(e)) from e
 
@@ -325,18 +328,23 @@ async def _repo_entities(wd: Path, ref: str, *paths: str) -> list[dict[str, Any]
     found = []
     for fpath in files:
         parts = fpath.split("/")
-        if len(parts) == 3 and parts[0] == "dashboards" and parts[2] == "meta.yaml":
-            ddir = f"dashboards/{parts[1]}"  # skipped when incomplete: a hand edit
-            if all(f"{ddir}/{f}" in files for f in DASHBOARD_FILES):
-                oid = "+".join(files[f"{ddir}/{f}"] for f in DASHBOARD_FILES)
+        if len(parts) == 3 and parts[0] == "dashboards" and parts[2] == "queries.yaml":
+            # Skipped when incomplete or not named as `slug` writes: a hand edit.
+            ddir = f"dashboards/{parts[1]}"
+            if f"{ddir}/dashboard.html" in files and unslug(parts[1]) is not None:
+                oid = "+".join(files.get(f"{ddir}/{f}", "") for f in DASHBOARD_FILES)
                 found.append({"relpath": ddir, "oid": oid})
     return found
 
 
 async def _read_repo_entity(wd: Path, ref: str, relpath: str) -> dict[str, Any]:
-    """A dashboard's content at `ref`, in the DB row shape. The caller has
-    checked its dir holds all of DASHBOARD_FILES."""
-    return dashboard_from_files({f: await _git("show", f"{ref}:{relpath}/{f}", cwd=wd) for f in DASHBOARD_FILES})
+    """A dashboard's content at `ref`, in the DB row shape, named by its
+    folder. The caller has checked `relpath` is a dashboard (_repo_entities)."""
+    present = await _tree_files(wd, ref, relpath)
+    texts = {
+        f: await _git("show", f"{ref}:{relpath}/{f}", cwd=wd) for f in DASHBOARD_FILES if f"{relpath}/{f}" in present
+    }
+    return {**dashboard_from_files(texts), "name": unslug(relpath.rpartition("/")[2])}
 
 
 async def _last_commit(wd: Path, ref: str, relpath: str) -> str:
@@ -563,10 +571,7 @@ async def rename(ws: WorkspaceRec, old: str, new: str) -> dict[str, Any]:
             await _git("mv", src, src_now, cwd=wd)
         else:
             src_now = src
-        await _git("mv", src_now, dst, cwd=wd)
-        meta = dashboard_to_files({**repo, "name": new})["meta.yaml"]  # the canonical name lives here
-        (wd / dst / "meta.yaml").write_text(meta, encoding="utf-8")
-        await _git("add", "-A", "--", dst, cwd=wd)
+        await _git("mv", src_now, dst, cwd=wd)  # the folder is the name: nothing to rewrite
         return True
 
     async def after(wd: Path | None, committed: bool) -> None:
@@ -659,13 +664,13 @@ async def restore(ws: WorkspaceRec, kind: str, name: str, ref: str | None = None
         if resolved is None:
             raise GitSyncError(f"{kind} {name!r} not found in git", status=404)
         merged = await _merge(ws, wd, head) if head else _empty_merge()
-        # All three files or nothing: a dir missing one is a hand edit, and
-        # restoring the rest would leave a truncated dashboard.
+        # Both required files or nothing: a dir missing one is a hand edit,
+        # and restoring the rest would leave a truncated dashboard.
         try:
             tree = await _tree_files(wd, resolved, relpath)
         except GitSyncError:
             tree = {}
-        missing = [f for f in DASHBOARD_FILES if f"{relpath}/{f}" not in tree]
+        missing = [f for f in _REQUIRED_FILES if f"{relpath}/{f}" not in tree]
         if missing:
             what = f"is missing {missing[0]}" if tree else "not found"
             raise GitSyncError(f"dashboard {name!r} {what} at {resolved}", status=404)

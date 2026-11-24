@@ -39,14 +39,14 @@ def test_dashboard_files_round_trip():
         "params": [],
     }
     files = dashboard_to_files(d)
-    assert set(files) == set(DASHBOARD_FILES)
+    assert set(files) == {"dashboard.html", "queries.yaml"}  # the folder holds the name
     assert files["dashboard.html"] == d["html"]  # verbatim
-    assert dashboard_from_files(files) == d
+    assert dashboard_from_files(files) == {**d, "name": None}
 
 
 def test_dashboard_from_files_rejects_malformed_meta():
     with pytest.raises(GitSyncError):
-        dashboard_from_files({"meta.yaml": "connection: x", "dashboard.html": "", "queries.yaml": ""})
+        dashboard_from_files({"meta.yaml": "params: [", "dashboard.html": "", "queries.yaml": ""})
 
 
 # The git_env fixture (bare repo + redirected clone base) lives in conftest.py.
@@ -138,11 +138,7 @@ def test_store_dashboard_touches_only_its_dir(git_env):
     ).stdout
     files = [line for line in out.splitlines() if line.strip()]
     assert files and all(f.startswith("dashboards/gs dash/") for f in files)
-    assert set(files) == {
-        "dashboards/gs dash/meta.yaml",
-        "dashboards/gs dash/dashboard.html",
-        "dashboards/gs dash/queries.yaml",
-    }
+    assert set(files) == {"dashboards/gs dash/dashboard.html", "dashboards/gs dash/queries.yaml"}
 
 
 def test_store_unreachable_remote_raises_without_init(tmp_path, clone_base):
@@ -550,7 +546,7 @@ def test_an_older_meta_yaml_naming_a_connection_still_reads():
         {"meta.yaml": "name: legacy\nconnection: reporting-db\n", "dashboard.html": "<p/>", "queries.yaml": "{}"}
     )
     assert d == {"name": "legacy", "html": "<p/>", "queries": {}, "params": []}
-    assert "connection" not in dashboard_to_files(d)["meta.yaml"]
+    assert "meta.yaml" not in dashboard_to_files(d)
 
 
 def test_dashboard_params_round_trip_through_meta_yaml():
@@ -560,10 +556,10 @@ def test_dashboard_params_round_trip_through_meta_yaml():
     ]
     d = {"name": "p", "html": "<p/>", "queries": {"q": "SELECT {by_region} FROM {table}"}, "params": params}
     files = dashboard_to_files(d)
-    assert "params:" in files["meta.yaml"]
-    assert dashboard_from_files(files) == d
-    # A params-free dashboard keeps its meta.yaml to the name alone.
-    assert dashboard_to_files({**d, "params": []})["meta.yaml"].strip() == "name: p"
+    assert files["meta.yaml"].startswith("params:")  # nothing else, the name included
+    assert dashboard_from_files(files) == {**d, "name": None}
+    # A params-free dashboard has no meta.yaml at all.
+    assert "meta.yaml" not in dashboard_to_files({**d, "params": []})
 
 
 def test_malformed_dashboard_params_are_rejected():
@@ -656,17 +652,18 @@ def test_sync_skips_a_dashboard_missing_a_file(git_env, other_instance, tmp_path
     assert _run(get_dashboard("gs halfdash", _default_ws_id())) is None
 
 
-def test_restore_of_a_dashboard_missing_meta_names_the_file(git_env, tmp_path):
+def test_restore_reads_a_dashboard_without_meta_yaml(git_env, tmp_path):
     from queryview.dashboards import upsert_dashboard
 
-    _run(upsert_dashboard("gs nometa", "<html/>", {"q": "SELECT 1"}, workspace_id=_default_ws_id()))
+    params = [{"name": "by_region", "kind": "dimension"}]
+    _run(upsert_dashboard("gs nometa", "<html/>", {"q": "SELECT 1"}, params, workspace_id=_default_ws_id()))
     _run(_astore(_default_ws(), "gs nometa"))
     _remove_from_remote(git_env, tmp_path, f"{dashboard_reldir('gs nometa')}/meta.yaml")
 
-    with pytest.raises(GitSyncError) as e:
-        _run(gitsync.restore(_default_ws(), "dashboard", "gs nometa"))
+    _run(gitsync.restore(_default_ws(), "dashboard", "gs nometa"))
 
-    assert e.value.status == 404 and "meta.yaml" in str(e.value)
+    d = _run(get_dashboard("gs nometa", _default_ws_id()))
+    assert d is not None and d["params"] == [] and d["html"] == "<html/>"
     with pytest.raises(GitSyncError) as e:
         _run(gitsync.restore(_default_ws(), "dashboard", "gs never stored"))
     assert e.value.status == 404 and str(e.value) == "dashboard 'gs never stored' not found at origin/main"
@@ -716,6 +713,9 @@ def _repo_files(remote) -> list[str]:
     ).stdout.splitlines()
 
 
+_PLAIN_FILES = DASHBOARD_FILES[1:]  # a params-free dashboard has no meta.yaml
+
+
 def _dash(name: str, html: str) -> dict:
     return {"name": name, "html": html, "queries": {"q": "SELECT 1"}, "params": []}
 
@@ -750,15 +750,12 @@ def test_rename_moves_folder_in_one_commit(git_env):
     assert r["committed"] is True and log.count("\n") == before + 1
     assert "rename dashboard ua sales → ua sales 2026" in log
     files = _repo_files(git_env)
-    assert f"{dashboard_reldir('ua sales 2026')}/meta.yaml" in files
+    assert f"{dashboard_reldir('ua sales 2026')}/queries.yaml" in files
     assert not any(f.startswith(dashboard_reldir("ua sales") + "/") for f in files)
-    meta = subprocess.run(
-        ["git", "show", f"main:{dashboard_reldir('ua sales 2026')}/meta.yaml"],
-        cwd=git_env,
-        capture_output=True,
-        text=True,
-    ).stdout
-    assert "name: ua sales 2026" in meta
+    moved = subprocess.run(
+        ["git", "show", "--name-status", "-M", "--format=", "main"], cwd=git_env, capture_output=True, text=True
+    ).stdout.split("\n")
+    assert all(line.startswith("R100\t") for line in moved if line)  # nothing rewritten
     assert _html("ua sales") is None and _html("ua sales 2026") == "<p>s</p>"
 
 
@@ -768,8 +765,8 @@ def test_rename_changing_only_the_case(git_env):
     r = _run(gitsync.rename(_default_ws(), "ua coverage", "UA Coverage"))
     assert r["committed"] is True
     files = _repo_files(git_env)
-    assert f"{dashboard_reldir('UA Coverage')}/meta.yaml" in files
-    assert f"{dashboard_reldir('ua coverage')}/meta.yaml" not in files
+    assert f"{dashboard_reldir('UA Coverage')}/queries.yaml" in files
+    assert f"{dashboard_reldir('ua coverage')}/queries.yaml" not in files
     assert _html("ua coverage") is None and _html("UA Coverage") == "<p>c</p>"
 
 
@@ -778,7 +775,7 @@ def test_case_only_rename_leaves_a_dashboard_named_like_its_temp_folder(git_env)
     _run(gitsync.save(_default_ws(), _dash("ua reach.renaming", "<p>other</p>")))
     _run(gitsync.rename(_default_ws(), "ua reach", "UA Reach"))
     assert sorted(_repo_files(git_env)) == sorted(
-        f"{dashboard_reldir(name)}/{f}" for name in ("UA Reach", "ua reach.renaming") for f in DASHBOARD_FILES
+        f"{dashboard_reldir(name)}/{f}" for name in ("UA Reach", "ua reach.renaming") for f in _PLAIN_FILES
     )
     shown = subprocess.run(
         ["git", "show", f"main:{dashboard_reldir('UA Reach')}/dashboard.html"],
@@ -914,4 +911,43 @@ def test_rename_ignores_a_stray_target_dir_in_the_clone(git_env):
     (stray / "leftover.txt").write_text("x")
     _run(gitsync.rename(_default_ws(), "ua src", "ua dst"))
     files = [f for f in _repo_files(git_env) if f.startswith(dashboard_reldir("ua dst") + "/")]
-    assert sorted(f.rsplit("/", 1)[1] for f in files) == sorted(DASHBOARD_FILES)
+    assert sorted(f.rsplit("/", 1)[1] for f in files) == sorted(_PLAIN_FILES)
+
+
+def _legacy(wd: Path, folder: str, meta: str) -> None:
+    """A dashboard folder as written by hand or by a QueryView that kept the name in meta.yaml."""
+    d = wd / "dashboards" / folder
+    d.mkdir(parents=True)
+    (d / "meta.yaml").write_text(meta, encoding="utf-8")
+    (d / "dashboard.html").write_text("<p>l</p>", encoding="utf-8")
+    (d / "queries.yaml").write_text("{}\n", encoding="utf-8")
+
+
+def test_the_folder_names_the_dashboard(git_env, tmp_path):
+    _run(gitsync.save(_default_ws(), _dash("fn seed", "<p>s</p>")))  # an empty remote has no main
+    _hand_edit(git_env, tmp_path, lambda wd: _legacy(wd, "fn folder", "name: fn other\n"))
+    r = _run(gitsync.sync(_default_ws()))
+    assert r["imported"] == [{"kind": "dashboard", "name": "fn folder"}]
+    assert _html("fn folder") == "<p>l</p>" and _html("fn other") is None
+
+
+def test_a_folder_slug_would_not_write_is_skipped(git_env, tmp_path):
+    _run(gitsync.save(_default_ws(), _dash("fn seed", "<p>s</p>")))
+    _hand_edit(git_env, tmp_path, lambda wd: _legacy(wd, "fn%41", "name: fnA\n"))
+    assert _run(gitsync.sync(_default_ws()))["imported"] == []
+    assert _html("fnA") is None
+
+
+def test_a_params_free_dashboard_has_no_meta_yaml(git_env):
+    _run(gitsync.save(_default_ws(), _dash("fn plain", "<p>p</p>")))
+    assert f"{dashboard_reldir('fn plain')}/meta.yaml" not in _repo_files(git_env)
+
+
+def test_renaming_an_older_folder_reads_under_the_new_name(other_instance, git_env, tmp_path):
+    _run(gitsync.save(_default_ws(), _dash("fn seed", "<p>s</p>")))
+    _hand_edit(git_env, tmp_path, lambda wd: _legacy(wd, "fn old", "name: fn old\n"))
+    _run(gitsync.sync(_default_ws()))
+    _run(gitsync.rename(_default_ws(), "fn old", "fn new"))
+    imported = _run(gitsync.sync(other_instance))["imported"]
+    assert {"kind": "dashboard", "name": "fn new"} in imported
+    assert {"kind": "dashboard", "name": "fn old"} not in imported
