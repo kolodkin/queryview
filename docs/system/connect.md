@@ -168,9 +168,9 @@ connection's file and `db.sqlite` included
 ([scripts.md](./scripts.md#file-writes)).
 
 <!-- req: system/connect/locked-hidden-from-agent -->
-The agent learns nothing about a locked connection but that the session is on
-one: `session_info` reports `locked: true` with no name, type, database or
-tables.
+The agent's tools tell it nothing about a locked connection but that the
+session is on one: `session_info` reports `locked: true` with no name, type,
+database or tables.
 
 Stored: only a salted scrypt hash of the passphrase (`lock_hash` on the
 `connections` row). Held by the tab: an **unlock token**, a random string the
@@ -193,7 +193,10 @@ working.
   sends them.
 
 Not covered: typing the passphrase where the agent can read it, or handing the
-agent the browser tab that holds the token.
+agent the browser tab that holds the token. Nor a caller that makes its own
+REST calls with the session id: `GET /api/session` and the connection list
+still give a locked connection's name, type and database list, because a tab
+needs them to ask for the passphrase.
 
 ## Sessions & reconnecting
 
