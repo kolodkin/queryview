@@ -13,12 +13,13 @@ and start from the nearest existing test file: it shows the call shapes. The
 |---|---|---|---|
 | Unit | one module's logic | beside the module, named after it | the module's docstring, or a TypeScript module's leading comment |
 | Integration | routes, stores, MCP tools, drivers working together | `backend/queryview/**/test_*.py`, `frontend/src/**/*.test.ts(x)`, naming an `architecture/` ID | `docs/architecture/` |
-| System | one feature through the browser | `e2e/<feature>.spec.ts` | `docs/system/` |
+| System | one feature through the browser | `e2e/<feature>.spec.ts`, or `e2e/acceptance.spec.ts` when the test also proves a requirement | `docs/system/` |
 | User | a user requirement end to end | `e2e/acceptance.spec.ts` | `docs/requirements/` |
 
-Frontend unit tests cover pure TypeScript logic, with no React rendering. An
-acceptance test may also prove a system statement; a user requirement is
-proved only in `e2e/acceptance.spec.ts`.
+Frontend unit tests cover pure TypeScript logic, with no React rendering.
+
+A browser test may sit on two layers, user and system, naming both IDs; the
+`vmodel` skill says how. No other layers share a test.
 
 Run backend tests with `uv run --group test pytest` (its `testpaths` cover
 `backend/queryview` and `scripts`), frontend ones with `npm test -w frontend`,

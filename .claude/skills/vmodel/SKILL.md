@@ -36,10 +36,25 @@ comma-separated):
 test("run SQL, pick columns, page and download CSV", async ({ page, seeds }) => {
 ```
 
-A test may name two IDs: an acceptance test that also proves a system
-statement names both, so no second browser test repeats it. Never reword a
-slug a test names. A marker outside the layer's "Proved in"
+Never reword a slug a test names. A marker outside the layer's "Proved in"
 location is support, not proof.
+
+## Tests on two layers
+
+A browser test may belong to two layers, user and system. It lives in
+`e2e/acceptance.spec.ts` and names both IDs:
+
+```ts
+// req: requirements/queryview/browse-tables, system/explorer/browse
+```
+
+When an acceptance test already walks a system statement, add the
+statement's ID to that test's marker; do not write a second browser test for
+it. A user requirement is still proved only in `e2e/acceptance.spec.ts`.
+
+Only this pair shares tests, for now: the line between a user journey and a
+feature's behavior is the least sharp one. Every other test has one layer.
+An integration test proves no system statement, and a unit test names no ID.
 
 ## Steps
 

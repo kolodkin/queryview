@@ -64,7 +64,7 @@ def _proves(layer: str, test: str) -> bool:
     if layer == "requirements":
         return test == ACCEPTANCE
     if layer == "system":
-        return test.startswith("e2e/")  # an acceptance journey also exercises the feature page
+        return test.startswith("e2e/")  # user and system may share a test; no other layers do
     return not test.startswith("e2e/")
 
 
