@@ -159,7 +159,6 @@ MCP tool that reads or writes data (`run_sql`, `run_script`, `select_database`,
 the table list in `session_info`, every push) answers `connection is locked`,
 as does `use_connection` naming a locked one,
 and so does every REST call without the tab's unlock token (`403`).
-`session_info` still names the connection and reports `locked: true`.
 `list_connections` and `list_databases` leave a locked connection out
 entirely, even while a tab has it unlocked: the lock is the connection's
 stored state, an unlock only that tab's. Session connections are never
@@ -167,6 +166,11 @@ locked. A lock holds against the API only: an agent's script on any unlocked
 DuckDB or SQLite connection can reach every file QueryView can, a locked
 connection's file and `db.sqlite` included
 ([scripts.md](./scripts.md#file-writes)).
+
+<!-- req: system/connect/locked-hidden-from-agent -->
+The agent learns nothing about a locked connection but that the session is on
+one: `session_info` reports `locked: true` with no name, type, database or
+tables.
 
 Stored: only a salted scrypt hash of the passphrase (`lock_hash` on the
 `connections` row). Held by the tab: an **unlock token**, a random string the

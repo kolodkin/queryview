@@ -113,6 +113,26 @@ def test_mcp_tools_are_refused_on_a_locked_connection():
     assert saved["pushed"] is False and saved["message"] == "connection is locked"
 
 
+# req: architecture/mcp/locked-refuses-both
+def test_a_locked_connection_tells_the_agent_nothing_about_itself(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "a.csv").write_text("id\n1\n")
+    c = _client()
+    r = c.post("/api/db/connect", json={"type": "duckdb", "name": "lock-hidden-duck", "path": str(tmp_path)}).json()
+    assert r["ok"] and r["database"] == "." and r["databases"] == [".", "sub"], r
+    assert c.post("/api/db/lock", json={"name": "lock-hidden-duck", "passphrase": "pw"}).json()["ok"]
+    sid = c.headers["X-QV-Session"]
+    remote.register(sid)
+
+    info = _run(mcp_server.session_info(sid))
+    info.pop("url", None)
+    assert info == {"ok": True, "workspace": info["workspace"], "connected": True, "locked": True, "tables": []}
+    # A refused tool names no database either.
+    assert _run(mcp_server.select_database(sid, "sub"))["database"] is None
+    assert _run(mcp_server.open_explorer(sid, "sub"))["database"] is None
+    assert _run(mcp_server.push_dashboard(sid, "<p>", {"q": "SELECT 1"}))["database"] is None
+
+
 def test_unlock_takes_the_passphrase_and_opening_lands_locked(_no_backoff):
     c = _connected("lock-open-duck")
     assert c.post("/api/db/lock", json={"name": "lock-open-duck", "passphrase": "pw"}).json()["ok"]

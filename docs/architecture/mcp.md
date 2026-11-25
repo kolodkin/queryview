@@ -10,7 +10,9 @@ you [armed](../system/mcp.md#arming-a-session).
 - `session_info(session_id)` — what the session is on: `{ok, connected,
   connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
-  discovery. The agent may switch to any listed connection (below).
+  discovery. The agent may switch to any listed connection (below). On a
+  [locked](../system/connect.md#locked-connections) connection it returns
+  only `{ok, connected, locked: true, workspace, tables: []}`.
 - Connections ([access rule](../system/connect.md#session-connections)):
   `list_connections(session_id)` tags each with `scope`, `created_by`,
   `active`, leaving out [locked](../system/connect.md#locked-connections) ones;
@@ -90,7 +92,8 @@ connection the user [locked](../system/connect.md#locked-connections) behind a
 passphrase, the tools that query it, push to its tab, pick its database or
 switch to it refuse with `connection is locked`: `run_sql`, `run_script`,
 `push_script`, `push_dashboard`, `open_explorer`, `select_database` and
-`use_connection`. `session_info` reports it as locked, with no tables, and
+`use_connection`. `session_info` reports only that it is locked, with no name,
+type, database or tables, and a refused tool names no database;
 `list_connections` leaves it out. REST calls without the tab's unlock token are
 refused too, so copying a session id into `/api/db/query` gets the agent
 nowhere.

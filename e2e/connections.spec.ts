@@ -88,6 +88,7 @@ test("a locked connection edits and deletes with its passphrase", async ({ page,
   await expect(c).toHaveCount(0);
 });
 
+// req: system/connect/locked-hidden-from-agent
 test("locked connection keeps the agent out", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const sessionId = await armRemote(page);
@@ -107,7 +108,9 @@ test("locked connection keeps the agent out", async ({ page, seeds, baseURL }) =
     pushed: false,
     message: "connection is locked",
   });
-  expect(await mcp("session_info", {})).toMatchObject({ locked: true, tables: [] });
+  const info = await mcp("session_info", {});
+  expect(info).toMatchObject({ connected: true, locked: true, tables: [] });
+  for (const key of ["connection", "type", "database", "databases", "root"]) expect(info).not.toHaveProperty(key);
   const r = await api(`${baseURL}/api/db/query`, {
     json: { query: "SELECT 1" },
     headers: { "X-QV-Session": sessionId },
