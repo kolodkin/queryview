@@ -19,6 +19,11 @@ So pages are stable only if the query defines its own order — include an
 `ORDER BY`, or pick **Order by** columns in the grid's **Fields** bar. There is
 no total-row count, so **Next** can page past the last row into an empty result.
 
+A query only reads, on this page and in a [dashboard](./dashboard.md): Postgres
+runs it in a read-only transaction, so a function that writes is refused, and
+DuckDB refuses SQL that closes the wrapper to add a statement of its own.
+Writes go through [Scripts](./scripts.md).
+
 ## Fields, selection & ordering
 
 **Fields** describes the query's output columns (names and types) without
