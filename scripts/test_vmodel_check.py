@@ -87,6 +87,14 @@ def test_an_acceptance_test_may_also_prove_a_system_id(tmp_path):
     assert r.matrix["system"] == {"system/dash/rerun": ["e2e/acceptance.spec.ts"]}
 
 
+def test_a_spec_in_a_subfolder_of_e2e_is_seen(tmp_path):
+    r = check(repo(tmp_path, {"docs/system/dash.md": PAGE, "e2e/dash/params.spec.ts": SPEC}))
+    assert r.errors == []
+    assert r.matrix["system"] == {"system/dash/rerun": ["e2e/dash/params.spec.ts"]}
+    r = check(repo(tmp_path, {"e2e/dash/untagged.spec.ts": "test('x', () => {})\n"}))
+    assert any("e2e/dash/untagged.spec.ts" in g for g in r.gaps)
+
+
 def test_layer_proof_locations(tmp_path):
     req = "<!-- req: requirements/user/goal -->\nA goal.\n"
     files = {"docs/requirements/user.md": req, "e2e/dash.spec.ts": "// req: requirements/user/goal\n"}

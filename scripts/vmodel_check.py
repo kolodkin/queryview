@@ -95,7 +95,7 @@ def _definitions(root: Path, report: Report) -> dict[str, str]:
 
 
 def _test_files(root: Path) -> list[Path]:
-    found = list((root / "e2e").glob("*.spec.ts"))
+    found = list((root / "e2e").rglob("*.spec.ts"))
     for base in ("backend/queryview", "scripts"):
         found += (root / base).rglob("test_*.py")
     for pattern in ("*.test.ts", "*.test.tsx"):
