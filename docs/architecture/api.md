@@ -70,8 +70,8 @@ hubs the matching REST endpoints call. See [mcp.md](../system/mcp.md) and
 
 ## Persistence
 
-Connections are stored in SQLite via SQLModel. See [connect.md](../system/connect.md)
-for the schema, and [session.md](../system/session.md) for the session model.
+Connections are stored in SQLite via SQLModel. See
+[storage.md](./storage.md#persistence-sqlite) for the schema, and [session.md](../system/session.md) for the session model.
 
 ## Workspaces
 

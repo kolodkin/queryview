@@ -1,5 +1,6 @@
-"""The /api/db surface: unknown type is a 400; validation errors are 400;
-the old /api/clickhouse paths are gone (404)."""
+"""The /api/db and /api/runqueries routes through the app: validation and the
+session gate, script execution, session-only and folder connections, the
+session query timeout, and parameter substitution."""
 
 from __future__ import annotations
 
@@ -48,7 +49,7 @@ def test_old_clickhouse_path_is_gone():
 )
 def test_gated_routes_without_session_are_409(method, path, body):
     c = TestClient(app)
-    # Disconnect first: it marks this cookie disconnected, so the auto-reconnect
+    # Disconnect first: it marks this session disconnected, so the auto-reconnect
     # of a connection saved by an earlier test can't turn this into a 200.
     c.post("/api/db/disconnect")
     r = c.request(method, path, json=body)

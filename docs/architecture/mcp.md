@@ -84,11 +84,20 @@ opened in advance, which answers `queued for the tab`; arming takes that
 channel over with its pushes queued. One whose tab never comes is dropped
 after a minute.
 
-**Locked connections keep the agent out.** A saved connection the user
-[locked](../system/connect.md#locked-connections) behind a passphrase refuses every
-tool above while a session is on it (`connection is locked`), and refuses REST
-calls without the tab's unlock token too, so copying a session id into
-`/api/db/query` gets the agent nowhere.
+<!-- req: architecture/mcp/locked-refuses-both -->
+**Locked connections keep the agent out.** While a session is on a saved
+connection the user [locked](../system/connect.md#locked-connections) behind a
+passphrase, the tools that query it, push to its tab, pick its database or
+switch to it refuse with `connection is locked`: `run_sql`, `run_script`,
+`push_script`, `push_dashboard`, `open_explorer`, `select_database` and
+`use_connection`. `session_info` reports it as locked, with no tables, and
+`list_connections` leaves it out. REST calls without the tab's unlock token are
+refused too, so copying a session id into `/api/db/query` gets the agent
+nowhere.
+
+`list_dashboards`, `git_history`, `git_restore` and `new_tab` work on the
+workspace or open a tab, never on a connection, so the lock does not reach
+them.
 
 <!-- req: architecture/mcp/remote-channel -->
 **Arming is the gate, not the id.** Disarming closes the channel, and any later
