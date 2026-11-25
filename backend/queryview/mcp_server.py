@@ -11,7 +11,7 @@ from typing import Any
 
 from mcp.server.mcpserver import Context, MCPServer
 
-from . import gitsync, remote, sessions
+from . import dashboard_queries, gitsync, remote, sessions
 from .connect import (
     _data_dir,
     _gated_session,
@@ -30,6 +30,7 @@ from .connect import (
 from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
 from .dashboards import _dashboard_event, get_dashboard
+from .drivers.base import RUN_SQL_TIMEOUT_SECONDS
 from .mcp_skills import SkillsExtension
 from .validation import dashboard_params_error
 
@@ -65,7 +66,6 @@ async def run_sql(session_id: str, sql: str, limit: int = 1000) -> dict[str, Any
         sql: The SQL statement to run.
         limit: Most rows to return (default 1000, max 10000).
     """
-    from .drivers.base import RUN_SQL_TIMEOUT_SECONDS
     from .validation import MAX_LIMIT
 
     limit = max(0, min(limit, MAX_LIMIT))
@@ -465,12 +465,79 @@ async def push_dashboard(
     )
 
 
+# How long a whole run_dashboard may take: DuckDB's page queries have no timer of their own.
+RUN_DASHBOARD_TIMEOUT_SECONDS: float = RUN_SQL_TIMEOUT_SECONDS
+
+
+@mcp.tool()
+async def run_dashboard(
+    session_id: str,
+    queries: dict[str, str] | None = None,
+    params: list[dict[str, Any]] | None = None,
+    values: dict[str, Any] | None = None,
+    dir: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Run a draft dashboard's queries on the session's connection and selected
+    database with `values` substituted into their `{name}` placeholders, as the
+    page itself would, returning the rows to the agent. Use it to test a
+    draft's queries before push_dashboard: nothing reaches the browser.
+
+    Returns {"ok": True, "database", "results": {query: {column: [values]}},
+    "meta": {query: [{name, type}]}, "params": [{name, kind, options, value}]}
+    (`results` is what the page reads as `window.queries`) or {"ok": False,
+    "message"}, with "params" when they resolved. A query waiting on a param
+    with no choice is absent from `results`. The run stops at the first failing
+    query, whose name opens the message, and after a minute.
+
+    Args:
+        session_id: The session id shown in the QueryView popover.
+        queries: Map of query name to SQL.
+        params: Optional selector specs, as push_dashboard takes them.
+        values: Map of param name to chosen value; a param left out, or given a
+            value its options do not offer, takes its default.
+        dir: Absolute path of a dashboard folder (see push_dashboard), instead
+            of `queries`; its dashboard.html is not needed. Inline `params` win over meta.yaml.
+        limit: Most rows of each query (default 100, max 1000).
+    """
+    if dir:
+        if queries is not None:
+            return {"ok": False, "message": "pass either `queries`, or `dir`"}
+        try:
+            d = await asyncio.to_thread(_read_dashboard_dir, dir, False)
+        except (ValueError, gitsync.GitSyncError) as e:
+            return {"ok": False, "message": str(e)}
+        queries = d["queries"]
+        params = d["params"] if params is None else params
+    queries = dashboard_queries.clean_queries(queries)  # a blank one is skipped, as on the page
+    if not queries:
+        return {"ok": False, "message": "pass `queries`, or `dir`"}
+    perr = dashboard_params_error(params)
+    if perr is not None:
+        return {"ok": False, "message": perr}
+    limit = max(1, min(limit, dashboard_queries.DASHBOARD_ROW_CAP))
+    try:
+        async with asyncio.timeout(RUN_DASHBOARD_TIMEOUT_SECONDS):
+            r = await dashboard_queries.run_dashboard(
+                session_id, queries, params, dashboard_queries.clean_values(values), limit
+            )
+    except TimeoutError:
+        return {"ok": False, "message": f"dashboard run timed out after {RUN_DASHBOARD_TIMEOUT_SECONDS}s"}
+    if not r["ok"]:
+        return {"ok": False, "message": r["message"], **dashboard_queries.resolved_part(r)}
+    return {
+        "ok": True,
+        "database": await sessions.database_of(session_id),
+        **{k: r[k] for k in ("results", "meta", "params")},
+    }
+
+
 _DIR_FILE_MAX = 5_000_000  # bytes; far above any real dashboard
 
 
-def _read_dashboard_dir(path: str) -> dict[str, Any]:
+def _read_dashboard_dir(path: str, html: bool = True) -> dict[str, Any]:
     """A dashboard (name None when meta.yaml gives none) from a folder in the
-    git-sync layout. Only its three fixed names are read, never through a
+    git-sync layout; without `html`, dashboard.html is not read. Only its three fixed names are read, never through a
     symlink and never inside the data dir, so `dir` can't aim at an arbitrary
     file or another workspace's clone."""
     root = Path(path)
@@ -478,6 +545,9 @@ def _read_dashboard_dir(path: str) -> dict[str, Any]:
         raise ValueError("`dir` must be an absolute path")
     texts: dict[str, str] = {}
     for fname in gitsync.DASHBOARD_FILES:
+        if fname == "dashboard.html" and not html:
+            texts[fname] = ""
+            continue
         p = root / fname
         if p.resolve().is_relative_to(_data_dir().resolve()):  # resolved: a symlink can't reach in either
             raise ValueError("`dir` may not be inside the QueryView data dir")

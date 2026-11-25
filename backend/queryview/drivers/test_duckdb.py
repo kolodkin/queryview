@@ -290,3 +290,11 @@ def test_a_cancelled_query_stops_in_its_thread(duck_path):
     started = time.monotonic()
     asyncio.run(go())
     assert time.monotonic() - started < 10
+
+
+def test_a_query_cannot_leave_its_wrapper_to_run_more_statements(folder, tmp_path):
+    leak = tmp_path / "leak.csv"
+    escape = f"SELECT 1) AS a; COPY (SELECT 42 AS n) TO '{leak}'; SELECT * FROM (SELECT 1 AS x"
+    r = _run(DuckDBDriver().run_query(DuckConfig(folder), escape, ".", 10, 0, None))
+    assert isinstance(r, Err) and "one read-only query" in r.message
+    assert not leak.exists()

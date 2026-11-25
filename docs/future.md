@@ -65,11 +65,6 @@ no picker and lists only what `SHOW TABLES` returns.
   the server image, and which connection a session with no user behind it
   runs on. Asking a user's armed tab for its snapshot was considered and
   dropped: the HTML is too large to return inline, and it needs that tab open.
-- **Run a dashboard for an agent.** An agent writing a dashboard with
-  `{placeholders}` cannot test its queries through `run_sql` without
-  substituting by hand. The backend substitutes
-  ([dashboard.md](./dashboard.md#dashboard-parameters)), so a tool that runs a
-  dashboard's queries for given values is a thin wrapper.
 - **Tabs that work in a snapshot.** A dashboard's own tabs switch by script,
   so a snapshot freezes on the tab that was open. A built-in `<qv-tabs>`
   that switches without script would work in the file; authors can get the

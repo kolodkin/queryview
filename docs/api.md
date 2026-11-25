@@ -53,8 +53,8 @@ shared (SQLite). See [session.md](./session.md).
 
 **MCP:** an MCP server is mounted at `/mcp/` (Streamable HTTP) exposing
 `push_script` (push a script to a session's Scripts editor), `push_dashboard`
-(push a dashboard draft to a session), `session_info`, `run_sql`, `run_script`,
-`list_dashboards`
+(push a dashboard draft to a session), `run_dashboard` (run a draft's queries for the agent), `session_info`,
+`run_sql`, `run_script`, `list_dashboards`
 and `git_history` / `git_restore`. They delegate to the in-process
 hubs the matching REST endpoints call. See [mcp.md](./mcp.md) and
 [dashboard.md](./dashboard.md).

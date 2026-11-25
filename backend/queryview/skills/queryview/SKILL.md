@@ -34,6 +34,7 @@ Use `push_dashboard` only when the user asks for it.
 
 `push_dashboard` renders HTML fed by named queries as an unsaved draft; re-push to revise
 it. See the tool's description for the `window.queries` and `params` contract.
+Test a draft's queries with `run_dashboard` first: it returns their rows to you.
 
 When the server runs on your machine, keep the dashboard as a folder in your
 scratchpad with exactly these file names, and push with `dir=<folder>`: a
