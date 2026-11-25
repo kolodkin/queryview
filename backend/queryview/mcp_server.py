@@ -497,18 +497,19 @@ async def run_dashboard(
         values: Map of param name to chosen value; a param left out, or given a
             value its options do not offer, takes its default.
         dir: Absolute path of a dashboard folder (see push_dashboard), instead
-            of `queries`. Inline `params` win over meta.yaml.
+            of `queries`; its dashboard.html is not needed. Inline `params` win over meta.yaml.
         limit: Most rows of each query (default 100, max 1000).
     """
     if dir:
         if queries is not None:
             return {"ok": False, "message": "pass either `queries`, or `dir`"}
         try:
-            d = await asyncio.to_thread(_read_dashboard_dir, dir)
+            d = await asyncio.to_thread(_read_dashboard_dir, dir, False)
         except (ValueError, gitsync.GitSyncError) as e:
             return {"ok": False, "message": str(e)}
         queries = d["queries"]
         params = d["params"] if params is None else params
+    queries = dashboard_queries.clean_queries(queries)  # a blank one is skipped, as on the page
     if not queries:
         return {"ok": False, "message": "pass `queries`, or `dir`"}
     perr = dashboard_params_error(params)
@@ -534,9 +535,9 @@ async def run_dashboard(
 _DIR_FILE_MAX = 5_000_000  # bytes; far above any real dashboard
 
 
-def _read_dashboard_dir(path: str) -> dict[str, Any]:
+def _read_dashboard_dir(path: str, html: bool = True) -> dict[str, Any]:
     """A dashboard (name None when meta.yaml gives none) from a folder in the
-    git-sync layout. Only its three fixed names are read, never through a
+    git-sync layout; without `html`, dashboard.html is not read. Only its three fixed names are read, never through a
     symlink and never inside the data dir, so `dir` can't aim at an arbitrary
     file or another workspace's clone."""
     root = Path(path)
@@ -544,6 +545,9 @@ def _read_dashboard_dir(path: str) -> dict[str, Any]:
         raise ValueError("`dir` must be an absolute path")
     texts: dict[str, str] = {}
     for fname in gitsync.DASHBOARD_FILES:
+        if fname == "dashboard.html" and not html:
+            texts[fname] = ""
+            continue
         p = root / fname
         if p.resolve().is_relative_to(_data_dir().resolve()):  # resolved: a symlink can't reach in either
             raise ValueError("`dir` may not be inside the QueryView data dir")

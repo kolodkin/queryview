@@ -93,3 +93,14 @@ def test_a_run_past_the_deadline_times_out(monkeypatch):
     slow = {"q": "SELECT count(*) AS n FROM range(100000000000) a, range(1000) b"}
     out = _run(run_dashboard(_connected_session("rd-slow"), slow))
     assert out == {"ok": False, "message": "dashboard run timed out after 0.2s"}
+
+
+def test_a_folder_needs_no_html(tmp_path):
+    (tmp_path / "queries.yaml").write_text("q: SELECT 7 AS n\n")
+    out = _run(run_dashboard(_connected_session("rd-nohtml"), dir=str(tmp_path)))
+    assert out["results"] == {"q": {"n": [7]}}
+
+
+def test_a_blank_query_is_skipped():
+    out = _run(run_dashboard(_connected_session("rd-blank"), {"q": "SELECT 7 AS n", "empty": "   "}))
+    assert out["results"] == {"q": {"n": [7]}}
