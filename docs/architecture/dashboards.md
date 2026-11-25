@@ -27,7 +27,8 @@ The HTML renders in
 assets but cannot read the app's storage or call `/api/*` as the session (it
 has neither the session id nor any credential). A link the page opens with
 `target="_blank"` lands in a normal tab. The page cannot print or download;
-[Snapshot](../system/dashboard.md#snapshot) is the way out. Data reaches it only through the
+[Snapshot](../system/dashboard.md#snapshot) is the way out; its file runs no script because the
+host puts a script-blocking policy ahead of the frame's text. Data reaches the page only through the
 injected `window.queries` and the [widget](../system/dashboard.md#widgets) replies; the
 `window.queries` JSON has `<` escaped so result data containing `</script>` can't break out
 of the prologue.

@@ -96,7 +96,7 @@ and let [git sync](docs/system/gitsync.md) do it.
 - [api.md](docs/architecture/api.md) — the full HTTP endpoint reference.
 - [viewer_server_api.md](docs/architecture/viewer_server_api.md) — the viewer server's endpoints.
 - [storage.md](docs/architecture/storage.md) — the data directory, migrations, connection table, encryption, CI.
-- [sessions.md](docs/architecture/sessions.md) — how a session is stored.
+- [sessions.md](docs/architecture/sessions.md) — how a session is stored and how a tab claims one.
 - [mcp.md](docs/architecture/mcp.md) — the MCP tools and the channel behind arming.
 - [dashboards.md](docs/architecture/dashboards.md) — running a dashboard's queries and its sandbox.
 - [decisions.md](docs/architecture/decisions.md) — design decisions for credentials and folder mode.

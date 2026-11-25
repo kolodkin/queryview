@@ -57,11 +57,9 @@ The tools an agent can call are listed in [mcp.md](../architecture/mcp.md#tools)
 
 The agent drafts and edits; the user names and saves. No tool saves.
 
-- **New work is unnamed.** `push_dashboard` without `name` pushes a draft. The
-  user names it at the prompt of the dashboard's **Save**, which refuses a name
-  already taken.
-- **`name` only edits.** It must be a saved dashboard (`list_dashboards`); any
-  other is refused.
+- **New work is unnamed.** The agent pushes a draft. The user names it at the
+  prompt of the dashboard's **Save**, which refuses a name already taken.
+- **The agent edits a saved dashboard by its name**, and only a saved one.
 - **A push persists nothing.** The user's **Save** does.
 - **No tool renames or deletes.** The store's names are the user's: **Rename**
   and **Delete** live on the dashboard page only. An agent asked to rename

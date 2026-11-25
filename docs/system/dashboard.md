@@ -360,9 +360,8 @@ stands at the current parameters. Print the file for a PDF.
 - A canvas chart becomes an image; a dropdown, its chosen value.
 - Refused while the dashboard or a widget is still loading.
 - The file runs no script and redirects nowhere, whatever the dashboard's
-  HTML contains: the host puts a script-blocking policy ahead of the frame's
-  text. Stylesheets, fonts and images from elsewhere are still fetched when
-  it is opened; embedded frames are not.
+  HTML contains. Stylesheets, fonts and images from elsewhere are still
+  fetched when it is opened; embedded frames are not.
 - A WebGL chart or a canvas holding a cross-origin image comes out blank; a
   password field, empty.
 - It holds rendered query results: treat the file as data.

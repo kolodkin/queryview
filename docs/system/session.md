@@ -65,40 +65,24 @@ What you get:
 - **New tab with nothing else open** → your last named session comes back,
   else a new one.
 
-Each tab keeps `qv_tab` (a token it mints) and `qv_session` (what it is attached
-to) in `sessionStorage`. Both survive a refresh, neither crosses to a new tab —
-so **a tab that already has an id is refreshing, a tab without one is new.**
+A session is **held** while its tab has been heard from within 90 seconds; a
+crashed tab simply stops being heard and frees its session.
 
-A session is **held** while its tab has been heard from within 90 seconds. Tabs
-re-attach every 10 seconds, which doubles as the heartbeat, and beacon a release
-when they close; a crashed tab simply stops heartbeating and frees its session.
-The TTL is well past a minute because browsers throttle a hidden tab's timers
-to about one run a minute.
-
-`POST /api/sessions/attach` decides in one server-side pass, so two tabs opening
-at once cannot race: the id the tab already has if it is free or already this
-tab's, else the most recently active unheld session, else a new one. The first
-case falls through when a *different* live tab holds that id — duplicating a tab
-copies its `sessionStorage`, and the copy must not hijack the original.
-
-An unnamed session is swept 90 seconds after it is both unheld and idle. The
-delay is the reload grace: a reload's release beacon can land after its
-re-attach, and the next heartbeat re-claims the session well within it. A
+An unnamed session is swept 90 seconds after it is both unheld and idle. A
 session whose tab still holds its claim but stopped heartbeating (a crash, a
 sleeping laptop) is kept — it may wake.
 
 A running tab is never moved silently. A sleeping laptop or a frozen tab can
-still let a claim lapse and another tab take its session. Its next heartbeat (sent
-with `keep`, see [api.md](../architecture/api.md)) gets a `409`: the tab greys out and stops
-writing until you pick **Use it here** (the other tab then greys out) or **New
-session**. Any session change re-syncs the whole shell.
+still let a claim lapse and another tab take its session: the tab greys out and
+stops writing until you pick **Use it here** (the other tab then greys out) or
+**New session**. Any session change re-syncs the whole shell.
 
-The row is also the truth for the connection and its database. Every row the tab
-adopts is checked against the connection it shows, so a switch made elsewhere
-(another tab, an API caller) reaches it within a beat, and every view follows —
-the explorer reloads its tables, the dashboard and the query panel re-run what
-is on screen. A switch the tab makes itself holds the heartbeat off, so no beat
-that read the row before it lands after it with the old database.
+A switch of connection or database made elsewhere (another tab, an API caller)
+reaches the tab within a beat, and every view follows — the explorer reloads
+its tables, the dashboard and the query panel re-run what is on screen.
+
+How tabs claim, heartbeat and release a session is in
+[sessions.md](../architecture/sessions.md#claims-and-the-heartbeat).
 
 ## The session dropdown
 

@@ -193,12 +193,11 @@ agent the browser tab that holds the token.
 
 ## Sessions & reconnecting
 
-Each **session** has one active connection, recorded on the session's own row in
-SQLite and keyed by the `X-QV-Session` header the SPA sends with every request.
-There is no session cookie: sessions are named by id, not by browser, so two
-tabs can sit on two different connections and databases at once. Saved
-connections themselves are shared (stored once in SQLite); the *active* one is
-per session. See [session.md](./session.md).
+Each **session** has one active connection, so two tabs can sit on two
+different connections and databases at once. Saved connections themselves are
+shared; the *active* one is per session. See [session.md](./session.md); how
+the session's row records it is in
+[sessions.md](../architecture/sessions.md#how-it-is-stored).
 
 Opening the app attaches a session and reconnects whatever connection that
 session was on:
@@ -212,41 +211,18 @@ session was on:
   session simply reads as disconnected. It is not repaired or repointed — you
   reconnect.
 
-A session with no connection (`connection_name IS NULL`) is disconnected, and
-stays that way across restarts: that is what `disconnect` records.
+A session with no connection is disconnected, and stays that way across
+restarts.
 
 To open a **specific** connection on load, pass `…/?connection=<name>`
 (equivalent to clicking its card); the SPA then cleans the URL so a later reload
 resumes normally.
 
-Only the live driver state — the decrypted config and the database list — is
-held in memory, as a cache. A backend restart costs one reconnect, not the
-session.
-
 ## API
 
-| Method | Path                          | Body                                   | Result |
-| ------ | ----------------------------- | -------------------------------------- | ------ |
-| POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
-| POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
-| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by, locked}]}`: this session's connections, then the saved ones most recent first (never the config) |
-| GET    | `/api/db/connections/<name>` | —                               | `{ok, name, type, config}` the saved config with the password blanked, for the edit form; unknown → `404`, locked without the token → `403` |
-| DELETE | `/api/db/connections` | `{name, passphrase?}`                  | `{ok}`; deletes a connection (this session's own, else a saved one) and disconnects every session on it; a locked one needs its passphrase (`403` without) |
-| POST   | `/api/db/open`        | `{name}`                               | `{ok, …}` the same state as `GET /api/session` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card); on a locked one `unlocked` says whether this tab's token opens it |
-| POST   | `/api/db/lock`        | `{name, passphrase}`                   | Lock a saved connection; `{ok, token}` for this tab. Empty passphrase, unknown or already locked → `400` |
-| POST   | `/api/db/unlock`      | `{name, passphrase}`                   | `{ok, token}` — this session's unlock token; wrong passphrase → `403`, not locked → `400` |
-| DELETE | `/api/db/lock`        | `{name, passphrase}`                   | Remove the lock; `{ok}`, wrong passphrase → `403` |
-| GET    | `/api/db/databases`   | —                                      | `{ok, name, databases}` \| `{ok:false, message}`; re-lists the connection's databases; no session → `409` |
-| POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database (a name not in the cached list is re-listed once) |
-| POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |
-| GET    | `/api/session`                | —                                      | `{connected, name?, type?, databases?, database?}` for the calling session |
-
-`test`/`connect` resolve the driver from `type` and validate per driver
-(ClickHouse/Postgres/MySQL require `host` + `port` `1..65535`, `database` optional;
-DuckDB takes an optional
-`path`, SQLite a required file path); validation errors return `400`. ClickHouse queries run over the HTTP
-interface with HTTP Basic auth, within the session's
-[query timeout](./queryview.md#query-timeout).
+`/api/db/test`, `/api/db/connect`, `/api/db/connections`, `/api/db/open`,
+`/api/db/lock`, `/api/db/unlock`, `/api/db/databases`, `/api/db/database`,
+`/api/db/query` and `/api/session` — see [api.md](../architecture/api.md).
 
 ## CI
 

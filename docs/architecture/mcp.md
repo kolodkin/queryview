@@ -52,8 +52,9 @@ you [armed](../system/mcp.md#arming-a-session).
   failure still leaves the session on `database`.
 - `push_dashboard(session_id, html?, queries?, params?, name?, dir?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
-  renders it. `name` selects a saved dashboard to
-  [edit](../system/mcp.md#naming-and-saving). `dir` reads the draft from
+  renders it. Without `name` the push is an unnamed draft; `name` selects a
+  saved dashboard to [edit](../system/mcp.md#naming-and-saving): it must be
+  one `list_dashboards` returns, and any other is refused. `dir` reads the draft from
   [a folder](../system/dashboard.md#pushing-from-a-folder) instead of `html` and
   `queries`. Returns
   `{ok, pushed, message, database}`; a disconnected session fails with
