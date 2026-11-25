@@ -193,7 +193,8 @@ class PostgresDriver:
     ) -> QueryRows:
         order_clause = build_order_by(order_by, '"')
         paginated = wrap_paginated(sql, order_clause, limit, offset, alias="_qv")
-        async with _connect(config, database) as conn:
+        # Read-only: a SELECT could otherwise call a function that writes.
+        async with _connect(config, database) as conn, conn.transaction(readonly=True):
             stmt = await conn.prepare(paginated)
             return _to_rows(stmt.get_attributes(), await stmt.fetch(), decode_json)
 

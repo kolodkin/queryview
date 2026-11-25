@@ -61,6 +61,13 @@ you [armed](../system/mcp.md#arming-a-session).
   `queries`. Returns
   `{ok, pushed, message, database}`; a disconnected session fails with
   `not connected`. See [dashboard.md](../system/dashboard.md).
+- `run_dashboard(session_id, queries?, params?, values?, dir?, limit?=100)` — run
+  a draft's queries with `values` substituted into their
+  [placeholders](../system/dashboard.md#dashboard-parameters), as the page would,
+  returning `{ok, database, results, meta, params}` to the agent: `results` in
+  the `window.queries` shape, at most `limit` rows a query (max 1000). A param
+  without a value takes its default. Stops at the first failing query, whose
+  name opens the `message`, and after 60s; nothing reaches the browser.
 - `new_tab(name)` — a session of the agent's own; see [Tabs](../system/mcp.md#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
 - `git_history` / `git_restore` — list and restore a saved dashboard's
@@ -91,8 +98,8 @@ after a minute.
 connection the user [locked](../system/connect.md#locked-connections) behind a
 passphrase, the tools that query it, push to its tab, pick its database or
 switch to it refuse with `connection is locked`: `run_sql`, `run_script`,
-`push_script`, `push_dashboard`, `open_explorer`, `select_database` and
-`use_connection`. `session_info` reports only that it is locked, with no name,
+`run_dashboard`, `push_script`, `push_dashboard`, `open_explorer`,
+`select_database` and `use_connection`. `session_info` reports only that it is locked, with no name,
 type, database or tables, and a refused tool names no database;
 `list_connections` leaves it out. REST calls without the tab's unlock token are
 refused too, so copying a session id into `/api/db/query` gets the agent

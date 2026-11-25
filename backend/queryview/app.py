@@ -41,7 +41,14 @@ from .connect import (
     session_settings,
     unlock_connection,
 )
-from .dashboard_queries import clean_values, resolved_part, run_dashboard, run_dashboard_queries, session_sql
+from .dashboard_queries import (
+    clean_queries,
+    clean_values,
+    resolved_part,
+    run_dashboard,
+    run_dashboard_queries,
+    session_sql,
+)
 from .dashboards import get_dashboard, list_dashboards
 from .drivers import DRIVERS
 from .drivers.clickhouse import close_client
@@ -66,14 +73,6 @@ def _status_error(
 ) -> JSONResponse:
     """The `{ok: false, message}` response for a domain error carrying its HTTP status."""
     return JSONResponse({"ok": False, "message": str(e)}, status_code=e.status)
-
-
-def _clean_queries(raw: Any) -> dict[str, str]:
-    """Keep only string→string entries with a non-empty name and SQL; ignore
-    anything else so a malformed `queries` map can't reach the runner."""
-    if not isinstance(raw, dict):
-        return {}
-    return {k: v for k, v in raw.items() if isinstance(k, str) and k and isinstance(v, str) and v.strip()}
 
 
 @asynccontextmanager
@@ -552,7 +551,7 @@ async def remote_lock(request: Request):
 async def run_queries(request: Request):
     body = await _read_json(request)
     b = body if isinstance(body, dict) else {}
-    queries = _clean_queries(b.get("queries"))
+    queries = clean_queries(b.get("queries"))
     # With `params` the queries are templates, substituted here; a dashboard of
     # widgets alone sends none and still gets its selectors resolved.
     with_params = "params" in b
@@ -585,7 +584,7 @@ async def dashboards_upsert(request: Request):
     name = _clean_str(b.get("name"))
     raw_html = b.get("html")
     html = raw_html if isinstance(raw_html, str) else ""
-    queries = _clean_queries(b.get("queries"))
+    queries = clean_queries(b.get("queries"))
     if not name or not html.strip():
         return JSONResponse({"ok": False, "message": "name and html are required"}, status_code=400)
     params = b.get("params")

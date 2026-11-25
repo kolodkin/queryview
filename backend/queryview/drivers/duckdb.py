@@ -209,6 +209,14 @@ def _list_files(root: str, folder: str, union: bool, limit: int) -> TablesResult
 _READ_STATEMENTS = {duckdb.StatementType.SELECT, duckdb.StatementType.EXPLAIN}
 
 
+def _require_one_read(con: duckdb.DuckDBPyConnection, sql: str, what: str) -> None:
+    """Refuse `sql` unless it is a single query-shaped statement: read_only
+    still lets COPY ... TO, ATTACH or INSTALL write (DESCRIBE/SHOW parse as SELECT)."""
+    stmts = con.extract_statements(sql)
+    if len(stmts) != 1 or stmts[0].type not in _READ_STATEMENTS:
+        raise ValueError(f"{what} runs one read-only query (SELECT, DESCRIBE, SHOW, EXPLAIN...)")
+
+
 def _rel_rows(rel: duckdb.DuckDBPyRelation) -> QueryRows:
     """A relation's rows as the shared result shape; it exposes DuckDB's own
     type names alongside the rows."""
@@ -330,6 +338,8 @@ class DuckDBDriver:
             con = _open(config.path, database)
             opened.append(con)
             try:
+                # Wrapped, so one SELECT; more means the SQL closed the wrapper to add its own.
+                _require_one_read(con, paginated, "a query")
                 return _rel_rows(con.sql(paginated))
             finally:
                 con.close()
@@ -363,11 +373,7 @@ class DuckDBDriver:
             timer = threading.Timer(RUN_SQL_TIMEOUT_SECONDS, con.interrupt)  # DuckDB has no server-side limit
             timer.start()
             try:
-                # read_only still lets COPY ... TO, ATTACH or INSTALL write, so
-                # only a single query-shaped statement runs (DESCRIBE/SHOW parse as SELECT).
-                stmts = con.extract_statements(sql)
-                if len(stmts) != 1 or stmts[0].type not in _READ_STATEMENTS:
-                    raise ValueError("run_sql runs one read-only query (SELECT, DESCRIBE, SHOW, EXPLAIN...)")
+                _require_one_read(con, sql, "run_sql")
                 rel = con.sql(sql)
                 return QueryRows([], []) if rel is None else _rel_rows(rel.limit(max_rows))
             finally:
