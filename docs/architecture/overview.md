@@ -35,12 +35,10 @@ Stated on the page that owns them:
 - Which session a request acts on: [api.md](./api.md).
 - Arming as the gate to the agent channel: [mcp.md](./mcp.md#how-it-works).
 - What a locked connection refuses: [mcp.md](./mcp.md#how-it-works).
+- The redirect onto the MCP mount: [api.md](./api.md).
 
 <!-- req: architecture/overview/driver-contract -->
 Every registered driver answers the shared operations (parse, config round trip, tables, fields, rows, text, databases) with the same typed results or an error.
-
-<!-- req: architecture/overview/mcp-mount -->
-A slashless `/mcp` redirects to `/mcp/` for every MCP method (`POST`, `GET`, `DELETE`), and `/mcp/` itself is not redirected. The mount is in [api.md](./api.md).
 
 <!-- req: architecture/overview/static-spa -->
 The backend serves the built SPA's files, falls back to `index.html` for client-side routes, and answers `404` for a missing file.

@@ -68,6 +68,10 @@ and `git_history` / `git_restore`. They delegate to the in-process
 hubs the matching REST endpoints call. See [mcp.md](../system/mcp.md) and
 [dashboard.md](../system/dashboard.md).
 
+<!-- req: architecture/api/mcp-mount -->
+A slashless `/mcp` redirects to `/mcp/` for every MCP method (`POST`, `GET`,
+`DELETE`), and `/mcp/` itself is not redirected.
+
 ## Persistence
 
 Connections are stored in SQLite via SQLModel. See
