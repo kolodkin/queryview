@@ -77,6 +77,16 @@ def test_system_id_needs_a_browser_test(tmp_path):
     assert any("no test in e2e/" in e for e in r.errors)
 
 
+def test_an_acceptance_test_may_also_prove_a_system_id(tmp_path):
+    req = "<!-- req: requirements/user/goal -->\nA goal.\n"
+    both = "// req: requirements/user/goal, system/dash/rerun\ntest('x', () => {})\n"
+    r = check(
+        repo(tmp_path, {"docs/requirements/user.md": req, "docs/system/dash.md": PAGE, "e2e/acceptance.spec.ts": both})
+    )
+    assert r.errors == []
+    assert r.matrix["system"] == {"system/dash/rerun": ["e2e/acceptance.spec.ts"]}
+
+
 def test_layer_proof_locations(tmp_path):
     req = "<!-- req: requirements/user/goal -->\nA goal.\n"
     files = {"docs/requirements/user.md": req, "e2e/dash.spec.ts": "// req: requirements/user/goal\n"}

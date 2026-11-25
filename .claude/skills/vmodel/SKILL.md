@@ -14,7 +14,7 @@ skill.
 | Layer | Doc of record | Proved in |
 |---|---|---|
 | User | `docs/requirements/` | `e2e/acceptance.spec.ts` |
-| System | `docs/system/` | the other `e2e/*.spec.ts` |
+| System | `docs/system/` | any `e2e/*.spec.ts` |
 | Integration | `docs/architecture/` | `backend/queryview/**/test_*.py`, `frontend/src/**/*.test.ts(x)` naming an `architecture/` ID |
 | Unit | the module's docstring (Python) or leading comment (TypeScript) | the test file beside the module, named after it, no ID |
 
@@ -36,7 +36,9 @@ comma-separated):
 test("run SQL, pick columns, page and download CSV", async ({ page, seeds }) => {
 ```
 
-Never reword a slug a test names. A marker outside the layer's "Proved in"
+A test may name two IDs: an acceptance test that also proves a system
+statement names both, so no second browser test repeats it. Never reword a
+slug a test names. A marker outside the layer's "Proved in"
 location is support, not proof.
 
 ## Steps

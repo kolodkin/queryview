@@ -16,7 +16,9 @@ and start from the nearest existing test file: it shows the call shapes. The
 | System | one feature through the browser | `e2e/<feature>.spec.ts` | `docs/system/` |
 | User | a user requirement end to end | `e2e/acceptance.spec.ts` | `docs/requirements/` |
 
-Frontend unit tests cover pure TypeScript logic, with no React rendering.
+Frontend unit tests cover pure TypeScript logic, with no React rendering. An
+acceptance test may also prove a system statement; a user requirement is
+proved only in `e2e/acceptance.spec.ts`.
 
 Run backend tests with `uv run --group test pytest` (its `testpaths` cover
 `backend/queryview` and `scripts`), frontend ones with `npm test -w frontend`,
