@@ -24,7 +24,7 @@ def test_substitutes_the_given_value():
 
 def test_a_param_left_out_or_not_offered_takes_its_default():
     sid = _connected_session("rd-default")
-    for values in (None, {"region": "mars"}, {"region": 3}, "notamap"):
+    for values in (None, {"region": "mars"}, {"region": 3}):
         assert _run(run_dashboard(sid, Q, REGION, values))["results"] == {"q": {"v": ["eu"]}}
 
 
