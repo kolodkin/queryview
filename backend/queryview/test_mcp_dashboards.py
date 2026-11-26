@@ -62,6 +62,8 @@ def test_reads_a_folder(tmp_path):
     assert _run(run_dashboard(sid, dir=str(tmp_path)))["results"] == {"q": {"v": ["eu"]}}
     both = _run(run_dashboard(sid, Q, dir=str(tmp_path)))
     assert both == {"ok": False, "message": "pass either `queries`, or `dir`"}
+    (tmp_path / "queries.yaml").write_text("q: ''\n")
+    assert _run(run_dashboard(sid, dir=str(tmp_path))) == {"ok": False, "message": "no runnable query in `dir`"}
 
 
 # req: architecture/mcp/run-dashboard
@@ -93,9 +95,19 @@ def test_a_drop_as_a_query_fails_and_leaves_the_table(tmp_path):
 
 
 # req: architecture/mcp/run-dashboard
-def test_a_non_string_value_is_dropped_over_mcp_too():
+def test_a_value_not_offered_takes_the_default_over_mcp_too():
     args = {"session_id": _connected_session("rd-wire"), "queries": Q, "params": REGION, "values": {"region": 3}}
     assert '"eu"' in str(_run(mcp.call_tool("run_dashboard", args)))
+
+
+# req: architecture/mcp/run-dashboard
+def test_a_number_or_boolean_value_is_read_as_its_text():
+    sid = _connected_session("rd-typed")
+    params = [{"name": "n", "options": [1, 2]}, {"name": "b", "options": [False, True]}]
+    out = _run(run_dashboard(sid, {"q": "SELECT {n} AS n, {b} AS b"}, params, {"n": 2, "b": True}))
+    assert [p["value"] for p in out["params"]] == ["2", "true"]
+    dim = [{"name": "region", "kind": "dimension"}]
+    assert _run(run_dashboard(sid, Q, dim, {"region": False}))["results"] == {"q": {"v": [""]}}
 
 
 # req: architecture/mcp/run-dashboard

@@ -517,7 +517,7 @@ async def run_dashboard(
         params = d["params"] if params is None else params
     queries = dashboard_queries.clean_queries(queries)  # a blank one is skipped, as on the page
     if not queries:
-        return {"ok": False, "message": "pass `queries`, or `dir`"}
+        return {"ok": False, "message": "no runnable query in `dir`" if dir else "pass `queries`, or `dir`"}
     perr = dashboard_params_error(params)
     if perr is not None:
         return {"ok": False, "message": perr}

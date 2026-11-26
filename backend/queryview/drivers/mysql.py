@@ -169,12 +169,16 @@ async def _fetch(
 
 
 _DUP_FIELDNAME = 1060
+# A session (not transaction) setting also refuses DDL and survives a COMMIT.
+_READ_ONLY = "SET SESSION TRANSACTION READ ONLY"
 
 
 async def _fetch_wrapped(conn: Any, sql: str, order_clause: str, limit: int, offset: int) -> tuple[Any, list[Any]]:
     """One page of `sql` through the paginating wrapper. A derived table needs
     unique column names, so `SELECT a.id, b.id …` runs as written instead,
     fetching through the page and dropping the rows before it."""
+    # Read-only: a SELECT could otherwise call a function that writes.
+    await _fetch(conn, _READ_ONLY, None, query_timeout.get())
     try:
         description, rows, _ = await _fetch(
             conn,
@@ -278,9 +282,8 @@ class MySqlDriver:
     async def run_sql(self, config: MySqlConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
         try:
             async with _connect(config, database) as conn:
-                # Unwrapped SQL could otherwise write. A session (not transaction) setting
-                # also refuses DDL and survives a COMMIT.
-                await _fetch(conn, "SET SESSION TRANSACTION READ ONLY", None, RUN_SQL_TIMEOUT_SECONDS)
+                # Unwrapped SQL could otherwise write.
+                await _fetch(conn, _READ_ONLY, None, RUN_SQL_TIMEOUT_SECONDS)
                 description, rows, _ = await _fetch(conn, sql, max_rows, RUN_SQL_TIMEOUT_SECONDS)
                 return RowsResult(_to_rows(description or (), rows))
         except Exception as e:  # noqa: BLE001

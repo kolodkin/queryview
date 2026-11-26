@@ -16,6 +16,7 @@ from .dashboard_params import (
     apply_to_queries,
     each_in,
     missing,
+    option_text,
     parse_params,
     resolve,
     substitute,
@@ -58,10 +59,14 @@ def clean_queries(raw: object) -> dict[str, str]:
 
 
 def clean_values(raw: object) -> dict[str, str]:
-    """A request's param values: the string entries of a mapping, the rest dropped."""
+    """A request's param values: the string entries of a mapping, a number or
+    boolean as the text the page would send, the rest dropped."""
     if not isinstance(raw, dict):
         return {}
-    return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str) and _sendable(k) and _sendable(v)}
+    texts = {k: option_text(v) if isinstance(v, (bool, int, float)) else v for k, v in raw.items()}
+    return {
+        k: v for k, v in texts.items() if isinstance(k, str) and isinstance(v, str) and _sendable(k) and _sendable(v)
+    }
 
 
 def resolved_part(r: dict[str, Any]) -> dict[str, Any]:
@@ -211,7 +216,10 @@ async def run_dashboard(
     if not queries and not any(p.options_sql for p in declared):
         # Nothing touches the database: no session, runner or dialect is used,
         # so a page of static selectors still renders disconnected.
-        resolved = await resolve(declared, values, _no_options, Dialect('"', False))
+        try:
+            resolved = await resolve(declared, values, _no_options, Dialect('"', False))
+        except ParamError as e:
+            return _params_error(str(e))
         return {"ok": True, "results": {}, "meta": {}, "params": resolved}
     s, err = await _gated_session(sid)
     if s is None:
