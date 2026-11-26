@@ -64,4 +64,4 @@ long, `409` a case twin of a saved dashboard or of an earlier entry.
 - [gitsync.md](./gitsync.md) — versioned backup/restore of the same entities via git.
 - [dashboard.md](./dashboard.md) — dashboards.
 - [workspace.md](./workspace.md) — workspaces: entity ownership.
-- [api.md](./api.md) — backend JSON API.
+- [api.md](../architecture/api.md) — backend JSON API.

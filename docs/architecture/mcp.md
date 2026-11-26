@@ -1,66 +1,21 @@
-# MCP server
+# MCP tools and channels
 
-QueryView serves an MCP server (Streamable HTTP) at `http://localhost:8000/mcp/`,
-inside the same process — nothing extra to start. Register it once with your
-agent:
-
-```bash
-claude mcp add --scope user --transport http queryview http://localhost:8000/mcp/
-```
-
-- **Match the port:** `--port 9000` or `docker run -p 127.0.0.1:9000:8000`
-  means `http://localhost:9000/mcp/`.
-- **Start QueryView first:** a client that finds nothing listening stays failed
-  until you reconnect it.
-- **Keep the trailing slash:** `/mcp` works too, but costs a redirect per call.
-- **Localhost only:** `/mcp/` has no auth and can query every connection and
-  rewrite workspace git state. Don't expose the port.
-
-## Tabs
-
-An agent works in browser tabs of its own, one per task, and leaves your
-sessions alone unless you hand it an id. `new_tab(name)` creates a
-[tab session](./session.md#tabs) and returns its `session_id` and `url`,
-`<origin>/?session=<id>`. The agent opens the link in your browser (`open` on
-macOS, `xdg-open` on Linux) or gives it to you; the tab lists as
-**Agent › orders**, arms itself on load, and is gone once closed. The agent
-connects it with `use_connection` or `add_connection`, then pushes into it as
-into any session; a push made before the link is opened waits for it, a minute
-at most, and every reply about a tab carries its `url`.
-
-## Arming a session
-
-Remote control is **opt-in**, per browser session, and off by default. Once a
-database is selected, an **agent icon** sits next to the connection status pill.
-Click it and toggle **Allow remote control**. The popover then shows this
-session's **id** and a copyable command, e.g.:
-
-> Use the queryview mcp to connect to session "a1b2c3" (Session 1)
-
-Turning the toggle off (or closing the tab) disarms the session immediately —
-pushes to its id are then reported as not delivered.
-
-Without a copied id the agent works in a [tab](#tabs) of its own.
-
-## Agent skill
-
-The server publishes one skill over the MCP Skills extension,
-`skill://queryview/SKILL.md` ([source](../backend/queryview/skills/queryview/SKILL.md)):
-the default workflow for tabs, connections, SQL and dashboards.
-Naming a tool overrides it.
+The MCP tools and the channel they push through. Connecting an agent and arming a session are in [mcp.md](../system/mcp.md).
 
 ## Tools
 
-Every tool acts on a browser session: a [tab](#tabs) of the agent's own, or one
-you [armed](#arming-a-session).
+Every tool acts on a browser session: a [tab](../system/mcp.md#tabs) of the agent's own, or one
+you [armed](../system/mcp.md#arming-a-session).
 
 - `session_info(session_id)` — what the session is on: `{ok, connected,
   connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
-  discovery. The agent may switch to any listed connection (below).
-- Connections ([access rule](./connect.md#session-connections)):
+  discovery. The agent may switch to any listed connection (below). On a
+  [locked](../system/connect.md#locked-connections) connection it returns
+  only `{ok, connected, locked: true, workspace, tables: []}`.
+- Connections ([access rule](../system/connect.md#session-connections)):
   `list_connections(session_id)` tags each with `scope`, `created_by`,
-  `active`, leaving out [locked](./connect.md#locked-connections) ones;
+  `active`, leaving out [locked](../system/connect.md#locked-connections) ones;
   `list_databases(session_id, connection?)` lists the databases of each listed
   connection, or of `connection` only.
   `add_connection(session_id, name, type, config)` adds a ClickHouse,
@@ -81,7 +36,7 @@ you [armed](#arming-a-session).
   collections as JSON); `truncated` means rows past `limit` were dropped. Fails
   with `not connected` on a disconnected session; stops after 60s, server-side
   too. ClickHouse errors name the `query_id` to look up in `system.query_log`.
-- `run_script(session_id, sql)` — run a script like the [Scripts](./scripts.md)
+- `run_script(session_id, sql)` — run a script like the [Scripts](../system/scripts.md)
   page's Run all, **writes included**, returning `{ok, database, results: [{sql,
   ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
   agent. Stops at the first failure; `columns`/`types`/`rows` are null for a
@@ -94,71 +49,71 @@ you [armed](#arming-a-session).
   (`"not connected"`, `"select a database first"`).
 - `open_explorer(session_id, database, table?)` —
   switch the session to `database` and send the browser to its
-  [Explorer](./explorer.md), on `table` when given (refused when the database
+  [Explorer](../system/explorer.md), on `table` when given (refused when the database
   doesn't list it). Returns `{ok, message, database}`; past the switch, a
   failure still leaves the session on `database`.
 - `push_dashboard(session_id, html?, queries?, params?, name?, dir?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
-  renders it. `name` selects a saved dashboard to
-  [edit](#naming-and-saving). `dir` reads the draft from
-  [a folder](./dashboard.md#pushing-from-a-folder) instead of `html` and
+  renders it. Without `name` the push is an unnamed draft; `name` selects a
+  saved dashboard to [edit](../system/mcp.md#naming-and-saving): it must be
+  one `list_dashboards` returns, and any other is refused. `dir` reads the draft from
+  [a folder](../system/dashboard.md#pushing-from-a-folder) instead of `html` and
   `queries`. Returns
   `{ok, pushed, message, database}`; a disconnected session fails with
-  `not connected`. See [dashboard.md](./dashboard.md).
+  `not connected`. See [dashboard.md](../system/dashboard.md).
 - `run_dashboard(session_id, queries?, params?, values?, dir?, limit?=100)` — run
   a draft's queries with `values` substituted into their
-  [placeholders](./dashboard.md#dashboard-parameters), as the page would,
+  [placeholders](../system/dashboard.md#dashboard-parameters), as the page would,
   returning `{ok, database, results, meta, params}` to the agent: `results` in
   the `window.queries` shape, at most `limit` rows a query (max 1000). A param
   without a value takes its default. Stops at the first failing query, whose
   name opens the `message`, and after 60s; nothing reaches the browser.
-- `new_tab(name)` — a session of the agent's own; see [Tabs](#tabs).
+- `new_tab(name)` — a session of the agent's own; see [Tabs](../system/mcp.md#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
 - `git_history` / `git_restore` — list and restore a saved dashboard's
-  versions in [workspace git](./gitsync.md); only the user's Save commits.
+  versions in [workspace git](../system/gitsync.md); only the user's Save commits.
 
 A pushed dashboard's queries run through the browser's own `/api/runqueries`
 and `/api/db/query` calls; the push layer never talks to a database.
-
-## Naming and saving
-
-The agent drafts and edits; the user names and saves. No tool saves.
-
-- **New work is unnamed.** `push_dashboard` without `name` pushes a draft. The
-  user names it at the prompt of the dashboard's **Save**, which refuses a name
-  already taken.
-- **`name` only edits.** It must be a saved dashboard (`list_dashboards`); any
-  other is refused.
-- **A push persists nothing.** The user's **Save** does.
-- **No tool renames or deletes.** The store's names are the user's: **Rename**
-  and **Delete** live on the dashboard page only. An agent asked to rename
-  says so; pushing the same dashboard under a new name is not a rename.
 
 ## How it works
 
 When armed, the browser opens an SSE stream
 (`GET /api/remote/events?session=<id>`); the backend registers an in-memory
-channel **keyed by that session's id** (see [session.md](./session.md)).
+channel **keyed by that session's id** (see [session.md](../system/session.md)).
 The push tools enqueue onto that channel; the SSE stream delivers the payload
 and the page renders it.
 
 Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
-reports nothing (see [workspace.md](./workspace.md)).
+reports nothing (see [workspace.md](../system/workspace.md)).
 
-A push to a [tab](#tabs) nobody has opened yet lands in a channel `new_tab`
+A push to a [tab](../system/mcp.md#tabs) nobody has opened yet lands in a channel `new_tab`
 opened in advance, which answers `queued for the tab`; arming takes that
 channel over with its pushes queued. One whose tab never comes is dropped
 after a minute.
 
-**Locked connections keep the agent out.** A saved connection the user
-[locked](./connect.md#locked-connections) behind a passphrase refuses every
-tool above while a session is on it (`connection is locked`), and refuses REST
-calls without the tab's unlock token too, so copying a session id into
-`/api/db/query` gets the agent nowhere.
+<!-- req: architecture/mcp/locked-refuses-both -->
+**Locked connections keep the agent out.** While a session is on a saved
+connection the user [locked](../system/connect.md#locked-connections) behind a
+passphrase, the tools that query it, push to its tab, pick its database or
+switch to it refuse with `connection is locked`: `run_sql`, `run_script`,
+`run_dashboard`, `push_script`, `push_dashboard`, `open_explorer`,
+`select_database` and `use_connection`. `session_info` reports only that it is locked, with no name,
+type, database or tables, and a refused tool names no database;
+`list_connections` leaves it out. REST calls without the tab's unlock token are
+refused too, so copying a session id into `/api/db/query` gets the agent
+nowhere.
 
+`list_dashboards`, `git_history`, `git_restore` and `new_tab` work on the
+workspace or open a tab, never on a connection, so the lock does not reach
+them.
+
+<!-- req: architecture/mcp/remote-channel -->
 **Arming is the gate, not the id.** Disarming closes the channel, and any later
-push fails with `unknown or inactive session`. The id is stable across refreshes
+push fails with `unknown or inactive session`.
+
+The id is stable across refreshes
 and re-arms, so the command you copy stops changing under you; equally, an id
 you have shared stays usable whenever that session is armed.
 
@@ -168,8 +123,6 @@ new id.
 
 ## Related docs
 
+- [mcp.md](../system/mcp.md) — connecting an agent, arming a session, naming and saving.
+- [session.md](../system/session.md) — sessions and agent tabs.
 - [api.md](./api.md) — backend JSON API.
-- [session.md](./session.md) — sessions and agent tabs.
-- [dashboard.md](./dashboard.md) — how agents author dashboards.
-- [query.md](./query.md) — querying: pagination, the results grid, CSV.
-- [docker.md](./docker.md) — port mapping when running the container.

@@ -30,3 +30,9 @@ repos:
         entry: prettier --write --ignore-unknown
         files: ^frontend/src/
         additional_dependencies: [prettier@3.9.10]
+      - id: vmodel-check
+        name: vmodel check
+        language: system
+        entry: uv run --no-project python scripts/vmodel_check.py
+        pass_filenames: false
+        always_run: true

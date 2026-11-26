@@ -2,7 +2,7 @@
 remote. Operations take a resolved workspaces.WorkspaceRec;
 every workspace has its own clone and lock. Versions are git commits — a
 user's Save, Rename or Delete makes one commit per entity, restore reads objects at a ref (git show) and
-upserts the DB row; HEAD never moves. Docs: docs/gitsync.md, docs/workspace.md."""
+upserts the DB row; HEAD never moves. Docs: docs/system/gitsync.md, docs/system/workspace.md."""
 
 from __future__ import annotations
 

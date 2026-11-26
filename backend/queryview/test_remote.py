@@ -17,6 +17,7 @@ def test_register_returns_the_session_id_it_was_given():
     remote.unregister(rid)
 
 
+# req: architecture/mcp/remote-channel
 def test_push_to_registered_session_delivers():
     rid = remote.register(uuid.uuid4().hex)
     try:
@@ -28,12 +29,14 @@ def test_push_to_registered_session_delivers():
         remote.unregister(rid)
 
 
+# req: architecture/mcp/remote-channel
 def test_push_to_unknown_session_fails():
     ok, msg = remote.push("deadbeef", _PUSH)
     assert ok is False
     assert "unknown" in msg.lower()
 
 
+# req: architecture/mcp/remote-channel
 def test_unregister_makes_push_fail():
     rid = remote.register(uuid.uuid4().hex)
     remote.unregister(rid)
@@ -117,6 +120,7 @@ def test_release_by_nonowner_is_noop():
 # --- the channel is the session ------------------------------------------
 
 
+# req: architecture/mcp/remote-channel
 def test_register_keys_the_channel_by_the_session_id():
     rec = asyncio.run(sessions.create_session())
     remote.register(rec.id)
@@ -127,6 +131,7 @@ def test_register_keys_the_channel_by_the_session_id():
         remote.unregister(rec.id)
 
 
+# req: architecture/mcp/remote-channel
 def test_push_to_an_unarmed_session_is_refused():
     """Disarming still revokes: the id alone is not access."""
     rec = asyncio.run(sessions.create_session())

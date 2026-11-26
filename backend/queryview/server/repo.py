@@ -1,6 +1,6 @@
 """The viewer server's dashboards: read from the git repo at its branch head
 and held in memory, refreshed by polling. Nothing is merged, committed or
-pushed. See docs/viewer_server."""
+pushed. See docs/system/viewer_server.md."""
 
 from __future__ import annotations
 

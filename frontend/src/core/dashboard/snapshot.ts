@@ -1,6 +1,6 @@
 // The dashboard snapshot: the frame serializes its own document on request
 // (the prologue in ./srcDoc.ts) and the host wraps that text for download.
-// See docs/dashboard.md.
+// See docs/system/dashboard.md.
 
 import { escapeHtml } from '../cells/cellView'
 import { downloadText } from '../download'

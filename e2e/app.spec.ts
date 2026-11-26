@@ -20,7 +20,6 @@ import {
   openDashboard,
   openNewQuery,
   sessionId,
-  startNewConnection,
   tableRow,
   test,
 } from "./fixtures";
@@ -43,90 +42,6 @@ async function switchDatabaseFromPill(page: Page, database: string): Promise<voi
   await page.keyboard.press("Enter");
   await expect(page.getByTestId("connection-status")).toContainText(`· ${database}`);
 }
-
-test("queryview e2e", async ({ page }) => {
-  // loads the app and shows the heading
-  await openConnect(page);
-  await expect(page.locator("h1")).toHaveText("QueryView");
-
-  // the ClickHouse "new connection" card opens its form, and Back returns
-  await startNewConnection(page, "clickhouse");
-  await expect(page.getByTestId("clickhouse-form")).toBeVisible();
-  await page.getByTestId("form-back").click();
-  await expect(page.getByTestId("clickhouse-form")).toHaveCount(0);
-  await startNewConnection(page, "clickhouse");
-  await expect(page.getByTestId("clickhouse-form")).toBeVisible();
-  for (const id of ["ch-name", "ch-host", "ch-port", "ch-username", "ch-password"])
-    await expect(page.getByTestId(id)).toBeVisible();
-
-  // test connection succeeds against the real ClickHouse
-  await page.getByTestId("ch-test").click();
-  const result = page.getByTestId("ch-result");
-  await expect(result).toBeVisible();
-  await expect(result).toHaveAttribute("data-ok", "true");
-  await expect(result).toContainText("Connected");
-
-  // connect opens the database picker
-  await page.getByTestId("ch-connect").click();
-  await expect(page.getByTestId("db-picker")).toBeVisible();
-  await expect(page.locator('[data-db="default"]')).toBeVisible();
-  // The picker's Back returns to the cards; with no database visited yet, the
-  // card opens the picker again.
-  let card = connCard(page, "clickhouse");
-  await page.getByTestId("picker-back").click();
-  await expect(page.getByTestId("db-picker")).toHaveCount(0);
-  await card.click();
-  // The picker's filter narrows the chips (a non-match hides `default`).
-  const dbFilter = page.getByTestId("db-filter");
-  await dbFilter.fill("sys");
-  await expect(page.locator('[data-db="default"]')).toHaveCount(0);
-  await expect(page.locator('[data-db="system"]')).toBeVisible();
-  await dbFilter.fill("");
-
-  // selecting a database shows the connected indicator and, because the
-  // connection is now ready, lands on the explorer. The session's URL write is
-  // fire-and-forget; wait for it so the reload below resumes the explorer.
-  await Promise.all([
-    page.waitForResponse((r) => r.request().method() === "PATCH" && r.url().includes("/api/sessions/")),
-    page.locator('[data-db="default"]').click(),
-  ]);
-  await expect(page.getByTestId("connection-indicator")).toBeVisible();
-  await expect(page.getByTestId("connection-status")).toContainText("· default");
-  await expect(page).toHaveURL(/\/explorer/);
-  await expect(page.getByTestId("explorer-tables")).toBeVisible();
-
-  // reload resumes the session, then reconnect and select the system database
-  await page.goto("/", { waitUntil: "networkidle" });
-  // Resume: came back connected to the previously selected database, and the
-  // landing redirect picks the explorer over Connect.
-  await expect(page.getByTestId("connection-status")).toContainText("· default");
-  await expect(page).toHaveURL(/\/explorer/);
-  // The saved connection's card, marked active and showing its database,
-  // goes straight back to the database last visited in this session.
-  await page.getByTestId("nav-connect").click();
-  card = connCard(page, "clickhouse");
-  await expect(card).toHaveAttribute("data-active", "true");
-  await expect(card).toContainText("default");
-  await card.click();
-  await expect(page).toHaveURL(/\/explorer/);
-  await expect(page.getByTestId("connection-status")).toContainText("· default");
-
-  // opening with ?connection=<name> opens that connection, on its last database too.
-  await page.goto("/?connection=clickhouse", { waitUntil: "networkidle" });
-  await expect(page.getByTestId("connection-status")).toContainText("· default");
-  await expect(page.getByTestId("db-picker")).toHaveCount(0);
-
-  // the connection pill's database menu carries the same filter
-  await page.getByTestId("connection-status").click();
-  const menuFilter = page.getByTestId("db-select-filter");
-  await expect(menuFilter).toBeVisible();
-  await menuFilter.fill("zzz");
-  await expect(page.getByTestId("db-select-empty")).toBeVisible();
-  await menuFilter.fill("sys");
-  await expect(page.getByTestId("db-select").getByRole("option")).toHaveCount(1);
-  await page.keyboard.press("Enter");
-  await expect(page.getByTestId("connection-status")).toContainText("· system");
-});
 
 for (const c of PICKER) {
   test(`a database switch reruns the query on screen [${c.id}]`, async ({ page, seeds }) => {

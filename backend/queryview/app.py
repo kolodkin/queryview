@@ -105,7 +105,7 @@ async def session_header(request: Request, call_next):
     """Identify the session from the header the SPA sends on every /api call.
     There is no cookie: a session is named by its id, not by the browser."""
     request.state.sid = request.headers.get("X-QV-Session") or ""
-    # The unlock token for a locked connection (docs/connect.md#locked-connections).
+    # The unlock token for a locked connection (docs/system/connect.md#locked-connections).
     request_token.set(request.headers.get("X-QV-Token"))
     return await call_next(request)
 
@@ -383,7 +383,7 @@ async def _with_params(
     request: Request, b: dict[str, Any], sql: str, reasons_409: tuple[str, ...]
 ) -> tuple[str, JSONResponse | None]:
     """A dashboard widget's query: with `params` in the body, `sql` is a
-    template and `values` are substituted here (docs/dashboard.md#dashboard-parameters).
+    template and `values` are substituted here (docs/system/dashboard.md#dashboard-parameters).
     Returns the SQL to run, or the failed response."""
     if "params" not in b:
         return sql, None
@@ -576,7 +576,7 @@ async def run_queries(request: Request):
 
 
 # The user's Save: upsert a dashboard (in a synced workspace also one commit,
-# docs/gitsync.md) and, with a session_id, push it to a live browser session.
+# docs/system/gitsync.md) and, with a session_id, push it to a live browser session.
 @router.post("/api/dashboards")
 async def dashboards_upsert(request: Request):
     body = await _read_json(request)
@@ -621,7 +621,7 @@ async def dashboards_get(name: str, request: Request):
     return d
 
 
-# Rename / Delete: a user action, one commit in a synced workspace (docs/gitsync.md).
+# Rename / Delete: a user action, one commit in a synced workspace (docs/system/gitsync.md).
 # `:path`: a name may contain "/", which arrives decoded.
 @router.post("/api/dashboards/{name:path}/rename")
 async def dashboards_rename(name: str, request: Request):
@@ -644,7 +644,7 @@ async def dashboards_delete(name: str, request: Request):
     return await _gitsync_json(gitsync.delete(ws, name))
 
 
-# --- Git sync: per-entity backup/restore (see docs/gitsync.md) -------------
+# --- Git sync: per-entity backup/restore (see docs/system/gitsync.md) -------------
 
 
 def _gitsync_args(kind: Any, name: Any) -> tuple[str, str] | JSONResponse:
@@ -726,7 +726,7 @@ async def git_restore(request: Request):
     return await _gitsync_json(gitsync.restore(ws, kind, name, _clean_str(b.get("ref")) or None))
 
 
-# --- YAML export / import (see docs/export-import.md) ----------------------
+# --- YAML export / import (see docs/system/export-import.md) ----------------------
 
 
 # Download one entity — or the whole workspace — as a self-describing YAML
@@ -766,7 +766,7 @@ async def import_yaml(request: Request):
     return {"ok": True, **r}
 
 
-# --- Workspaces (see docs/workspace.md) ------------------------------------
+# --- Workspaces (see docs/system/workspace.md) ------------------------------------
 # Admin configuration with secrets (the remote URL may embed a token): exposed
 # over REST/UI only, deliberately not over MCP.
 

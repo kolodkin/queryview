@@ -91,7 +91,7 @@ session id) exposes:
   `{ok, pushed, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
 - `run_dashboard` returns the rows of a draft's queries to the agent, to test
-  them before a push: see [mcp.md](./mcp.md#tools).
+  them before a push: see [mcp.md](../architecture/mcp.md#tools).
 
 A dashboard never names a [connection](./connect.md): it runs on the
 **viewing** session's connection and selected database. So
@@ -102,7 +102,7 @@ fully-qualify tables as `db.table`.
 
 The REST mirror `POST /api/dashboards` takes the inline fields (plus optional
 `session_id`) and drives the same persist-and-push path (used by the e2e suite).
-See [api.md](./api.md) for the full endpoint list.
+See [api.md](../architecture/api.md) for the full endpoint list.
 
 ## Pushing from a folder
 
@@ -349,20 +349,7 @@ declares, reviewable in `queries.yaml`.
 
 ## Running the queries: `/api/runqueries`
 
-The browser POSTs `{queries, params, values}` to `/api/runqueries`: the
-dashboard's queries as written, its `params` declaration and the chosen
-values. The backend resolves each selector's options and value, substitutes
-them into the queries, and runs each one on the session's connection and
-selected database (wrapped in a paginated subselect capped at 1000 rows). It
-returns column-oriented results and the resolved selectors. Up to five queries
-run at once. Switching the connection or database re-runs them.
-
-It is **fail-fast**: if any query fails, or the session is not connected or has
-no database selected, the whole request returns an HTTP error and the page shows a
-dashboard-level error banner instead of partial panels. On success every named
-query is present in `window.queries`. A failing query's message is prefixed with
-its panel name (e.g. `churn: Unknown table …`) so it's clear which one to fix. When
-several fail, the first in the dashboard's order is the one reported.
+The request the page sends to run a dashboard's queries is in [dashboards.md](../architecture/dashboards.md#running-the-queries-apirunqueries).
 
 ## Snapshot
 
@@ -375,35 +362,20 @@ stands at the current parameters. Print the file for a PDF.
 - A canvas chart becomes an image; a dropdown, its chosen value.
 - Refused while the dashboard or a widget is still loading.
 - The file runs no script and redirects nowhere, whatever the dashboard's
-  HTML contains: the host puts a script-blocking policy ahead of the frame's
-  text. Stylesheets, fonts and images from elsewhere are still fetched when
-  it is opened; embedded frames are not.
+  HTML contains. Stylesheets, fonts and images from elsewhere are still
+  fetched when it is opened; embedded frames are not.
 - A WebGL chart or a canvas holding a cross-origin image comes out blank; a
   password field, empty.
 - It holds rendered query results: treat the file as data.
 
 ## Isolation & security
 
-The HTML renders in
-`<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc=…>`
-**without** `allow-same-origin`, giving it an opaque origin: it can run JS and load CDN
-assets but cannot read the app's storage or call `/api/*` as the session (it
-has neither the session id nor any credential). A link the page opens with
-`target="_blank"` lands in a normal tab. The page cannot print or download;
-[Snapshot](#snapshot) is the way out. Data reaches it only through the
-injected `window.queries` and the [widget](#widgets) replies; the
-`window.queries` JSON has `<` escaped so result data containing `</script>` can't break out
-of the prologue.
-
-Persisted dashboards are shared via SQLite and keyed by name within their
-[workspace](./workspace.md). The agent HTML
-is untrusted and confined to the sandbox; it never sees connection secrets or
-the session id.
+The sandbox the dashboard HTML runs in is described in [dashboards.md](../architecture/dashboards.md#isolation--security).
 
 ## Related docs
 
 - [queryview.md](./queryview.md) — the pages and the Connect page.
 - [query.md](./query.md) — pagination, the results grid, CSV, the edit lock.
 - [mcp.md](./mcp.md) — arming a session, the session id, the MCP server.
-- [api.md](./api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
+- [api.md](../architecture/api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
 - [connect.md](./connect.md) — connections and their stored database.

@@ -16,6 +16,7 @@ import {
   dbExec,
   expect,
   test,
+  uid,
 } from "./fixtures";
 
 // A table the write round-trip creates: unique per run, so parallel workers
@@ -36,7 +37,7 @@ const TEMP_DDL: Record<string, string> = {
   sqlite: "CREATE TEMP TABLE {t} (x INTEGER)",
 };
 
-const uniqueTable = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+const uniqueTable = (prefix: string) => `${prefix}_${uid()}`;
 
 /** Drop a table the test created, straight on the server, whatever state the
  * UI was left in. */

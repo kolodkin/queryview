@@ -1,8 +1,8 @@
 # Running the viewer server
 
-The [viewer server](./README.md) ships in the same package and
-[image](../docker.md) as the app; pass the command `queryview-server` and mount
-its [config file](./README.md#the-config-file):
+The [viewer server](./system/viewer_server.md) ships in the same package and
+[image](docker.md) as the app; pass the command `queryview-server` and mount
+its [config file](./system/viewer_server.md#the-config-file):
 
 ```bash
 docker run -d --name queryview-server \
@@ -21,5 +21,5 @@ docker run -d --name queryview-server \
 
 ## Related docs
 
-- [README.md](./README.md) — the viewer server and its config file.
-- [../docker.md](../docker.md) — the image, and running the app from it.
+- [viewer_server.md](./system/viewer_server.md) — the viewer server and its config file.
+- [docker.md](docker.md) — the image, and running the app from it.

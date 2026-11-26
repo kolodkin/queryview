@@ -12,7 +12,7 @@ working on it; [README.md](README.md) covers running it.
 ├── backend/         # Python FastAPI + SQLModel app exposing /api/* (queryview package)
 ├── frontend/        # Vite + React + TS + Tailwind v4 SPA (npm workspace)
 ├── e2e/             # Playwright (TypeScript) browser tests
-├── docs/            # Feature and API documentation
+├── docs/            # Docs by V-model layer: requirements, system, architecture
 ├── pyproject.toml   # Backend deps + console script + `test` group (uv)
 └── package.json     # npm workspace root: dev orchestration, frontend build, e2e
 ```
@@ -79,11 +79,11 @@ In production there is no Vite — the FastAPI backend serves the bundled SPA fr
 
 ## Tests
 
-Backend unit tests live beside the code they test inside `backend/queryview`,
-and ship in the wheel:
+Backend tests live beside the code they test inside `backend/queryview`, and
+ship in the wheel; the `vmodel_check` script's tests in `scripts/` do not:
 
 ```bash
-uv run --group test pytest backend/queryview
+uv run --group test pytest backend/queryview scripts
 ```
 
 The e2e suite is [Playwright Test](https://playwright.dev/docs/intro) in
@@ -116,7 +116,10 @@ CLAUDEAI_ALLOW_LOCAL=1 claudeai/run.sh stop
 ## Lint & type-check
 
 [pre-commit](https://pre-commit.com) runs ruff (lint + format) and pyright, the
-same checks CI's `lint` job runs. Pyright resolves imports from the project's
+same checks CI's `lint` job runs, and the vmodel check
+(`scripts/vmodel_check.py`). A vmodel failure means a `req:` ID with no proving
+test, or a test naming an unknown ID; the rules are in
+`.claude/skills/vmodel/SKILL.md`. Pyright resolves imports from the project's
 `.venv`, so sync first:
 
 ```bash

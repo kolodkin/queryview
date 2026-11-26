@@ -22,7 +22,7 @@ class _Channel:
     # treated as released (heartbeat lapsed / tab froze).
     lock_owner: str | None = None
     lock_touched: float = 0.0
-    # A tab's channel opened before its browser tab armed (docs/mcp.md#tabs):
+    # A tab's channel opened before its browser tab armed (docs/system/mcp.md#tabs):
     # pushes queue up and answer "queued for the tab" until `register` takes
     # it over.
     pending_since: float | None = None

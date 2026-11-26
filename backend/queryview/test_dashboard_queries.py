@@ -67,7 +67,7 @@ def test_run_queries_needs_a_connected_session():
     assert out["ok"] is False and out["reason"] == "no-session"
 
 
-# --- With params: resolved and substituted here (docs/dashboard.md#dashboard-parameters) ---
+# --- With params: resolved and substituted here (docs/system/dashboard.md#dashboard-parameters) ---
 
 
 class _SeenDriver(_RowsDriver):
@@ -186,7 +186,7 @@ def test_a_failing_query_stops_the_ones_still_running(monkeypatch):
     assert driver.finished == [] and driver.running == 0
 
 
-# --- A query run once per value of an `each` param (docs/dashboard.md) ---
+# --- A query run once per value of an `each` param (docs/system/dashboard.md) ---
 
 EACH = [{"name": "region", "kind": "each", "options": ["eu", "us", "ap"]}]
 

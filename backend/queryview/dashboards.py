@@ -24,7 +24,7 @@ class Dashboard(SQLModel, table=True):
     workspace_id: int  # owning workspace (workspaces.id)
     html: str  # agent-authored HTML document
     queries: str  # JSON text: {query_name: SQL}
-    params: str = Field(default="[]")  # JSON text: selector specs (docs/dashboard.md)
+    params: str = Field(default="[]")  # JSON text: selector specs (docs/system/dashboard.md)
     updated_at: int  # unix ms
     commit_sha: str | None = None  # git commit whose content this row holds; None when unsynced or edited since
 
