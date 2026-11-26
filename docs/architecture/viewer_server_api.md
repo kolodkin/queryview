@@ -25,7 +25,7 @@ connection's own. The body needs no `connection`; one sent is ignored.
 `/api/run` also returns `connections: [{name, database, status, queries,
 message?}]`, `status` being `ok`, `failed` or `unknown`. A name the config
 lacks fails its query as `orders: unknown connection "nope"` (`400`).
-`connections` on `GET /api/dashboards/{name}` lists the names used. A dashboard
+`connections` on `GET /api/dashboards/{name}` lists the names its queries, then its `options_sql` params, use, each once. A dashboard
 mixing named and unnamed queries is not served.
 
 <!-- req: values-checked -->

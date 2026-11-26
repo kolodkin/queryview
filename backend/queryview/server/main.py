@@ -159,7 +159,9 @@ def create_app(config: ServerConfig) -> FastAPI:
         # Query names only: the SQL and the params' options_sql stay here.
         out: dict[str, Any] = {"name": d["name"], "html": d["html"], "queries": list(d["queries"])}
         if is_federated(d["queries"], d["params"]):
-            out["connections"] = list(dict.fromkeys(e["connection"] for e in d["queries"].values()))
+            named = [entry_connection(e) for e in d["queries"].values()]
+            named += [(p.connection, p.database) for p in parse_params(d["params"]) if p.options_sql]
+            out["connections"] = list(dict.fromkeys(pair[0] for pair in named if pair and pair[0]))
         return out
 
     # Run a dashboard's own queries (all, or the named ones) with its selectors

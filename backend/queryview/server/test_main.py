@@ -473,6 +473,17 @@ def test_the_dashboard_listing_never_carries_an_entry(fed_client):
 
 
 # req: architecture/viewer_server_api/named-connection
+def test_the_dashboard_listing_names_its_params_connections_too(fed_client, dash_repo):
+    params = [
+        {"name": "s", "options_sql": "SELECT sku FROM stock", "connection": "warehouse"},
+        {"name": "r", "options_sql": "SELECT 1", "connection": "archive"},
+    ]
+    dash_repo.commit([{**FED, "name": "picked", "params": params}])
+    asyncio.run(fed_client.app.state.repo.refresh())
+    assert fed_client.get("/api/dashboards/picked").json()["connections"] == ["local", "warehouse", "archive"]
+
+
+# req: architecture/viewer_server_api/named-connection
 def test_a_mixed_dashboard_is_not_served(fed_client, dash_repo):
     dash_repo.commit([{**FED, "name": "mixed", "queries": {**FED["queries"], "plain": "SELECT 1"}}])
     assert (dash_repo.author / dashboard_reldir("mixed")).is_dir()  # in the repo...
