@@ -13,7 +13,7 @@ selected database (wrapped in a paginated subselect capped at 1000 rows). It
 returns column-oriented results and the resolved selectors. Up to five queries
 run at once, across connections. Switching the connection or database re-runs them.
 
-A [federated](../system/dashboard.md#the-push_dashboard-mcp-tool) dashboard's queries and
+A [federated](../system/dashboard.md#federated-dashboards) dashboard's queries and
 `options_sql` each run on the connection they name instead, with no session
 gate: it runs in a disconnected session, or one on a locked connection. Its
 reply, failed or not, carries `connections`, one entry per named connection

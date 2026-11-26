@@ -60,8 +60,8 @@ redirects here, and `/studio` to a dashboard
   `/connect` (a picker-less driver's menu has just these two).
   Next to it, an **agent icon** opens the remote-control popover (opt-in "Allow
   remote control"); see [mcp.md](./mcp.md). Then the
-  [**Timeout** chip](#query-timeout). On a federated
-  [dashboard](./dashboard.md#the-page-dashboard) the pill is the federated one
+  [**Timeout** chip](#query-timeout). On a
+  [federated dashboard](./dashboard.md#federated-dashboards) the pill is the federated one
   (below) instead.
   <!-- req: federated-pill -->
 - **Federated pill** — while `/dashboard` shows a federated dashboard, the

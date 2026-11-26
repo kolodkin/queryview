@@ -45,7 +45,7 @@ skips a folder the encoding would not write, such as `a%41` for `aA`, with a
 warning in the server log.
 
 `queries.yaml` holds each entry as written: a SQL string, or a
-[federated](./dashboard.md#the-push_dashboard-mcp-tool) map, so an untouched
+[federated](./dashboard.md#federated-dashboards) map, so an untouched
 repo produces no diff. A folder mixing the two is refused with
 `malformed dashboard file: every query and options_sql names a connection, or none does`.
 

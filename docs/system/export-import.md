@@ -38,7 +38,7 @@ bundle carrying a non-empty `queries` list, is refused with
 name, so it imports into whichever workspace you choose.
 
 A query entry is written as stored: a SQL string, or a
-[federated](./dashboard.md#the-push_dashboard-mcp-tool) map
+[federated](./dashboard.md#federated-dashboards) map
 `{connection, sql, database?}`. A dashboard mixing the two is refused (`400`)
 with `every query and options_sql names a connection, or none does`.
 

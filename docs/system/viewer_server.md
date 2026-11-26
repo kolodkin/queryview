@@ -27,7 +27,7 @@ endpoints. For how dashboards reach the repo see [gitsync.md](gitsync.md).
   connection. Without it the page reopens the browser's last pick (kept in its
   local storage), else the first connection.
   <!-- req: federated -->
-- **Federated:** a [federated dashboard](dashboard.md#the-page-dashboard) names
+- **Federated:** a [federated dashboard](./dashboard.md#federated-dashboards) names
   its connections from the config file's `connections`, so the connection
   picker is hidden and the page lists them (without **Unlock**; there are no
   locks). An unknown name fails that query.

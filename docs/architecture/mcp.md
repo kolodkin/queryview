@@ -92,7 +92,7 @@ and `/api/db/query` calls; the push layer never talks to a database.
 ### Federated drafts
 
 Both dashboard tools take a query as SQL or as a
-[federated](../system/dashboard.md#the-push_dashboard-mcp-tool)
+[federated](../system/dashboard.md#federated-dashboards)
 `{connection, sql, database?}` map, and refuse a malformed entry or a mixed
 dashboard before anything runs. A pushed page's script can send
 `window.queries` anywhere, so either tool reads data, and a named connection

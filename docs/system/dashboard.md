@@ -118,6 +118,8 @@ opened in a disconnected session it asks you to connect, unless nothing in it
 queries the database. Select a database first, or fully-qualify tables as
 `db.table`.
 
+### Federated dashboards
+
 <!-- req: federated -->
 A **federated** dashboard names a connection per query, so one page shows
 several databases. A query entry is a SQL string, or a map:
@@ -133,7 +135,8 @@ orders:
   is malformed. A param with `options_sql` may carry `connection` and
   `database` the same way.
 - The database is the entry's `database`; else the session's selected one when
-  the name is its active connection; else the saved connection's own.
+  the name is its active connection; else the saved connection's own; else the
+  one its config pins.
 - A failing lookup fails that query with `orders: unknown connection
   "warehouse"`, `orders: connection "warehouse" is locked` (a locked
   connection runs only in a tab that unlocked it) or `orders: no database
