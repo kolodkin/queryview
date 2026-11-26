@@ -438,6 +438,7 @@ async def connection_target(
     `database`, else the session's selected one when `name` is its active
     connection, else the stored one. See docs/architecture/dashboards.md —
     "Which connection, which database"."""
+    await _ensure_session(sid)  # also applies the session's settings, its query timeout among them
     found = await _resolve(sid, name)
     if found is None:
         return "unknown", f'unknown connection "{name}"'
@@ -446,7 +447,6 @@ async def connection_target(
     if not session_owned and await _lock_hash_of(name) is not None and not _is_unlocked(sid, name):
         return "locked", f'connection "{name}" is locked'
     if database is None:
-        await _ensure_session(sid)
         s = _get_session_entry(sid)
         if s is not None and s.name == name:
             database = s.database

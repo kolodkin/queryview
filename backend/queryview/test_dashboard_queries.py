@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 import queryview.connect as connect
+from queryview import sessions
 from queryview.dashboard_entries import MIXED
 from queryview.dashboard_queries import (
     DASHBOARD_CONCURRENCY,
@@ -19,7 +22,7 @@ from queryview.dashboard_queries import (
     run_dashboard_queries,
 )
 from queryview.drivers import DRIVERS
-from queryview.drivers.base import Column, DatabasesResult, Err, QueryRows, RowsResult
+from queryview.drivers.base import Column, DatabasesResult, Err, QueryRows, RowsResult, query_timeout
 from queryview.test_dashboard_params import PG
 
 
@@ -392,13 +395,22 @@ class _WarehouseDriver(_SeenDriver):
         super().__init__()
         self.requires_database = requires_database
         self.databases: list[str | None] = []
+        self.timeouts: list[int] = []
 
     async def list_databases(self, c, limit=1000, current=None):
         return DatabasesResult(["today", "yesterday"])
 
     async def run_query(self, c, sql, database, limit, offset, order_by):
         self.databases.append(database)
+        self.timeouts.append(query_timeout.get())
         return await super().run_query(c, sql, database, limit, offset, order_by)
+
+
+@pytest.fixture(autouse=True)
+def _drop_warehouse():
+    """No `warehouse` row of a fake driver type is left for later modules."""
+    yield
+    asyncio.run(connect.delete_connection("", "warehouse", ""))
 
 
 def _warehouse(monkeypatch, owner="s-wh-owner", requires_database=False):
@@ -478,3 +490,13 @@ def test_a_connection_that_needs_a_database_and_has_none(monkeypatch):
     out = asyncio.run(run_dashboard("s-no-db", ORDERS, [], {}))
     assert (out["ok"], out["reason"], out["message"]) == (False, "query", 'orders: no database selected on "warehouse"')
     assert out["connections"][0]["status"] == "failed"
+
+
+# req: architecture/dashboards/named-connection
+def test_a_query_with_its_own_database_runs_under_the_sessions_timeout(monkeypatch):
+    wh = _warehouse(monkeypatch)
+    sid = asyncio.run(sessions.create_session()).id
+    asyncio.run(sessions.patch_session(sid, ui={"app": {"queryTimeout": 45}}))
+    q = {"orders": {"connection": "warehouse", "sql": "SELECT 2", "database": "archive"}}
+    assert asyncio.run(run_dashboard(sid, q, [], {}))["ok"]
+    assert wh.timeouts == [45]
