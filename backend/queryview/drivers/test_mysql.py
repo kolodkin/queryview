@@ -64,8 +64,11 @@ def test_run_query_builds_aliased_backtick_sql_and_decodes_json(monkeypatch):
     assert r.rows.meta == [Column("id", "bigint"), Column("doc", "json")]
     assert r.rows.data == [[str(2**60), {"a": "1.5"}]]
     assert log["database"] == "shop" and log.get("closed")
-    assert log["cursors"] == ["Cursor"]  # a LIMIT-bounded page is buffered
-    assert log["sql"] == ["SELECT * FROM (\nSELECT * FROM t\n) AS _qv ORDER BY `a b` DESC LIMIT 50 OFFSET 10"]
+    assert log["cursors"][-1] == "Cursor"  # a LIMIT-bounded page is buffered
+    assert log["sql"] == [
+        "SET SESSION TRANSACTION READ ONLY",  # a SELECT calling a function that writes is refused
+        "SELECT * FROM (\nSELECT * FROM t\n) AS _qv ORDER BY `a b` DESC LIMIT 50 OFFSET 10",
+    ]
 
     csv = asyncio.run(MySqlDriver().export_csv(CFG, "SELECT 1", "shop", 50, 0, None))
     assert isinstance(csv, TextResult) and csv.text == 'id,doc\n1152921504606846976,"{""a"": 1.5}"'
@@ -150,7 +153,7 @@ def test_duplicate_column_names_run_unwrapped(monkeypatch):
     log = _fake(monkeypatch, results)
     r = asyncio.run(MySqlDriver().run_query(CFG, "SELECT a.id, b.id FROM a JOIN b;", "shop", 1, 1, None))
     assert isinstance(r, RowsResult) and r.rows.data == [[2, 20]]
-    assert log["sql"][1] == "SELECT a.id, b.id FROM a JOIN b" and log["fetchmany"] == 2
+    assert log["sql"][2] == "SELECT a.id, b.id FROM a JOIN b" and log["fetchmany"] == 2
     # A column sort needs the wrapper, so the error stands.
     assert isinstance(asyncio.run(MySqlDriver().run_query(CFG, "SELECT 1", "shop", 1, 0, [{"name": "id"}])), Err)
 

@@ -29,6 +29,7 @@ from .connect import (
 )
 from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
+from .dashboard_params import option_text
 from .dashboards import _dashboard_event, get_dashboard
 from .drivers.base import RUN_SQL_TIMEOUT_SECONDS
 from .mcp_skills import SkillsExtension
@@ -511,11 +512,14 @@ async def run_dashboard(
         params = d["params"] if params is None else params
     queries = dashboard_queries.clean_queries(queries)  # a blank one is skipped, as on the page
     if not queries:
-        return {"ok": False, "message": "pass `queries`, or `dir`"}
+        return {"ok": False, "message": "no runnable query in `dir`" if dir else "pass `queries`, or `dir`"}
     perr = dashboard_params_error(params)
     if perr is not None:
         return {"ok": False, "message": perr}
     limit = max(1, min(limit, dashboard_queries.DASHBOARD_ROW_CAP))
+    if isinstance(values, dict):
+        # An agent sends 3 or true where the page would send its text.
+        values = {k: option_text(v) if isinstance(v, (bool, int, float)) else v for k, v in values.items()}
     try:
         async with asyncio.timeout(RUN_DASHBOARD_TIMEOUT_SECONDS):
             r = await dashboard_queries.run_dashboard(

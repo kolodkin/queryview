@@ -175,6 +175,8 @@ async def _fetch_wrapped(conn: Any, sql: str, order_clause: str, limit: int, off
     """One page of `sql` through the paginating wrapper. A derived table needs
     unique column names, so `SELECT a.id, b.id …` runs as written instead,
     fetching through the page and dropping the rows before it."""
+    # Read-only: a SELECT could otherwise call a function that writes.
+    await _fetch(conn, "SET SESSION TRANSACTION READ ONLY", None, query_timeout.get())
     try:
         description, rows, _ = await _fetch(
             conn,
