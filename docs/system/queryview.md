@@ -58,9 +58,28 @@ redirects here, and `/studio` to a dashboard
   own, the agent's badged `agent`, then saved; the active one marked) switch
   on click, and **Disconnect** at the bottom drops the connection and goes to
   `/connect` (a picker-less driver's menu has just these two).
+  On a federated [dashboard](./dashboard.md#the-page-dashboard) the pill is the
+  federated one (below) instead.
   Next to it, an **agent icon** opens the remote-control popover (opt-in "Allow
   remote control"); see [mcp.md](./mcp.md). Then the
   [**Timeout** chip](#query-timeout).
+<!-- req: federated-pill -->
+- **Federated pill** — while `/dashboard` shows a federated dashboard, the
+  top-left pill reads **⛓ Federated · N connections**, in any session state,
+  and its list has a row per connection (status icon, name, database, query
+  count). The session's connection is unchanged, and leaving the page restores
+  its pill.
+
+  ```
+  [⛓ Federated · 2 connections ▾]
+  | 🟢 analytics · sales_reporting     2 queries |
+  | 🔒 warehouse · reporting [Unlock]  1 query   |
+  ```
+
+  Statuses: 🟢 ok; 🔴 failed, with the message under the row; 🔒 locked, with
+  **Unlock**, which asks for the passphrase and re-runs the dashboard; ⚪ not a
+  connection here ("Not a connection here"). Before the first reply rows show
+  names only.
 - **Narrow windows** — below `md` the cards stack in one column, the session,
   workspace and page links collapse into one **☰ &lt;page&gt;** menu, and
   full-height pages keep a 48rem minimum width, scrolling sideways rather than

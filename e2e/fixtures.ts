@@ -162,6 +162,28 @@ export async function startNewConnection(page: Page, driver: string): Promise<vo
   for (const [id, value] of Object.entries(servers[driver] ?? {})) await page.getByTestId(id).fill(value);
 }
 
+/** For federated dashboards: a `marks(v)` table on the worker's ClickHouse
+ * ('from-clickhouse') and Postgres ('from-postgres') databases, and a saved
+ * Postgres connection `name` on that database, made from another session `sid`
+ * (so a tab under test holds no unlock token for it). `drop()` deletes it. */
+export async function savePostgresMarks(baseURL: string | undefined, seeds: Seeds) {
+  const ch = await seeds.testDb();
+  const pg = await seeds.pgDb();
+  await chExec(`DROP TABLE IF EXISTS ${ch}.marks`);
+  await chExec(`CREATE TABLE ${ch}.marks (v String) ENGINE = Memory`);
+  await chExec(`INSERT INTO ${ch}.marks VALUES ('from-clickhouse')`);
+  await dbExec("postgres", pg, "DROP TABLE IF EXISTS marks", "CREATE TABLE marks (v TEXT)", "INSERT INTO marks VALUES ('from-postgres')");
+  const name = `pg-${uid()}`;
+  const sid = `e2e-pg-${uid()}`;
+  const headers = { "X-QV-Session": sid };
+  await api(`${baseURL}/api/db/connect`, {
+    json: { type: "postgres", name, host: PG_HOST, port: PG_PORT, username: PG_USER, password: PG_PASSWORD, database: pg },
+    headers,
+  });
+  const drop = () => api(`${baseURL}/api/db/connections`, { method: "DELETE", json: { name }, ok: false });
+  return { name, sid, headers, drop };
+}
+
 /** Connect to ClickHouse and stop on the database picker. */
 export async function openClickhousePicker(page: Page): Promise<void> {
   await openConnect(page);
@@ -173,7 +195,9 @@ export async function openClickhousePicker(page: Page): Promise<void> {
 
 export const dashboardFrame = (page: Page): FrameLocator => page.frameLocator('[data-testid="dashboard-frame"]');
 
-export type Dash = { name: string; html: string; queries: Record<string, string>; params?: unknown[] };
+/** A query entry: SQL, or (federated) the SQL on a named connection. */
+export type Entry = string | { connection: string; sql: string; database?: string };
+export type Dash = { name: string; html: string; queries: Record<string, Entry>; params?: unknown[] };
 
 /** Save a dashboard through the REST mirror and open it; returns its frame. */
 export async function openDashboard(page: Page, baseURL: string | undefined, dash: Dash): Promise<FrameLocator> {

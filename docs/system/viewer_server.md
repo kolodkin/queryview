@@ -26,7 +26,12 @@ endpoints. For how dashboards reach the repo see [gitsync.md](gitsync.md).
 - **Shareable:** `?connection=<name>&name=<dashboard>` opens a dashboard on a
   connection. Without it the page reopens the browser's last pick (kept in its
   local storage), else the first connection.
-- **A dashboard runs on the picked connection.** It names none, as in the app,
+<!-- req: federated -->
+- **Federated:** a [federated dashboard](dashboard.md#the-page-dashboard) names
+  its connections from the config file's `connections`, so the connection
+  picker is hidden and the page lists them (without **Unlock**; there are no
+  locks). An unknown name fails that query.
+- **An unfederated dashboard runs on the picked connection.** It names none, as in the app,
   so one written for another database fails with that database's error.
 
 ## The config file

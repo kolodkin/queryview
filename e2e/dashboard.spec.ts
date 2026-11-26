@@ -2,7 +2,7 @@
 // driver, so these run once on DuckDB (no service).
 import { readFileSync } from "node:fs";
 
-import { DUCK, api, armRemote, closeQueries, connect, dashboardFrame, expect, holdRoute, openDashboard, test, uid } from "./fixtures";
+import { CH, DUCK, api, armRemote, closeQueries, chDb, connect, dashboardFrame, expect, holdRoute, openDashboard, savePostgresMarks, test, uid } from "./fixtures";
 
 // Reads window.queries and writes a value into the DOM, so the test can
 // assert the injected results reached the agent HTML. Styled as large,
@@ -289,4 +289,89 @@ test("the dashboard's name can be copied", async ({ page, context, seeds, baseUR
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.getByTestId("dashboard-copy").click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("copy me");
+});
+
+// req: system/dashboard/sql-panel-connection
+test("the SQL panel federates a dashboard and back", async ({ page, seeds, baseURL }) => {
+  await connect(page, CH, await seeds.testDb());
+  const pg = await savePostgresMarks(baseURL, seeds);
+  try {
+    const frame = await openDashboard(page, baseURL, {
+      name: `panel-${uid()}`,
+      html: '<b id="m" data-qv-query="m" data-qv-column="v"></b>',
+      queries: { m: "SELECT v FROM marks" },
+    });
+    await expect(frame.locator("#m")).toHaveText("from-clickhouse");
+
+    await page.getByTestId("dashboard-edit-queries").click();
+    await page.getByTestId("dash-sql-federated").check();
+    await page.getByTestId("dash-sql-connection").selectOption(pg.name);
+    await page.getByTestId("dash-sql-execute").click();
+    await closeQueries(page);
+    await expect(frame.locator("#m")).toHaveText("from-postgres");
+    await expect(page.getByTestId("federated-pill")).toContainText("Federated");
+
+    await page.getByTestId("dashboard-edit-queries").click();
+    await page.getByTestId("dash-sql-federated").uncheck();
+    await page.getByTestId("dash-sql-execute").click();
+    await closeQueries(page);
+    await expect(frame.locator("#m")).toHaveText("from-clickhouse");
+    await expect(page.getByTestId("federated-pill")).toHaveCount(0);
+    await expect(page.getByTestId("connection-status")).toContainText(`clickhouse · ${chDb()}`);
+  } finally {
+    await pg.drop();
+  }
+});
+
+// req: system/queryview/federated-pill
+test("a locked and an unknown connection show in the pill, and Unlock opens the locked one", async ({ page, seeds, baseURL }) => {
+  const pg = await savePostgresMarks(baseURL, seeds);
+  try {
+    const passphrase = "open sesame";
+    // Locked from another session: this tab holds no token.
+    await api(`${baseURL}/api/db/lock`, { json: { name: pg.name, passphrase }, headers: pg.headers });
+    const missing = `missing-${uid()}`;
+    const name = `locked-${uid()}`;
+    await api(`${baseURL}/api/dashboards`, {
+      json: {
+        name,
+        html: '<b id="pg" data-qv-query="pg" data-qv-column="v"></b>',
+        queries: {
+          pg: { connection: pg.name, sql: "SELECT v FROM marks" },
+          gone: { connection: missing, sql: "SELECT 1" },
+        },
+      },
+    });
+    await page.goto("/");
+    await page.getByTestId("nav-dashboard").click();
+    await page.getByTestId("dashboard-select").selectOption(name);
+    await page.getByTestId("federated-pill").click();
+    const rows = page.getByTestId("federated-pill-row");
+    await expect(rows.filter({ hasText: pg.name })).toContainText("🔒");
+    await expect(rows.filter({ hasText: missing })).toContainText("⚪");
+    await expect(rows.filter({ hasText: missing })).toContainText("Not a connection here");
+
+    await rows.filter({ hasText: pg.name }).getByTestId("federated-unlock").click();
+    await page.getByTestId("passphrase-input").fill(passphrase);
+    await page.getByTestId("passphrase-submit").click();
+    await expect(rows.filter({ hasText: pg.name })).toContainText("🟢");
+    await expect(dashboardFrame(page).locator("#pg")).toHaveText("from-postgres");
+  } finally {
+    await api(`${baseURL}/api/db/lock`, { method: "DELETE", json: { name: pg.name, passphrase: "open sesame" }, ok: false });
+    await pg.drop();
+  }
+});
+
+// req: system/dashboard/federated
+test("a dashboard mixing SQL strings and connection entries is refused", async ({ baseURL }) => {
+  const r = await api(`${baseURL}/api/dashboards`, {
+    json: {
+      name: `mixed-${uid()}`,
+      html: "<p></p>",
+      queries: { a: "SELECT 1", b: { connection: "warehouse", sql: "SELECT 1" } },
+    },
+    ok: false,
+  });
+  expect(r.status).toBeGreaterThanOrEqual(400);
+  expect(JSON.stringify(r.body)).toContain("every query and options_sql names a connection, or none does");
 });

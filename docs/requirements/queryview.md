@@ -79,6 +79,10 @@ A user can open a saved dashboard that re-runs its queries against live data.
 - Opening it shows its queries' results as they are now: rows added since it
   was saved appear.
 
+<!-- req: dashboard-many-connections -->
+A user can open one dashboard that shows data from several connections side
+by side, and see which connections it uses and whether each answered.
+
 See [dashboard.md](../system/dashboard.md).
 
 ## Back up a workspace to git
