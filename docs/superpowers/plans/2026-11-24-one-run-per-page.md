@@ -19,7 +19,7 @@
 - Explorer and Scripts keep `/api/db/query` and `/api/db/describe`.
 - A query's page defaults to no sort, offset 0, limit 1000 (`DASHBOARD_ROW_CAP`); a given limit is clamped to 1..1000.
 - At most 5 queries of one call in flight (`DASHBOARD_CONCURRENCY`).
-- Repo rules: `uv run`, imports at file top, no `__all__`, invented example names only, no AI attribution in commits. Load the project `testing` skill before adding a test and `docs-writing` before editing docs.
+- Repo rules: `uv run`, imports at file top, no `__all__`, invented example names only, no AI attribution in commits. Load the project `vmodel` skill before adding a test and `docs-writing` before editing docs.
 - Old endpoints and code paths stay working until Task 8 removes them, so every task leaves the app and the viewer usable.
 
 ## Review Focus

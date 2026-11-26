@@ -1,6 +1,6 @@
 ---
 name: vmodel
-description: Use when a change alters behavior in this repo, before writing its doc, test or code — walks the change down the docs and up the tests so every test names the doc statement it proves.
+description: Use when a change alters behavior in this repo, before writing its doc, test or code, and when adding, changing or running a test — backend pytest, frontend vitest or Playwright e2e.
 ---
 
 # V-model
@@ -11,12 +11,12 @@ docs, writing a failing test at each layer, then up the tests. When a
 `docs/superpowers/` plan splits the work into tasks, each task follows this
 skill.
 
-| Layer | Doc of record | Proved in |
-|---|---|---|
-| User | `docs/requirements/` | `e2e/acceptance.spec.ts` |
-| System | `docs/system/` | any `e2e/*.spec.ts` |
-| Integration | `docs/architecture/` | `backend/queryview/**/test_*.py`, `frontend/src/**/*.test.ts(x)` naming an `architecture/` ID |
-| Unit | the module's docstring (Python) or leading comment (TypeScript) | the test file beside the module, named after it, no ID |
+| Layer | Doc of record | A test covers | Proved in |
+|---|---|---|---|
+| User | `docs/requirements/` | a user requirement end to end | `e2e/acceptance.spec.ts` |
+| System | `docs/system/` | one feature through the browser | any `e2e/*.spec.ts`, by convention `e2e/<feature>.spec.ts` |
+| Integration | `docs/architecture/` | routes, stores, MCP tools, drivers working together | `backend/queryview/**/test_*.py`, `frontend/src/**/*.test.ts(x)` naming an `architecture/` ID |
+| Unit | the module's docstring (Python) or leading comment (TypeScript) | one module's logic | the test file beside the module, named after it, no ID |
 
 ## Markers
 
@@ -72,9 +72,10 @@ An integration test proves no system statement, and a unit test names no ID.
      judgment: give one per behavior a reader would call a separate promise.
      On a system page, give IDs to what a user can see; test an edge case of
      one behavior under the same ID, or at integration or unit;
-   - write a test that names the ID and fails now (load `testing`). A changed
-     number or default is a changed statement: its test asserts the new value.
-     The failing test may be an existing one whose assertion changes.
+   - write a test that names the ID and fails now (see
+     [Writing a test](#writing-a-test)). A changed number or default is a
+     changed statement: its test asserts the new value. The failing test may
+     be an existing one whose assertion changes.
 
    At unit: edit the module's docstring or leading comment and the test beside
    the module; no ID, no marker (`docs-writing` does not apply).
@@ -88,7 +89,8 @@ An integration test proves no system statement, and a unit test names no ID.
    3. `uv run --group test pytest backend/queryview scripts`;
    4. `npm test -w frontend`;
    5. the touched `e2e/<feature>.spec.ts`;
-   6. `e2e/acceptance.spec.ts`;
+   6. `e2e/acceptance.spec.ts`, also when untouched: a change below it can
+      break a journey;
    7. `uv run python scripts/vmodel_check.py` (also a pre-commit hook). It must
       exit 0; `--strict` also fails on the untagged pages and tests it lists.
       Once the report shows no gaps, `--strict` goes into the pre-commit hook.
@@ -105,4 +107,51 @@ before" is not a reason to leave it without one.
 ## Not covered
 
 A pure refactor, a comment, or a docs wording fix that changes no behavior
-skips this skill; `testing` and `docs-writing` still apply.
+skips the steps above; the test rules below and `docs-writing` still apply.
+
+## Writing a test
+
+Put a test in the lowest layer that can observe the behavior, and start from
+the nearest existing test file: it shows the call shapes.
+
+- Frontend unit tests cover pure TypeScript logic, with no React rendering.
+- Backend tests ship in the wheel and run from the installed package in the
+  release workflow, so a test may import only from `queryview` and its own
+  directory — never from `e2e/`.
+- Example data follows the root `AGENTS.md` privacy rule: invented names only.
+
+Run backend tests with `uv run --group test pytest` (its `testpaths` cover
+`backend/queryview` and `scripts`), frontend ones with `npm test -w frontend`,
+and the browser suite with `npm run e2e`. `CONTRIBUTING.md` covers installing
+the tooling and the full command set.
+
+## Backend tests
+
+- `backend/queryview/conftest.py` already isolates `DATA_DIR` per session
+  (autouse). Reuse its fixtures instead of building your own: `default_ws_id`,
+  `clone_base`, `git_env` (a bare remote wired to the default workspace),
+  `wipe_workspace_entities`.
+- Async store functions are called with `asyncio.run(...)`; a module-level
+  `_run` helper is the pattern.
+- Driver behavior that every driver must share goes in
+  `drivers/test_contract.py`, parameterized over `DRIVERS`; a new driver only
+  needs a `SAMPLES` entry there. Dialect SQL and real-database checks go in
+  that driver's own `test_<driver>.py`.
+
+## Browser tests
+
+- Needs ClickHouse on `:8123`, Postgres on `:5432`, MySQL on `:3306` and a built SPA
+  (`npm run build:e2e`, a 2s session heartbeat). In the Claude Code web
+  container, the `claudeai-run` skill starts the databases.
+- `e2e/fixtures.ts` holds the navigation helpers, seeds and MCP client; extend
+  them before writing a new click sequence.
+- Locate elements by `data-testid` (`page.getByTestId(...)`), adding a
+  kebab-case attribute in the component when missing (`db-picker`,
+  `ch-connect`). Assert with `expect` (15 s default), not sleeps.
+- Every test gets its own backend session (the `context` fixture). Seed data
+  with the worker-scoped `seeds` fixture (`await seeds.duckdb()`); each worker
+  has its own ClickHouse/Postgres/MySQL database, `chDb()` — never hard-code `qvtest`.
+- `shot(label)` saves a screenshot only under `E2E_SHOTS=1`.
+- `BASE_URL=http://localhost:5173 npx playwright test` runs against a server
+  you started, on one worker. Start that server with `DATA_DIR` set to a
+  scratch folder; the suite refuses one on the default `~/.queryview`.
