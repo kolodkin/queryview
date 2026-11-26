@@ -79,6 +79,7 @@ Connections are stored in SQLite via SQLModel. See
 
 ## Workspaces
 
+<!-- req: architecture/api/workspaces -->
 Dashboards belong to a workspace; each workspace syncs
 to its own git remote. The remote URL may embed a token — it is encrypted at
 rest and never returned by the API. See [workspace.md](../system/workspace.md).
@@ -92,6 +93,7 @@ rest and never returned by the API. See [workspace.md](../system/workspace.md).
 
 ## YAML export / import
 
+<!-- req: architecture/api/export-import -->
 Dashboards can be downloaded as self-describing YAML
 documents and imported back — one at a time or a whole workspace at once. See
 [export-import.md](../system/export-import.md) for the document shapes.
@@ -103,6 +105,7 @@ documents and imported back — one at a time or a whole workspace at once. See
 
 ## Git sync
 
+<!-- req: architecture/api/git-sync -->
 Dashboards can be backed up to (and restored from) each
 workspace's git repository, per entity. Connections are never written to the
 repo. See [gitsync.md](../system/gitsync.md) for configuration, repository layout, and

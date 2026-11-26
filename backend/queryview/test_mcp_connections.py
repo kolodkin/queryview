@@ -25,6 +25,7 @@ def _connected_session(name: str) -> str:
     return rec.id
 
 
+# req: architecture/mcp/run-sql
 def test_run_query_uses_the_session_connection():
     from queryview.mcp_server import run_sql
 
@@ -37,6 +38,7 @@ def test_run_query_uses_the_session_connection():
     assert "connection" not in out
 
 
+# req: architecture/mcp/run-sql
 def test_run_query_runs_non_select_and_flags_truncation():
     from queryview.mcp_server import run_sql
 
@@ -50,6 +52,7 @@ def test_run_query_runs_non_select_and_flags_truncation():
         assert _run(run_sql(sid, sql))["ok"] is False
 
 
+# req: architecture/mcp/run-sql
 def test_run_query_on_disconnected_session_fails():
     from queryview.mcp_server import run_sql
 
@@ -58,6 +61,7 @@ def test_run_query_on_disconnected_session_fails():
     assert out == {"ok": False, "message": "not connected"}
 
 
+# req: architecture/mcp/run-sql
 def test_run_query_unknown_session_fails():
     from queryview.mcp_server import run_sql
 
@@ -65,6 +69,7 @@ def test_run_query_unknown_session_fails():
     assert out["ok"] is False
 
 
+# req: architecture/mcp/push-dashboard
 def test_push_dashboard_names_no_connection():
     """The draft carries no connection: it runs on whichever session views it."""
     from queryview.mcp_server import push_dashboard
@@ -80,6 +85,7 @@ def test_push_dashboard_names_no_connection():
         remote.unregister(rid)
 
 
+# req: architecture/mcp/push-dashboard
 def test_push_dashboard_on_disconnected_session_fails_without_pushing():
     from queryview.mcp_server import push_dashboard
 
@@ -103,6 +109,7 @@ def _agent_add(sid: str, name: str) -> dict:
     return {"ok": state is not None, "message": message}
 
 
+# req: architecture/mcp/connections
 def test_add_connection_refuses_duckdb_and_adds_a_network_one_directly(monkeypatch):
     from queryview.drivers import DRIVERS
     from queryview.drivers.base import DatabasesResult
@@ -126,6 +133,7 @@ def _names(out):
     return {c["name"]: c for c in out["connections"]}
 
 
+# req: architecture/mcp/connections
 def test_agent_session_connection_lifecycle():
     """Added in memory only, usable and removable by the agent, never saved."""
     from queryview import connect
@@ -156,6 +164,7 @@ def test_agent_session_connection_lifecycle():
     assert _run(run_sql(sid, "SELECT 1")) == {"ok": False, "message": "not connected"}
 
 
+# req: architecture/mcp/connections
 def test_add_connection_refuses_a_taken_name_and_bad_input():
     from queryview.mcp_server import add_connection
 
@@ -167,6 +176,7 @@ def test_add_connection_refuses_a_taken_name_and_bad_input():
     assert _run(add_connection(sid, "x", "clickhouse", {"host": "h", "port": 0}))["ok"] is False
 
 
+# req: architecture/mcp/connections
 def test_agent_cannot_remove_saved_or_user_connections_nor_switch_to_their_duckdb():
     from queryview.connect import add_session_connection
     from queryview.mcp_server import remove_connection, use_connection
@@ -181,6 +191,7 @@ def test_agent_cannot_remove_saved_or_user_connections_nor_switch_to_their_duckd
     assert _run(use_connection(sid, "ag-absent"))["not_found"] is True
 
 
+# req: architecture/mcp/connections
 def test_agent_switches_to_a_saved_network_connection(monkeypatch):
     from queryview import connect
     from queryview.mcp_server import use_connection
@@ -195,6 +206,7 @@ def test_agent_switches_to_a_saved_network_connection(monkeypatch):
     assert out["ok"] is True and out["database"] == "analytics"
 
 
+# req: architecture/mcp/connections
 def test_select_database_on_any_active_connection(monkeypatch):
     from queryview import connect
     from queryview.mcp_server import select_database
@@ -211,6 +223,7 @@ def test_select_database_on_any_active_connection(monkeypatch):
     assert _run(select_database(rec.id, "memory"))["message"] == "not connected"
 
 
+# req: architecture/mcp/connections
 def test_open_saved_unknown_connection_lists_available_names():
     _run(_save_active_connection("lc-open", ChConfig("h.example.internal", 8123, "u", "p"), "clickhouse"))
     out = _run(open_saved("lc-open-sid", "lc-absent"))
@@ -230,6 +243,7 @@ def test_localhost_hint_only_inside_container(monkeypatch):
     assert connect._with_localhost_hint("refused", other) == "refused"
 
 
+# req: architecture/mcp/session-info
 def test_session_info_describes_the_session(tmp_path):
     import duckdb
 
@@ -249,6 +263,7 @@ def test_session_info_describes_the_session(tmp_path):
     assert all("query" not in t for t in out["tables"])
 
 
+# req: architecture/mcp/session-info
 def test_session_info_on_a_disconnected_or_unknown_session():
     from queryview.mcp_server import session_info
 
@@ -258,6 +273,7 @@ def test_session_info_on_a_disconnected_or_unknown_session():
     assert _run(session_info("no-such-session"))["ok"] is False
 
 
+# req: architecture/mcp/connections
 def test_saved_connect_refuses_a_session_connection_name():
     from queryview.connect import add_session_connection, connect_new
 
@@ -267,6 +283,7 @@ def test_saved_connect_refuses_a_session_connection_name():
     assert out["ok"] is False and "already exists" in out["message"]
 
 
+# req: architecture/mcp/connections
 def test_session_connection_names_are_unique_across_sessions():
     from queryview.connect import add_session_connection, connect_new, open_saved
 
@@ -281,6 +298,7 @@ def test_session_connection_names_are_unique_across_sessions():
     assert "ag-shared" in _run(open_saved(a, "ag-absent"))["message"]
 
 
+# req: architecture/mcp/connections
 def test_add_and_remove_connection_tell_an_armed_browser_to_refresh(monkeypatch):
     from queryview.drivers import DRIVERS
     from queryview.drivers.base import DatabasesResult
@@ -302,6 +320,7 @@ def test_add_and_remove_connection_tell_an_armed_browser_to_refresh(monkeypatch)
         remote.unregister(rid)
 
 
+# req: architecture/mcp/connections
 def test_use_connection_marks_the_switch_as_the_agents():
     """The row tells every tab who switched; only an agent switch toasts."""
     from queryview.mcp_server import remove_connection, use_connection

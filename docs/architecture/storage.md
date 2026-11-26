@@ -8,6 +8,7 @@ Where connections live and how they are kept: the SQLite data directory, migrati
 State lives in one data directory (`DATA_DIR`, defaulting to `~/.queryview`),
 whose SQLite file is `db.sqlite`.
 
+<!-- req: architecture/storage/alembic-schema -->
 The backend is **single-process** — SQLite is single-writer, so one process owns
 the file, and no cross-process migration lock is needed. The schema is owned by
 **Alembic**: on startup the FastAPI lifespan runs `alembic upgrade head` (via
@@ -54,6 +55,7 @@ driver needs no schema change.
 
 ## Config encryption
 
+<!-- req: architecture/storage/config-encrypted -->
 The whole `config` blob is **encrypted at rest** with AES-256-GCM; the stored
 value is `base64(iv ‖ ciphertext)` (AES-GCM appends its 16-byte tag to the
 ciphertext), never plaintext. Storing the entire config (not just a password

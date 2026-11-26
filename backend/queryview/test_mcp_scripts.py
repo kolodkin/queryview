@@ -8,6 +8,7 @@ from queryview.mcp_server import push_script, run_script
 from queryview.test_mcp_connections import _connected_session, _run
 
 
+# req: architecture/mcp/run-script
 def test_run_script_runs_writes_and_returns_each_statement():
     sid = _connected_session("ss-duck")
     out = _run(run_script(sid, "CREATE TABLE t (a INTEGER); INSERT INTO t VALUES (1), (2); SELECT a FROM t ORDER BY a"))
@@ -22,6 +23,7 @@ def test_run_script_runs_writes_and_returns_each_statement():
     assert {"status", "message", "elapsed_ms"} <= select.keys()
 
 
+# req: architecture/mcp/run-script
 def test_run_script_stops_at_first_error():
     sid = _connected_session("ss-err")
     out = _run(run_script(sid, "SELECT 1; SELECT * FROM no_such_table; SELECT 2"))
@@ -30,15 +32,18 @@ def test_run_script_stops_at_first_error():
     assert out["results"][1]["message"]
 
 
+# req: architecture/mcp/run-script
 def test_run_script_requires_sql():
     assert _run(run_script(_connected_session("ss-empty"), "  ")) == {"ok": False, "message": "sql required"}
 
 
+# req: architecture/mcp/run-script
 def test_run_script_on_disconnected_session_fails():
     rec = _run(sessions.create_session())
     assert _run(run_script(rec.id, "SELECT 1")) == {"ok": False, "message": "not connected"}
 
 
+# req: architecture/mcp/push-script
 def test_push_script_delivers_to_the_armed_session():
     sid = _connected_session("ss-push")
     rid = remote.register(sid)
@@ -54,6 +59,7 @@ def test_push_script_delivers_to_the_armed_session():
         remote.unregister(rid)
 
 
+# req: architecture/mcp/push-script
 def test_push_script_blocked_while_user_edits():
     rid = remote.register(_connected_session("ss-lock"))
     try:
@@ -65,10 +71,12 @@ def test_push_script_blocked_while_user_edits():
         remote.unregister(rid)
 
 
+# req: architecture/mcp/push-script
 def test_push_script_unknown_session_fails():
     assert _run(push_script("no-such-session", "SELECT 1"))["ok"] is False
 
 
+# req: architecture/mcp/push-script
 def test_push_script_on_disconnected_session_is_not_delivered():
     rid = remote.register(_run(sessions.create_session()).id)
     try:

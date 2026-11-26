@@ -4,7 +4,7 @@ A doc defines an ID with `<!-- req: <id> -->`; a test names it with
 `// req: <id>` or `# req: <id>`. The rules live in the V-model skill,
 `.claude/skills/vmodel/SKILL.md`. Errors (bad, duplicate, unknown or unproven
 IDs; undocumented unit modules) always fail; gaps (untagged docs and tests)
-fail only with `--strict`. Standard library only.
+fail only with `--strict`, which the pre-commit hook passes. Standard library only.
 """
 
 import argparse
@@ -53,7 +53,8 @@ def _has_leading_doc(module: Path) -> bool:
 
 def _paired_module(test: Path) -> Path | None:
     if test.suffix == ".py":
-        names = [test.name.removeprefix("test_")]
+        stem = test.stem.removeprefix("test_")
+        names = [stem + ".py", f"__{stem}__.py"]  # test_main.py also proves __main__.py
     else:
         stem = test.name.split(".test.")[0]
         names = [stem + ".ts", stem + ".tsx"]
@@ -90,7 +91,7 @@ def _definitions(root: Path, report: Report) -> dict[str, str]:
                     else:
                         defined[id_] = rel
                         report.matrix[layer][id_] = []
-            if not tagged:
+            if not tagged and page.name != "decisions.md":  # a decision explains a statement; no test proves it
                 report.gaps.append(f"{rel}: no req: marker")
     return defined
 

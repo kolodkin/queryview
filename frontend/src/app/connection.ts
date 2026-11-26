@@ -1,3 +1,6 @@
+// The active connection: its shape, opening, locking and deleting a saved one,
+// and selecting its database or folder.
+
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
 
 import { apiFetch, postJson } from './api'

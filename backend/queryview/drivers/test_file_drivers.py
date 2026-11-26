@@ -52,10 +52,12 @@ def db(request, tmp_path) -> FileDb:
     return fdb
 
 
+# req: architecture/overview/driver-contract
 def test_list_databases_is_empty(db):
     assert _run(db.driver.list_databases(db.config)) == DatabasesResult([])
 
 
+# req: architecture/overview/driver-contract
 def test_run_query_paginates_and_returns_typed_rows(db):
     r = _run(
         db.driver.run_query(
@@ -68,16 +70,19 @@ def test_run_query_paginates_and_returns_typed_rows(db):
     assert r.rows.data == [[1, "alpha"], [2, "beta"]]
 
 
+# req: architecture/overview/driver-contract
 def test_export_csv_returns_csv_with_names(db):
     r = _run(db.driver.export_csv(db.config, "SELECT id, name FROM items ORDER BY id", None, 2, 0, None))
     assert isinstance(r, TextResult) and r.text == "id,name\n1,alpha\n2,beta"
 
 
+# req: architecture/overview/driver-contract
 def test_describe_query_returns_columns(db):
     r = _run(db.driver.describe_query(db.config, "SELECT id, name FROM items", None))
     assert isinstance(r, FieldsResult) and [f["name"] for f in r.fields] == ["id", "name"]
 
 
+# req: architecture/overview/driver-contract
 def test_query_errors_become_err(db):
     d, cfg = db.driver, db.config
     for r in (
@@ -88,6 +93,7 @@ def test_query_errors_become_err(db):
         assert isinstance(r, Err) and "no_such" in r.message
 
 
+# req: architecture/overview/driver-contract
 def test_execute_script_runs_statements_in_order_and_persists(db):
     results = _run(
         db.driver.execute_script(
@@ -108,12 +114,14 @@ def test_execute_script_runs_statements_in_order_and_persists(db):
     assert db.count("extra") == 1  # the write landed in the file
 
 
+# req: architecture/overview/driver-contract
 def test_execute_script_stops_at_the_first_failing_statement(db):
     results = _run(db.driver.execute_script(db.config, "SELECT 1; SELECT * FROM no_such; SELECT 2", None))
     assert [r.ok for r in results] == [True, False]
     assert "no_such" in results[1].message and results[1].sql == "SELECT * FROM no_such"
 
 
+# req: architecture/overview/driver-contract
 def test_execute_script_caps_rows_and_flags_truncation(db):
     many = "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x < 150) SELECT x FROM n"
     results = _run(db.driver.execute_script(db.config, many, None))

@@ -17,6 +17,7 @@ const test = base.extend<{ leftBehind: string }>({
   },
 });
 
+// req: system/session/refresh-new-tab
 test("refresh keeps the page you were on", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await page.getByTestId("nav-explorer").click();
@@ -28,6 +29,7 @@ test("refresh keeps the page you were on", async ({ page, seeds }) => {
   await expect(page).toHaveURL(/\/explorer/);
 });
 
+// req: system/session/refresh-new-tab
 test("a second tab gets its own session", async ({ page, context, seeds }) => {
   // The first tab holds its session, so a new tab starts a fresh one rather
   // than showing the same state twice.
@@ -43,6 +45,7 @@ test("a second tab gets its own session", async ({ page, context, seeds }) => {
   }
 });
 
+// req: system/session/taken-greys-out
 test("a tab whose session is taken greys out until it takes it back", async ({ page, seeds, baseURL }) => {
   // A backgrounded tab's claim can lapse and another tab take its session.
   // The tab must say so instead of silently moving to some other session.
@@ -64,6 +67,7 @@ test("a tab whose session is taken greys out until it takes it back", async ({ p
   }
 });
 
+// req: system/session/new-session
 test("the switcher opens a new session", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await page.getByTestId("session-switcher").click();
@@ -76,6 +80,7 @@ test("the switcher opens a new session", async ({ page, seeds }) => {
   await expect(page.getByTestId("connection-status")).toHaveCount(0);
 });
 
+// req: system/session/rename
 test("a renamed session keeps its name", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await page.getByTestId("session-switcher").click();
@@ -90,6 +95,7 @@ test("a renamed session keeps its name", async ({ page, seeds }) => {
   await expect(page.getByTestId("session-switcher")).toContainText("nightly audit");
 });
 
+// req: system/session/rename
 test("leaving the rename box unchanged does not pin the automatic name", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const sid = await sessionId(page);
@@ -102,6 +108,7 @@ test("leaving the rename box unchanged does not pin the automatic name", async (
   expect(row.pinned).toBe(false);
 });
 
+// req: system/session/rename
 test("inline rename: Escape cancels, a reserved name is refused, focus-out saves", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const switcher = page.getByTestId("session-switcher");
@@ -131,6 +138,7 @@ test("each test starts on a fresh session", async ({ leftBehind, page }) => {
   expect(await sessionId(page)).not.toBe(leftBehind);
 });
 
+// req: system/session/switch-elsewhere
 test("a switch made elsewhere names the new connection", async ({ page, seeds, baseURL }) => {
   // A session connection opened outside this tab (the agent's path) shows in
   // the pill and the pill's connection list (no badge: the user added it);

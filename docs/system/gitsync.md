@@ -118,11 +118,13 @@ three only change the workspace.
 
 ## UI
 
+<!-- req: system/gitsync/restore-ui -->
 **Restore**, next to the dashboard page's **Save**, opens the entity's
 revision list (newest first, 10 at a time, scroll for more) and overwrites the
 local copy with the picked revision after confirmation. It is disabled when
 the active workspace has no remote configured.
 
+<!-- req: system/gitsync/not-in-git -->
 With a remote, the dashboard picker marks a dashboard no commit holds
 (`commit_sha` is `NULL`) as `<name> · not in git`. A row whose content
 matches the repo but has no `commit_sha` recorded yet gets one on the next

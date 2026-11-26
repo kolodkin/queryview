@@ -158,3 +158,13 @@ def test_a_root_without_docs_fails_with_one_line(tmp_path, capsys):
     assert main(["--root", str(tmp_path)]) != 0
     out = capsys.readouterr()
     assert out.out == "" and out.err.strip() == f"error: {tmp_path} has no docs/ directory"
+
+
+def test_test_main_pairs_with_dunder_main(tmp_path):
+    files = {"backend/queryview/test_main.py": "", "backend/queryview/__main__.py": '"""Doc."""\n'}
+    r = check(repo(tmp_path, files))
+    assert r.errors == [] and r.gaps == []
+
+
+def test_a_decisions_page_needs_no_id(tmp_path):
+    assert check(repo(tmp_path, {"docs/architecture/decisions.md": "Why.\n"})).gaps == []

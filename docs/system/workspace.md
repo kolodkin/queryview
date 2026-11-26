@@ -38,6 +38,7 @@ optional `workspace` name, defaulting to the fallback workspace.
 
 ## UI
 
+<!-- req: system/workspace/switcher -->
 The header shows a workspace switcher (dropdown + manage panel for
 create/rename/remote/branch/delete). The active workspace is session state
 (see [session.md](./session.md)); switching reloads the query and dashboard

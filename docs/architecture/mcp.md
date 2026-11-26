@@ -7,12 +7,14 @@ The MCP tools and the channel they push through. Connecting an agent and arming 
 Every tool acts on a browser session: a [tab](../system/mcp.md#tabs) of the agent's own, or one
 you [armed](../system/mcp.md#arming-a-session).
 
+<!-- req: architecture/mcp/session-info -->
 - `session_info(session_id)` — what the session is on: `{ok, connected,
   connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
   discovery. The agent may switch to any listed connection (below). On a
   [locked](../system/connect.md#locked-connections) connection it returns
   only `{ok, connected, locked: true, workspace, tables: []}`.
+  <!-- req: architecture/mcp/connections -->
 - Connections ([access rule](../system/connect.md#session-connections)):
   `list_connections(session_id)` tags each with `scope`, `created_by`,
   `active`, leaving out [locked](../system/connect.md#locked-connections) ones;
@@ -28,6 +30,7 @@ you [armed](../system/mcp.md#arming-a-session).
   every tab picks it up on its next heartbeat, toasts "Agent switched to
   <name>", and the pill reads `<connection> · <database>` with the menu entry
   marked active and badged `agent`. Switches made in the UI never toast.
+  <!-- req: architecture/mcp/run-sql -->
 - `run_sql(session_id, sql, limit?=1000)` — run one read-only statement as
   written (so `DESCRIBE`/`SHOW`/`EXPLAIN` work; page with your own
   `LIMIT`/`OFFSET`) on the session's connection and database, returning
@@ -36,22 +39,26 @@ you [armed](../system/mcp.md#arming-a-session).
   collections as JSON); `truncated` means rows past `limit` were dropped. Fails
   with `not connected` on a disconnected session; stops after 60s, server-side
   too. ClickHouse errors name the `query_id` to look up in `system.query_log`.
+  <!-- req: architecture/mcp/run-script -->
 - `run_script(session_id, sql)` — run a script like the [Scripts](../system/scripts.md)
   page's Run all, **writes included**, returning `{ok, database, results: [{sql,
   ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
   agent. Stops at the first failure; `columns`/`types`/`rows` are null for a
   statement without rows.
+  <!-- req: architecture/mcp/push-script -->
 - `push_script(session_id, sql, run?=false)` — replace the Scripts editor's
   text; the browser navigates there and, with `run`, runs it all (results stay
   in the browser). Returns
   `{ok, message, database}`; `ok:false` for an unknown id, a held lock
   (`"blocked, user editing"`), or a session whose Scripts page can't open yet
   (`"not connected"`, `"select a database first"`).
+  <!-- req: architecture/mcp/open-explorer -->
 - `open_explorer(session_id, database, table?)` —
   switch the session to `database` and send the browser to its
   [Explorer](../system/explorer.md), on `table` when given (refused when the database
   doesn't list it). Returns `{ok, message, database}`; past the switch, a
   failure still leaves the session on `database`.
+  <!-- req: architecture/mcp/push-dashboard -->
 - `push_dashboard(session_id, html?, queries?, params?, name?, dir?)` — push a dashboard
   **draft** on the session's connection; the browser navigates to it and
   renders it. Without `name` the push is an unnamed draft; `name` selects a
@@ -61,6 +68,7 @@ you [armed](../system/mcp.md#arming-a-session).
   `queries`. Returns
   `{ok, pushed, message, database}`; a disconnected session fails with
   `not connected`. See [dashboard.md](../system/dashboard.md).
+  <!-- req: architecture/mcp/run-dashboard -->
 - `run_dashboard(session_id, queries?, params?, values?, dir?, limit?=100)` — run
   a draft's queries with `values` substituted into their
   [placeholders](../system/dashboard.md#dashboard-parameters), as the page would,
@@ -70,6 +78,7 @@ you [armed](../system/mcp.md#arming-a-session).
   name opens the `message`, and after 60s; nothing reaches the browser.
 - `new_tab(name)` — a session of the agent's own; see [Tabs](../system/mcp.md#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
+  <!-- req: architecture/mcp/git-tools -->
 - `git_history` / `git_restore` — list and restore a saved dashboard's
   versions in [workspace git](../system/gitsync.md); only the user's Save commits.
 
@@ -88,6 +97,7 @@ Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](../system/workspace.md)).
 
+<!-- req: architecture/mcp/tab-queue -->
 A push to a [tab](../system/mcp.md#tabs) nobody has opened yet lands in a channel `new_tab`
 opened in advance, which answers `queued for the tab`; arming takes that
 channel over with its pushes queued. One whose tab never comes is dropped

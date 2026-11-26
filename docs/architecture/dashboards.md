@@ -4,6 +4,7 @@ How a dashboard's queries run and how its HTML is isolated. Building and using a
 
 ## Running the queries: `/api/runqueries`
 
+<!-- req: architecture/dashboards/runqueries -->
 The browser POSTs `{queries, params, values}` to `/api/runqueries`: the
 dashboard's queries as written, its `params` declaration and the chosen
 values. The backend resolves each selector's options and value, substitutes
@@ -12,6 +13,7 @@ selected database (wrapped in a paginated subselect capped at 1000 rows). It
 returns column-oriented results and the resolved selectors. Up to five queries
 run at once. Switching the connection or database re-runs them.
 
+<!-- req: architecture/dashboards/fail-fast -->
 It is **fail-fast**: if any query fails, or the session is not connected or has
 no database selected, the whole request returns an HTTP error and the page shows a
 dashboard-level error banner instead of partial panels. On success every named

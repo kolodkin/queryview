@@ -18,9 +18,11 @@ endpoints. For how dashboards reach the repo see [gitsync.md](gitsync.md).
 +--------------------------------------------------------+
 ```
 
+<!-- req: system/viewer_server/same-rendering -->
 - **Same rendering:** [parameters](dashboard.md#dashboard-parameters),
   [widgets](dashboard.md#widgets) (paging, sorting, CSV) and
   [**Snapshot**](dashboard.md#snapshot) work as in the app.
+  <!-- req: system/viewer_server/shareable -->
 - **Shareable:** `?connection=<name>&name=<dashboard>` opens a dashboard on a
   connection. Without it the page reopens the browser's last pick (kept in its
   local storage), else the first connection.
@@ -57,6 +59,7 @@ connections:
 
 ## Sync
 
+<!-- req: system/viewer_server/sync -->
 The server shows the repo's latest commit: what a QueryView app saves to the
 repo appears within `sync_interval`, with nothing to click.
 
@@ -75,6 +78,7 @@ repo appears within `sync_interval`, with nothing to click.
 - **No login.** Anyone who can reach the server sees every dashboard's data on
   every configured connection. Put a reverse proxy or your platform's
   single sign-on in front, and keep the port private otherwise.
+  <!-- req: system/viewer_server/display-only -->
 - **Display only by construction.** The server is a separate app: the routes
   that save, connect or run SQL, and the [MCP](mcp.md) endpoint, don't exist
   on it. The browser sends dashboard, query and connection names plus

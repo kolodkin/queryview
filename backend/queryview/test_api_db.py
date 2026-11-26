@@ -300,6 +300,7 @@ def _duck(tmp_path, sid: str) -> TestClient:
     return c
 
 
+# req: architecture/dashboards/runqueries
 def test_runqueries_with_params_returns_resolved_params(tmp_path):
     c = _duck(tmp_path, "params-run")
     r = c.post("/api/runqueries", json={"queries": {"q": "SELECT {r} AS v"}, "params": REGION, "values": {"r": "us"}})
@@ -308,6 +309,7 @@ def test_runqueries_with_params_returns_resolved_params(tmp_path):
     assert r.json()["params"] == [{"name": "r", "kind": "value", "options": ["eu", "us"], "value": "us"}]
 
 
+# req: architecture/dashboards/runqueries
 def test_runqueries_with_params_allows_no_queries(tmp_path):
     c = _duck(tmp_path, "params-empty")
     r = c.post("/api/runqueries", json={"queries": {}, "params": REGION})
@@ -315,6 +317,7 @@ def test_runqueries_with_params_allows_no_queries(tmp_path):
     assert r.json()["results"] == {} and r.json()["params"][0]["value"] == "eu"
 
 
+# req: architecture/dashboards/runqueries
 def test_runqueries_without_params_is_unchanged(tmp_path):
     c = _duck(tmp_path, "params-none")
     assert c.post("/api/runqueries", json={"queries": {}}).status_code == 400
@@ -322,6 +325,7 @@ def test_runqueries_without_params_is_unchanged(tmp_path):
     assert r.json()["results"] == {"q": {"v": ["{r}"]}} and "params" not in r.json()
 
 
+# req: architecture/dashboards/runqueries, architecture/dashboards/fail-fast
 def test_runqueries_bad_param_is_a_400_and_a_failing_query_keeps_the_selectors(tmp_path):
     c = _duck(tmp_path, "params-bad")
     r = c.post("/api/runqueries", json={"queries": {"q": "SELECT {r:nope}"}, "params": REGION})
@@ -330,6 +334,7 @@ def test_runqueries_bad_param_is_a_400_and_a_failing_query_keeps_the_selectors(t
     assert r.status_code == 400 and r.json()["params"][0]["value"] == "eu"
 
 
+# req: architecture/dashboards/runqueries
 def test_runqueries_names_a_malformed_param_and_still_runs(tmp_path):
     c = _duck(tmp_path, "params-malformed")
     params = [{"name": "bad", "kind": "dropdown", "options": ["a"]}, *REGION]
