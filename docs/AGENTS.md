@@ -1,7 +1,7 @@
 # Docs
 
 - `docs/` is the doc of record: what the app does today. Before adding or
-  editing a page, load the project `docs-writing` skill.
+  editing a page, load the project `vmodel` skill.
 - One folder per layer:
   - `docs/requirements/`: what a user needs; no design, no screen detail.
   - `docs/system/`: one page per feature, what a user can see or do.

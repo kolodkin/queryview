@@ -1,6 +1,6 @@
 ---
 name: vmodel
-description: Use when a change alters behavior in this repo, before writing its doc, test or code, and when adding, changing or running a test — backend pytest, frontend vitest or Playwright e2e.
+description: Use when a change alters behavior in this repo, before writing its doc, test or code; when adding, changing or running a test (backend pytest, frontend vitest or Playwright e2e); and when adding or editing a page under docs/.
 ---
 
 # V-model
@@ -67,7 +67,7 @@ An integration test proves no system statement, and a unit test names no ID.
    check inside the module that applies it is unit.
 2. **Go down, one layer at a time, from the entry to unit.** At each layer
    above unit:
-   - write or edit the statement in its doc of record (load `docs-writing`);
+   - write or edit the statement in its doc of record (see [Writing a doc](#writing-a-doc));
    - give it an ID, or keep its existing one. How fine an ID is, is a
      judgment: give one per behavior a reader would call a separate promise.
      On a system page, give IDs to what a user can see; test an edge case of
@@ -78,7 +78,7 @@ An integration test proves no system statement, and a unit test names no ID.
      be an existing one whose assertion changes.
 
    At unit: edit the module's docstring or leading comment and the test beside
-   the module; no ID, no marker (`docs-writing` does not apply).
+   the module; no ID, no marker.
 
    For a layer the change does not alter, write one line: `Skipping <layer>:
    <why>.`
@@ -107,7 +107,46 @@ before" is not a reason to leave it without one.
 ## Not covered
 
 A pure refactor, a comment, or a docs wording fix that changes no behavior
-skips the steps above; the test rules below and `docs-writing` still apply.
+skips the steps above; the test and doc rules below still apply.
+
+## Writing a doc
+
+Every docs edit ends with the `devpowers:shortify` checklist on the pages you
+touched; it owns brevity, heading depth and link hygiene. The house style on
+top of it:
+
+- A page holds one layer's content; a change to an existing feature is a
+  section on its page. Copy the shape of the nearest page.
+- A requirements page has no design and no screen detail.
+- Present tense, describing current behavior.
+  No history ("now", "previously", "since vX"); proposals go in `future.md`
+  and move into the feature's page when they ship.
+- On a system page, the opening paragraph names the route (`/dashboard`,
+  `/explorer`, …) and links the neighboring pages a reader may have meant
+  instead.
+- UI labels are **bold**, exactly as the screen shows them. A page about a
+  screen may open with a layout sketch; the `devpowers:ascii-sketch` skill draws it.
+- `docs/architecture/api.md` is the endpoint reference. A feature page's
+  `## API` section names its endpoints and links there, as `scripts.md` does;
+  bodies and responses are not repeated.
+- Links are relative, `./page.md#anchor`. Code is named only when the reader
+  must open it, as a module or package path. Code and docstrings that back-link
+  a heading quote it word for word, so grep for the old text when renaming one.
+- End with `## Related docs`: a bullet per linked page with a short phrase.
+- Example names are invented (`sales_reporting`, `example.internal`), per the
+  root `AGENTS.md` privacy rule.
+
+## Where a decision goes
+
+A design decision (why this solution or technology) carries no ID: it explains
+a statement, and no test proves it.
+
+- It sits beside what it explains, as a `## Why` section on that page, at that
+  page's layer: a product choice on its `docs/system/` page, a build or
+  technology choice on its `docs/architecture/` page. `docs/system/creds.md`
+  "Why" is the example.
+- A choice that spans several pages goes in that layer folder's
+  `decisions.md`.
 
 ## Writing a test
 
