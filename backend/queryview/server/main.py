@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse, Response
 from ..dashboard_params import ParamError, needed, parse_params
 from ..dashboard_queries import (
     WAITING,
+    Target,
     clean_values,
     dialect_of,
     ready_sql,
@@ -108,7 +109,8 @@ def create_app(config: ServerConfig) -> FastAPI:
         # Only the selectors this query needs: each options_sql is a query.
         declared = needed(template, parse_params(dash["params"]))
         try:
-            resolved = await resolve_on(driver, conn.config, conn.database, declared, clean_values(body.get("values")))
+            target = Target(driver, conn.config, conn.database)
+            resolved = await resolve_on(target, None, declared, clean_values(body.get("values")))
         except ParamError as e:
             return _fail(str(e))
         values = {p["name"]: p["value"] for p in resolved}
@@ -152,9 +154,8 @@ def create_app(config: ServerConfig) -> FastAPI:
         if any(n not in dash["queries"] for n in names):
             return _fail("unknown query", 404)
         r = await run_dashboard_on(
-            DRIVERS[conn.type],
-            conn.config,
-            conn.database,
+            Target(DRIVERS[conn.type], conn.config, conn.database),
+            None,
             {n: dash["queries"][n] for n in names},
             dash["params"],
             clean_values(body.get("values")),
