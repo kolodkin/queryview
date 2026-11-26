@@ -1,8 +1,8 @@
 """Tie every test to the doc statement it proves through `req:` IDs.
 
 A doc defines an ID with `<!-- req: <slug> -->`, its page's path under `docs/`
-giving the prefix; a test names the full ID with `// req: <id>` or `# req: <id>`. The rules live in the V-model skill,
-`.claude/skills/vmodel/SKILL.md`. Errors (bad, duplicate, unknown or unproven
+giving the prefix; a test names the full ID with `// req: <id>` or `# req: <id>`. The rules live in the `devpowers:vmodel`
+skill and its project extension, `.claude/skills/vmodel/SKILL.md`. Errors (bad, duplicate, unknown or unproven
 IDs; undocumented unit modules) always fail; gaps (untagged docs and tests)
 fail only with `--strict`, which the pre-commit hook passes. Standard library only.
 """

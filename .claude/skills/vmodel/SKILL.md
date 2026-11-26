@@ -5,11 +5,10 @@ description: Use when a change alters behavior in this repo, before writing its 
 
 # V-model
 
-Every behavior has a statement in a doc of record, and a test that names the
-statement's ID (at unit, a test beside the module). A change walks down the
-docs, writing a failing test at each layer, then up the tests. When a
-`docs/superpowers/` plan splits the work into tasks, each task follows this
-skill.
+Extends the `devpowers:vmodel` skill: load it first for the method (markers,
+the steps down and up the V, where a decision goes). This skill holds only
+what is particular to QueryView. When a `docs/superpowers/` plan splits the
+work into tasks, each task follows both.
 
 | Layer | Doc of record | A test covers | Proved in |
 |---|---|---|---|
@@ -18,109 +17,49 @@ skill.
 | Integration | `docs/architecture/` | routes, stores, MCP tools, drivers working together | `backend/queryview/**/test_*.py`, `frontend/src/**/*.test.ts(x)` naming an `architecture/` ID |
 | Unit | the module's docstring (Python) or leading comment (TypeScript) | one module's logic | the test file beside the module, named after it, no ID |
 
-## Markers
-
-An ID is the page's path under `docs/` without `.md`, then a kebab-case slug.
-The doc defines it on the line above the statement, writing only the slug,
-since the page gives the prefix:
-
-```md
-<!-- in docs/requirements/queryview.md: requirements/queryview/run-sql -->
-<!-- req: run-sql -->
-A user can run SQL, page through the rows, pick columns, and download CSV.
-```
-
-A test names the full ID directly above the test or group (`#` in Python;
-several IDs comma-separated):
-
-```ts
-// req: requirements/queryview/run-sql
-test("run SQL, pick columns, page and download CSV", async ({ page, seeds }) => {
-```
-
-Never reword a slug a test names. A marker outside the layer's "Proved in"
-location is support, not proof.
+The docs root is `docs/`: `requirements/queryview/run-sql` is defined in
+`docs/requirements/queryview.md` as `<!-- req: run-sql -->`, and named by a
+test as `// req: requirements/queryview/run-sql` (`#` in Python).
 
 ## Tests on two layers
 
-A browser test may belong to two layers, user and system. It lives in
-`e2e/acceptance.spec.ts` and names both IDs:
+User and system share tests, and only they do: the line between a user
+journey and a feature's behavior is the least sharp one. A shared test lives
+in `e2e/acceptance.spec.ts` and names both IDs:
 
 ```ts
 // req: requirements/queryview/browse-tables, system/explorer/browse
 ```
 
-When an acceptance test already walks a system statement, add the
-statement's ID to that test's marker; do not write a second browser test for
-it. A user requirement is still proved only in `e2e/acceptance.spec.ts`.
-
-Only this pair shares tests, for now: the line between a user journey and a
-feature's behavior is the least sharp one. Every other test has one layer.
-An integration test proves no system statement, and a unit test names no ID.
+A user requirement is proved only in `e2e/acceptance.spec.ts`. An integration
+test proves no system statement.
 
 ## Steps
 
-1. **Name the entry layer: the highest one the change touches.** A new or
-   changed user need: user. Anything a user can see or set in the app (a
-   screen, a label, an error, a limit, a default): system. A contract between
-   components (an API route, an MCP tool, a store, a driver): integration.
-   Logic inside one module: unit. Example: raising the maximum query timeout
-   enters at system (`docs/system/queryview.md`, "Query timeout"); the bound
-   check inside the module that applies it is unit.
-2. **Go down, one layer at a time, from the entry to unit.** At each layer
-   above unit:
-   - write or edit the statement in its doc of record (see [Writing a doc](#writing-a-doc));
-   - give it an ID, or keep its existing one. How fine an ID is, is a
-     judgment: give one per behavior a reader would call a separate promise.
-     On a system page, give IDs to what a user can see; test an edge case of
-     one behavior under the same ID, or at integration or unit;
-   - write a test that names the ID and fails now (see
-     [Writing a test](#writing-a-test)). A changed number or default is a
-     changed statement: its test asserts the new value. The failing test may
-     be an existing one whose assertion changes.
-
-   At unit: edit the module's docstring or leading comment and the test beside
-   the module; no ID, no marker.
-
-   For a layer the change does not alter, write one line: `Skipping <layer>:
-   <why>.`
-3. **Build.** Write the code that makes the tests pass.
-4. **Go up.** Run every layer's tests; the suites are independent, so run them
-   side by side:
-   - the touched unit and integration test files first, as a quick check;
-   - `uv run --group test pytest backend/queryview scripts` and
-     `npm test -w frontend`;
-   - the touched `e2e/<feature>.spec.ts` and `e2e/acceptance.spec.ts`, also
-     when untouched: a change below it can break a journey;
-   - `uv run python scripts/vmodel_check.py --strict` (also the pre-commit
-     hook). It must exit 0: an untagged page or test file fails like an error.
-5. **A failure goes back down the V to where it started.** Read the failing
-   test's paired statement first: is the statement wrong, or the code? A
-   failure seen at one layer often starts lower: a browser test can fail on a
-   driver or a client-side race. The layer where it starts is the one whose
-   statement and test were missing, so walk step 2 at that layer:
-   - state the behavior there: the module's docstring or leading comment at
-     unit, the architecture page at integration;
-   - write the test at that layer that fails for the cause, and see it fail;
-   - fix the code there, then go up again from that layer.
-
-   A test that passes on retry ("flaky") still has a cause; never retry or skip
-   it away.
+- **Entry layer.** A contract between components here is an API route, an MCP
+  tool, a store or a driver. Example: raising the maximum query timeout enters
+  at system (`docs/system/queryview.md`, "Query timeout"); the bound check
+  inside the module that applies it is unit. On a system page, give IDs to
+  what a user can see.
+- **Go up.** The suites are independent, so run them side by side:
+  - the touched unit and integration test files first, as a quick check;
+  - `uv run --group test pytest backend/queryview scripts` and
+    `npm test -w frontend`;
+  - the touched `e2e/<feature>.spec.ts` and `e2e/acceptance.spec.ts`, also
+    when untouched;
+  - `uv run python scripts/vmodel_check.py --strict` (also the pre-commit
+    hook). It must exit 0: an untagged page or test file fails like an error.
+- **A failure that starts lower** than the browser test showing it (a driver,
+  a client-side race) is stated on the architecture page at integration, or in
+  the module's docstring or leading comment at unit.
 
 ## Every file is tagged
 
 Every layer page defines at least one ID and every test file names one. The
 exceptions: a `decisions.md` page, and a unit test file, which pairs with its
-module by name (`test_main.py` also with `__main__.py`). A new page or test
-file gets its ID in the change that adds it.
-
-Not every statement or test has one yet: the statement a change edits gets
-its ID in that change, and so does the test that proves it.
-
-## Not covered
-
-A pure refactor, a comment, or a docs wording fix that changes no behavior
-skips the steps above; the test and doc rules below still apply.
+module by name (`test_main.py` also with `__main__.py`).
+`docs/system/creds.md` "Why" is the example of a decision beside its
+statement.
 
 ## Writing a doc
 
@@ -149,22 +88,7 @@ top of it:
 - Example names are invented (`sales_reporting`, `example.internal`), per the
   root `AGENTS.md` privacy rule.
 
-## Where a decision goes
-
-A design decision (why this solution or technology) carries no ID: it explains
-a statement, and no test proves it.
-
-- It sits beside what it explains, as a `## Why` section on that page, at that
-  page's layer: a product choice on its `docs/system/` page, a build or
-  technology choice on its `docs/architecture/` page. `docs/system/creds.md`
-  "Why" is the example.
-- A choice that spans several pages goes in that layer folder's
-  `decisions.md`.
-
 ## Writing a test
-
-Put a test in the lowest layer that can observe the behavior, and start from
-the nearest existing test file: it shows the call shapes.
 
 - Frontend unit tests cover pure TypeScript logic, with no React rendering.
 - Backend tests ship in the wheel and run from the installed package in the

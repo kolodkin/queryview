@@ -23,7 +23,7 @@
 # Tests
 
 Before a change that alters behavior, and before adding, changing or running a
-test, load the project `vmodel` skill: it ties each test to the doc statement
+test, load the project `vmodel` skill and the `devpowers:vmodel` skill it extends: it ties each test to the doc statement
 it proves, and says which layer a test belongs in, where it lives, and which
 fixtures to reuse.
 
