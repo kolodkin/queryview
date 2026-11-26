@@ -39,6 +39,7 @@ export {
   entryConnection,
   entrySql,
   federate,
+  federatedRows,
   isFederated,
   unfederate,
   withConnection,

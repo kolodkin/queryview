@@ -4,6 +4,7 @@ import {
   entryConnection,
   entrySql,
   federate,
+  federatedRows,
   isFederated,
   unfederate,
   withConnection,
@@ -46,4 +47,14 @@ it('lists the connections in first-use order', () => {
   expect(
     connectionNames({ a: orders, b: { connection: 'analytics', sql: 'x' }, c: orders }),
   ).toEqual(['warehouse', 'analytics'])
+})
+it('rows are every connection the dashboard names, with the reply where it has one', () => {
+  const queries = { a: orders, w: { connection: 'widgets', sql: 'x' } }
+  const params = [
+    { name: 'r', options_sql: 'SELECT r', connection: 'lookup' },
+    { name: 'k', options: ['a'] },
+  ]
+  expect(federatedRows(queries, params)).toEqual(['warehouse', 'widgets', 'lookup'])
+  const ok = { name: 'warehouse', database: 'reporting', status: 'ok' as const, queries: ['a'] }
+  expect(federatedRows(queries, params, [ok])).toEqual([ok, 'widgets', 'lookup'])
 })

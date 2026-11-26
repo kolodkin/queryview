@@ -22,7 +22,7 @@ export function FederatedPill({
   onUnlock,
   children,
 }: {
-  connections: FederatedConnection[] | string[]
+  connections: (FederatedConnection | string)[]
   onUnlock?: (name: string) => void
   children?: ReactNode
 }) {
@@ -47,8 +47,8 @@ export function FederatedPill({
       </button>
       {open && (
         <ul className="glass-popover absolute left-0 top-full z-10 mt-2 w-96 p-1 text-sm">
-          {rows.map((c) => (
-            <li key={c.name} data-testid="federated-pill-row" className="rounded px-2 py-1.5">
+          {rows.map((c, i) => (
+            <li key={i} data-testid="federated-pill-row" className="rounded px-2 py-1.5">
               <div className="flex items-center gap-2">
                 {'status' in c && <span>{ICON[c.status]}</span>}
                 <span className="truncate text-slate-200">{c.name}</span>

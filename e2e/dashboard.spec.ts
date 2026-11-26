@@ -363,6 +363,23 @@ test("a locked and an unknown connection show in the pill, and Unlock opens the 
   }
 });
 
+// req: system/queryview/federated-pill
+test("closing a federated dashboard shows the session's pill again", async ({ page, seeds, baseURL }) => {
+  await connect(page, CH, await seeds.testDb());
+  const name = `fed-close-${uid()}`;
+  await api(`${baseURL}/api/dashboards`, {
+    json: { name, html: "<p></p>", queries: { a: { connection: "clickhouse", sql: "SELECT 1" } } },
+  });
+  await page.getByTestId("nav-dashboard").click();
+  await page.getByTestId("dashboard-select").selectOption(name);
+  await expect(page.getByTestId("federated-pill")).toContainText("Federated · 1 connection");
+  await expect(page.getByTestId("connection-status")).toHaveCount(0);
+
+  await page.getByTestId("dashboard-select").selectOption("");
+  await expect(page.getByTestId("federated-pill")).toHaveCount(0);
+  await expect(page.getByTestId("connection-status")).toContainText(`clickhouse · ${chDb()}`);
+});
+
 // req: system/dashboard/federated
 test("a dashboard mixing SQL strings and connection entries is refused", async ({ baseURL }) => {
   const r = await api(`${baseURL}/api/dashboards`, {

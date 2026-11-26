@@ -218,7 +218,7 @@ function Shell() {
   const [dbOpen, setDbOpen] = useState(false)
   // The open federated dashboard's connections: its pill replaces the
   // session's while set (docs/system/queryview.md).
-  const [federated, setFederated] = useState<FederatedConnection[] | string[] | null>(null)
+  const [federated, setFederated] = useState<(FederatedConnection | string)[] | null>(null)
   // The pill row whose Unlock is asking for a passphrase; a success bumps the nonce,
   // which re-runs the dashboard.
   const [unlocking, setUnlocking] = useState<string | null>(null)

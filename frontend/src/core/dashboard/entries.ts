@@ -67,3 +67,22 @@ export function unfederate(queries: Queries, params: unknown[]) {
 export const connectionNames = (queries: Queries): string[] => [
   ...new Set(Object.values(queries).flatMap((e) => entryConnection(e) ?? [])),
 ]
+
+// The federated pill's rows: every connection the dashboard names (its
+// queries, a widget's included, then its `options_sql` params), in first-use
+// order; each as the run's `reply` reports it (one row per database), else
+// the name alone. A run leaves widget queries out, so its reply alone may miss one.
+export function federatedRows(
+  queries: Queries,
+  params: unknown[],
+  reply?: FederatedConnection[],
+): (FederatedConnection | string)[] {
+  const fromParams = params.flatMap((p) =>
+    hasOptionsSql(p) && typeof p.connection === 'string' ? [p.connection] : [],
+  )
+  const names = new Set([...connectionNames(queries), ...fromParams])
+  return [...names].flatMap((n): (FederatedConnection | string)[] => {
+    const rows = reply?.filter((c) => c.name === n) ?? []
+    return rows.length ? rows : [n]
+  })
+}

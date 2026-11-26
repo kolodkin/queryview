@@ -4,9 +4,9 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 import {
   DashboardFrame,
   answerSnapshot,
-  connectionNames,
   entrySql,
   federate,
+  federatedRows,
   isFederated,
   unfederate,
   withConnection,
@@ -146,7 +146,7 @@ function DashboardView({
   activeConnection?: string | null
   // A federated dashboard's connections for the shell's pill (names, then
   // the last full run's statuses); null for an unfederated one or none.
-  onFederated?: (connections: FederatedConnection[] | string[] | null) => void
+  onFederated?: (connections: (FederatedConnection | string)[] | null) => void
   // Bumped by the shell after an Unlock: re-run, as Execute with nothing edited.
   rerunNonce?: number
 }) {
@@ -376,22 +376,24 @@ function DashboardView({
       setWarning(null)
       setResults(null)
       setActive(null)
-      if (!name && localPush?.name !== '') return
+      // No dashboard on screen: the session's own pill again.
+      if (!name && localPush?.name !== '') return onFederated?.(null)
 
       const dash = await loadDashboard()
-      if (cancelled || !dash) return
+      if (cancelled) return
+      if (!dash) return onFederated?.(null)
       setActive(dash)
       // A reload with unexecuted edits (a database switch) keeps them in the
       // editor and re-runs the SQL as last executed.
       if (dash !== editedRef.current) executedRef.current = dash.queries
       const executed = executedRef.current
-      report(executed)
+      report(executed, dash)
 
       setLoading(true)
       try {
         const r = await runDashboard(withoutWidgetQueries(executed, dash.html), dash.params, {})
         if (cancelled) return
-        report(executed, r)
+        report(executed, dash, r)
         if (r.ok) {
           setParams(r.params)
           resolvedRef.current = r.params
@@ -449,7 +451,7 @@ function DashboardView({
     const queries = only ? Object.fromEntries(only.map((n) => [n, executed[n]])) : executed
     const r = await runDashboard(withoutWidgetQueries(queries, dash.html), dash.params, sent)
     // A partial run's reply covers only its queries: the pill keeps the last full one.
-    if (!only) report(executed, r)
+    if (!only) report(executed, dash, r)
     if (r.params) resolvedRef.current = r.params
     if (!r.ok)
       return { type: 'params-results', ok: false, message: r.message, params: r.params ?? [] }
@@ -507,8 +509,9 @@ function DashboardView({
   }
 
   // The pill's connections for `queries` as run, with `r`'s statuses once it answered.
-  function report(queries: Record<string, QueryEntry>, r?: RunReply) {
-    onFederated?.(isFederated(queries) ? (r?.connections ?? connectionNames(queries)) : null)
+  function report(queries: Record<string, QueryEntry>, dash: DashboardPush, r?: RunReply) {
+    const rows = federatedRows(queries, dash.params ?? [], r?.connections)
+    onFederated?.(isFederated(queries) ? rows : null)
   }
   useEffect(() => () => onFederated?.(null), [onFederated])
 
