@@ -39,6 +39,7 @@ in, which is what lets two tabs sit on two different databases. The one
 exception is the remote-control SSE stream, which takes `?session=` because
 `EventSource` cannot send headers.
 
+<!-- req: row-is-durable -->
 Only the live driver state — the decrypted config and the database list — is
 held in memory, as a cache. A backend restart costs one reconnect, not the
 session.
@@ -58,6 +59,7 @@ alone.
 Writes are fire-and-forget — the page never waits on one, and a lost patch costs
 a remembered preference, never your work in the live tab.
 
+<!-- req: release-then-attach -->
 **A reload keeps what you typed just before it.** A reload sends the server two
 requests for the same session, milliseconds apart: the old page's `pagehide`
 beacon with its unsaved edits, then the new page's `attach`, which reads the
@@ -96,6 +98,7 @@ Tabs re-attach every 10 seconds, which doubles as the heartbeat, and beacon a
 release when they close. The 90-second hold is well past a minute because
 browsers throttle a hidden tab's timers to about one run a minute.
 
+<!-- req: attach -->
 `POST /api/sessions/attach` decides in one server-side pass, so two tabs opening
 at once cannot race: the id the tab already has if it is free or already this
 tab's, else the most recently active unheld session, else a new one. The first
@@ -106,6 +109,7 @@ The 90 seconds before an unnamed session is swept are the reload grace: a
 reload's release beacon can land after its re-attach, and the next heartbeat
 re-claims the session well within it.
 
+<!-- req: lapsed-claim-409 -->
 A tab whose claim lapsed learns it on its next heartbeat (sent with `keep`, see
 [api.md](./api.md)), which gets a `409`.
 

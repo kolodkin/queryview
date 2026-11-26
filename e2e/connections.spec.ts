@@ -88,7 +88,7 @@ test("a locked connection edits and deletes with its passphrase", async ({ page,
   await expect(c).toHaveCount(0);
 });
 
-// req: system/connect/locked-hidden-from-agent
+// req: system/connect/locked-hidden-from-agent, system/creds/locked-until-unlocked
 test("locked connection keeps the agent out", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const sessionId = await armRemote(page);

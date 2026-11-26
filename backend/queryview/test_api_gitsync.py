@@ -22,17 +22,20 @@ def _default_ws_id() -> int:
     return _run(resolve(DEFAULT_WORKSPACE)).id
 
 
+# req: architecture/api/git-sync
 def test_status_reports_unconfigured():
     # Outside git_env the default workspace has no remote configured.
     c = TestClient(app)
     assert c.get("/api/git/status").json() == {"configured": False, "conflicts": []}
 
 
+# req: architecture/api/git-sync
 def test_status_reports_configured(git_env):
     c = TestClient(app)
     assert c.get("/api/git/status").json() == {"configured": True, "conflicts": []}
 
 
+# req: architecture/api/git-sync
 def test_validation_400():
     c = TestClient(app)
     assert c.post("/api/git/restore", json={}).status_code == 400
@@ -48,10 +51,12 @@ def test_validation_400():
         assert r.json() == {"ok": False, "message": "unknown kind 'query' (expected 'dashboard')"}
 
 
+# req: architecture/api/git-sync
 def test_git_store_endpoint_is_gone():
     assert TestClient(app).post("/api/git/store", json={"kind": "dashboard", "name": "x"}).status_code in (404, 405)
 
 
+# req: architecture/api/git-sync
 def test_save_history_restore_round_trip(git_env):
     from queryview.dashboards import get_dashboard
 
@@ -71,18 +76,21 @@ def test_save_history_restore_round_trip(git_env):
     assert d is not None and d["html"] == "<p>v1</p>" and d["queries"] == {"q": "SELECT 1"}
 
 
+# req: architecture/api/git-sync
 def test_restore_unknown_entity_404(git_env):
     c = TestClient(app)
     r = c.post("/api/git/restore", json={"kind": "dashboard", "name": "never stored api"})
     assert r.status_code == 404
 
 
+# req: architecture/api/git-sync
 def test_sync_merges_on_demand_and_needs_a_remote():
     c = TestClient(app)
     r = c.post("/api/git/sync", json={})
     assert r.status_code == 409  # the default workspace has no remote here
 
 
+# req: architecture/api/git-sync
 def test_unchanged_save_reports_no_commit(git_env):
     c = TestClient(app)
     body = {"name": "api same", "html": "<p>s</p>", "queries": {}}

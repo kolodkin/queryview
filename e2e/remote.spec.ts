@@ -16,6 +16,7 @@ import {
   uid,
 } from "./fixtures";
 
+// req: architecture/mcp/connections
 test("agent switch names the connection and toasts", async ({ page, seeds, baseURL }) => {
   // use_connection reaches an unarmed tab by heartbeat: the pill names the
   // agent's connection, a toast says the agent switched, the menu badges it.
@@ -35,6 +36,7 @@ test("agent switch names the connection and toasts", async ({ page, seeds, baseU
   await expect(entry.getByTestId("conn-agent-badge")).toHaveText("agent");
 });
 
+// req: architecture/mcp/open-explorer
 test("mcp open_explorer browses the table", async ({ page, seeds, baseURL }) => {
   await seeds.testDb();
   await connect(page, CH, chDb());
@@ -54,6 +56,7 @@ test("mcp open_explorer browses the table", async ({ page, seeds, baseURL }) => 
   expect(missing).toEqual({ ok: false, message: `no table "nope" in ${chDb()}`, database: chDb() });
 });
 
+// req: system/mcp/tabs
 test("mcp new_tab opens a session of the agent's own at its link", async ({ page, context, seeds, baseURL }) => {
   await seeds.testDb();
   await connect(page, CH, chDb()); // the user's own tab, untouched below

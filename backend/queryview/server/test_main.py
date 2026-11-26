@@ -62,6 +62,7 @@ def test_health(client):
     assert r.status_code == 200 and r.json()["status"] == "ok"
 
 
+# req: architecture/viewer_server_api/names-not-sql
 def test_connections_list_names_and_types_only(client):
     assert client.get("/api/connections").json() == [
         {"name": "local", "type": "sqlite"},
@@ -73,6 +74,7 @@ def test_dashboards_list_names(client):
     assert client.get("/api/dashboards").json() == [{"name": "sales"}]
 
 
+# req: architecture/viewer_server_api/names-not-sql
 def test_a_dashboard_carries_no_sql(client):
     r = client.get("/api/dashboards/sales")
     assert r.json() == {"name": "sales", "html": SALES["html"], "queries": ["total", "rows"]}
@@ -103,6 +105,7 @@ def test_run_only_the_named_queries(client):
     assert r.json()["results"] == {} and len(r.json()["params"]) == 2
 
 
+# req: architecture/viewer_server_api/values-checked
 def test_a_value_outside_the_options_never_reaches_the_sql(client):
     hostile = {"col": 'amount" FROM orders; --', "region": "' OR 1=1 --"}
     r = client.post("/api/query", json={**ON_SALES, "query": "rows", "values": hostile})
@@ -136,6 +139,7 @@ def test_describe(client):
     assert r.status_code == 200 and [f["name"] for f in r.json()["fields"]] == ["region", "amount"]
 
 
+# req: architecture/viewer_server_api/names-not-sql
 @pytest.mark.parametrize(
     "path, body",
     [
@@ -230,6 +234,7 @@ def test_a_failing_database_does_not_stop_the_server(client, tmp_path):
     assert client.post("/api/run", json=ON_SALES).status_code == 200
 
 
+# req: architecture/viewer_server_api/names-not-sql
 @pytest.mark.parametrize(
     "method, path",
     [
@@ -331,6 +336,7 @@ def test_text_that_cannot_be_encoded_is_not_a_500(client, dash_repo, path, value
     assert r.status_code == 200, r.text  # dropped: the default runs
 
 
+# req: architecture/viewer_server_api/values-checked
 def test_a_param_declared_twice_cannot_slip_a_value_past_its_options(client, dash_repo):
     twice = [{"name": "col", "kind": "text"}, {"name": "col", "kind": "identifier", "options": ["amount"]}]
     dup = {"name": "dup", "html": "<p>dup</p>", "queries": {"q": "SELECT {col} AS v FROM orders"}, "params": twice}

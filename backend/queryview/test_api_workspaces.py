@@ -9,12 +9,14 @@ from fastapi.testclient import TestClient
 from queryview.conftest import app
 
 
+# req: architecture/api/workspaces
 def test_list_includes_default():
     c = TestClient(app)
     names = [w["name"] for w in c.get("/api/workspaces").json()["workspaces"]]
     assert "default" in names
 
 
+# req: architecture/api/workspaces
 def test_create_list_update_delete_round_trip():
     c = TestClient(app)
     r = c.post(
@@ -44,6 +46,7 @@ def test_create_list_update_delete_round_trip():
     assert c.delete("/api/workspaces/t6-rt2").status_code == 404
 
 
+# req: architecture/api/workspaces
 def test_create_validation_and_conflict():
     c = TestClient(app)
     assert c.post("/api/workspaces", json={}).status_code == 400

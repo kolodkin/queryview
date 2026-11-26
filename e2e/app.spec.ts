@@ -44,6 +44,7 @@ async function switchDatabaseFromPill(page: Page, database: string): Promise<voi
 }
 
 for (const c of PICKER) {
+  // req: system/queryview/connection-status
   test(`a database switch reruns the query on screen [${c.id}]`, async ({ page, seeds }) => {
     await connect(page, c, await seeds[c.seed]());
     const other = OTHER_DB[c.id];
@@ -65,6 +66,7 @@ for (const c of PICKER) {
     await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT 'edited'");
   });
 
+  // req: system/queryview/connection-status
   test(`a database switch refreshes dashboard param options [${c.id}]`, async ({ page, seeds, baseURL }) => {
     // `options_sql` choices are resolved on the viewing session, so they follow
     // its database, and the re-run the switch triggers substitutes the new ones.
@@ -87,6 +89,7 @@ for (const c of PICKER) {
   });
 }
 
+// req: system/queryview/connection-status
 test("the pill menu relists databases on open", async ({ page, seeds }) => {
   // A database created after connecting shows up the next time the pill menu
   // opens, without reconnecting.
@@ -104,6 +107,7 @@ test("the pill menu relists databases on open", async ({ page, seeds }) => {
   }
 });
 
+// req: system/queryview/connection-status
 test("database names copy from the picker and the pill", async ({ page, context, seeds }) => {
   // A database name copies from its picker row (without selecting it) and,
   // once selected, from the status pill.
@@ -122,6 +126,7 @@ test("database names copy from the picker and the pill", async ({ page, context,
   await expect(page.getByTestId("db-select")).toHaveCount(0);
 });
 
+// req: system/session/switch-elsewhere
 test("a database switched elsewhere reaches the tab on its heartbeat", async ({ page, seeds, baseURL }) => {
   // A switch this tab did not make (an API caller here; another tab is the
   // same path) reaches its pill and views on the next heartbeat.
@@ -141,6 +146,7 @@ test("a database switched elsewhere reaches the tab on its heartbeat", async ({ 
   await expect(tableRow(page, "databases")).toBeVisible();
 });
 
+// req: system/dashboard/new-query-draft
 test("ready connection opens a New query draft", async ({ page, seeds }) => {
   // Connecting lands on the explorer; ad-hoc SQL is a New query draft on the
   // Dashboard page, which the old /studio URL still opens.
@@ -158,6 +164,7 @@ test("ready connection opens a New query draft", async ({ page, seeds }) => {
   await expect(frame.getByTestId("qv-error")).toHaveText("Enter a query.");
 });
 
+// req: system/queryview/connection-status
 test("connect page and disconnect", async ({ page, seeds }) => {
   // Connect keeps the cards up for a ready connection, and the pill's menu
   // (even a picker-less driver's) ends with Disconnect.
@@ -178,6 +185,7 @@ test("connect page and disconnect", async ({ page, seeds }) => {
   await expect(page.getByTestId("connection-status")).toHaveCount(0);
 });
 
+// req: system/queryview/landing
 test("disconnected lands on connect", async ({ page }) => {
   // A disconnected session opens on /connect, and Scripts sends it there too:
   // a script needs a database. The old /prompt URL redirects.
@@ -192,6 +200,7 @@ test("disconnected lands on connect", async ({ page }) => {
   await expect(page).toHaveURL(/\/connect$/);
 });
 
+// req: system/queryview/many-connections
 test("many connections", async ({ page, seeds, baseURL }) => {
   // Past six saved connections: Recent row, a capped scrolling list, search
   // with a count and arrow-key highlight, driver chips, and "+ New" alone.
@@ -252,6 +261,7 @@ test("many connections", async ({ page, seeds, baseURL }) => {
   await expect(page.getByTestId("connection-status")).toContainText(name!);
 });
 
+// req: system/queryview/query-timeout
 test("the query timeout chip is remembered with the session", async ({ page, seeds, shot }) => {
   // The header's Timeout chip shows the default, takes whole seconds in
   // 1..600, and keeps its value across a reload: it lives in the session.

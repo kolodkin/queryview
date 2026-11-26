@@ -297,7 +297,7 @@ test("a saved dashboard shows its data as it is now", async ({ page, seeds, base
   }
 });
 
-// req: requirements/queryview/workspace-git
+// req: requirements/queryview/workspace-git, system/gitsync/restore-ui, system/gitsync/not-in-git
 test("git save and restore dashboard round trip", async ({ page, baseURL, seeds, shot }) => {
   test.skip(!(await gitConfigured(baseURL!)), "git sync is not configured for this stack");
   // Unique per attempt: a CI retry shares the remote, which keeps the first
@@ -337,7 +337,7 @@ test("git save and restore dashboard round trip", async ({ page, baseURL, seeds,
   expect(body.queries).toEqual({ q: "SELECT 1" });
 });
 
-// req: requirements/queryview/yaml-export-import
+// req: requirements/queryview/yaml-export-import, system/export-import/ui
 test("dashboard export import round trip", async ({ page, baseURL, shot }, testInfo) => {
   // Download a dashboard as YAML from the UI, drift the stored copy, then
   // import the downloaded file back and verify it overwrote the drift.
@@ -368,7 +368,7 @@ test("dashboard export import round trip", async ({ page, baseURL, shot }, testI
   expect(body.queries).toEqual({ q: "SELECT 1" });
 });
 
-// req: requirements/queryview/agent-drives
+// req: requirements/queryview/agent-drives, system/mcp/arming, system/scripts/agent-push, system/query/edit-lock
 test("mcp push_script fills and runs the scripts editor", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const sid = await armRemote(page);

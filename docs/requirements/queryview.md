@@ -6,7 +6,7 @@ section links; [queryview.md](../system/queryview.md) lists the app's pages.
 
 ## Add a connection
 
-<!-- req: requirements/queryview/add-connection -->
+<!-- req: add-connection -->
 A user can save a connection to a ClickHouse, Postgres, MySQL, DuckDB or SQLite
 database.
 
@@ -19,7 +19,7 @@ See [connect.md](../system/connect.md#creating-a-connection).
 
 ## Open a database
 
-<!-- req: requirements/queryview/open-database -->
+<!-- req: open-database -->
 A user can open a saved connection, pick a database, and find it reconnected
 next time.
 
@@ -35,7 +35,7 @@ See [connect.md](../system/connect.md#database-picker) and
 
 ## Run SQL
 
-<!-- req: requirements/queryview/run-sql -->
+<!-- req: run-sql -->
 A user can run SQL, page through the rows, pick columns, and download CSV.
 
 - Running a query shows its rows under its column names.
@@ -47,7 +47,7 @@ See [query.md](../system/query.md).
 
 ## Run a script
 
-<!-- req: requirements/queryview/run-script -->
+<!-- req: run-script -->
 A user can run a multi-statement script, writes included, that stops at the
 first error.
 
@@ -60,7 +60,7 @@ See [scripts.md](../system/scripts.md).
 
 ## Browse tables
 
-<!-- req: requirements/queryview/browse-tables -->
+<!-- req: browse-tables -->
 A user can browse tables and page through their rows without typing SQL.
 
 - The connected database's tables are listed, with row estimates where the
@@ -72,7 +72,7 @@ See [explorer.md](../system/explorer.md).
 
 ## Live dashboard
 
-<!-- req: requirements/queryview/live-dashboard -->
+<!-- req: live-dashboard -->
 A user can open a saved dashboard that re-runs its queries against live data.
 
 - A saved dashboard is listed and opens by its link.
@@ -83,7 +83,7 @@ See [dashboard.md](../system/dashboard.md).
 
 ## Back up a workspace to git
 
-<!-- req: requirements/queryview/workspace-git -->
+<!-- req: workspace-git -->
 A user can back a workspace up to a git remote and restore a dashboard from it.
 
 - Each save of a dashboard is a commit on the workspace's remote.
@@ -95,7 +95,7 @@ See [gitsync.md](../system/gitsync.md) and [workspace.md](../system/workspace.md
 
 ## Move a dashboard as YAML
 
-<!-- req: requirements/queryview/yaml-export-import -->
+<!-- req: yaml-export-import -->
 A user can move a dashboard between instances as YAML.
 
 - Export downloads the dashboard as a YAML file.
@@ -106,7 +106,7 @@ See [export-import.md](../system/export-import.md).
 
 ## Let an agent drive the tab
 
-<!-- req: requirements/queryview/agent-drives -->
+<!-- req: agent-drives -->
 A user can have an agent run a query in the user's open tab over MCP.
 
 - Once the user allows remote control, a script the agent sends appears in the

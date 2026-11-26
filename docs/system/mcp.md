@@ -18,6 +18,7 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 
 ## Tabs
 
+<!-- req: tabs -->
 An agent works in browser tabs of its own, one per task, and leaves your
 sessions alone unless you hand it an id. `new_tab(name)` creates a
 [tab session](./session.md#tabs) and returns its `session_id` and `url`,
@@ -30,6 +31,7 @@ at most, and every reply about a tab carries its `url`.
 
 ## Arming a session
 
+<!-- req: arming -->
 Remote control is **opt-in**, per browser session, and off by default. Once a
 database is selected, an **agent icon** sits next to the connection status pill.
 Click it and toggle **Allow remote control**. The popover then shows this

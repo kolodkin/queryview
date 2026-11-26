@@ -5,7 +5,7 @@ from pathlib import Path
 
 from vmodel_check import check, main, parse_ids
 
-PAGE = "<!-- req: system/dash/rerun -->\nA param change re-runs.\n"
+PAGE = "<!-- req: rerun -->\nA param change re-runs.\n"
 SPEC = "// req: system/dash/rerun\ntest('x', () => {})\n"
 
 
@@ -39,9 +39,14 @@ def test_unknown_id_in_test(tmp_path):
     assert any("no doc defines" in e for e in r.errors)
 
 
-def test_prefix_must_match_page(tmp_path):
+def test_a_doc_slug_takes_its_pages_prefix(tmp_path):
     r = check(repo(tmp_path, {"docs/system/other.md": PAGE, "e2e/dash.spec.ts": SPEC}))
-    assert any("prefix" in e for e in r.errors)
+    assert "system/other/rerun" in r.matrix["system"] and any("system/dash/rerun" in e for e in r.errors)
+
+
+def test_a_doc_marker_names_a_slug_not_a_full_id(tmp_path):
+    r = check(repo(tmp_path, {"docs/system/dash.md": "<!-- req: system/dash/rerun -->\n", "e2e/dash.spec.ts": SPEC}))
+    assert any("slug" in e for e in r.errors)
 
 
 def test_malformed_marker(tmp_path):
@@ -78,7 +83,7 @@ def test_system_id_needs_a_browser_test(tmp_path):
 
 
 def test_an_acceptance_test_may_also_prove_a_system_id(tmp_path):
-    req = "<!-- req: requirements/user/goal -->\nA goal.\n"
+    req = "<!-- req: goal -->\nA goal.\n"
     both = "// req: requirements/user/goal, system/dash/rerun\ntest('x', () => {})\n"
     r = check(
         repo(tmp_path, {"docs/requirements/user.md": req, "docs/system/dash.md": PAGE, "e2e/acceptance.spec.ts": both})
@@ -96,12 +101,12 @@ def test_a_spec_in_a_subfolder_of_e2e_is_seen(tmp_path):
 
 
 def test_layer_proof_locations(tmp_path):
-    req = "<!-- req: requirements/user/goal -->\nA goal.\n"
+    req = "<!-- req: goal -->\nA goal.\n"
     files = {"docs/requirements/user.md": req, "e2e/dash.spec.ts": "// req: requirements/user/goal\n"}
     assert any("no test in e2e/acceptance.spec.ts" in e for e in check(repo(tmp_path, files)).errors)
     files = {"docs/requirements/user.md": req, "e2e/acceptance.spec.ts": "// req: requirements/user/goal\n"}
     assert check(repo(tmp_path, files)).errors == []
-    arch = "<!-- req: architecture/db/pool -->\nA pool.\n"
+    arch = "<!-- req: pool -->\nA pool.\n"
     files = {"docs/architecture/db.md": arch, "backend/queryview/test_api_db.py": "# req: architecture/db/pool\n"}
     r = check(repo(tmp_path, files))
     assert r.errors == [] and not any("test_api_db" in g for g in r.gaps)
@@ -128,7 +133,7 @@ def test_gaps(tmp_path):
     files = {
         "docs/system/empty.md": "text\n",
         "e2e/x.spec.ts": "test('x', () => {})\n",
-        "docs/future.md": "<!-- req: system/a/b -->\n",
+        "docs/future.md": "<!-- req: b -->\n",
         "docs/superpowers/specs/x.md": "<!-- req: nope -->\n",
     }
     r = check(repo(tmp_path, files))
@@ -158,3 +163,13 @@ def test_a_root_without_docs_fails_with_one_line(tmp_path, capsys):
     assert main(["--root", str(tmp_path)]) != 0
     out = capsys.readouterr()
     assert out.out == "" and out.err.strip() == f"error: {tmp_path} has no docs/ directory"
+
+
+def test_test_main_pairs_with_dunder_main(tmp_path):
+    files = {"backend/queryview/test_main.py": "", "backend/queryview/__main__.py": '"""Doc."""\n'}
+    r = check(repo(tmp_path, files))
+    assert r.errors == [] and r.gaps == []
+
+
+def test_a_decisions_page_needs_no_id(tmp_path):
+    assert check(repo(tmp_path, {"docs/architecture/decisions.md": "Why.\n"})).gaps == []

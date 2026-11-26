@@ -2,6 +2,7 @@
 // and git round trips are in acceptance.spec.ts.
 import { api, expect, gitConfigured, sessionId, switchWorkspace, test, uid } from "./fixtures";
 
+// req: system/workspace/switcher
 test("switcher isolates dashboards", async ({ page, baseURL }) => {
   // Uses a uniquely-named workspace and cleans it up so reruns are idempotent.
   const ws = `e2e-${uid(6)}`;
@@ -36,6 +37,7 @@ test("switcher isolates dashboards", async ({ page, baseURL }) => {
 // remote the backend fixture points the default workspace at, so the
 // save/restore round trip (acceptance.spec.ts) runs; on an unconfigured stack
 // that test skips and Restore renders disabled.
+// req: system/gitsync/restore-ui
 test("git controls disabled when unconfigured", async ({ page, baseURL }) => {
   test.skip(await gitConfigured(baseURL!), "git sync is configured; disabled-state not applicable");
   await page.goto("/dashboard");
@@ -43,6 +45,7 @@ test("git controls disabled when unconfigured", async ({ page, baseURL }) => {
   await expect(page.getByTestId("git-commit")).toHaveCount(0); // Save commits
 });
 
+// req: system/queryview/popovers
 test("popovers close on outside click and escape", async ({ page }) => {
   // The header dropdowns close when the click (or Escape) lands outside them,
   // not only on their own trigger.

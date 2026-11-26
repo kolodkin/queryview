@@ -15,6 +15,7 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+# req: architecture/api/export-import
 def test_export_validation_400():
     c = TestClient(app)
     assert c.get("/api/export").status_code == 400
@@ -25,18 +26,21 @@ def test_export_validation_400():
     assert r.status_code == 400 and "no longer supported" in r.json()["message"]
 
 
+# req: architecture/api/export-import
 def test_export_unknown_entity_404():
     c = TestClient(app)
     r = c.get("/api/export", params={"kind": "dashboard", "name": "never saved"})
     assert r.status_code == 404
 
 
+# req: architecture/api/export-import
 def test_export_unknown_workspace_404():
     c = TestClient(app)
     r = c.get("/api/export", params={"kind": "workspace", "workspace": "no such ws"})
     assert r.status_code == 404
 
 
+# req: architecture/api/export-import
 def test_import_requires_body_and_valid_yaml():
     c = TestClient(app)
     assert c.post("/api/import", content=b"").status_code == 400
@@ -46,6 +50,7 @@ def test_import_requires_body_and_valid_yaml():
     assert r.json() == {"ok": False, "message": "saved queries are no longer supported"}
 
 
+# req: architecture/api/export-import
 def test_dashboard_export_headers_and_round_trip(default_ws_id):
     from queryview.dashboards import get_dashboard, upsert_dashboard
 
@@ -66,6 +71,7 @@ def test_dashboard_export_headers_and_round_trip(default_ws_id):
     assert d is not None and d["html"] == "<p>v1</p>" and d["queries"] == {"q": "SELECT 1"}
 
 
+# req: architecture/api/export-import
 def test_workspace_export_import_between_workspaces(default_ws_id, wipe_workspace_entities):
     from queryview.dashboards import upsert_dashboard
 
