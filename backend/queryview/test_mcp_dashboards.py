@@ -106,6 +106,8 @@ def test_a_number_or_boolean_value_is_read_as_its_text():
     params = [{"name": "n", "options": [1, 2]}, {"name": "b", "options": [False, True]}]
     out = _run(run_dashboard(sid, {"q": "SELECT {n} AS n, {b} AS b"}, params, {"n": 2, "b": True}))
     assert [p["value"] for p in out["params"]] == ["2", "true"]
+    dim = [{"name": "region", "kind": "dimension"}]
+    assert _run(run_dashboard(sid, Q, dim, {"region": False}))["results"] == {"q": {"v": [""]}}
 
 
 # req: architecture/mcp/run-dashboard
