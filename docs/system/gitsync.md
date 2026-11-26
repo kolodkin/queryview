@@ -27,7 +27,7 @@ Git never runs interactively: stdin is closed, prompts are disabled, SSH runs in
 batch mode, and each invocation is capped at two minutes. A missing credential,
 a key passphrase or an unknown host fails instead of blocking a request — which
 is why a container wants a token rather than a key it cannot unlock. Mounting
-for that case is in [docker.md](./docker.md#git-sync).
+for that case is in [docker.md](../docker.md#git-sync).
 
 ## Repository layout
 
@@ -44,7 +44,7 @@ key in `meta.yaml` is ignored. A dashboard needs `dashboard.html` and
 skips a folder the encoding would not write, such as `a%41` for `aA`, with a
 warning in the server log.
 
-Every QueryView on one repo, [viewer servers](./viewer_server/README.md)
+Every QueryView on one repo, [viewer servers](./viewer_server.md)
 included, must read this layout: one that expects the name in `meta.yaml`
 skips these folders.
 
@@ -118,11 +118,13 @@ three only change the workspace.
 
 ## UI
 
+<!-- req: restore-ui -->
 **Restore**, next to the dashboard page's **Save**, opens the entity's
 revision list (newest first, 10 at a time, scroll for more) and overwrites the
 local copy with the picked revision after confirmation. It is disabled when
 the active workspace has no remote configured.
 
+<!-- req: not-in-git -->
 With a remote, the dashboard picker marks a dashboard no commit holds
 (`commit_sha` is `NULL`) as `<name> · not in git`. A row whose content
 matches the repo but has no `commit_sha` recorded yet gets one on the next
@@ -146,5 +148,5 @@ optional `session_id` (see [workspace.md](./workspace.md)).
 - [workspace.md](./workspace.md) — workspaces: per-workspace remotes.
 - [export-import.md](./export-import.md) — one-shot YAML export/import of the same entities, no git needed.
 - [dashboard.md](./dashboard.md) — dashboards.
-- [api.md](./api.md) — backend JSON API.
-- [future.md](./future.md) — planned follow-ups to git sync.
+- [api.md](../architecture/api.md) — backend JSON API.
+- [future.md](../future.md) — planned follow-ups to git sync.

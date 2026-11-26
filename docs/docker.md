@@ -38,7 +38,7 @@ Inside the container, `localhost` is the container itself. To reach a database:
 
 The image ships `git`, and the mount above covers the clones. Give the
 workspace an HTTPS remote carrying a scoped, expiring token —
-[gitsync.md](./gitsync.md) has the URL form and what becomes of the credential.
+[gitsync.md](./system/gitsync.md) has the URL form and what becomes of the credential.
 
 SSH also works, but nothing in the container can answer a prompt: the key must
 be passphrase-free and `known_hosts` must already list the host. Mount one
@@ -55,6 +55,6 @@ docker run -d --name queryview \
 
 ## Related docs
 
-- [gitsync.md](./gitsync.md) — workspace git sync, remote URLs and credentials.
-- [connect.md](./connect.md) — connections and drivers.
-- [viewer_server/docker.md](./viewer_server/docker.md) — running the viewer server from this image.
+- [gitsync.md](./system/gitsync.md) — workspace git sync, remote URLs and credentials.
+- [connect.md](./system/connect.md) — connections and drivers.
+- [viewer_server_docker.md](./viewer_server_docker.md) — running the viewer server from this image.

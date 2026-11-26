@@ -12,6 +12,7 @@ async function openChDraft(page: Page): Promise<FrameLocator> {
   return openNewQuery(page);
 }
 
+// req: system/query/default-views
 test("default views for array map tuple", async ({ page, seeds, shot }) => {
   // Array/Map/Tuple columns get a built-in default view: a vertical list,
   // collapsed to the first 3 items with an expander. Types come with the
@@ -51,6 +52,7 @@ test("default views for array map tuple", async ({ page, seeds, shot }) => {
   await shot("default views: array expanded");
 });
 
+// req: system/query/fields
 test("field pickers visibility and order by", async ({ page, seeds, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openNewQuery(page);
@@ -115,6 +117,7 @@ test("field pickers visibility and order by", async ({ page, seeds, shot }) => {
   await shot("ordered + limited results");
 });
 
+// req: system/query/long-values
 test("long cells scroll and open in the cell popup", async ({ page, seeds, shot }) => {
   // Columns fit their widest value up to a cap; a longer value scrolls in its
   // cell and gains a button that opens the full value, glyphed `{ }` for
@@ -172,6 +175,7 @@ test("long cells scroll and open in the cell popup", async ({ page, seeds, shot 
   await shot("cell popup - raw long text");
 });
 
+// req: system/query/long-values
 test("a native map cell is labelled by its column type", async ({ page, seeds }) => {
   // A Map arrives from the driver as an object; the popup names it by its type.
   await seeds.testDb();
@@ -185,6 +189,7 @@ test("a native map cell is labelled by its column type", async ({ page, seeds })
   await expect(modal.getByTestId("cell-data-tree")).toContainText("service");
 });
 
+// req: system/query/fields
 test("field menu keeps names beside long types", async ({ page, seeds }) => {
   // DESCRIBE spreads a named Tuple's long type over lines: the Fields menu
   // still shows the column's name, and the type keeps its real newlines.

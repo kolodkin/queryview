@@ -24,6 +24,7 @@ order-by select the [dashboard widget](./query.md#fields-selection--ordering) us
 +------------------------------------------------------------+
 ```
 
+<!-- req: sidebar -->
 - **Sidebar** — the tables of the session's selected database, from
   `GET /api/db/tables`. A DuckDB folder connection adds a **Union by name**
   checkbox beside the heading (see [DuckDB folder mode](#duckdb-folder-mode)).
@@ -36,8 +37,10 @@ order-by select the [dashboard widget](./query.md#fields-selection--ordering) us
   engine doesn't track (views, a never-analyzed Postgres table) is simply
   omitted. The list refreshes when the active database changes (via the
   connection pill); a selected table that no longer exists is deselected.
+  <!-- req: table-search -->
 - **Table search** — the box above the list filters it by case-insensitive
   substring of the name; Enter opens the first match.
+  <!-- req: sidebar-width -->
 - **Sidebar width** — drag the panel's right edge for names too long to fit the
   256px default (200–600px); ←/→ nudge it, Home or a double-click resets, as
   does a **Reset width** button beside the *Tables* heading. A name that still
@@ -49,6 +52,7 @@ order-by select the [dashboard widget](./query.md#fields-selection--ordering) us
 - **Viewport height** — the page fills the window (min 30rem, then the page
   scrolls); the table list and rows grid scroll
   internally, keeping the grid's horizontal scrollbar on screen.
+  <!-- req: loading -->
 - **Loading** — panels show *Loading tables…* / *Loading rows…* rather than
   sitting empty. Re-running a loaded table (paging, a new order-by) keeps its
   rows on screen, dimmed, with a spinner by the table name.
@@ -58,6 +62,7 @@ order-by select the [dashboard widget](./query.md#fields-selection--ordering) us
 
 ## Browsing behavior
 
+<!-- req: browse -->
 Selecting a table describes `SELECT * FROM "<table>"` to populate the pickers,
 then loads the first page. The pickers are the query panel's, with the same
 semantics:
@@ -66,6 +71,7 @@ semantics:
 - **Order by** — server-side `ORDER BY`; toggling a column or flipping its
   ASC/DESC direction re-runs the query immediately (browsing wants instant
   feedback, so unlike the query panel there is no separate Run button).
+  <!-- req: refresh -->
 - **Refresh** — the ↻ after the table name re-runs the browse query at the
   current offset; the row loader shows meanwhile.
 - **Pagination** — Limit (applies on blur) plus Previous/Next, mapping to the
@@ -119,6 +125,7 @@ root; reopening the connection does too.
 +------------------------------------------------+
 ```
 
+<!-- req: folder-navigation -->
 - **Pill menu** — one level at a time: the selected folder's full path, then
   its subfolders and **..**; picking one enters it, which lists its files in
   the sidebar. The pill reads `<connection> · <folder name>` with the full path
@@ -133,6 +140,7 @@ root; reopening the connection does too.
 - **Path** — beside the selected file's name, its path from the root in small
   type (`sub/nested.csv.gz`) with a copy button, for SQL on the query page.
   A `*.<ext>` entry has none.
+  <!-- req: folder-max-entries -->
 - **Max entries** — the most subfolders and files listed per folder, default
   1000 (1–100000); a blank or non-number entry is ignored. A cut list says so:
   "More than N files" above the sidebar (its `*.<ext>` entries then read only
@@ -143,6 +151,7 @@ root; reopening the connection does too.
   select any folder under the root, checked one step at a time: a step that is
   hidden, `.`/`..` or empty refuses the path; one that is missing or a symlink
   ends it there, so a folder that is gone falls back to its nearest parent.
+  <!-- req: folder-union-by-name -->
 - **Union by name** — adds `union_by_name = true` to `*.<ext>` queries, so a
   column only some files have is kept (NULL elsewhere) rather than dropped.
   Remembered with the sidebar width.
@@ -155,18 +164,4 @@ root; reopening the connection does too.
 
 ## Why folder mode lists one level at a time
 
-The folder list is read per level, centred on the selected folder, rather than
-scanned across the whole tree at connect:
-
-- **The limit trims a view, not reachability.** With a whole-tree scan, a cap
-  hides deep folders whenever the tree grows or the cap drops, and a restart
-  or a saved dashboard then loses the selected folder. Per level, the selected
-  folder is reached by its path, so neither can drop it.
-- **Connect costs one directory read** on any root size, instead of a scan
-  bounded only by the cap.
-- **Checking each step of the path,** not just the final folder, is what keeps
-  a symlink partway along (`link` -> `/etc`) from leading outside the root.
-- **A missing step stops at the nearest parent** rather than the root, so a
-  deleted folder leaves the user as close as possible to where they were.
-- The cost: the menu re-reads a level on each pick, and an agent listing
-  folders without a selection sees only the root's top level.
+The reasoning is in [decisions.md](../architecture/decisions.md#why-folder-mode-lists-one-level-at-a-time).

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 import time
 from collections.abc import Coroutine
 from typing import Any, TypeVar
@@ -13,6 +14,7 @@ from typing import Any, TypeVar
 import duckdb
 import pytest
 
+from queryview.drivers import duckdb as duckdb_mod
 from queryview.drivers.base import Err, RowsResult, TablesResult
 from queryview.drivers.duckdb import DuckConfig, DuckDBDriver
 
@@ -63,6 +65,17 @@ def test_execute_script_reports_a_runtime_error_as_a_failed_statement(duck_path)
     results = _run(d.execute_script(DuckConfig(duck_path), "SELECT 1 AS a; SELECT 'abc'::INTEGER AS b; SELECT 2", None))
     assert [r.ok for r in results] == [True, False]
     assert "abc" in results[1].message
+
+
+def test_a_script_waits_for_a_query_on_the_same_file_instead_of_failing(duck_path):
+    # DuckDB refuses a read-write open while a read-only one is open on the
+    # same file; the Explorer listing tables while a script starts did just that.
+    reader = duckdb_mod._open(duck_path, None)
+    started = time.monotonic()
+    threading.Timer(0.3, duckdb_mod._close, [reader]).start()
+    results = _run(DuckDBDriver().execute_script(DuckConfig(duck_path), "SELECT 1", None))
+    assert results[0].ok, results[0].message
+    assert time.monotonic() - started >= 0.3
 
 
 def test_file_connection_cannot_read_other_host_files(duck_path, tmp_path):
@@ -290,3 +303,11 @@ def test_a_cancelled_query_stops_in_its_thread(duck_path):
     started = time.monotonic()
     asyncio.run(go())
     assert time.monotonic() - started < 10
+
+
+def test_a_query_cannot_leave_its_wrapper_to_run_more_statements(folder, tmp_path):
+    leak = tmp_path / "leak.csv"
+    escape = f"SELECT 1) AS a; COPY (SELECT 42 AS n) TO '{leak}'; SELECT * FROM (SELECT 1 AS x"
+    r = _run(DuckDBDriver().run_query(DuckConfig(folder), escape, ".", 10, 0, None))
+    assert isinstance(r, Err) and "one read-only query" in r.message
+    assert not leak.exists()

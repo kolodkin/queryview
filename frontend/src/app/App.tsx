@@ -125,7 +125,7 @@ function ConnectionList({
 // Long connections list hundreds of databases, so it carries the landing
 // picker's filter; a picker-less driver gets just Disconnect. A DuckDB folder
 // connection lists one level at a time: the current folder's subfolders plus
-// `..`, under the folder's full path (docs/explorer.md).
+// `..`, under the folder's full path (docs/system/explorer.md).
 function DatabaseMenu({
   connection,
   connections,
@@ -621,7 +621,7 @@ function Shell() {
               onClick={() => setNavOpen(false)}
               className={navLinkClass('/dashboard')}
             >
-              Dashboard
+              Dashboards
             </Link>
             <Link
               to="/explorer"
@@ -780,7 +780,7 @@ const NAV_ROW =
 function pageTitle(path: string): string {
   if (path.startsWith('/scripts')) return 'Scripts'
   if (path.startsWith('/explorer')) return 'Explorer'
-  if (path.startsWith('/dashboard')) return 'Dashboard'
+  if (path.startsWith('/dashboard')) return 'Dashboards'
   return 'Connect'
 }
 

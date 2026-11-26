@@ -1,4 +1,4 @@
-// The viewer server's API (docs/viewer_server). No session: every request names
+// The viewer server's API (docs/system/viewer_server.md). No session: every request names
 // its connection and dashboard, and none carries SQL.
 
 type Json = Record<string, unknown>

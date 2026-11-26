@@ -19,7 +19,7 @@
 - Explorer and Scripts keep `/api/db/query` and `/api/db/describe`.
 - A query's page defaults to no sort, offset 0, limit 1000 (`DASHBOARD_ROW_CAP`); a given limit is clamped to 1..1000.
 - At most 5 queries of one call in flight (`DASHBOARD_CONCURRENCY`).
-- Repo rules: `uv run`, imports at file top, no `__all__`, invented example names only, no AI attribution in commits. Load the project `testing` skill before adding a test and `docs-writing` before editing docs.
+- Repo rules: `uv run`, imports at file top, no `__all__`, invented example names only, no AI attribution in commits. Load the project `vmodel` skill before adding a test and before editing docs.
 - Old endpoints and code paths stay working until Task 8 removes them, so every task leaves the app and the viewer usable.
 
 ## Review Focus
@@ -388,7 +388,7 @@ Keep every security test (`a value outside the options never reaches the sql`, `
 ### Task 8: Remove the old paths, and the docs
 
 **Files:**
-- Modify: `backend/queryview/app.py`, `backend/queryview/dashboard_queries.py`, their tests; `frontend/src/core/widgets/SelectView.tsx`, `frameChannel.ts`, `frontend/src/core/dashboard/frameHost.ts` (+ test); `docs/api.md`, `docs/viewer_server/api.md`, `docs/dashboard.md`
+- Modify: `backend/queryview/app.py`, `backend/queryview/dashboard_queries.py`, their tests; `frontend/src/core/widgets/SelectView.tsx`, `frameChannel.ts`, `frontend/src/core/dashboard/frameHost.ts` (+ test); `docs/architecture/api.md`, `docs/architecture/viewer_server_api.md`, `docs/system/dashboard.md`
 - Delete: `docs/superpowers/specs/2026-11-24-one-run-per-page-design.md`, this plan
 
 What goes:

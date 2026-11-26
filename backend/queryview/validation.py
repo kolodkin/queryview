@@ -1,5 +1,5 @@
 """Strict validation shared by the write paths: a dashboard's `params`
-(docs/dashboard.md#dashboard-parameters) and query paging."""
+(docs/system/dashboard.md#dashboard-parameters) and query paging."""
 
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def _twice(label: str, name: str) -> str:
 
 
 def dashboard_params_error(raw: object) -> str | None:
-    """Validate a dashboard's `params` (see docs/dashboard.md#dashboard-parameters):
+    """Validate a dashboard's `params` (see docs/system/dashboard.md#dashboard-parameters):
     the selector rules, plus a `kind` and an optional `default: none`. A
     `dimension` is a checkbox, so it needs no options; a `text` is free input
     with an optional `default` string; an `each` is a list with no default.

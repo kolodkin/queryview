@@ -16,6 +16,7 @@ import {
   dbExec,
   expect,
   test,
+  uid,
 } from "./fixtures";
 
 // A table the write round-trip creates: unique per run, so parallel workers
@@ -36,7 +37,7 @@ const TEMP_DDL: Record<string, string> = {
   sqlite: "CREATE TEMP TABLE {t} (x INTEGER)",
 };
 
-const uniqueTable = (prefix: string) => `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+const uniqueTable = (prefix: string) => `${prefix}_${uid()}`;
 
 /** Drop a table the test created, straight on the server, whatever state the
  * UI was left in. */
@@ -52,6 +53,7 @@ async function openScriptsPage(page: Page): Promise<void> {
 }
 
 for (const c of CASES) {
+  // req: system/scripts/run-all
   test(`run all writes and shows the last select [${c.id}]`, async ({ page, seeds, shot }) => {
     const seed = await seeds[c.seed]();
     const table = uniqueTable("qv_sql");
@@ -106,6 +108,7 @@ for (const c of CASES) {
     }
   });
 
+  // req: system/scripts/one-connection
   test(`statements share the run's connection [${c.id}]`, async ({ page, seeds }) => {
     // A temporary table made by one statement is there for the next: the run
     // is one connection (one server session on ClickHouse).
@@ -122,6 +125,7 @@ for (const c of CASES) {
   });
 }
 
+// req: system/scripts/row-cap
 test("clickhouse row cap leaves subqueries alone", async ({ page, seeds }) => {
   // The cap is a setting on the ClickHouse session; it must bound only the
   // statement's own result, never what a subquery feeds it.
@@ -133,6 +137,7 @@ test("clickhouse row cap leaves subqueries alone", async ({ page, seeds }) => {
   await expect(page.getByTestId("scripts-output")).toContainText("200000");
 });
 
+// req: system/scripts/error-stops
 test("run all stops at the first failing statement", async ({ page, seeds, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await openScriptsPage(page);
@@ -159,6 +164,7 @@ test("run all stops at the first failing statement", async ({ page, seeds, shot 
   await expect(page.getByTestId("scripts-open-dashboard")).toBeDisabled();
 });
 
+// req: system/scripts/run-current
 test("run current runs the statement under the cursor", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await openScriptsPage(page);
@@ -178,6 +184,7 @@ test("run current runs the statement under the cursor", async ({ page, seeds }) 
   await expect(headers).toContainText(["a"]);
 });
 
+// req: system/scripts/session-text
 test("sql text is remembered and results are not", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await openScriptsPage(page);
@@ -195,6 +202,7 @@ test("sql text is remembered and results are not", async ({ page, seeds }) => {
   await expect(page.getByTestId("scripts-output")).toHaveCount(0);
 });
 
+// req: system/scripts/textarea-sizes
 test("textarea sizes collapse and expand", async ({ page, seeds, shot }) => {
   // Min collapses the textbox so the results get the room; the other steps
   // set its height in rows. The text survives every step.

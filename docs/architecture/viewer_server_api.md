@@ -1,8 +1,9 @@
 # Viewer server API
 
-The [viewer server](./README.md) (`queryview-server`) is a separate app with
+<!-- req: names-not-sql -->
+The [viewer server](../system/viewer_server.md) (`queryview-server`) is a separate app with
 its own, smaller API. No session header; none of the app's
-[routes](../api.md) exist on it.
+[routes](api.md) exist on it.
 A body names a `connection` and a `dashboard`, never SQL. Errors are
 `{ok:false, message}`: `404` for an unknown connection, dashboard or query
 name, `400` for a bad body, a bad value or a failing query.
@@ -17,11 +18,12 @@ name, `400` for a bad body, a bad value or a failing query.
 | POST   | `/api/query`             | `{connection, dashboard, query, values?, limit?, offset?, order_by?, format?}` | One page of a dashboard query, as the app's `/api/db/query`: `{ok, meta, data}`, or `{ok, output}` for `format:"csv"`. A query waiting on a choice → `400`. |
 | POST   | `/api/describe`          | `{connection, dashboard, query, values?}`        | The query's output columns: `{ok, fields}`. |
 
+<!-- req: values-checked -->
 Every POST resolves the selectors first, so a value outside a param's options
 falls back to its default and never reaches the SQL.
 
 ## Related docs
 
-- [README.md](./README.md) — the viewer server.
-- [../api.md](../api.md) — the app's API.
-- [../dashboard.md](../dashboard.md#dashboard-parameters) — parameters and how they are substituted.
+- [viewer_server.md](../system/viewer_server.md) — the viewer server.
+- [api.md](api.md) — the app's API.
+- [dashboard.md](../system/dashboard.md#dashboard-parameters) — parameters and how they are substituted.

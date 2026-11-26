@@ -1,7 +1,7 @@
 """Dashboard parameters: selectors declared in a dashboard's `params` and
 substituted into its queries via `{name}` placeholders.
 
-See docs/dashboard.md — "Dashboard parameters".
+See docs/system/dashboard.md — "Dashboard parameters".
 
     value       a literal: {region} -> 'eu'
     identifier  a table/column: {field} -> "city"
@@ -156,8 +156,8 @@ def _quote_identifier(name: str, param: str, dialect: Dialect) -> str:
 
 
 def _is_checked(v: str | None) -> bool:
-    """A dimension's checkbox state; a page may send 0 for unchecked."""
-    return bool(v) and v != "0"
+    """A dimension's checkbox state; a page may send 0 or false for unchecked."""
+    return bool(v) and v not in ("0", "false")
 
 
 def substitute(sql: str, params: list[Param], values: dict[str, str], dialect: Dialect) -> str:

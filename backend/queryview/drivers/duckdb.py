@@ -1,5 +1,8 @@
 """DuckDB driver: file-based, no network, no picker. The synchronous duckdb
-library is driven in a worker thread so the event loop is never blocked."""
+library is driven in a worker thread so the event loop is never blocked.
+
+Opens of one database file share a reader/writer gate: queries run side by
+side, and a script waits until they close rather than failing to open."""
 
 from __future__ import annotations
 
@@ -102,6 +105,44 @@ def _sql_str(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+# DuckDB refuses to open a database file read-write while a read-only
+# connection to it is open in this process, and the reverse ("a different
+# configuration than existing connections"). So opens of one file go through a
+# reader/writer gate: queries share it, a script waits until they close.
+_GATE_WAIT_SECONDS = 30
+_gates: dict[str, threading.Condition] = {}
+_holders: dict[str, int] = {}  # path -> open read-only count, or -1 while a writer holds it
+_gates_lock = threading.Lock()
+_releases: dict[int, str] = {}  # id(connection) -> the path it holds
+
+
+def _enter(path: str, read_only: bool) -> None:
+    with _gates_lock:
+        gate = _gates.setdefault(path, threading.Condition())
+    with gate:
+        free = (lambda: _holders.get(path, 0) >= 0) if read_only else (lambda: _holders.get(path, 0) == 0)
+        if not gate.wait_for(free, _GATE_WAIT_SECONDS):
+            raise TimeoutError(f"database file busy for {_GATE_WAIT_SECONDS}s")
+        _holders[path] = _holders.get(path, 0) + 1 if read_only else -1
+
+
+def _leave(path: str) -> None:
+    gate = _gates[path]
+    with gate:
+        _holders[path] = 0 if _holders[path] < 0 else _holders[path] - 1
+        gate.notify_all()
+
+
+def _close(con: duckdb.DuckDBPyConnection) -> None:
+    """Close a connection from _open, letting a waiting open of its file in."""
+    try:
+        con.close()
+    finally:
+        path = _releases.pop(id(con), None)
+        if path is not None:
+            _leave(path)
+
+
 def _open(path: str, database: str | None, read_only: bool = True):
     # Folder mode has no database file: an in-memory connection whose
     # file_search_path is the root, so `read_csv('sub/x.csv')` resolves the
@@ -115,15 +156,28 @@ def _open(path: str, database: str | None, read_only: bool = True):
         return con
     if database is not None:  # only folder mode selects one: the folder is gone
         raise FileNotFoundError(f"folder not found: {path}")
-    # read_only avoids lock contention between concurrent describe/query opens;
-    # :memory: cannot be read_only, so open it read-write.
-    con = duckdb.connect(path, read_only=(read_only and path != ":memory:"))
+    # read_only avoids lock contention between concurrent describe/query opens.
+    if path == ":memory:":
+        con = duckdb.connect(path)  # :memory: cannot be read_only, and no file is shared
+    else:
+        key = os.path.realpath(path)
+        _enter(key, read_only)
+        try:
+            con = duckdb.connect(path, read_only=read_only)
+        except BaseException:
+            _leave(key)
+            raise
+        _releases[id(con)] = key
     # A file/memory connection queries its own DB; it never needs other local
     # files, so block them — no read_text/read_csv/ATTACH of the host (e.g.
     # QueryView's encryption.key) through unwrapped SQL. Writes to the open DB
     # still work. DuckDB refuses to re-enable external access at runtime, so SQL
     # cannot undo this; no config lock is needed (that would also block SET).
-    con.execute("SET enable_external_access = false")
+    try:
+        con.execute("SET enable_external_access = false")
+    except BaseException:
+        _close(con)
+        raise
     return con
 
 
@@ -209,6 +263,14 @@ def _list_files(root: str, folder: str, union: bool, limit: int) -> TablesResult
 _READ_STATEMENTS = {duckdb.StatementType.SELECT, duckdb.StatementType.EXPLAIN}
 
 
+def _require_one_read(con: duckdb.DuckDBPyConnection, sql: str, what: str) -> None:
+    """Refuse `sql` unless it is a single query-shaped statement: read_only
+    still lets COPY ... TO, ATTACH or INSTALL write (DESCRIBE/SHOW parse as SELECT)."""
+    stmts = con.extract_statements(sql)
+    if len(stmts) != 1 or stmts[0].type not in _READ_STATEMENTS:
+        raise ValueError(f"{what} runs one read-only query (SELECT, DESCRIBE, SHOW, EXPLAIN...)")
+
+
 def _rel_rows(rel: duckdb.DuckDBPyRelation) -> QueryRows:
     """A relation's rows as the shared result shape; it exposes DuckDB's own
     type names alongside the rows."""
@@ -247,7 +309,7 @@ class DuckDBDriver:
             try:
                 return _scalar(con, "SELECT 1")
             finally:
-                con.close()
+                _close(con)
 
         try:
             val = await asyncio.to_thread(_work)
@@ -305,7 +367,7 @@ class DuckDBDriver:
 
                 return [{"name": n, "rows": est.get(n), "bytes": _bytes(n)} for n in names]
             finally:
-                con.close()
+                _close(con)
 
         try:
             return TablesResult(await asyncio.to_thread(_work))
@@ -330,9 +392,11 @@ class DuckDBDriver:
             con = _open(config.path, database)
             opened.append(con)
             try:
+                # Wrapped, so one SELECT; more means the SQL closed the wrapper to add its own.
+                _require_one_read(con, paginated, "a query")
                 return _rel_rows(con.sql(paginated))
             finally:
-                con.close()
+                _close(con)
 
         try:
             return await asyncio.to_thread(_work)
@@ -363,16 +427,12 @@ class DuckDBDriver:
             timer = threading.Timer(RUN_SQL_TIMEOUT_SECONDS, con.interrupt)  # DuckDB has no server-side limit
             timer.start()
             try:
-                # read_only still lets COPY ... TO, ATTACH or INSTALL write, so
-                # only a single query-shaped statement runs (DESCRIBE/SHOW parse as SELECT).
-                stmts = con.extract_statements(sql)
-                if len(stmts) != 1 or stmts[0].type not in _READ_STATEMENTS:
-                    raise ValueError("run_sql runs one read-only query (SELECT, DESCRIBE, SHOW, EXPLAIN...)")
+                _require_one_read(con, sql, "run_sql")
                 rel = con.sql(sql)
                 return QueryRows([], []) if rel is None else _rel_rows(rel.limit(max_rows))
             finally:
                 timer.cancel()
-                con.close()
+                _close(con)
 
         try:
             return RowsResult(await asyncio.to_thread(_work))
@@ -403,7 +463,7 @@ class DuckDBDriver:
                 # DuckDB's DESCRIBE returns (column_name, column_type, ...).
                 return con.execute(f"DESCRIBE {inner}").fetchall()
             finally:
-                con.close()
+                _close(con)
 
         try:
             rows = await asyncio.to_thread(_work)
@@ -435,4 +495,4 @@ class DuckDBDriver:
         try:
             return await run_script(sql, lambda stmt: asyncio.to_thread(run_one_sync, con, stmt))
         finally:
-            con.close()
+            _close(con)

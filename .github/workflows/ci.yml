@@ -81,7 +81,7 @@ jobs:
         run: uv sync --frozen --group test
 
       - name: Run backend unit tests
-        run: uv run --frozen pytest backend/queryview
+        run: uv run --frozen pytest backend/queryview scripts
 
   # The suite runs in two halves on two runners; test-e2e merges their
   # reports and carries the result.

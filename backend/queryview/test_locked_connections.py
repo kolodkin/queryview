@@ -1,6 +1,6 @@
 """Locked connections: a passphrase-locked saved connection serves only the
 tab holding its unlock token; the agent (MCP tools, or REST without the token)
-is refused. See docs/connect.md#locked-connections."""
+is refused. See docs/system/connect.md#locked-connections."""
 
 from __future__ import annotations
 
@@ -53,6 +53,7 @@ def test_hash_verifies_and_never_stores_the_passphrase():
     assert _hash_passphrase("x") != _hash_passphrase("x"), "a fresh salt per lock"
 
 
+# req: architecture/mcp/locked-refuses-both
 def test_lock_keeps_the_locking_tab_working_and_shuts_out_everyone_else():
     c = _connected("lock-duck")
     # A space can't appear in base64, so the plaintext never hides in the hash by chance.
@@ -88,6 +89,7 @@ def test_lock_keeps_the_locking_tab_working_and_shuts_out_everyone_else():
     assert c.post("/api/db/query", json={"query": "SELECT 1"}).status_code == 403
 
 
+# req: architecture/mcp/locked-refuses-both
 def test_mcp_tools_are_refused_on_a_locked_connection():
     c = _connected("lock-mcp-duck")
     assert c.post("/api/db/lock", json={"name": "lock-mcp-duck", "passphrase": "pw"}).json()["ok"]
@@ -96,6 +98,7 @@ def test_mcp_tools_are_refused_on_a_locked_connection():
 
     assert _run(mcp_server.run_sql(sid, "SELECT 1"))["message"] == "connection is locked"
     assert _run(mcp_server.run_script(sid, "SELECT 1"))["message"] == "connection is locked"
+    assert _run(mcp_server.run_dashboard(sid, {"q": "SELECT 1"}))["message"] == "connection is locked"
     assert _run(mcp_server.push_script(sid, "SELECT 1"))["message"] == "connection is locked"
     pushed = _run(mcp_server.push_dashboard(sid, "<p>", {"q": "SELECT 1"}))
     assert pushed["ok"] is False and pushed["message"] == "connection is locked"
@@ -104,10 +107,31 @@ def test_mcp_tools_are_refused_on_a_locked_connection():
     listed = [x["name"] for x in _run(mcp_server.list_connections(sid))["connections"]]
     assert "lock-mcp-duck" not in listed  # though this session is on it, unlocked
     assert _run(mcp_server.select_database(sid, "memory"))["message"] == "connection is locked"
+    assert _run(mcp_server.open_explorer(sid, "memory"))["message"] == "connection is locked"
     assert _run(mcp_server.use_connection(sid, "lock-mcp-duck"))["message"] == "connection is locked"
     # The REST push surface, with the session id only.
     saved = c.post("/api/dashboards", json={"name": "lock-mcp dash", "html": "<p/>", "session_id": sid}).json()
     assert saved["pushed"] is False and saved["message"] == "connection is locked"
+
+
+# req: architecture/mcp/locked-refuses-both
+def test_a_locked_connection_tells_the_agent_nothing_about_itself(tmp_path):
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "a.csv").write_text("id\n1\n")
+    c = _client()
+    r = c.post("/api/db/connect", json={"type": "duckdb", "name": "lock-hidden-duck", "path": str(tmp_path)}).json()
+    assert r["ok"] and r["database"] == "." and r["databases"] == [".", "sub"], r
+    assert c.post("/api/db/lock", json={"name": "lock-hidden-duck", "passphrase": "pw"}).json()["ok"]
+    sid = c.headers["X-QV-Session"]
+    remote.register(sid)
+
+    info = _run(mcp_server.session_info(sid))
+    info.pop("url", None)
+    assert info == {"ok": True, "workspace": info["workspace"], "connected": True, "locked": True, "tables": []}
+    # A refused tool names no database either.
+    assert _run(mcp_server.select_database(sid, "sub"))["database"] is None
+    assert _run(mcp_server.open_explorer(sid, "sub"))["database"] is None
+    assert _run(mcp_server.push_dashboard(sid, "<p>", {"q": "SELECT 1"}))["database"] is None
 
 
 def test_unlock_takes_the_passphrase_and_opening_lands_locked(_no_backoff):

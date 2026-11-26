@@ -1,3 +1,6 @@
+// The active connection: its shape, opening, locking and deleting a saved one,
+// and selecting its database or folder.
+
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
 
 import { apiFetch, postJson } from './api'
@@ -87,7 +90,7 @@ async function lockCall(
   }
 }
 
-// Lock a saved connection behind a passphrase (docs/connect.md#locked-connections).
+// Lock a saved connection behind a passphrase (docs/system/connect.md#locked-connections).
 export const lockConnection = (name: string, passphrase: string) =>
   lockCall('POST', '/api/db/lock', name, passphrase)
 // Exchange the passphrase for this tab's unlock token on a locked connection.

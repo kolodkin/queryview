@@ -1,6 +1,8 @@
 """The SPA catch-all: real files, the index.html fallback for client routes,
 and a 404 for a missing file, so a broken build fails loudly."""
 
+# req: architecture/overview/static-spa
+
 import asyncio
 
 import pytest

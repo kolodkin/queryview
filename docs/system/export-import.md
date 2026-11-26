@@ -39,6 +39,7 @@ name, so it imports into whichever workspace you choose.
 
 ## UI
 
+<!-- req: ui -->
 Next to the dashboard page's **Restore** button: **Export** downloads the saved DB state as a YAML file;
 **Import** picks a YAML file and upserts whatever its `kind` declares. The
 workspace manage panel (header dropdown → *Manage workspaces…*) has the same
@@ -64,4 +65,4 @@ long, `409` a case twin of a saved dashboard or of an earlier entry.
 - [gitsync.md](./gitsync.md) — versioned backup/restore of the same entities via git.
 - [dashboard.md](./dashboard.md) — dashboards.
 - [workspace.md](./workspace.md) — workspaces: entity ownership.
-- [api.md](./api.md) — backend JSON API.
+- [api.md](../architecture/api.md) — backend JSON API.

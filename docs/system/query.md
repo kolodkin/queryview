@@ -7,6 +7,7 @@ the [explorer](./explorer.md), and the [Scripts](./scripts.md) page.
 
 ## Pagination
 
+<!-- req: pagination -->
 The backend paginates by wrapping the query:
 
 ```sql
@@ -19,8 +20,14 @@ So pages are stable only if the query defines its own order — include an
 `ORDER BY`, or pick **Order by** columns in the grid's **Fields** bar. There is
 no total-row count, so **Next** can page past the last row into an empty result.
 
+A query only reads, on this page and in a [dashboard](./dashboard.md): Postgres
+and MySQL run it in a read-only transaction, so a function that writes is
+refused, and DuckDB refuses SQL that closes the wrapper to add a statement of its own.
+Writes go through [Scripts](./scripts.md).
+
 ## Fields, selection & ordering
 
+<!-- req: fields -->
 **Fields** describes the query's output columns (names and types) without
 scanning data, and fills two searchable dropdowns:
 
@@ -34,6 +41,7 @@ scanning data, and fills two searchable dropdowns:
 
 ## Default views for complex types
 
+<!-- req: default-views -->
 Cells whose value is a collection — a ClickHouse **`Array`**, **`Map`**, or
 **`Tuple`**, or any JSON array/object another driver returns — get a built-in
 **default view** with no cell template: instead of the serialized text
@@ -63,6 +71,7 @@ value.
 
 ## Long values
 
+<!-- req: long-values -->
 Each result column fits its header or its widest value on the page, **capped at
 50 characters**, so a table of short values fits on screen and one long-text
 column can't push the others off-screen. A longer value **scrolls inside its own
@@ -91,6 +100,7 @@ underlying value.
 
 ## Results & CSV
 
+<!-- req: results-csv -->
 Results come back as `{meta: [{name, type}], data: [[…]]}` — ClickHouse's
 `JSONCompact` shape, which the other drivers reproduce from their native rows.
 Values are JSON as the database emitted them; 64-bit integers and decimals are
@@ -102,6 +112,7 @@ tuples arrive as JSON arrays and objects (named tuples as objects).
 
 ## Co-edit & edit lock
 
+<!-- req: edit-lock -->
 An agent (via the `push_dashboard` / `push_script` MCP tools) and a human can
 share a live session without clobbering each other, arbitrated by a
 **server-side edit lock** on the session (owner: none / human / agent, held in
@@ -125,7 +136,7 @@ backplane.
 ## API
 
 `/api/db/query` (a page of rows, or CSV), `/api/db/describe` (output columns)
-and `/api/remote/lock` (the edit lock): see [api.md](./api.md). Queries run on
+and `/api/remote/lock` (the edit lock): see [api.md](../architecture/api.md). Queries run on
 the session's connection and selected database, within its
 [query timeout](./queryview.md#query-timeout).
 
@@ -134,4 +145,4 @@ the session's connection and selected database, within its
 - [dashboard.md](./dashboard.md) — dashboards, the SQL panel and the widgets.
 - [scripts.md](./scripts.md) — the Scripts page: a `;`-separated script run as written, writes included.
 - [explorer.md](./explorer.md) — browsing tables with the same grid.
-- [api.md](./api.md) — the full backend JSON API.
+- [api.md](../architecture/api.md) — the full backend JSON API.

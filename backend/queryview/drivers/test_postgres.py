@@ -41,7 +41,18 @@ def test_run_query_builds_aliased_double_quoted_sql(monkeypatch):
         async def fetch(self):
             return [["alpha"]]
 
+    class _Txn:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
     class _Conn:
+        def transaction(self, readonly=False):
+            captured["readonly"] = readonly
+            return _Txn()
+
         async def prepare(self, sql):
             captured["sql"] = sql
             return _Stmt()
@@ -63,6 +74,7 @@ def test_run_query_builds_aliased_double_quoted_sql(monkeypatch):
     assert r.rows.meta == [Column("name", "text")]
     assert r.rows.data == [["alpha"]]
     assert captured["database"] == "mydb"
+    assert captured["readonly"] is True  # a SELECT calling a function that writes is refused
     assert captured["sql"] == ('SELECT * FROM (\nSELECT name FROM t\n) AS _qv ORDER BY "name" ASC LIMIT 50 OFFSET 10')
 
     csv = asyncio.run(d.export_csv(PgConfig("h", 5432, "u", ""), "SELECT name FROM t", "mydb", 50, 10, None))

@@ -38,6 +38,7 @@ optional `workspace` name, defaulting to the fallback workspace.
 
 ## UI
 
+<!-- req: switcher -->
 The header shows a workspace switcher (dropdown + manage panel for
 create/rename/remote/branch/delete). The active workspace is session state
 (see [session.md](./session.md)); switching reloads the query and dashboard
@@ -56,5 +57,5 @@ CRUD stays API/UI-only because it is admin configuration involving secrets.
 
 - [gitsync.md](./gitsync.md) — backup & restore mechanics.
 - [dashboard.md](./dashboard.md) — dashboards.
-- [api.md](./api.md) — backend JSON API.
-- [future.md](./future.md) — planned work.
+- [api.md](../architecture/api.md) — backend JSON API.
+- [future.md](../future.md) — planned work.

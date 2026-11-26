@@ -16,6 +16,7 @@ from .dashboard_params import (
     apply_to_queries,
     each_in,
     missing,
+    option_text,
     parse_params,
     resolve,
     substitute,
@@ -49,11 +50,23 @@ def _sendable(text: str) -> bool:
     return True
 
 
-def clean_values(raw: object) -> dict[str, str]:
-    """A request's param values: the string entries of a mapping, the rest dropped."""
+def clean_queries(raw: object) -> dict[str, str]:
+    """Keep only string→string entries with a non-empty name and SQL; ignore
+    anything else so a malformed `queries` map can't reach the runner."""
     if not isinstance(raw, dict):
         return {}
-    return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str) and _sendable(k) and _sendable(v)}
+    return {k: v for k, v in raw.items() if isinstance(k, str) and k and isinstance(v, str) and v.strip()}
+
+
+def clean_values(raw: object) -> dict[str, str]:
+    """A request's param values: the string entries of a mapping, a number or
+    boolean as the text the page would send, the rest dropped."""
+    if not isinstance(raw, dict):
+        return {}
+    texts = {k: option_text(v) if isinstance(v, (bool, int, float)) else v for k, v in raw.items()}
+    return {
+        k: v for k, v in texts.items() if isinstance(k, str) and isinstance(v, str) and _sendable(k) and _sendable(v)
+    }
 
 
 def resolved_part(r: dict[str, Any]) -> dict[str, Any]:
@@ -96,7 +109,7 @@ async def run_queries_on(
 
     A query given as `{value: sql}` runs every SQL and is the rows of all of
     them, stacked in that order and cut at `limit`; the runs must return the
-    same columns. See docs/dashboard.md — "A query run once per value"."""
+    same columns. See docs/system/dashboard.md — "A query run once per value"."""
     slots = asyncio.Semaphore(DASHBOARD_CONCURRENCY)
 
     async def one(sql: str) -> RowsResult | Err:
@@ -160,9 +173,11 @@ async def run_dashboard_on(
     queries: dict[str, str],
     params: object,
     values: dict[str, str],
+    limit: int = DASHBOARD_ROW_CAP,
 ) -> dict[str, Any]:
     """Resolve the selectors, then run the queries that are ready (one waiting
-    on a choice is left out). run_queries_on's reply plus "params":
+    on a choice is left out), `limit` rows of each at most. run_queries_on's
+    reply plus "params":
     [{name, kind, options, value}] — also on a failing query, so the page keeps
     its selectors. A bad declaration or value fails with `reason`: params."""
     try:
@@ -171,7 +186,7 @@ async def run_dashboard_on(
         runnable = apply_to_queries(queries, declared, resolved, dialect_of(driver))
     except ParamError as e:
         return _params_error(str(e))
-    return {**await run_queries_on(driver, config, database, runnable), "params": resolved}
+    return {**await run_queries_on(driver, config, database, runnable, limit), "params": resolved}
 
 
 async def run_dashboard_queries(
@@ -193,18 +208,23 @@ async def _no_options(sql: str) -> list[Any]:
     return []
 
 
-async def run_dashboard(sid: str, queries: dict[str, str], params: object, values: dict[str, str]) -> dict[str, Any]:
+async def run_dashboard(
+    sid: str, queries: dict[str, str], params: object, values: dict[str, str], limit: int = DASHBOARD_ROW_CAP
+) -> dict[str, Any]:
     """run_dashboard_on session `sid`'s connection and selected database."""
     declared = parse_params(params)
     if not queries and not any(p.options_sql for p in declared):
         # Nothing touches the database: no session, runner or dialect is used,
         # so a page of static selectors still renders disconnected.
-        resolved = await resolve(declared, values, _no_options, Dialect('"', False))
+        try:
+            resolved = await resolve(declared, values, _no_options, Dialect('"', False))
+        except ParamError as e:
+            return _params_error(str(e))
         return {"ok": True, "results": {}, "meta": {}, "params": resolved}
     s, err = await _gated_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
-    return await run_dashboard_on(DRIVERS[s.type], s.config, s.database, queries, params, values)
+    return await run_dashboard_on(DRIVERS[s.type], s.config, s.database, queries, params, values, limit)
 
 
 async def session_sql(

@@ -8,26 +8,7 @@ reconnects whichever one it was last on.
 
 ## Storage & migrations
 
-State lives in one data directory (`DATA_DIR`, defaulting to `~/.queryview`),
-whose SQLite file is `db.sqlite`.
-The backend is **single-process** — SQLite is single-writer, so one process owns
-the file, and no cross-process migration lock is needed. The schema is owned by
-**Alembic**: on startup the FastAPI lifespan runs `alembic upgrade head` (via
-`connect._ensure_schema()`) before serving any request, so an Alembic-managed DB
-is migrated forward in place rather than rebuilt. Migrations ship inside the
-package (`backend/queryview/migrations/`). To author a new revision after
-changing a model, from `backend/`:
-
-```
-DATA_DIR=/tmp/qv-dev uv run alembic revision --autogenerate -m "describe change"
-```
-
-Review the generated script (column changes use batch mode for SQLite) and
-commit it; the app applies it on next start.
-
-> A DB predating Alembic (created by the old `create_all`, so it has no
-> `alembic_version` table) is not upgraded automatically — delete it and let the
-> app recreate it on next start.
+How connections are stored, encrypted and migrated is in [storage.md](../architecture/storage.md#storage--migrations).
 
 ## Drivers
 
@@ -50,7 +31,7 @@ letter instead.
 A saved card that fails to open reports the error under the cards.
 When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`
 fails, the error suggests `host.docker.internal` (see
-[Connecting to databases on your machine](./docker.md#connecting-to-databases-on-your-machine)).
+[Connecting to databases on your machine](../docker.md#connecting-to-databases-on-your-machine)).
 
 ## Concepts
 
@@ -142,44 +123,11 @@ failed re-list keeps the list on screen.
 
 ## Persistence (SQLite)
 
-Connection details are stored via SQLModel in the SQLite database (see
-[Storage & migrations](#storage--migrations)). Schema (the `connections` table):
-
-```sql
-CREATE TABLE connections (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  name           TEXT NOT NULL UNIQUE,
-  type           TEXT NOT NULL,   -- selects the driver (clickhouse | postgres | mysql | duckdb | sqlite)
-  config         TEXT NOT NULL,   -- base64(AES-GCM(json.dumps(driver config)))
-  database       TEXT,            -- last selected database (nullable)
-  last_active_at INTEGER NOT NULL -- unix ms; when it was last opened
-);
-```
-
-- **Connect** upserts the row by `name` and bumps `last_active_at`.
-- **Selecting a database** updates `database` for that row.
-- `last_active_at` orders the saved cards, most recent first.
-
-Driver-specific fields (host/port/user/pass for ClickHouse, Postgres and MySQL, a file
-path for DuckDB) are not columns — each driver serializes its own config to a
-dict that is JSON-encoded and stored encrypted in `config`. Adding a future
-driver needs no schema change.
+The `connections` table is described in [storage.md](../architecture/storage.md#persistence-sqlite).
 
 ## Config encryption
 
-The whole `config` blob is **encrypted at rest** with AES-256-GCM; the stored
-value is `base64(iv ‖ ciphertext)` (AES-GCM appends its 16-byte tag to the
-ciphertext), never plaintext. Storing the entire config (not just a password
-field) keeps the storage layer secret-agnostic. The key is resolved once and
-memoized on first use:
-
-- `DB_ENCRYPTION_KEY` — base64 of 32 bytes, if set (use this in CI/shared envs);
-- otherwise a key is generated and written to `encryption.key` in the data dir
-  (gitignored, mode `600`).
-
-If the key changes (or a row predates encryption) the value can't be decrypted;
-a session on that connection reads as disconnected and the user reconnects,
-which re-encrypts it with the current key.
+The stored config is encrypted at rest; see [storage.md](../architecture/storage.md#config-encryption).
 
 ## Session connections
 
@@ -199,7 +147,7 @@ restarts (the session then reads as disconnected).
 - The agent may switch to any unlocked ClickHouse, Postgres or MySQL connection and
   pick the database of whichever unlocked one it is on; it may add (also
   ClickHouse, Postgres or MySQL only: DuckDB and SQLite read local files) and remove
-  only its own. See [mcp.md](./mcp.md#tools).
+  only its own. See [mcp.md](../architecture/mcp.md#tools).
 - This keeps a cooperating agent in its lane; it is not a security boundary.
   For one, lock the connection.
 
@@ -211,7 +159,6 @@ MCP tool that reads or writes data (`run_sql`, `run_script`, `select_database`,
 the table list in `session_info`, every push) answers `connection is locked`,
 as does `use_connection` naming a locked one,
 and so does every REST call without the tab's unlock token (`403`).
-`session_info` still names the connection and reports `locked: true`.
 `list_connections` and `list_databases` leave a locked connection out
 entirely, even while a tab has it unlocked: the lock is the connection's
 stored state, an unlock only that tab's. Session connections are never
@@ -219,6 +166,11 @@ locked. A lock holds against the API only: an agent's script on any unlocked
 DuckDB or SQLite connection can reach every file QueryView can, a locked
 connection's file and `db.sqlite` included
 ([scripts.md](./scripts.md#file-writes)).
+
+<!-- req: locked-hidden-from-agent -->
+The agent's tools tell it nothing about a locked connection but that the
+session is on one: `session_info` reports `locked: true` with no name, type,
+database or tables.
 
 Stored: only a salted scrypt hash of the passphrase (`lock_hash` on the
 `connections` row). Held by the tab: an **unlock token**, a random string the
@@ -241,16 +193,18 @@ working.
   sends them.
 
 Not covered: typing the passphrase where the agent can read it, or handing the
-agent the browser tab that holds the token.
+agent the browser tab that holds the token. Nor a caller that makes its own
+REST calls with the session id: `GET /api/session` and the connection list
+still give a locked connection's name, type and database list, because a tab
+needs them to ask for the passphrase.
 
 ## Sessions & reconnecting
 
-Each **session** has one active connection, recorded on the session's own row in
-SQLite and keyed by the `X-QV-Session` header the SPA sends with every request.
-There is no session cookie: sessions are named by id, not by browser, so two
-tabs can sit on two different connections and databases at once. Saved
-connections themselves are shared (stored once in SQLite); the *active* one is
-per session. See [session.md](./session.md).
+Each **session** has one active connection, so two tabs can sit on two
+different connections and databases at once. Saved connections themselves are
+shared; the *active* one is per session. See [session.md](./session.md); how
+the session's row records it is in
+[sessions.md](../architecture/sessions.md#how-it-is-stored).
 
 Opening the app attaches a session and reconnects whatever connection that
 session was on:
@@ -264,45 +218,19 @@ session was on:
   session simply reads as disconnected. It is not repaired or repointed — you
   reconnect.
 
-A session with no connection (`connection_name IS NULL`) is disconnected, and
-stays that way across restarts: that is what `disconnect` records.
+A session with no connection is disconnected, and stays that way across
+restarts.
 
 To open a **specific** connection on load, pass `…/?connection=<name>`
 (equivalent to clicking its card); the SPA then cleans the URL so a later reload
 resumes normally.
 
-Only the live driver state — the decrypted config and the database list — is
-held in memory, as a cache. A backend restart costs one reconnect, not the
-session.
-
 ## API
 
-| Method | Path                          | Body                                   | Result |
-| ------ | ----------------------------- | -------------------------------------- | ------ |
-| POST   | `/api/db/test`        | `{type, …driver config}`               | `{ok, message}` — test only |
-| POST   | `/api/db/connect`     | `{type, name, session?, …driver config}` | `{ok, name, type, databases}` \| `{ok:false, message}`; saves + activates (new-connection form); `session:true` keeps it session-only |
-| GET    | `/api/db/connections` | —                                      | `{connections:[{name, type, database, last_active_at, scope, created_by, locked}]}`: this session's connections, then the saved ones most recent first (never the config) |
-| GET    | `/api/db/connections/<name>` | —                               | `{ok, name, type, config}` the saved config with the password blanked, for the edit form; unknown → `404`, locked without the token → `403` |
-| DELETE | `/api/db/connections` | `{name, passphrase?}`                  | `{ok}`; deletes a connection (this session's own, else a saved one) and disconnects every session on it; a locked one needs its passphrase (`403` without) |
-| POST   | `/api/db/open`        | `{name}`                               | `{ok, …}` the same state as `GET /api/session` \| `{ok:false, message}`; opens a connection by name, this session's session connections first (a card); on a locked one `unlocked` says whether this tab's token opens it |
-| POST   | `/api/db/lock`        | `{name, passphrase}`                   | Lock a saved connection; `{ok, token}` for this tab. Empty passphrase, unknown or already locked → `400` |
-| POST   | `/api/db/unlock`      | `{name, passphrase}`                   | `{ok, token}` — this session's unlock token; wrong passphrase → `403`, not locked → `400` |
-| DELETE | `/api/db/lock`        | `{name, passphrase}`                   | Remove the lock; `{ok}`, wrong passphrase → `403` |
-| GET    | `/api/db/databases`   | —                                      | `{ok, name, databases}` \| `{ok:false, message}`; re-lists the connection's databases; no session → `409` |
-| POST   | `/api/db/database`    | `{database}`                           | `{ok}`; sets the session/connection database (a name not in the cached list is re-listed once) |
-| POST   | `/api/db/query`       | `{query, limit?, offset?, format?}`    | `{ok, meta, data}` \| `{ok:false, message}`; paginated SQL against the session's selected database (`format:"csv"` returns `{ok, output}` CSV text) |
-| GET    | `/api/session`                | —                                      | `{connected, name?, type?, databases?, database?}` for the calling session |
-
-`test`/`connect` resolve the driver from `type` and validate per driver
-(ClickHouse/Postgres/MySQL require `host` + `port` `1..65535`, `database` optional;
-DuckDB takes an optional
-`path`, SQLite a required file path); validation errors return `400`. ClickHouse queries run over the HTTP
-interface with HTTP Basic auth, within the session's
-[query timeout](./queryview.md#query-timeout).
+`/api/db/test`, `/api/db/connect`, `/api/db/connections`, `/api/db/open`,
+`/api/db/lock`, `/api/db/unlock`, `/api/db/databases`, `/api/db/database`,
+`/api/db/query` and `/api/session` — see [api.md](../architecture/api.md).
 
 ## CI
 
-CI runs a real `clickhouse/clickhouse-server` service container so the e2e suite
-exercises an actual connection: it asserts that connecting succeeds, a database
-can be selected, the indicator shows `<connection> · <database>`, and a query
-against a seeded `test` database returns its rows.
+What CI exercises is in [storage.md](../architecture/storage.md#ci).

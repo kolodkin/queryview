@@ -20,7 +20,6 @@ import {
   openDashboard,
   openNewQuery,
   sessionId,
-  startNewConnection,
   tableRow,
   test,
 } from "./fixtures";
@@ -44,91 +43,8 @@ async function switchDatabaseFromPill(page: Page, database: string): Promise<voi
   await expect(page.getByTestId("connection-status")).toContainText(`· ${database}`);
 }
 
-test("queryview e2e", async ({ page }) => {
-  // loads the app and shows the heading
-  await openConnect(page);
-  await expect(page.locator("h1")).toHaveText("QueryView");
-
-  // the ClickHouse "new connection" card opens its form, and Back returns
-  await startNewConnection(page, "clickhouse");
-  await expect(page.getByTestId("clickhouse-form")).toBeVisible();
-  await page.getByTestId("form-back").click();
-  await expect(page.getByTestId("clickhouse-form")).toHaveCount(0);
-  await startNewConnection(page, "clickhouse");
-  await expect(page.getByTestId("clickhouse-form")).toBeVisible();
-  for (const id of ["ch-name", "ch-host", "ch-port", "ch-username", "ch-password"])
-    await expect(page.getByTestId(id)).toBeVisible();
-
-  // test connection succeeds against the real ClickHouse
-  await page.getByTestId("ch-test").click();
-  const result = page.getByTestId("ch-result");
-  await expect(result).toBeVisible();
-  await expect(result).toHaveAttribute("data-ok", "true");
-  await expect(result).toContainText("Connected");
-
-  // connect opens the database picker
-  await page.getByTestId("ch-connect").click();
-  await expect(page.getByTestId("db-picker")).toBeVisible();
-  await expect(page.locator('[data-db="default"]')).toBeVisible();
-  // The picker's Back returns to the cards; with no database visited yet, the
-  // card opens the picker again.
-  let card = connCard(page, "clickhouse");
-  await page.getByTestId("picker-back").click();
-  await expect(page.getByTestId("db-picker")).toHaveCount(0);
-  await card.click();
-  // The picker's filter narrows the chips (a non-match hides `default`).
-  const dbFilter = page.getByTestId("db-filter");
-  await dbFilter.fill("sys");
-  await expect(page.locator('[data-db="default"]')).toHaveCount(0);
-  await expect(page.locator('[data-db="system"]')).toBeVisible();
-  await dbFilter.fill("");
-
-  // selecting a database shows the connected indicator and, because the
-  // connection is now ready, lands on the explorer. The session's URL write is
-  // fire-and-forget; wait for it so the reload below resumes the explorer.
-  await Promise.all([
-    page.waitForResponse((r) => r.request().method() === "PATCH" && r.url().includes("/api/sessions/")),
-    page.locator('[data-db="default"]').click(),
-  ]);
-  await expect(page.getByTestId("connection-indicator")).toBeVisible();
-  await expect(page.getByTestId("connection-status")).toContainText("· default");
-  await expect(page).toHaveURL(/\/explorer/);
-  await expect(page.getByTestId("explorer-tables")).toBeVisible();
-
-  // reload resumes the session, then reconnect and select the system database
-  await page.goto("/", { waitUntil: "networkidle" });
-  // Resume: came back connected to the previously selected database, and the
-  // landing redirect picks the explorer over Connect.
-  await expect(page.getByTestId("connection-status")).toContainText("· default");
-  await expect(page).toHaveURL(/\/explorer/);
-  // The saved connection's card, marked active and showing its database,
-  // goes straight back to the database last visited in this session.
-  await page.getByTestId("nav-connect").click();
-  card = connCard(page, "clickhouse");
-  await expect(card).toHaveAttribute("data-active", "true");
-  await expect(card).toContainText("default");
-  await card.click();
-  await expect(page).toHaveURL(/\/explorer/);
-  await expect(page.getByTestId("connection-status")).toContainText("· default");
-
-  // opening with ?connection=<name> opens that connection, on its last database too.
-  await page.goto("/?connection=clickhouse", { waitUntil: "networkidle" });
-  await expect(page.getByTestId("connection-status")).toContainText("· default");
-  await expect(page.getByTestId("db-picker")).toHaveCount(0);
-
-  // the connection pill's database menu carries the same filter
-  await page.getByTestId("connection-status").click();
-  const menuFilter = page.getByTestId("db-select-filter");
-  await expect(menuFilter).toBeVisible();
-  await menuFilter.fill("zzz");
-  await expect(page.getByTestId("db-select-empty")).toBeVisible();
-  await menuFilter.fill("sys");
-  await expect(page.getByTestId("db-select").getByRole("option")).toHaveCount(1);
-  await page.keyboard.press("Enter");
-  await expect(page.getByTestId("connection-status")).toContainText("· system");
-});
-
 for (const c of PICKER) {
+  // req: system/queryview/connection-status
   test(`a database switch reruns the query on screen [${c.id}]`, async ({ page, seeds }) => {
     await connect(page, c, await seeds[c.seed]());
     const other = OTHER_DB[c.id];
@@ -150,6 +66,7 @@ for (const c of PICKER) {
     await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT 'edited'");
   });
 
+  // req: system/queryview/connection-status
   test(`a database switch refreshes dashboard param options [${c.id}]`, async ({ page, seeds, baseURL }) => {
     // `options_sql` choices are resolved on the viewing session, so they follow
     // its database, and the re-run the switch triggers substitutes the new ones.
@@ -172,6 +89,7 @@ for (const c of PICKER) {
   });
 }
 
+// req: system/queryview/connection-status
 test("the pill menu relists databases on open", async ({ page, seeds }) => {
   // A database created after connecting shows up the next time the pill menu
   // opens, without reconnecting.
@@ -189,6 +107,7 @@ test("the pill menu relists databases on open", async ({ page, seeds }) => {
   }
 });
 
+// req: system/queryview/connection-status
 test("database names copy from the picker and the pill", async ({ page, context, seeds }) => {
   // A database name copies from its picker row (without selecting it) and,
   // once selected, from the status pill.
@@ -207,6 +126,7 @@ test("database names copy from the picker and the pill", async ({ page, context,
   await expect(page.getByTestId("db-select")).toHaveCount(0);
 });
 
+// req: system/session/switch-elsewhere
 test("a database switched elsewhere reaches the tab on its heartbeat", async ({ page, seeds, baseURL }) => {
   // A switch this tab did not make (an API caller here; another tab is the
   // same path) reaches its pill and views on the next heartbeat.
@@ -226,6 +146,7 @@ test("a database switched elsewhere reaches the tab on its heartbeat", async ({ 
   await expect(tableRow(page, "databases")).toBeVisible();
 });
 
+// req: system/dashboard/new-query-draft
 test("ready connection opens a New query draft", async ({ page, seeds }) => {
   // Connecting lands on the explorer; ad-hoc SQL is a New query draft on the
   // Dashboard page, which the old /studio URL still opens.
@@ -243,6 +164,7 @@ test("ready connection opens a New query draft", async ({ page, seeds }) => {
   await expect(frame.getByTestId("qv-error")).toHaveText("Enter a query.");
 });
 
+// req: system/queryview/connection-status
 test("connect page and disconnect", async ({ page, seeds }) => {
   // Connect keeps the cards up for a ready connection, and the pill's menu
   // (even a picker-less driver's) ends with Disconnect.
@@ -263,6 +185,7 @@ test("connect page and disconnect", async ({ page, seeds }) => {
   await expect(page.getByTestId("connection-status")).toHaveCount(0);
 });
 
+// req: system/queryview/landing
 test("disconnected lands on connect", async ({ page }) => {
   // A disconnected session opens on /connect, and Scripts sends it there too:
   // a script needs a database. The old /prompt URL redirects.
@@ -277,6 +200,7 @@ test("disconnected lands on connect", async ({ page }) => {
   await expect(page).toHaveURL(/\/connect$/);
 });
 
+// req: system/queryview/many-connections
 test("many connections", async ({ page, seeds, baseURL }) => {
   // Past six saved connections: Recent row, a capped scrolling list, search
   // with a count and arrow-key highlight, driver chips, and "+ New" alone.
@@ -337,6 +261,7 @@ test("many connections", async ({ page, seeds, baseURL }) => {
   await expect(page.getByTestId("connection-status")).toContainText(name!);
 });
 
+// req: system/queryview/query-timeout
 test("the query timeout chip is remembered with the session", async ({ page, seeds, shot }) => {
   // The header's Timeout chip shows the default, takes whole seconds in
   // 1..600, and keeps its value across a reload: it lives in the session.

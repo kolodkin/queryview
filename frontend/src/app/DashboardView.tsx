@@ -31,7 +31,7 @@ export type DashboardPush = {
   name: string
   html: string
   queries: Record<string, string>
-  // Selector specs (docs/dashboard.md, "Dashboard parameters").
+  // Selector specs (docs/system/dashboard.md, "Dashboard parameters").
   params?: unknown[]
 }
 
@@ -83,7 +83,7 @@ async function runDashboard(
 const NEW_QUERY_HTML = queryViewHtml('main')
 
 // The session view holding the unsaved New query draft, so it survives leaving
-// the page and a reload (docs/session.md).
+// the page and a reload (docs/system/session.md).
 const VIEW = 'dashboard'
 
 // The draft the session remembers, when the page opens without a dashboard.
@@ -126,7 +126,7 @@ function DashboardView({
   const name = searchParams.get('name') ?? ''
 
   const [dashboards, setDashboards] = useState<DashboardSummary[]>([])
-  // With a remote, a dashboard no commit holds is marked in the picker (docs/gitsync.md#ui).
+  // With a remote, a dashboard no commit holds is marked in the picker (docs/system/gitsync.md#ui).
   const [gitOn, setGitOn] = useState(false)
   useEffect(() => {
     void gitStatus(activeWorkspace()).then(setGitOn)
@@ -461,7 +461,7 @@ function DashboardView({
   // both show runs once (widgetHost.ts).
   const [marked] = useState(() => markedRuns(() => [frameRef.current, popupFrameRef.current]))
 
-  // Download the dashboard as one static HTML file (docs/dashboard.md).
+  // Download the dashboard as one static HTML file (docs/system/dashboard.md).
   function snapshot() {
     if (active) requestSnapshot(frameRef, active.name || 'dashboard', snapshotRef, setError)
   }
@@ -523,7 +523,7 @@ function DashboardView({
     <div className="mt-10 w-full" data-testid="dashboard-view">
       <div className="mb-4 flex items-center justify-center gap-3">
         <h1 className="text-2xl font-bold tracking-tight text-white [text-shadow:0_2px_30px_rgba(129,140,248,0.45)]">
-          Dashboard
+          Dashboards
         </h1>
         <select
           data-testid="dashboard-select"

@@ -1,5 +1,6 @@
-"""The /api/db surface: unknown type is a 400; validation errors are 400;
-the old /api/clickhouse paths are gone (404)."""
+"""The /api/db and /api/runqueries routes through the app: validation and the
+session gate, script execution, session-only and folder connections, the
+session query timeout, and parameter substitution."""
 
 from __future__ import annotations
 
@@ -48,7 +49,7 @@ def test_old_clickhouse_path_is_gone():
 )
 def test_gated_routes_without_session_are_409(method, path, body):
     c = TestClient(app)
-    # Disconnect first: it marks this cookie disconnected, so the auto-reconnect
+    # Disconnect first: it marks this session disconnected, so the auto-reconnect
     # of a connection saved by an earlier test can't turn this into a 200.
     c.post("/api/db/disconnect")
     r = c.request(method, path, json=body)
@@ -86,6 +87,7 @@ def test_execute_runs_a_script_per_statement(tmp_path):
     assert all(isinstance(x["elapsed_ms"], int) for x in results)
 
 
+# req: architecture/api/session-scoped-api
 def test_session_only_connect_lists_for_its_session_only():
     c = TestClient(app, headers={"X-QV-Session": "session-only-test"})
     other = TestClient(app, headers={"X-QV-Session": "session-only-other"})
@@ -97,6 +99,7 @@ def test_session_only_connect_lists_for_its_session_only():
     assert "so-duck" not in {x["name"] for x in other.get("/api/db/connections").json()["connections"]}
 
 
+# req: architecture/api/session-scoped-api
 def test_folder_connection_lands_on_root_with_tables_and_union(tmp_path):
     for name in ("a.csv", "b.csv"):
         (tmp_path / name).write_text("id\n1\n")
@@ -244,6 +247,7 @@ def test_reopening_a_picker_less_connection_goes_back_to_its_last_table(tmp_path
     assert c.get("/api/session").json()["table"] == "refunds"
 
 
+# req: architecture/api/session-scoped-api
 def test_requests_run_within_the_session_query_timeout(monkeypatch, tmp_path):
     """The **Timeout** chip's value in the session's `ui` blob reaches the
     driver on the connect probe and on each query; a value the chip could not
@@ -282,7 +286,7 @@ def test_requests_run_within_the_session_query_timeout(monkeypatch, tmp_path):
     assert seen == [("test", 45), ("list", 45), ("query", 45), *[("query", 30)] * 4]
 
 
-# --- Dashboard params: substituted here, not in the browser (docs/dashboard.md#dashboard-parameters) ---
+# --- Dashboard params: substituted here, not in the browser (docs/system/dashboard.md#dashboard-parameters) ---
 
 REGION = [{"name": "r", "options": ["eu", "us"]}]
 
@@ -296,6 +300,7 @@ def _duck(tmp_path, sid: str) -> TestClient:
     return c
 
 
+# req: architecture/dashboards/runqueries
 def test_runqueries_with_params_returns_resolved_params(tmp_path):
     c = _duck(tmp_path, "params-run")
     r = c.post("/api/runqueries", json={"queries": {"q": "SELECT {r} AS v"}, "params": REGION, "values": {"r": "us"}})
@@ -304,6 +309,7 @@ def test_runqueries_with_params_returns_resolved_params(tmp_path):
     assert r.json()["params"] == [{"name": "r", "kind": "value", "options": ["eu", "us"], "value": "us"}]
 
 
+# req: architecture/dashboards/runqueries
 def test_runqueries_with_params_allows_no_queries(tmp_path):
     c = _duck(tmp_path, "params-empty")
     r = c.post("/api/runqueries", json={"queries": {}, "params": REGION})
@@ -311,6 +317,7 @@ def test_runqueries_with_params_allows_no_queries(tmp_path):
     assert r.json()["results"] == {} and r.json()["params"][0]["value"] == "eu"
 
 
+# req: architecture/dashboards/runqueries
 def test_runqueries_without_params_is_unchanged(tmp_path):
     c = _duck(tmp_path, "params-none")
     assert c.post("/api/runqueries", json={"queries": {}}).status_code == 400
@@ -318,6 +325,7 @@ def test_runqueries_without_params_is_unchanged(tmp_path):
     assert r.json()["results"] == {"q": {"v": ["{r}"]}} and "params" not in r.json()
 
 
+# req: architecture/dashboards/runqueries, architecture/dashboards/fail-fast
 def test_runqueries_bad_param_is_a_400_and_a_failing_query_keeps_the_selectors(tmp_path):
     c = _duck(tmp_path, "params-bad")
     r = c.post("/api/runqueries", json={"queries": {"q": "SELECT {r:nope}"}, "params": REGION})
@@ -326,6 +334,7 @@ def test_runqueries_bad_param_is_a_400_and_a_failing_query_keeps_the_selectors(t
     assert r.status_code == 400 and r.json()["params"][0]["value"] == "eu"
 
 
+# req: architecture/dashboards/runqueries
 def test_runqueries_names_a_malformed_param_and_still_runs(tmp_path):
     c = _duck(tmp_path, "params-malformed")
     params = [{"name": "bad", "kind": "dropdown", "options": ["a"]}, *REGION]

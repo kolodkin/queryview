@@ -1,6 +1,6 @@
 // Entry of the dashboard widget bundle (vite.widgets.config.ts → /widgets.js):
 // the <qv-*> tags an agent may use in dashboard HTML. Runs inside the
-// sandboxed dashboard frame, never in the app. See docs/dashboard.md.
+// sandboxed dashboard frame, never in the app. See docs/system/dashboard.md.
 
 import { MAX_LIMIT, parseFieldsAttr, parseOrderByAttr } from './core/dashboard/widgetChannel'
 import { ParamSelect } from './core/widgets/ParamSelect'

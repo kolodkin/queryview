@@ -15,17 +15,20 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+# req: architecture/mcp/git-tools
 def test_git_tools_are_registered():
     names = {t.name for t in _run(mcp.list_tools())}
     assert {"git_history", "git_restore"} <= names
     assert "git_store" not in names  # only a user's Save commits
 
 
+# req: architecture/mcp/git-tools
 def test_git_restore_tool_reports_unconfigured():
     r = _run(git_restore("dashboard", "x"))
     assert r["ok"] is False
 
 
+# req: architecture/mcp/git-tools
 def test_git_history_resolves_workspace_from_session(tmp_path, clone_base):
     """An armed session on workspace B routes git_history to B's remote."""
     rb = tmp_path / "b.git"
@@ -49,6 +52,7 @@ def test_git_history_resolves_workspace_from_session(tmp_path, clone_base):
         remote.unregister(rid)
 
 
+# req: architecture/mcp/git-tools
 def test_git_history_without_session_uses_default_workspace():
     # Outside git_env the default workspace has no remote -> unconfigured.
     r = _run(git_history("dashboard", "anything"))
@@ -56,6 +60,7 @@ def test_git_history_without_session_uses_default_workspace():
     assert "no git remote" in r["message"]
 
 
+# req: architecture/mcp/git-tools
 def test_git_tools_refuse_the_removed_query_kind():
     for tool in (git_history, git_restore):
         r = _run(tool("query", "anything"))

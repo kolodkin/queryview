@@ -263,7 +263,7 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-# --- Locked connections (docs/connect.md#locked-connections) ---------------
+# --- Locked connections (docs/system/connect.md#locked-connections) ---------------
 #
 # A locked saved connection serves only requests carrying the unlock token its
 # tab got for the passphrase. MCP tool calls have no browser behind them and
@@ -413,7 +413,7 @@ class _SessionConn:
 
 # Session connections: sid -> name -> connection. Memory only — never written to
 # the connections table, invisible to other sessions, gone on restart or when
-# the session is deleted. See docs/connect.md#session-connections.
+# the session is deleted. See docs/system/connect.md#session-connections.
 _session_conns: dict[str, dict[str, _SessionConn]] = {}
 
 
@@ -489,7 +489,7 @@ def _bounded_int(raw: Any, hi: int, default: int) -> int:
 
 def _apply_settings(rec: SessionRec | None) -> int:
     """Set the drivers' per-request timeout to the session's **Query timeout**
-    (docs/queryview.md) and return its Explorer **Max entries** (docs/explorer.md):
+    (docs/system/queryview.md) and return its Explorer **Max entries** (docs/system/explorer.md):
     the two settings a driver call needs, read from one row."""
     ui = rec.ui if rec else {}
     app, explorer = ui.get("app"), ui.get("explorer")
@@ -909,7 +909,7 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
 
 async def _unlocked_session(sid: str) -> tuple[_SessionState | None, dict[str, Any] | None]:
     """This session's state, or why the request may not use its connection:
-    not connected, or locked without the tab's token (docs/connect.md#locked-connections)."""
+    not connected, or locked without the tab's token (docs/system/connect.md#locked-connections)."""
     await _ensure_session(sid)
     s = _get_session_entry(sid)
     if s is None:
@@ -997,7 +997,7 @@ def _rows_reply(s: _SessionState, r: RowsResult | Err) -> dict[str, Any]:
 
 async def execute_script(sid: str, sql: str) -> dict[str, Any]:
     """Run a script as written on this session's selected database (the Scripts
-    page): `{ok, results}`, one entry per statement run — see docs/api.md."""
+    page): `{ok, results}`, one entry per statement run — see docs/architecture/api.md."""
     s, err = await _gated_session(sid)
     if s is None:
         return err  # type: ignore[return-value]

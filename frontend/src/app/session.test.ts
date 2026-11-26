@@ -427,6 +427,36 @@ describe('startHeartbeat', () => {
     stop()
   })
 
+  it('drops a patch reply that straddles a database switch', async () => {
+    const { attachSession, patchSession, onSessionRow } = await import('./session')
+    const { selectDatabase } = await import('./connection')
+    await attachSession()
+    const onRow = vi.fn()
+    onSessionRow(onRow)
+    // A patch that read the row before the switch committed, answering after it.
+    let answerPatch!: () => void
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerPatch = () =>
+            resolve({
+              ok: true,
+              status: 200,
+              json: async () => ({ ok: true, session: { ...SESSION, database: 'old' } }),
+            })
+        }),
+    )
+    const patched = patchSession({ url: '/explorer' })
+    fetchMock.mockImplementation(() =>
+      Promise.resolve({ ok: true, status: 200, json: async () => ({ ok: true }) }),
+    )
+    expect(await selectDatabase('new')).toBe(true)
+
+    answerPatch()
+    await patched
+    expect(onRow).not.toHaveBeenCalledWith(expect.objectContaining({ database: 'old' }))
+  })
+
   it('ignores a beat that straddles a workspace switch', async () => {
     const { attachSession, startHeartbeat, patchSession, activeWorkspace } =
       await import('./session')

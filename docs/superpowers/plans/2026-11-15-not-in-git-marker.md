@@ -35,13 +35,13 @@
 
 - [ ] Change the test's key assertion to `{"name", "updated_at", "commit_sha"}` and assert `row["commit_sha"] is None`; run, see it fail.
 - [ ] Add `"commit_sha": r.commit_sha` to `list_dashboards`' dicts; run `uv run --group test pytest backend/queryview -q`, all pass.
-- [ ] Update `docs/api.md` `GET /api/dashboards` row to name `commit_sha`.
+- [ ] Update `docs/architecture/api.md` `GET /api/dashboards` row to name `commit_sha`.
 
 ### Task 2: Picker suffix
 
 **Files:**
 - Modify: `frontend/src/app/DashboardView.tsx` (`DashboardSummary`, option render, `onRestored`)
-- Modify: `docs/gitsync.md` (`## UI`)
+- Modify: `docs/system/gitsync.md` (`## UI`)
 - Test: `e2e/workspaces.spec.ts::git save and restore dashboard round trip`
 
 **Interfaces:**
@@ -51,5 +51,5 @@
 - [ ] `DashboardSummary` gains `commit_sha: string | null`; state `gitOn` from `gitStatus(activeWorkspace())` in an effect; option text `{d.name}{gitOn && d.commit_sha === null ? ' · not in git' : ''}`.
 - [ ] `onRestored` also calls `void loadDashboards()`.
 - [ ] `npm test -w frontend`, `npm run lint -w frontend`, `npm run build` pass.
-- [ ] `docs/gitsync.md` UI section: one sentence on the suffix.
+- [ ] `docs/system/gitsync.md` UI section: one sentence on the suffix.
 - [ ] Commit and push.

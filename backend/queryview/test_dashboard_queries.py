@@ -67,7 +67,7 @@ def test_run_queries_needs_a_connected_session():
     assert out["ok"] is False and out["reason"] == "no-session"
 
 
-# --- With params: resolved and substituted here (docs/dashboard.md#dashboard-parameters) ---
+# --- With params: resolved and substituted here (docs/system/dashboard.md#dashboard-parameters) ---
 
 
 class _SeenDriver(_RowsDriver):
@@ -128,13 +128,20 @@ def test_a_failing_query_still_returns_the_selectors(monkeypatch):
     assert out["params"] == [{"name": "r", "kind": "value", "options": ["eu"], "value": "eu"}]
 
 
+def test_run_dashboard_reports_an_over_long_each_with_no_queries():
+    many = [{"name": "n", "kind": "each", "options": list(range(101))}]
+    out = asyncio.run(run_dashboard("s-p-many", {}, many, {}))
+    assert out["ok"] is False and out["reason"] == "params" and "more than 100" in out["message"]
+
+
 def test_run_dashboard_needs_a_connected_session():
     out = asyncio.run(run_dashboard("s-p-none", {"q": "SELECT 1"}, [], {}))
     assert out["ok"] is False and out["reason"] == "no-session"
 
 
-def test_clean_values_keeps_only_strings():
-    assert clean_values({"a": "x", "b": 5, "c": None, "d": ["x"], 1: "y"}) == {"a": "x"}
+def test_clean_values_keeps_strings_and_reads_numbers_and_booleans_as_text():
+    values = {"a": "x", "b": 5, "c": None, "d": ["x"], 1: "y", "e": True}
+    assert clean_values(values) == {"a": "x", "b": "5", "e": "true"}
     assert clean_values(None) == {} and clean_values(["a"]) == {}
 
 
@@ -180,7 +187,7 @@ def test_a_failing_query_stops_the_ones_still_running(monkeypatch):
     assert driver.finished == [] and driver.running == 0
 
 
-# --- A query run once per value of an `each` param (docs/dashboard.md) ---
+# --- A query run once per value of an `each` param (docs/system/dashboard.md) ---
 
 EACH = [{"name": "region", "kind": "each", "options": ["eu", "us", "ap"]}]
 

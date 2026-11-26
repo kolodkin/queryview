@@ -13,6 +13,7 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+# req: architecture/storage/alembic-schema
 def test_fresh_db_is_migrated_to_head():
     _run(_ensure_schema())
 
@@ -43,6 +44,7 @@ def test_fresh_db_is_migrated_to_head():
     assert versions[0] == head, f"stamped {versions[0]} != head {head}"
 
 
+# req: architecture/storage/alembic-schema
 def test_config_blob_migration_backfills_existing_clickhouse_row(tmp_path, monkeypatch):
     """A row written at the pre-blob revision is rewrapped into an encrypted
     JSON config that decrypts back to the original host/port/user/password.
@@ -86,6 +88,7 @@ def test_config_blob_migration_backfills_existing_clickhouse_row(tmp_path, monke
     assert data == {"host": "h", "port": 8123, "username": "u", "password": "pw"}
 
 
+# req: architecture/storage/alembic-schema
 def test_predefined_queries_table_is_dropped_and_downgrade_restores_it(tmp_path, monkeypatch):
     """Head has no predefined_queries; one step down recreates it with its
     final schema. Runs on a private DB so the shared one stays at head."""
@@ -123,6 +126,7 @@ def test_predefined_queries_table_is_dropped_and_downgrade_restores_it(tmp_path,
     assert len(restored[1]) == len(before[1])
 
 
+# req: architecture/storage/alembic-schema
 def test_workspaces_autosave_column_is_dropped():
     _run(_ensure_schema())
     con = sqlite3.connect(_db_path())
@@ -133,6 +137,7 @@ def test_workspaces_autosave_column_is_dropped():
     assert "autosave" not in cols
 
 
+# req: architecture/storage/alembic-schema
 def test_sessions_queries_to_scripts_migration(tmp_path, monkeypatch):
     """A session saved before the Queries -> Scripts rename keeps its script
     text under `scripts`; a newer `scripts` key wins, and an unreadable ui

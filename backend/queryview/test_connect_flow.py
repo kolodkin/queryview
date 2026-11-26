@@ -168,6 +168,7 @@ def test_list_tables_requires_database_when_picker_present(monkeypatch):
     ]
 
 
+# req: architecture/sessions/row-is-durable
 def test_connect_writes_through_to_the_session_row(monkeypatch):
     """The session row, not the in-memory map, is what survives a restart."""
     monkeypatch.setitem(DRIVERS, "fake", _FakeDriver())
@@ -178,6 +179,7 @@ def test_connect_writes_through_to_the_session_row(monkeypatch):
     assert again.connection_name == "reporting"
 
 
+# req: architecture/sessions/row-is-durable
 def test_session_state_rebuilds_from_the_row_after_the_cache_is_dropped(monkeypatch):
     monkeypatch.setitem(DRIVERS, "fake", _FakeDriver())
     rec = _run(sessions.create_session())
@@ -190,6 +192,7 @@ def test_session_state_rebuilds_from_the_row_after_the_cache_is_dropped(monkeypa
     assert "ident_quote" not in out and "backslash_escapes" not in out
 
 
+# req: architecture/sessions/row-is-durable
 def test_disconnect_clears_the_connection_durably(monkeypatch):
     monkeypatch.setitem(DRIVERS, "fake", _FakeDriver())
     rec = _run(sessions.create_session())
@@ -199,6 +202,7 @@ def test_disconnect_clears_the_connection_durably(monkeypatch):
     assert _run(connect.get_session(rec.id)) == {"connected": False}
 
 
+# req: architecture/sessions/row-is-durable
 def test_two_sessions_keep_their_own_connections(monkeypatch):
     """The old store reconnected whichever connection was globally latest, so
     two sessions could not differ. Each session now resolves its own row."""
@@ -290,6 +294,7 @@ def test_select_database_relists_on_a_miss(monkeypatch):
     assert out["ok"] is False and out["message"] == "listing failed"
 
 
+# req: architecture/sessions/row-is-durable
 def test_rebuild_keeps_an_unlisted_database_on_the_row_for_picker_drivers(monkeypatch):
     # Only DuckDB folder mode falls back to its root; a ClickHouse/Postgres row
     # keeps its selection, as refresh_databases does, even if no longer listed.
@@ -308,6 +313,7 @@ def test_rebuild_keeps_an_unlisted_database_on_the_row_for_picker_drivers(monkey
     assert _row(rec.id).database == "gone"
 
 
+# req: architecture/sessions/row-is-durable
 def test_reopening_a_connection_goes_back_to_its_last_database_and_table(monkeypatch):
     # A picker driver: reopening skips the picker for the database last visited
     # in this session, and offers its table back.

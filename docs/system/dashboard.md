@@ -15,12 +15,14 @@ agent-authored HTML, which renders inside an isolated iframe.
 [explorer](./explorer.md) and [Scripts](./scripts.md); see
 [queryview.md](./queryview.md). It has:
 
+<!-- req: picker -->
 - a **dropdown** of saved dashboards — selecting one sets `?name=<name>`, so the
   URL is shareable and the back button works; the button beside it copies the
   open dashboard's name;
 - **Save** — writes the open dashboard to the store; reads **Saved**, disabled,
   while the open dashboard is the store's copy (no draft, agent push or
   SQL-panel edit);
+  <!-- req: rename-delete -->
 - **Rename** and **Delete** — for a saved dashboard; Rename asks for the new
   name and keeps unsaved SQL-panel edits, Delete asks to confirm. Both are
   the user's: no [MCP tool](./mcp.md#naming-and-saving) does either. A new
@@ -45,10 +47,12 @@ agent-authored HTML, which renders inside an isolated iframe.
 +--------------------------------------------------------+
 ```
 
+<!-- req: reopen-by-name -->
 Open it from the corner nav, or by URL: `?name=<name>` jumps straight to one.
 Reopening re-fetches the dashboard and re-runs its queries, so a reloaded or
 shared link always shows live data.
 
+<!-- req: new-query-draft -->
 `/dashboard?new` opens a **New query** draft: an unsaved dashboard holding one
 [`<qv-select-view>`](#widgets) over one query, for ad-hoc SQL, with the
 [SQL panel](#the-sql-panel) open. [Scripts](./scripts.md)' **Open in
@@ -65,12 +69,14 @@ dashboard discards it.
 - its rows, in a results table like a [`<qv-select-view>`](#widgets),
   whatever the dashboard's HTML does with that query.
 
+<!-- req: execute -->
 **Execute** re-runs the queries you edited (everything, when nothing was
 edited): in the popup's table, on the page and in the widgets over them. A
 page of rows the popup and a widget both show runs once. The frame is not
 reloaded, so the page keeps its state; a failing page query shows its error
 above the frame. Until **Execute**, everything runs the SQL as last executed.
 
+<!-- req: save-edits -->
 **Close**, Escape or a press outside the popup keeps the edits; **Save**
 persists the edited dashboard.
 
@@ -90,7 +96,10 @@ session id) exposes:
   writes it to the store. Returns
   `{ok, pushed, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`.
+- `run_dashboard` returns the rows of a draft's queries to the agent, to test
+  them before a push: see [mcp.md](../architecture/mcp.md#tools).
 
+<!-- req: viewing-connection -->
 A dashboard never names a [connection](./connect.md): it runs on the
 **viewing** session's connection and selected database. So
 a dashboard is portable across sessions, instances and git sync; opened in a
@@ -100,7 +109,7 @@ fully-qualify tables as `db.table`.
 
 The REST mirror `POST /api/dashboards` takes the inline fields (plus optional
 `session_id`) and drives the same persist-and-push path (used by the e2e suite).
-See [api.md](./api.md) for the full endpoint list.
+See [api.md](../architecture/api.md) for the full endpoint list.
 
 ## Pushing from a folder
 
@@ -161,6 +170,7 @@ Load any chart library from a CDN inside the HTML. A minimal dashboard:
 
 ## Bound values
 
+<!-- req: bound-values -->
 Any element with `data-qv-query` shows row 1 of that query's
 `data-qv-column` (default: its first column) as text, and follows each
 re-run, so a KPI needs no script:
@@ -190,6 +200,7 @@ frame with the rest of the page; only dashboards that use one load them.
 </qv-select-view>
 ```
 
+<!-- req: select-view -->
 - **`<qv-select-view query>`** — a results table over the dashboard query it
   names: **Fields** (the select-fields and order-by pickers), **Limit**,
   **Offset**, **Previous** / **Next** and **Download CSV**, with the
@@ -198,6 +209,7 @@ frame with the rest of the page; only dashboards that use one load them.
   (1–1000, default 100), `order-by` (`col` or `col desc`, comma-separated) and
   `fields` (the columns shown at first) set how it opens; changes made in the
   widget last for the visit.
+  <!-- req: cell-template -->
 - **`<template column>`** — designs one column's cells. Its HTML is used per
   row with `{cell}` (this column's value) and `{row.<column>}` (another
   column's) substituted: HTML-escaped, and URL-encoded inside `href` / `src`.
@@ -205,11 +217,13 @@ frame with the rest of the page; only dashboards that use one load them.
   in `href` / `src` only: other attributes (`style`, `on…`) get no URL encoding.
   A column holding a whole URL can't fill an `href` by itself, since its `://`
   is encoded too; build the link around an id instead.
+  <!-- req: qv-param -->
 - **`<qv-param name>`** — the selector for one
   [dashboard parameter](#dashboard-parameters): a dropdown, or a checkbox for a
   `dimension`, a text box for a `text` (sent on Enter or on leaving it). A
   change re-runs the dashboard.
 
+<!-- req: widget-owns-query -->
 A query a `<qv-select-view>` names belongs to that widget: it runs per page
 through `/api/db/query`, is **not** in `window.queries`, and a failure shows in
 the widget, leaving the rest of the dashboard up. A name the dashboard doesn't
@@ -273,6 +287,7 @@ An identifier containing the quote character, or a backslash on ClickHouse, is
 rejected. Write option values as they are stored (`CORP\alice`); never
 pre-escape them.
 
+<!-- req: malformed-param -->
 Saving refuses a malformed declaration. One already in a stored dashboard
 (saved before a rule existed) is left out when it opens, and the dashboard
 page names each one above the dashboard.
@@ -288,6 +303,7 @@ dependency is still unchosen simply has no options yet.
 
 ## A query run once per value
 
+<!-- req: each-param -->
 An **`each`** param is a list nobody picks from. A query that names it runs
 once per option, up to five at a time, and its result is the rows of every
 run, stacked in the list's order. A heavy query over many partitions (a
@@ -326,6 +342,7 @@ The resolved selectors are injected next to the results:
 window.params = [{ name, kind, options: [...], value }, …]
 ```
 
+<!-- req: set-params -->
 The page draws its own controls from that list and asks for a re-run with
 `window.setParams({ field: 'city', category: true })`. The host posts the
 values with the dashboard's **own** queries; the backend substitutes them and
@@ -335,6 +352,7 @@ message)` then fires with the new `window.queries` and `window.params`
 (`message` is set when the run failed and the previous results were kept). The
 iframe isn't reloaded, so the page keeps its state.
 
+<!-- req: loading-mark -->
 While that re-run is in flight the page's `<html>` carries
 **`data-qv-loading`**, however it started (`setParams`, a `<qv-param>`,
 **Execute**), until the last one queued has answered. A thin bar runs across
@@ -347,23 +365,11 @@ declares, reviewable in `queries.yaml`.
 
 ## Running the queries: `/api/runqueries`
 
-The browser POSTs `{queries, params, values}` to `/api/runqueries`: the
-dashboard's queries as written, its `params` declaration and the chosen
-values. The backend resolves each selector's options and value, substitutes
-them into the queries, and runs each one on the session's connection and
-selected database (wrapped in a paginated subselect capped at 1000 rows). It
-returns column-oriented results and the resolved selectors. Up to five queries
-run at once. Switching the connection or database re-runs them.
-
-It is **fail-fast**: if any query fails, or the session is not connected or has
-no database selected, the whole request returns an HTTP error and the page shows a
-dashboard-level error banner instead of partial panels. On success every named
-query is present in `window.queries`. A failing query's message is prefixed with
-its panel name (e.g. `churn: Unknown table …`) so it's clear which one to fix. When
-several fail, the first in the dashboard's order is the one reported.
+The request the page sends to run a dashboard's queries is in [dashboards.md](../architecture/dashboards.md#running-the-queries-apirunqueries).
 
 ## Snapshot
 
+<!-- req: snapshot -->
 **Snapshot** downloads the open dashboard as one static `<name>.html`, as it
 stands at the current parameters. Print the file for a PDF.
 
@@ -373,35 +379,20 @@ stands at the current parameters. Print the file for a PDF.
 - A canvas chart becomes an image; a dropdown, its chosen value.
 - Refused while the dashboard or a widget is still loading.
 - The file runs no script and redirects nowhere, whatever the dashboard's
-  HTML contains: the host puts a script-blocking policy ahead of the frame's
-  text. Stylesheets, fonts and images from elsewhere are still fetched when
-  it is opened; embedded frames are not.
+  HTML contains. Stylesheets, fonts and images from elsewhere are still
+  fetched when it is opened; embedded frames are not.
 - A WebGL chart or a canvas holding a cross-origin image comes out blank; a
   password field, empty.
 - It holds rendered query results: treat the file as data.
 
 ## Isolation & security
 
-The HTML renders in
-`<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc=…>`
-**without** `allow-same-origin`, giving it an opaque origin: it can run JS and load CDN
-assets but cannot read the app's storage or call `/api/*` as the session (it
-has neither the session id nor any credential). A link the page opens with
-`target="_blank"` lands in a normal tab. The page cannot print or download;
-[Snapshot](#snapshot) is the way out. Data reaches it only through the
-injected `window.queries` and the [widget](#widgets) replies; the
-`window.queries` JSON has `<` escaped so result data containing `</script>` can't break out
-of the prologue.
-
-Persisted dashboards are shared via SQLite and keyed by name within their
-[workspace](./workspace.md). The agent HTML
-is untrusted and confined to the sandbox; it never sees connection secrets or
-the session id.
+The sandbox the dashboard HTML runs in is described in [dashboards.md](../architecture/dashboards.md#isolation--security).
 
 ## Related docs
 
 - [queryview.md](./queryview.md) — the pages and the Connect page.
 - [query.md](./query.md) — pagination, the results grid, CSV, the edit lock.
 - [mcp.md](./mcp.md) — arming a session, the session id, the MCP server.
-- [api.md](./api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
+- [api.md](../architecture/api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
 - [connect.md](./connect.md) — connections and their stored database.

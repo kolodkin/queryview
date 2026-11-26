@@ -1,5 +1,6 @@
-// The explorer page: table sidebar -> rows with the field/order-by selects and
-// pagination, for every driver (same seeds as drivers.spec.ts).
+// The explorer page beyond the per-driver browse flow in acceptance.spec.ts:
+// stale runs, refresh, views, the sidebar and loaders (same seeds as
+// drivers.spec.ts).
 import type { Route } from "@playwright/test";
 import { CASES, CH, DUCK, chDb, chExec, connect, dbExec, expect, tableRow, test } from "./fixtures";
 
@@ -14,70 +15,7 @@ const hold = (ms: number) => async (route: Route) => {
   await route.continue().catch(() => {});
 };
 
-for (const c of CASES) {
-  test(`explorer browse, order, fields, paginate [${c.id}]`, async ({ page, seeds, shot }) => {
-    await connect(page, c, await seeds[c.seed]());
-
-    await page.getByTestId("nav-explorer").click();
-    await expect(page.getByTestId("explorer-tables")).toBeVisible();
-
-    // Each sidebar entry carries the engine's estimates. ClickHouse and DuckDB
-    // know the seeded row count immediately; a fresh Postgres table has no
-    // reltuples estimate yet, so its subline is just the on-disk size. SQLite
-    // keeps no estimates at all, so it has no subline.
-    const meta = tableRow(page, "items").getByTestId("explorer-table-meta");
-    if (c.id !== "sqlite") await expect(meta).toBeVisible();
-    if (c.id === "clickhouse" || c.id === "duckdb") await expect(meta).toContainText("3 rows");
-    await shot(`${c.id} explorer table list`);
-
-    // Clicking a table selects it into the URL and loads its rows.
-    await tableRow(page, "items").click();
-    await expect(page).toHaveURL(/table=items/);
-    const output = page.getByTestId("explorer-output");
-    const headers = output.locator("table thead th");
-    await expect(output).toBeVisible();
-    await expect(headers).toContainText(["id", "name"]);
-    await expect(output).toContainText("alpha");
-    await expect(output).toContainText("gamma");
-    await shot(`${c.id} explorer rows`);
-
-    // The pickers come pre-populated from an automatic describe.
-    await expect(page.getByTestId("field-pickers")).toBeVisible();
-    await expect(page.getByTestId("fields-count")).toHaveText("2/2");
-
-    // Order by id, flipped to DESC, re-runs immediately: gamma (id 3) first.
-    await page.getByTestId("orderby-menu").click();
-    await page.locator('[data-testid="orderby-add"][data-col="id"]').click();
-    const chip = page.locator('[data-testid="orderby-chip"][data-col="id"]');
-    await expect(chip).toBeVisible();
-    await chip.getByTestId("orderby-dir").click();
-    await expect(output.locator("tbody tr").first()).toContainText("gamma");
-    await shot(`${c.id} explorer ordered desc`);
-
-    // Hiding a field is client-side column visibility — no re-run.
-    await page.getByTestId("fields-menu").click();
-    const idToggle = page.locator('[data-testid="field-toggle"][data-col="id"]');
-    await idToggle.click();
-    await expect(headers).toHaveCount(1);
-    await idToggle.click();
-    await expect(headers).toHaveCount(2);
-
-    // Pagination under the DESC order: limit 2 (applies on blur) shows
-    // gamma, beta; the next page holds only alpha.
-    await page.getByTestId("explorer-limit").fill("2");
-    await page.keyboard.press("Tab");
-    await expect(output).not.toContainText("alpha");
-    await page.getByTestId("explorer-next").click();
-    await expect(output).toContainText("alpha");
-    await expect(output).not.toContainText("gamma");
-    await shot(`${c.id} explorer page 2`);
-
-    // Short values are left alone: no per-cell expand button in a normal table.
-    await expect(output.locator('[data-testid="cell-expand"]')).toHaveCount(0);
-    await shot(`${c.id} explorer short cells stay plain`);
-  });
-}
-
+// req: system/explorer/browse
 test("explorer stale run does not overwrite the newest", async ({ page, seeds }) => {
   // Adding an order-by column and flipping its direction fire two browse runs
   // back to back. The two are held at the network and released in reverse,
@@ -118,6 +56,7 @@ test("explorer stale run does not overwrite the newest", async ({ page, seeds })
   await expect(output.locator("tbody tr").first()).toContainText("gamma");
 });
 
+// req: system/explorer/refresh
 test("refresh reloads the rows from the database", async ({ page, seeds }) => {
   // The refresh button next to the table name re-runs the browse query: a row
   // inserted since the last load appears, and the loader shows while the
@@ -147,6 +86,7 @@ test("refresh reloads the rows from the database", async ({ page, seeds }) => {
 
 // Drivers that flag views: they follow the tables under a Views heading.
 for (const c of CASES.filter((c) => ["clickhouse", "postgres", "mysql"].includes(c.id))) {
+  // req: system/explorer/sidebar
   test(`views are listed under their own heading [${c.id}]`, async ({ page, seeds, shot }) => {
     await seeds[c.seed]();
     // ClickHouse runs over HTTP with no default database, so it qualifies names.
@@ -176,6 +116,7 @@ for (const c of CASES.filter((c) => ["clickhouse", "postgres", "mysql"].includes
   });
 }
 
+// req: system/explorer/sidebar-width
 test("sidebar width is draggable and remembered", async ({ page, seeds, shot }) => {
   // The Tables sidebar resizes from its right edge so long names need not be
   // truncated. The width is remembered per view and survives a reload; the
@@ -221,6 +162,7 @@ test("sidebar width is draggable and remembered", async ({ page, seeds, shot }) 
   await expect(page.getByTestId("explorer-sidebar-reset")).toHaveCount(0);
 });
 
+// req: system/explorer/loading
 test("panels show loaders until data arrives", async ({ page, seeds, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
 
@@ -242,6 +184,7 @@ test("panels show loaders until data arrives", async ({ page, seeds, shot }) => 
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
+// req: system/explorer/sidebar
 test("table copy puts the name on the clipboard", async ({ page, context, seeds }) => {
   // Each table row's copy icon copies its name without opening the table.
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -253,6 +196,7 @@ test("table copy puts the name on the clipboard", async ({ page, context, seeds 
   await expect(page).not.toHaveURL(/table=/);
 });
 
+// req: system/explorer/table-search
 test("table filter narrows the sidebar", async ({ page, seeds }) => {
   // Typing in the sidebar search narrows the list case-insensitively; Enter
   // opens the first match, and a miss says so.

@@ -2,7 +2,7 @@
 // into its queries via `{name}` placeholders. The backend parses the
 // declaration, resolves each selector's options and substitutes
 // (backend/queryview/dashboard_params.py); this side only shapes the values it
-// posts. See docs/dashboard.md, "Dashboard parameters".
+// posts. See docs/system/dashboard.md, "Dashboard parameters".
 
 export type ParamKind = 'value' | 'identifier' | 'dimension' | 'text' | 'each'
 
