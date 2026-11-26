@@ -83,19 +83,22 @@ An integration test proves no system statement, and a unit test names no ID.
    For a layer the change does not alter, write one line: `Skipping <layer>:
    <why>.`
 3. **Build.** Write the code that makes the tests pass.
-4. **Go up.** Run each only after the one before passes:
-   1. the unit test files touched;
-   2. the integration test files touched;
-   3. `uv run --group test pytest backend/queryview scripts`;
-   4. `npm test -w frontend`;
-   5. the touched `e2e/<feature>.spec.ts`;
-   6. `e2e/acceptance.spec.ts`, also when untouched: a change below it can
-      break a journey;
-   7. `uv run python scripts/vmodel_check.py` (also a pre-commit hook). It must
-      exit 0; `--strict` also fails on the untagged pages and tests it lists.
-      Once the report shows no gaps, `--strict` goes into the pre-commit hook.
-5. **A failure goes across before it goes down.** Read the failing test's
-   paired statement first: is the statement wrong, or the code? Fix that one.
+4. **Go up.** Run every layer's tests; the suites are independent, so run them
+   side by side:
+   - the touched unit and integration test files first, as a quick check;
+   - `uv run --group test pytest backend/queryview scripts` and
+     `npm test -w frontend`;
+   - the touched `e2e/<feature>.spec.ts` and `e2e/acceptance.spec.ts`, also
+     when untouched: a change below it can break a journey;
+   - `uv run python scripts/vmodel_check.py` (also a pre-commit hook). It must
+     exit 0; `--strict` also fails on the untagged pages and tests it lists.
+     Once the report shows no gaps, `--strict` goes into the pre-commit hook.
+5. **A failure: find its root cause, wherever it is.** Read the failing test's
+   paired statement first: is the statement wrong, or the code? A failure seen
+   in a browser test can come from any layer below it, or from a race between
+   them. Find where it starts, write the lowest-layer test that fails for that
+   cause, then fix it there. A test that passes on retry ("flaky") still has a
+   cause; never retry or skip it away.
 
 ## Tagging on touch
 
