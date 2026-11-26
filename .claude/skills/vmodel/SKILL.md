@@ -21,15 +21,17 @@ skill.
 ## Markers
 
 An ID is the page's path under `docs/` without `.md`, then a kebab-case slug.
-The doc defines it on the line above the statement:
+The doc defines it on the line above the statement, writing only the slug,
+since the page gives the prefix:
 
 ```md
-<!-- req: requirements/queryview/run-sql -->
+<!-- in docs/requirements/queryview.md: requirements/queryview/run-sql -->
+<!-- req: run-sql -->
 A user can run SQL, page through the rows, pick columns, and download CSV.
 ```
 
-A test names it directly above the test or group (`#` in Python; several IDs
-comma-separated):
+A test names the full ID directly above the test or group (`#` in Python;
+several IDs comma-separated):
 
 ```ts
 // req: requirements/queryview/run-sql
@@ -90,9 +92,8 @@ An integration test proves no system statement, and a unit test names no ID.
      `npm test -w frontend`;
    - the touched `e2e/<feature>.spec.ts` and `e2e/acceptance.spec.ts`, also
      when untouched: a change below it can break a journey;
-   - `uv run python scripts/vmodel_check.py` (also a pre-commit hook). It must
-     exit 0; `--strict` also fails on the untagged pages and tests it lists.
-     Once the report shows no gaps, `--strict` goes into the pre-commit hook.
+   - `uv run python scripts/vmodel_check.py --strict` (also the pre-commit
+     hook). It must exit 0: an untagged page or test file fails like an error.
 5. **A failure goes back down the V to where it started.** Read the failing
    test's paired statement first: is the statement wrong, or the code? A
    failure seen at one layer often starts lower: a browser test can fail on a
@@ -106,12 +107,15 @@ An integration test proves no system statement, and a unit test names no ID.
    A test that passes on retry ("flaky") still has a cause; never retry or skip
    it away.
 
-## Tagging on touch
+## Every file is tagged
 
-Most pages and test files carry no IDs yet. The statement a change edits gets
-its ID in that change, and so does each test file it edits (unit test files
-excepted), even when the rest of the page stays untagged. "It had no marker
-before" is not a reason to leave it without one.
+Every layer page defines at least one ID and every test file names one. The
+exceptions: a `decisions.md` page, and a unit test file, which pairs with its
+module by name (`test_main.py` also with `__main__.py`). A new page or test
+file gets its ID in the change that adds it.
+
+Not every statement or test has one yet: the statement a change edits gets
+its ID in that change, and so does the test that proves it.
 
 ## Not covered
 

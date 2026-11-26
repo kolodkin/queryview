@@ -27,6 +27,7 @@ server only as an empty string. A connection the agent adds itself with
 
 ## Locked connections
 
+<!-- req: locked-until-unlocked -->
 A saved connection can be locked behind a passphrase. Only its scrypt hash is
 stored, never the passphrase. Unlocking exchanges the passphrase for a
 per-session token; wrong attempts back off exponentially, up to 30 seconds. A

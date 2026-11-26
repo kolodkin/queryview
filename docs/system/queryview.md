@@ -38,6 +38,7 @@ redirects here, and `/studio` to a dashboard
 - **New connection** — a card per driver, and the same entries in the **+ New**
   menu; either opens that driver's form in place (see
   [connect.md](./connect.md)).
+  <!-- req: many-connections -->
 - **Many connections** — past six, the page reorganizes
   (`savedConnections.ts`):
   - the three most recent sit in a **Recent** row; the rest scroll in a
@@ -48,6 +49,7 @@ redirects here, and `/studio` to a dashboard
   - **driver chips** (with counts) narrow to one driver;
   - the new-connection cards are hidden; **+ New** remains.
 - **← Connections** — on the form and the picker; back to the cards.
+  <!-- req: connection-status -->
 - **Connection status** — the one element that persists across every page: a
   pill in the **top-left** corner, hidden until a database is selected, then
   showing 🟢 `<connection> · <database>`, with a copy icon for the database name.
@@ -63,6 +65,7 @@ redirects here, and `/studio` to a dashboard
   workspace and page links collapse into one **☰ &lt;page&gt;** menu, and
   full-height pages keep a 48rem minimum width, scrolling sideways rather than
   squeezing.
+  <!-- req: popovers -->
 - **Popovers** — dropdowns and their panels close on a click outside or on
   Escape. Panels holding unsaved input are the exception: the workspace manage
   form once edited, closes through its own buttons.
@@ -80,6 +83,7 @@ nav switches between them. See [session.md](./session.md).
 A live connection lands on the **explorer**, not the Connect page — there are tables
 to browse (see [explorer.md](./explorer.md)).
 
+<!-- req: landing -->
 - **Opening the app** (`/`) waits for the session to attach, then goes where
   that session left off. A session with no remembered URL lands on `/explorer`
   for a ready connection and `/connect` otherwise. Only `/` chooses: a deep link
@@ -91,6 +95,7 @@ to browse (see [explorer.md](./explorer.md)).
 
 ## Query timeout
 
+<!-- req: query-timeout -->
 The **Timeout** chip beside the connection pill: how long one request to the
 database may take, in whole seconds 1–600, 30 by default. It covers queries,
 describes, table and database lists and the connect probe; an agent's `run_sql`

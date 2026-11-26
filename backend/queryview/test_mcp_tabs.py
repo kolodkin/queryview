@@ -23,6 +23,7 @@ def _ctx(url: str) -> Any:
     return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(url=URL(url))))
 
 
+# req: architecture/mcp/tab-queue
 def test_new_tab_links_a_session_that_collects_pushes_once_it_arms():
     from queryview.mcp_server import new_tab, push_script
 

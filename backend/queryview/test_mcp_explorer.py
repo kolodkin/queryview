@@ -28,23 +28,27 @@ def rid(monkeypatch, request):
     remote.unregister(sid)
 
 
+# req: architecture/mcp/open-explorer
 def test_open_explorer_with_table_pushes_the_table(rid):
     assert _run(open_explorer(rid, "db", "items")) == {"ok": True, "message": "delivered", "database": "db"}
     assert _run(remote.next_message(rid, 1.0)) == {"type": "explorer", "table": "items"}
 
 
+# req: architecture/mcp/open-explorer
 def test_open_explorer_with_table_refuses_a_missing_table(rid):
     out = _run(open_explorer(rid, "db", "nope"))
     assert out == {"ok": False, "message": 'no table "nope" in db', "database": "db"}
     assert _run(remote.next_message(rid, 0.1)) is None
 
 
+# req: architecture/mcp/open-explorer
 def test_open_explorer_without_a_table(rid):
     assert _run(open_explorer(rid, "db"))["ok"] is True
     assert _run(remote.next_message(rid, 1.0)) == {"type": "explorer", "table": None}
     assert _run(open_explorer(rid, "no_such_db"))["message"] == "unknown database"
 
 
+# req: architecture/mcp/open-explorer
 def test_open_explorer_with_table_trusts_a_truncated_list(rid, monkeypatch):
     async def truncated(sid):
         return {"ok": True, "tables": [{"name": "items"}], "truncated": True}

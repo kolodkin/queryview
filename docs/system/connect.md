@@ -167,7 +167,7 @@ DuckDB or SQLite connection can reach every file QueryView can, a locked
 connection's file and `db.sqlite` included
 ([scripts.md](./scripts.md#file-writes)).
 
-<!-- req: system/connect/locked-hidden-from-agent -->
+<!-- req: locked-hidden-from-agent -->
 The agent's tools tell it nothing about a locked connection but that the
 session is on one: `session_info` reports `locked: true` with no name, type,
 database or tables.
