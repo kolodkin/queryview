@@ -2,7 +2,7 @@
 
 ## Intent
 
-A [dashboard](../../dashboard.md) runs every query on the viewing session's
+A [dashboard](../../system/dashboard.md) runs every query on the viewing session's
 connection, so one page cannot show data from two databases. A query that
 names a connection runs there instead, and the page's own JavaScript combines
 the results. Wanted: panels from, say, a ClickHouse and a Postgres side by
@@ -25,7 +25,7 @@ side on one page.
   session's connection and selected database exactly as today. No stored
   dashboard, git repository or export is migrated.
 - The same shape works everywhere a dashboard's queries travel: the store,
-  `queries.yaml`, export and import, `push_dashboard`, the SQL panel, the
+  `queries.yaml`, export and import, `push_dashboard` and `run_dashboard`, the SQL panel, the
   app's run and widget requests, and the viewer server.
 - A param's `options_sql` can name a connection the same way.
 
@@ -78,8 +78,8 @@ reader, so no caller checks `isinstance(entry, str)` itself.
 - String entries are handled by each reader exactly as today, blank ones
   included: Save and a run request drop them, import and git sync accept
   them.
-- A malformed map is refused, with the query's name, by `push_dashboard`,
-  import and git sync. Save and a run request drop it, as `_clean_queries`
+- A malformed map is refused, with the query's name, by both agent tools,
+  import and git sync. Save and a run request drop it, as `clean_queries`
   drops any malformed entry today.
 - Validation checks the shape only. Whether the connection exists is decided
   when the query runs, so a dashboard syncs to an instance that lacks it.
@@ -147,15 +147,28 @@ the app builds for it carries the entry instead of bare SQL, and the same
 lookup applies; the describe request likewise. Explorer and Scripts calls to
 the same endpoints are unchanged.
 
-### `push_dashboard`
+### The agent: `push_dashboard` and `run_dashboard`
 
-`queries` accepts both shapes. A push naming a connection the agent could not
-switch to with `use_connection` (locked, or a DuckDB or SQLite one it did not
-add) is refused with that tool's message. A name this instance lacks is
-accepted, and the push's `message` lists it, so the agent sees a typo the
-browser would only show as a failed panel. This keeps a cooperating agent in
-its lane and is not a security boundary, as
-[connect.md](../../connect.md#session-connections) says of the rest.
+Both take `queries` in either shape. `run_dashboard` returns rows to the
+agent, and a pushed page's own script can send its `window.queries` anywhere
+it can fetch, so a named connection is a read path for the agent either way.
+Both hold a named connection to what the agent can already reach with
+`use_connection`, and to the
+[locked-connection rule](../../architecture/mcp.md#how-it-works) that the
+agent learns nothing about a locked one:
+
+- A name `list_connections` does not show the agent (it does not exist, or it
+  is locked) fails as `unknown connection "warehouse"`: `run_dashboard` fails
+  that query; `push_dashboard` refuses the push.
+- A DuckDB or SQLite connection the agent did not add is refused with
+  `use_connection`'s message, by both.
+- Neither needs the session to be on any connection when every query and
+  `options_sql` names one.
+
+A dashboard naming a connection this instance lacks cannot be pushed by the
+agent; the user's **Save** and import still take it. This keeps a cooperating
+agent in its lane and is not a security boundary, as
+[connect.md](../../system/connect.md#session-connections) says of the rest.
 
 ### The SQL panel
 
@@ -182,26 +195,38 @@ The viewer page has no panel and changes only through the server.
 - `queries.yaml` and the export document hold the entry as written. A string
   entry is dumped as a string, so an untouched repo produces no diff.
 
-### Docs
+### Docs and tests, by layer
 
-`dashboard.md` (the paragraph saying a dashboard never names a connection,
-`queries.yaml`, the SQL panel, params, widgets), `api.md`, `mcp.md`,
-`gitsync.md`, `export-import.md`, `connect.md` (locked connections),
-`viewer_server/api.md`. This spec and its plan are deleted when the work
-ships.
+Each statement below is written, with its `<!-- req: … -->` ID, before its
+failing test (the project `vmodel` skill).
 
-### Tests
+| Layer | Statement (page, ID) | Proved in |
+|---|---|---|
+| User | `requirements/queryview.md`, new `dashboard-many-connections`: a user can open one dashboard showing data from several connections. | `e2e/acceptance.spec.ts`: a dashboard over ClickHouse and Postgres renders both. |
+| System | `system/dashboard.md`: `viewing-connection` rewritten (a string entry runs on the viewing session; the slug stays, its test names it); new `query-connection` (the map entry, `database`, the three messages, locked, no-session rule); new `sql-panel-connection`. Params, widgets and `queries.yaml` sections gain the entry. | `e2e/dashboard.spec.ts` |
+| Integration | `architecture/dashboards.md`: `runqueries` extended, new `named-connection` (lookup, database rule, lock, per-connection quoting). `architecture/mcp.md`: `push-dashboard`, `run-dashboard`, `locked-refuses-both`. `architecture/viewer_server_api.md`: new `named-connection`. `architecture/api.md`: `/api/db/query` and `/api/db/describe` take `connection` and `database`. | backend `test_*.py` beside each route and tool |
+| Unit | Docstrings of the entry module, `dashboard_params.py`, `dashboard_queries.py`; the leading comment of the frontend entry module. | the test file beside each |
+
+Pages edited without a new ID: `system/gitsync.md`, `system/export-import.md`
+(the file shapes), `system/connect.md` (a locked connection a dashboard
+names).
+
+Behaviors each layer's tests must cover:
 
 - Runner: two fake drivers, a string entry and a map entry each reach their
   own; unknown, locked and database-less connections fail with the messages
   above; a value is quoted per connection dialect.
 - Validation: both shapes accepted, each malformed shape refused, through
-  save, push, import and git sync.
-- Locked: a map entry on a locked connection runs only with the token.
+  push, import and git sync.
+- Locked: a map entry on a locked connection runs only with the token, and
+  reads as unknown to both agent tools.
+- Agent: `run_dashboard` and `push_dashboard` refuse a file connection the
+  agent did not add.
 - Viewer server: a map entry runs on the configured connection; an unknown
   one fails.
 - A dashboard of string entries: every existing test passes unchanged.
-- One e2e spec: a dashboard over two of the CI databases renders both.
+
+This spec and its plan are deleted when the work ships.
 
 ## Calls made while writing this up
 
@@ -212,8 +237,8 @@ These were not discussed; each is open to correction.
 - Existence of a connection is checked at run time, not on save.
 - Locked: the query fails with a message; no passphrase prompt is added to
   the dashboard page.
-- The agent's push is held to `use_connection`'s rules, except that an
-  unknown name is accepted and reported.
+- Both agent tools are held to `use_connection`'s rules, and a locked
+  connection reads as unknown to them.
 - String entries keep each reader's leniency; only maps are checked strictly.
 - A refused session gate fails a mixed run whole.
 - Params get `connection` and `database`.
