@@ -139,8 +139,9 @@ def test_run_dashboard_needs_a_connected_session():
     assert out["ok"] is False and out["reason"] == "no-session"
 
 
-def test_clean_values_keeps_only_strings():
-    assert clean_values({"a": "x", "b": 5, "c": None, "d": ["x"], 1: "y"}) == {"a": "x"}
+def test_clean_values_keeps_strings_and_reads_numbers_and_booleans_as_text():
+    values = {"a": "x", "b": 5, "c": None, "d": ["x"], 1: "y", "e": True}
+    assert clean_values(values) == {"a": "x", "b": "5", "e": "true"}
     assert clean_values(None) == {} and clean_values(["a"]) == {}
 
 
