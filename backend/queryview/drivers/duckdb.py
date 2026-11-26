@@ -1,5 +1,8 @@
 """DuckDB driver: file-based, no network, no picker. The synchronous duckdb
-library is driven in a worker thread so the event loop is never blocked."""
+library is driven in a worker thread so the event loop is never blocked.
+
+Opens of one database file share a reader/writer gate: queries run side by
+side, and a script waits until they close rather than failing to open."""
 
 from __future__ import annotations
 

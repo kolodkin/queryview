@@ -93,12 +93,18 @@ An integration test proves no system statement, and a unit test names no ID.
    - `uv run python scripts/vmodel_check.py` (also a pre-commit hook). It must
      exit 0; `--strict` also fails on the untagged pages and tests it lists.
      Once the report shows no gaps, `--strict` goes into the pre-commit hook.
-5. **A failure: find its root cause, wherever it is.** Read the failing test's
-   paired statement first: is the statement wrong, or the code? A failure seen
-   in a browser test can come from any layer below it, or from a race between
-   them. Find where it starts, write the lowest-layer test that fails for that
-   cause, then fix it there. A test that passes on retry ("flaky") still has a
-   cause; never retry or skip it away.
+5. **A failure goes back down the V to where it started.** Read the failing
+   test's paired statement first: is the statement wrong, or the code? A
+   failure seen at one layer often starts lower: a browser test can fail on a
+   driver or a client-side race. The layer where it starts is the one whose
+   statement and test were missing, so walk step 2 at that layer:
+   - state the behavior there: the module's docstring or leading comment at
+     unit, the architecture page at integration;
+   - write the test at that layer that fails for the cause, and see it fail;
+   - fix the code there, then go up again from that layer.
+
+   A test that passes on retry ("flaky") still has a cause; never retry or skip
+   it away.
 
 ## Tagging on touch
 
