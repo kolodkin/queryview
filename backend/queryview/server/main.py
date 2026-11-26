@@ -17,9 +17,11 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
+from ..dashboard_entries import entry_connection, entry_sql, is_federated
 from ..dashboard_params import ParamError, needed, parse_params
 from ..dashboard_queries import (
     WAITING,
+    LookupError_,
     Target,
     clean_values,
     dialect_of,
@@ -34,7 +36,7 @@ from ..drivers.clickhouse import close_client
 from ..gitsync import GitSyncError
 from ..serving import resolve_port, serve_static
 from ..validation import page_bounds
-from .config import ConfigError, Connection, ServerConfig, config_path, load_config
+from .config import ConfigError, ServerConfig, config_path, load_config
 from .repo import Repo
 
 log = logging.getLogger("queryview.server")
@@ -81,8 +83,17 @@ def create_app(config: ServerConfig) -> FastAPI:
     app = FastAPI(title="queryview-server", lifespan=lifespan)
     app.state.repo = repo
 
-    async def _target(request: Request) -> tuple[Connection, dict[str, Any], dict[str, Any]] | JSONResponse:
-        """A POST body's connection and dashboard, by name, plus the body."""
+    async def lookup(name: str, database: str | None) -> Target | LookupError_:
+        """A configured connection by name, on the entry's database else its own."""
+        conn = config.connections.get(name)
+        if conn is None:
+            return LookupError_("unknown", f'unknown connection "{name}"')
+        return Target(DRIVERS[conn.type], conn.config, database or conn.database)
+
+    async def _target(request: Request) -> tuple[Target | None, dict[str, Any], dict[str, Any]] | JSONResponse:
+        """A POST body's dashboard and the target it runs on, plus the body. The
+        target is the request's connection, or None for a federated dashboard:
+        each query then names its own."""
         try:
             body = await request.json()
         except Exception:
@@ -90,32 +101,42 @@ def create_app(config: ServerConfig) -> FastAPI:
         if not isinstance(body, dict):
             return _fail("a JSON object is required")
         cname, dname = body.get("connection"), body.get("dashboard")
+        dash = repo.get(dname) if isinstance(dname, str) else None
+        if dash is None:
+            conn = config.connections.get(cname) if isinstance(cname, str) else None
+            return _fail("unknown connection" if conn is None else _not_found(dname), 404)
+        if is_federated(dash["queries"], dash["params"]):
+            return None, dash, body
         conn = config.connections.get(cname) if isinstance(cname, str) else None
         if conn is None:
             return _fail("unknown connection", 404)
-        dash = repo.get(dname) if isinstance(dname, str) else None
-        if dash is None:
-            return _fail(_not_found(dname), 404)
-        return conn, dash, body
+        return Target(DRIVERS[conn.type], conn.config, conn.database), dash, body
 
-    async def _widget_sql(conn: Connection, dash: dict[str, Any], body: dict[str, Any]) -> str | JSONResponse:
-        """The dashboard query a widget named, with the sent values applied.
-        Values are resolved first, so each is one of its param's options."""
+    async def _widget_sql(
+        default: Target | None, dash: dict[str, Any], body: dict[str, Any]
+    ) -> tuple[str, Target] | JSONResponse:
+        """The dashboard query a widget named, with the sent values applied, and
+        where it runs. Values are resolved first, so each is one of its param's options."""
         qname = body.get("query")
-        template = dash["queries"].get(qname) if isinstance(qname, str) else None
-        if template is None:
+        entry = dash["queries"].get(qname) if isinstance(qname, str) else None
+        if entry is None:
             return _fail("unknown query", 404)
-        driver = DRIVERS[conn.type]
+        target = default
+        if target is None:
+            found = await lookup(*(entry_connection(entry) or ("", None)))
+            if isinstance(found, LookupError_):
+                return _fail(f"{qname}: {found.message}")
+            target = found
+        template = entry_sql(entry)
         # Only the selectors this query needs: each options_sql is a query.
         declared = needed(template, parse_params(dash["params"]))
         try:
-            target = Target(driver, conn.config, conn.database)
-            resolved = await resolve_on(target, None, declared, clean_values(body.get("values")))
+            resolved = await resolve_on(default, lookup, declared, clean_values(body.get("values")))
         except ParamError as e:
             return _fail(str(e))
         values = {p["name"]: p["value"] for p in resolved}
-        sql, why = ready_sql(template, dash["params"], values, dialect_of(driver))
-        return sql if sql is not None else _fail(why or WAITING)
+        sql, why = ready_sql(template, dash["params"], values, dialect_of(target.driver))
+        return (sql, target) if sql is not None else _fail(why or WAITING)
 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
@@ -136,7 +157,10 @@ def create_app(config: ServerConfig) -> FastAPI:
         if d is None:
             return _fail(_not_found(name), 404)
         # Query names only: the SQL and the params' options_sql stay here.
-        return {"name": d["name"], "html": d["html"], "queries": list(d["queries"])}
+        out: dict[str, Any] = {"name": d["name"], "html": d["html"], "queries": list(d["queries"])}
+        if is_federated(d["queries"], d["params"]):
+            out["connections"] = list(dict.fromkeys(e["connection"] for e in d["queries"].values()))
+        return out
 
     # Run a dashboard's own queries (all, or the named ones) with its selectors
     # resolved from `values`.
@@ -145,7 +169,7 @@ def create_app(config: ServerConfig) -> FastAPI:
         target = await _target(request)
         if isinstance(target, JSONResponse):
             return target
-        conn, dash, body = target
+        default, dash, body = target
         names = body.get("queries")
         if names is None:
             names = list(dash["queries"])
@@ -154,13 +178,13 @@ def create_app(config: ServerConfig) -> FastAPI:
         if any(n not in dash["queries"] for n in names):
             return _fail("unknown query", 404)
         r = await run_dashboard_on(
-            Target(DRIVERS[conn.type], conn.config, conn.database),
-            None,
+            default,
+            lookup,
             {n: dash["queries"][n] for n in names},
             dash["params"],
             clean_values(body.get("values")),
         )
-        resolved = resolved_part(r)
+        resolved = {**resolved_part(r), **({"connections": r["connections"]} if "connections" in r else {})}
         if not r["ok"]:
             return _fail(r["message"], **resolved)
         return {"ok": True, "results": r["results"], **resolved}
@@ -171,17 +195,18 @@ def create_app(config: ServerConfig) -> FastAPI:
         target = await _target(request)
         if isinstance(target, JSONResponse):
             return target
-        conn, dash, body = target
-        sql = await _widget_sql(conn, dash, body)
-        if isinstance(sql, JSONResponse):
-            return sql
+        default, dash, body = target
+        widget = await _widget_sql(default, dash, body)
+        if isinstance(widget, JSONResponse):
+            return widget
+        sql, t = widget
         limit, offset = page_bounds(body.get("limit"), body.get("offset"))
         order_by = body.get("order_by") if isinstance(body.get("order_by"), list) else None
-        driver = DRIVERS[conn.type]
+        driver = t.driver
         if body.get("format") == "csv":
-            text = await driver.export_csv(conn.config, sql, conn.database, limit, offset, order_by)
+            text = await driver.export_csv(t.config, sql, t.database, limit, offset, order_by)
             return _fail(text.message) if isinstance(text, Err) else {"ok": True, "output": text.text}
-        r = await driver.run_query(conn.config, sql, conn.database, limit, offset, order_by)
+        r = await driver.run_query(t.config, sql, t.database, limit, offset, order_by)
         if isinstance(r, Err):
             return _fail(r.message)
         return {"ok": True, "meta": [c._asdict() for c in r.rows.meta], "data": r.rows.data}
@@ -192,11 +217,12 @@ def create_app(config: ServerConfig) -> FastAPI:
         target = await _target(request)
         if isinstance(target, JSONResponse):
             return target
-        conn, dash, body = target
-        sql = await _widget_sql(conn, dash, body)
-        if isinstance(sql, JSONResponse):
-            return sql
-        r = await DRIVERS[conn.type].describe_query(conn.config, sql, conn.database)
+        default, dash, body = target
+        widget = await _widget_sql(default, dash, body)
+        if isinstance(widget, JSONResponse):
+            return widget
+        sql, t = widget
+        r = await t.driver.describe_query(t.config, sql, t.database)
         return _fail(r.message) if isinstance(r, Err) else {"ok": True, "fields": r.fields}
 
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
