@@ -99,7 +99,7 @@ and let [git sync](docs/system/gitsync.md) do it.
 - [sessions.md](docs/architecture/sessions.md) — how a session is stored and how a tab claims one.
 - [mcp.md](docs/architecture/mcp.md) — the MCP tools and the channel behind arming.
 - [dashboards.md](docs/architecture/dashboards.md) — running a dashboard's queries and its sandbox.
-- [decisions.md](docs/architecture/decisions.md) — design decisions for credentials and folder mode.
+- [decisions.md](docs/architecture/decisions.md) — why folder mode lists one level at a time.
 
 ### Deployment
 
