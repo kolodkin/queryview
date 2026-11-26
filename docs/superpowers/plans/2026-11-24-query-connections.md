@@ -342,7 +342,7 @@ In `test_dashboard_params.py`: `parse_params` reads `connection`/`database` besi
   - `unfederate(queries, params: unknown[]): { queries; params }`: every query becomes its SQL; params lose `connection` and `database`.
   - `connectionNames(queries): string[]`: in first-use order, each once.
 - `DashboardPush.queries` and the panel's `queries` prop become `Record<string, QueryEntry>`. The panel gains `federated: boolean`, `onFederated: (on: boolean) => void`, `onConnection: (query: string, connection: string) => void`, `connections: string[]`.
-- `FederatedPill({ connections: FederatedConnection[] | string[], onUnlock: (name: string) => void })`: before the first reply it takes the names alone.
+- `FederatedPill({ connections: FederatedConnection[] | string[], onUnlock?: (name: string) => void })`: before the first reply it takes the names alone; without `onUnlock` a locked row shows no **Unlock**.
 - The shell (`App.tsx`) holds `federated: FederatedConnection[] | string[] | null`; `DashboardView` sets it on each load and reply and clears it on unmount. While it is non-null the shell renders `FederatedPill` in place of the connection pill. **Unlock** reuses `PassphrasePrompt` and `POST /api/db/unlock`, stores the token as the existing lock flow does, then asks the page to re-run.
 
 - [ ] **Step 1: Write the failing unit tests** in `entries.test.ts` (no marker):
