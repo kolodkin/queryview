@@ -119,7 +119,7 @@ CLAUDEAI_ALLOW_LOCAL=1 claudeai/run.sh stop
 same checks CI's `lint` job runs, and the vmodel check
 (`scripts/vmodel_check.py`). A vmodel failure means a `req:` ID with no proving
 test, a test naming an unknown ID, or an untagged page or test file; the rules
-are in `.claude/skills/vmodel/SKILL.md`. Pyright resolves imports from the project's
+are in the `devpowers:vmodel` skill and `.claude/skills/vmodel/SKILL.md`. Pyright resolves imports from the project's
 `.venv`, so sync first:
 
 ```bash
