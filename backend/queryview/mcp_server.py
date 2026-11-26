@@ -170,10 +170,8 @@ async def session_info(session_id: str) -> dict[str, Any]:
     info: dict[str, Any] = {"ok": True, "workspace": rec.workspace, **await get_session(session_id)}
     info.pop("unlocked", None)  # the tab's business, not the agent's
     if info.get("locked"):  # hidden from the agent: only that the session is on one
-        return _with_url(
-            session_id, {"ok": True, "workspace": rec.workspace, "connected": True, "locked": True, "tables": []}
-        )
-    if info["connected"]:
+        info = {"ok": True, "workspace": rec.workspace, "connected": True, "locked": True, "tables": []}
+    elif info["connected"]:
         info["connection"] = info.pop("name")
         listed = await list_tables(session_id)  # not ok until a database is picked
         tables: list[dict[str, Any]] = listed.get("tables") or []
@@ -465,8 +463,9 @@ async def push_dashboard(
             "ok": pushed,
             "pushed": pushed,
             "message": message,
+            # A refused push on a locked connection names no database.
             "database": None
-            if (await get_session(session_id)).get("locked")
+            if not pushed and (await get_session(session_id)).get("locked")
             else await sessions.database_of(session_id),
         },
     )

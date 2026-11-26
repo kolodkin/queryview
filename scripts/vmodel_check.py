@@ -60,12 +60,13 @@ def _paired_module(test: Path) -> Path | None:
     return next((m for n in names if (m := test.with_name(n)).is_file()), None)
 
 
-def _proves(layer: str, test: str) -> bool:
-    if layer == "requirements":
-        return test == ACCEPTANCE
-    if layer == "system":
-        return test.startswith("e2e/")  # user and system may share a test; no other layers do
-    return not test.startswith("e2e/")
+# Per layer: whether a test file proves its IDs, and where the error says to look.
+# User and system may share a test; no other layers do.
+PROOF = {
+    "requirements": (lambda t: t == ACCEPTANCE, ACCEPTANCE),
+    "system": (lambda t: t.startswith("e2e/"), "e2e/"),
+    "architecture": (lambda t: not t.startswith("e2e/"), "backend/ or frontend/"),
+}
 
 
 def _definitions(root: Path, report: Report) -> dict[str, str]:
@@ -98,8 +99,7 @@ def _test_files(root: Path) -> list[Path]:
     found = list((root / "e2e").rglob("*.spec.ts"))
     for base in ("backend/queryview", "scripts"):
         found += (root / base).rglob("test_*.py")
-    for pattern in ("*.test.ts", "*.test.tsx"):
-        found += (root / "frontend/src").rglob(pattern)
+    found += (p for p in (root / "frontend/src").rglob("*.test.ts*") if p.suffix in (".ts", ".tsx"))
     return sorted(found)
 
 
@@ -132,8 +132,8 @@ def check(root: Path) -> Report:
                 report.errors.append(f"{_rel(root, module)}: module has no docstring or leading comment")
     for layer, ids in report.matrix.items():
         for id_, tests in ids.items():
-            if not any(_proves(layer, t) for t in tests):
-                where = {"requirements": ACCEPTANCE, "system": "e2e/", "architecture": "backend/ or frontend/"}[layer]
+            proves, where = PROOF[layer]
+            if not any(proves(t) for t in tests):
                 report.errors.append(f"{defined[id_]}: {id_} has no test in {where}")
     return report
 

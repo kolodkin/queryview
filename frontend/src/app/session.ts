@@ -264,13 +264,12 @@ export async function flushPatches(): Promise<void> {
 // Runs a switch of session, connection or database with no heartbeat
 // overlapping it: the beat in flight lands first, none starts until `f`
 // settles. A beat straddling the switch would adopt the row from before it —
-// claiming the old session back, or handing the shell the old database.
+// claiming the old session back, or handing the shell the old database. A
+// patch reply sent before the switch ends is dropped for the same reason.
 export async function withoutHeartbeat<T>(f: () => Promise<T>): Promise<T> {
   holds++
   try {
     await beating
-    // A patch reply still in flight read the row from before the switch: drop it.
-    localGen++
     return await f()
   } finally {
     localGen++
