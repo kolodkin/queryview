@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BrowserRouter,
   Link,
@@ -223,6 +223,11 @@ function Shell() {
   // which re-runs the dashboard.
   const [unlocking, setUnlocking] = useState<string | null>(null)
   const [rerunNonce, setRerunNonce] = useState(0)
+  // A prompt left open must not reopen on the next federated dashboard.
+  const showFederated = useCallback((rows: (FederatedConnection | string)[] | null) => {
+    setFederated(rows)
+    if (!rows) setUnlocking(null)
+  }, [])
   // The pill menu's connection list, refetched on open and on a `connections`
   // push; the nonce also refreshes Connect.
   const [connections, setConnections] = useState<SavedConnection[]>([])
@@ -733,7 +738,7 @@ function Shell() {
                 runOn={connectionKey(connection)}
                 remoteId={remoteId}
                 activeConnection={connection?.name ?? null}
-                onFederated={setFederated}
+                onFederated={showFederated}
                 rerunNonce={rerunNonce}
               />
             }

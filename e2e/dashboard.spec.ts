@@ -351,6 +351,16 @@ test("a locked and an unknown connection show in the pill, and Unlock opens the 
     await expect(rows.filter({ hasText: missing })).toContainText("⚪");
     await expect(rows.filter({ hasText: missing })).toContainText("Not a connection here");
 
+    // A prompt left open does not come back with the next federated dashboard.
+    await rows.filter({ hasText: pg.name }).getByTestId("federated-unlock").click();
+    await expect(page.getByTestId("passphrase-input")).toBeVisible();
+    await page.getByTestId("dashboard-select").selectOption("");
+    await expect(page.getByTestId("federated-pill")).toHaveCount(0);
+    await page.getByTestId("dashboard-select").selectOption(name);
+    await expect(page.getByTestId("federated-pill")).toBeVisible();
+    await expect(page.getByTestId("passphrase-input")).toHaveCount(0);
+
+    await page.getByTestId("federated-pill").click();
     await rows.filter({ hasText: pg.name }).getByTestId("federated-unlock").click();
     await page.getByTestId("passphrase-input").fill(passphrase);
     await page.getByTestId("passphrase-submit").click();
@@ -376,6 +386,36 @@ test("closing a federated dashboard shows the session's pill again", async ({ pa
   await expect(page.getByTestId("connection-status")).toHaveCount(0);
 
   await page.getByTestId("dashboard-select").selectOption("");
+  await expect(page.getByTestId("federated-pill")).toHaveCount(0);
+  await expect(page.getByTestId("connection-status")).toContainText(`clickhouse · ${chDb()}`);
+});
+
+// req: system/queryview/federated-pill
+test("a re-run answering after the page was left leaves no federated pill", async ({ page, seeds, baseURL }) => {
+  await connect(page, CH, await seeds.testDb());
+  const name = `fed-late-${uid()}`;
+  await api(`${baseURL}/api/dashboards`, {
+    json: {
+      name,
+      html: '<qv-param name="pick"></qv-param><b id="v" data-qv-query="q" data-qv-column="v"></b>',
+      queries: { q: { connection: "clickhouse", sql: "SELECT {pick} AS v" } },
+      params: [{ name: "pick", options: ["a", "b"] }],
+    },
+  });
+  await page.getByTestId("nav-dashboard").click();
+  await page.getByTestId("dashboard-select").selectOption(name);
+  const frame = dashboardFrame(page);
+  await expect(frame.locator("#v")).toHaveText("a");
+  await expect(page.getByTestId("federated-pill")).toBeVisible();
+
+  const release = await holdRoute(page, "**/api/runqueries");
+  await frame.getByTestId("qv-param").selectOption("b");
+  await page.getByTestId("nav-explorer").click();
+  await expect(page.getByTestId("federated-pill")).toHaveCount(0);
+  const answered = page.waitForResponse("**/api/runqueries");
+  release();
+  await answered;
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await expect(page.getByTestId("federated-pill")).toHaveCount(0);
   await expect(page.getByTestId("connection-status")).toContainText(`clickhouse · ${chDb()}`);
 });

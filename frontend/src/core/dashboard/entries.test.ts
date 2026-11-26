@@ -58,3 +58,9 @@ it('rows are every connection the dashboard names, with the reply where it has o
   const ok = { name: 'warehouse', database: 'reporting', status: 'ok' as const, queries: ['a'] }
   expect(federatedRows(queries, params, [ok])).toEqual([ok, 'widgets', 'lookup'])
 })
+it('a dashboard whose only named connections are options_sql params is federated', () => {
+  const params = [{ name: 'r', options_sql: 'SELECT r', connection: 'lookup' }]
+  expect(isFederated({}, params)).toBe(true)
+  expect(isFederated({}, [{ name: 'r', options_sql: 'SELECT r' }])).toBe(false)
+  expect(isFederated({ a: 'SELECT 1' })).toBe(false)
+})

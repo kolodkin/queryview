@@ -432,8 +432,7 @@ function DashboardView({
     const frame = frameRef.current
     const run = async () => {
       if (frameRef.current !== frame) return null
-      const answer = await rerunNow(dash, values, only)
-      return frameRef.current === frame ? answer : null
+      return rerunNow(dash, values, only, frame)
     }
     const answer = rerunQueue.current.then(run, run)
     rerunQueue.current = answer
@@ -444,12 +443,15 @@ function DashboardView({
     dash: DashboardPush,
     values: Record<string, string> | null,
     only: string[] | null,
-  ): Promise<Record<string, unknown>> {
+    frame: HTMLIFrameElement | null,
+  ): Promise<Record<string, unknown> | null> {
     // Fresh selections, with any text the page left out; else the current ones.
     const sent = values ? withKeptText(values, resolvedRef.current) : valuesOf(resolvedRef.current)
     const executed = executedRef.current
     const queries = only ? Object.fromEntries(only.map((n) => [n, executed[n]])) : executed
     const r = await runDashboard(withoutWidgetQueries(queries, dash.html), dash.params, sent)
+    // The page was left or the dashboard switched meanwhile (its iframe is gone).
+    if (frameRef.current !== frame) return null
     // A partial run's reply covers only its queries: the pill keeps the last full one.
     if (!only) report(executed, dash, r)
     if (r.params) resolvedRef.current = r.params
@@ -511,7 +513,7 @@ function DashboardView({
   // The pill's connections for `queries` as run, with `r`'s statuses once it answered.
   function report(queries: Record<string, QueryEntry>, dash: DashboardPush, r?: RunReply) {
     const rows = federatedRows(queries, dash.params ?? [], r?.connections)
-    onFederated?.(isFederated(queries) ? rows : null)
+    onFederated?.(isFederated(queries, dash.params ?? []) ? rows : null)
   }
   useEffect(() => () => onFederated?.(null), [onFederated])
 
@@ -737,7 +739,7 @@ function DashboardView({
       {showSql && active && (
         <DashboardSqlPanel
           queries={active.queries}
-          federated={isFederated(active.queries)}
+          federated={isFederated(active.queries, active.params ?? [])}
           onFederated={setFederated}
           onConnection={setConnection}
           connections={connectionList}
