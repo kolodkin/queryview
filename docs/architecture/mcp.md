@@ -77,7 +77,7 @@ you [armed](../system/mcp.md#arming-a-session).
   without a value takes its default; a number or boolean value is read as its
   text (`2`, `true`); see [why](./decisions.md#why-a-param-value-is-matched-as-the-pages-text). Stops at the first failing query, whose
   name opens the `message`, and after 60s; nothing reaches the browser. A
-  [federated](#federated-drafts) run needs no session connection, adds
+  [federated](#federated-drafts) run needs no session connection, only a known session (else `unknown session`), adds
   `connections: [{name, database, status, queries, message?}]` and has a null
   `database`.
 - `new_tab(name)` — a session of the agent's own; see [Tabs](../system/mcp.md#tabs).

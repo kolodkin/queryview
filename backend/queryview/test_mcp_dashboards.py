@@ -9,7 +9,7 @@ from queryview import mcp_server, sessions
 from queryview.connect import _save_active_connection, open_saved
 from queryview.dashboard_entries import MIXED
 from queryview.drivers.duckdb import DuckConfig
-from queryview.mcp_server import _AGENT_DRIVERS, mcp, run_dashboard
+from queryview.mcp_server import _AGENT_DRIVERS, mcp, push_dashboard, run_dashboard
 from queryview.test_mcp_connections import _agent_add, _connected_session, _run
 
 REGION = [{"name": "region", "options": ["eu", "us"]}]
@@ -174,3 +174,18 @@ def test_a_mixed_dashboard_is_refused():
     assert _agent_add(sid, "rd-mixed-wh")["ok"]
     out = _run(run_dashboard(sid, {**_orders("rd-mixed-wh"), "q": "SELECT 1"}))
     assert out == {"ok": False, "message": MIXED}
+
+
+# req: architecture/mcp/run-dashboard
+def test_a_federated_run_on_a_made_up_session_is_refused():
+    _run(_save_active_connection("rd-ghost-duck", DuckConfig(":memory:"), "duckdb"))
+    assert _run(run_dashboard("no-such-session", _orders("rd-ghost-duck"))) == {
+        "ok": False,
+        "message": "unknown session",
+    }
+
+
+# req: architecture/mcp/run-dashboard
+def test_a_federated_push_on_a_made_up_session_is_refused():
+    out = _run(push_dashboard("no-such-session", "<p></p>", _orders("rd-ghost-duck")))
+    assert out["ok"] is False and out["message"] == "not connected"

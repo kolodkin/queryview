@@ -328,7 +328,11 @@ def _agent_lookup(session_id: str) -> dashboard_queries.Lookup:
             return dashboard_queries.LookupError_("unknown", f'unknown connection "{name}"')
         if _file_refused(listed):
             return dashboard_queries.LookupError_("failed", _FILE_REFUSED)
-        return await inner(name, database)
+        found = await inner(name, database)
+        if isinstance(found, dashboard_queries.LookupError_) and found.status == "locked":
+            # Locked after the listing above.
+            return dashboard_queries.LookupError_("unknown", f'unknown connection "{name}"')
+        return found
 
     return lookup
 
@@ -551,7 +555,7 @@ async def run_dashboard(
     "message"}, with "params" when they resolved. A query waiting on a param
     with no choice is absent from `results`. The run stops at the first failing
     query, whose name opens the message, and after a minute. A federated run
-    needs no session connection; its reply, failed or not, adds "connections":
+    needs no session connection, only a known session; its reply, failed or not, adds "connections":
     [{name, database, status, queries, message?}], and "database" is null.
 
     Args:
@@ -583,6 +587,12 @@ async def run_dashboard(
     if perr is not None:
         return {"ok": False, "message": perr}
     limit = max(1, min(limit, dashboard_queries.DASHBOARD_ROW_CAP))
+    try:
+        named = dashboard_entries.is_federated(queries, params)
+    except ValueError:
+        named = False  # the run below refuses a mixed dashboard
+    if named and await sessions.get_session_rec(session_id) is None:
+        return {"ok": False, "message": "unknown session"}
     try:
         async with asyncio.timeout(RUN_DASHBOARD_TIMEOUT_SECONDS):
             r = await dashboard_queries.run_dashboard(

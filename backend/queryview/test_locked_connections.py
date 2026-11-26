@@ -12,7 +12,9 @@ from fastapi.testclient import TestClient
 
 from queryview import connect, mcp_server, remote, sessions
 from queryview.conftest import app
-from queryview.connect import _db_path, _hash_passphrase, _passphrase_matches
+from queryview.connect import _db_path, _hash_passphrase, _passphrase_matches, add_session_connection
+from queryview.dashboard_queries import LookupError_
+from queryview.drivers.duckdb import DuckConfig
 
 
 def _run(coro):
@@ -347,3 +349,22 @@ def test_a_dashboard_reaches_a_locked_connection_only_with_the_token():
         assert r.status_code == 200 and r.json()["results"] == {"orders": {"v": [1]}}, r.text
     finally:
         _run(connect.delete_connection("", "warehouse", "pw"))
+
+
+# req: architecture/mcp/locked-refuses-both
+def test_a_connection_locked_mid_run_reads_as_unknown_to_the_agent(monkeypatch):
+    sid = _run(sessions.create_session()).id
+    _run(add_session_connection(sid, "lock-race-duck", DuckConfig(":memory:"), "duckdb", "agent"))
+
+    def locked_lookup(_sid):
+        async def lookup(name, database):
+            return LookupError_("locked", f'connection "{name}" is locked')
+
+        return lookup
+
+    # Locked between the listing and the lookup.
+    monkeypatch.setattr(mcp_server.dashboard_queries, "session_lookup", locked_lookup)
+    out = _run(mcp_server.run_dashboard(sid, {"orders": {"connection": "lock-race-duck", "sql": "SELECT 1"}}))
+    assert out["ok"] is False and out["message"] == 'orders: unknown connection "lock-race-duck"'
+    assert [c["status"] for c in out["connections"]] == ["unknown"]
+    assert "locked" not in str(out)
