@@ -2,7 +2,7 @@
 // driver, so these run once on DuckDB (no service).
 import { readFileSync } from "node:fs";
 
-import { DUCK, api, armRemote, closeQueries, connect, dashboardFrame, expect, holdRoute, openDashboard, test } from "./fixtures";
+import { DUCK, api, armRemote, closeQueries, connect, dashboardFrame, expect, holdRoute, openDashboard, test, uid } from "./fixtures";
 
 // Reads window.queries and writes a value into the DOM, so the test can
 // assert the injected results reached the agent HTML. Styled as large,
@@ -59,7 +59,7 @@ test("dashboard push and reopen", async ({ page, seeds, baseURL, shot }) => {
 
 test("a malformed param is named above the dashboard, which still renders", async ({ page, seeds, baseURL, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
-  const name = `odd ${crypto.randomUUID().slice(0, 6)}`;
+  const name = `odd ${uid(6)}`;
   await api(`${baseURL}/api/dashboards`, { json: { name, html: DASHBOARD_HTML, queries: { items: "SELECT name FROM items ORDER BY id" } } });
   // Saving refuses a malformed param, so one is put into the stored copy as it is read.
   await page.route(`**/api/dashboards/${encodeURIComponent(name)}?*`, async (route) => {
@@ -160,7 +160,7 @@ test("a query naming an each param is the rows of every value", async ({ page, s
 
 test("rename and delete a saved dashboard", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
-  const tag = crypto.randomUUID().slice(0, 6);
+  const tag = uid(6);
   const [name, renamed] = [`ren ${tag}`, `ren ${tag} 2026`];
   await openDashboard(page, baseURL, { name, html: DASHBOARD_HTML, queries: { items: "SELECT name FROM items ORDER BY id" } });
   await expect(dashboardFrame(page).locator("#out")).toHaveText("alpha,beta,gamma");

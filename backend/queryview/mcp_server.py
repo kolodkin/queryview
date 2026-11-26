@@ -160,15 +160,18 @@ async def session_info(session_id: str) -> dict[str, Any]:
     "created_by", "locked", "database", "databases", "workspace",
     "tables": [{name, ...}]}; a disconnected session
     has "connected": False and no connection fields; "tables" is empty until a
-    database is selected, and on a locked connection ("locked": True), which
-    the agent may not query at all. Unknown session → {"ok": False, "message"}.
+    database is selected. A session on a locked connection, which the agent may
+    not query at all, returns only {"ok", "connected", "locked": True,
+    "workspace", "tables": []}. Unknown session → {"ok": False, "message"}.
     """
     rec = await sessions.get_session_rec(session_id) if session_id else None
     if rec is None:
         return {"ok": False, "message": "unknown session"}
     info: dict[str, Any] = {"ok": True, "workspace": rec.workspace, **await get_session(session_id)}
     info.pop("unlocked", None)  # the tab's business, not the agent's
-    if info["connected"]:
+    if info.get("locked"):  # hidden from the agent: only that the session is on one
+        info = {"ok": True, "workspace": rec.workspace, "connected": True, "locked": True, "tables": []}
+    elif info["connected"]:
         info["connection"] = info.pop("name")
         listed = await list_tables(session_id)  # not ok until a database is picked
         tables: list[dict[str, Any]] = listed.get("tables") or []
@@ -314,7 +317,7 @@ async def select_database(session_id: str, database: str) -> dict[str, Any]:
         return _failed("not connected")
     r = await connect_select_database(session_id, database)
     if not r["ok"]:
-        return {"ok": False, "message": r["message"], "database": cur["database"]}
+        return {"ok": False, "message": r["message"], "database": None if cur.get("locked") else cur["database"]}
     return {"ok": True, "message": "selected", "database": database}
 
 
@@ -409,7 +412,7 @@ async def push_dashboard(
     placeholders (kinds value / identifier / dimension / text / each, `options`
     or `options_sql`, `default: none`; a query naming an `each` runs once per
     option, rows stacked); the page gets them as `window.params` and
-    re-runs with `window.setParams({...})`. See docs/dashboard.md.
+    re-runs with `window.setParams({...})`. See docs/system/dashboard.md.
 
     The HTML may use `<qv-select-view query="name">` (a paged results table
     over that query, with `<template column="col">` children designing cells
@@ -460,7 +463,10 @@ async def push_dashboard(
             "ok": pushed,
             "pushed": pushed,
             "message": message,
-            "database": await sessions.database_of(session_id),
+            # A refused push on a locked connection names no database.
+            "database": None
+            if not pushed and (await get_session(session_id)).get("locked")
+            else await sessions.database_of(session_id),
         },
     )
 
@@ -579,7 +585,7 @@ def _push_failed(message: str) -> dict[str, Any]:
 @mcp.tool()
 async def new_tab(name: str, ctx: Context) -> dict[str, Any]:
     """A fresh QueryView session for your work and the link that shows it (see
-    docs/mcp.md, "Tabs"). Open `url` in the user's browser yourself: `open
+    docs/system/mcp.md, "Tabs"). Open `url` in the user's browser yourself: `open
     <url>` on macOS, `xdg-open <url>` on Linux; otherwise give the user the
     link. The tab lists as "Agent › <name>", arms itself on load and is gone
     once closed. Connect it with use_connection or add_connection, then push

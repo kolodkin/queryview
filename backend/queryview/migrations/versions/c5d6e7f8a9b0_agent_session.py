@@ -1,4 +1,4 @@
-"""sessions: seed the standing Agent session (docs/session.md#the-agent-session)
+"""sessions: seed the standing Agent session (docs/system/session.md#sessions-and-the-agent)
 
 Revision ID: c5d6e7f8a9b0
 Revises: b4c5d6e7f8a9

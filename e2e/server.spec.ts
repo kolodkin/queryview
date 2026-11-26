@@ -1,7 +1,7 @@
 import { type Download, type Page } from "@playwright/test";
 import { dashboardFrame, expect, holdRoute, startViewer, test, type Dash, type Viewer } from "./fixtures";
 
-// The viewer server (docs/viewer_server): display only, on its own entrypoint.
+// The viewer server (docs/system/viewer_server.md): display only, on its own entrypoint.
 
 const ITEMS: Dash = {
   name: "items",

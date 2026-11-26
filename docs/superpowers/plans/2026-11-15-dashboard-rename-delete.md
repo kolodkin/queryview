@@ -139,8 +139,8 @@ Rename: `window.prompt('Rename dashboard to:', name)?.trim()`; skip if empty or 
 ### Task 5: Docs
 
 **Files:**
-- Modify: `docs/dashboard.md` (page bullets + sketch toolbar), `docs/gitsync.md` (UI, API, MCP list; add "Only a user's Save, Rename or Delete commits; agent pushes, Import and Restore never do"), `docs/api.md` (routes table, drop `/api/git/store`), `docs/mcp.md:108` (drop `git_store`), `docs/future.md` (remove the Rename and delete bullet)
+- Modify: `docs/system/dashboard.md` (page bullets + sketch toolbar), `docs/system/gitsync.md` (UI, API, MCP list; add "Only a user's Save, Rename or Delete commits; agent pushes, Import and Restore never do"), `docs/architecture/api.md` (routes table, drop `/api/git/store`), `docs/system/mcp.md:108` (drop `git_store`), `docs/future.md` (remove the Rename and delete bullet)
 
-- [ ] **Step 1:** Load the `docs-writing` skill, then edit.
+- [ ] **Step 1:** Load the `vmodel` skill, then edit.
 - [ ] **Step 2: Verify** `grep -rn "git_store\|api/git/store\|git-commit" docs frontend/src backend e2e` → no hits outside `docs/superpowers/`.
 - [ ] **Step 3: Commit** `git commit -m "Docs: dashboard rename/delete; only user actions commit"`

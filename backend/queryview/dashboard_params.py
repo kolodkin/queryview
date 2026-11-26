@@ -1,7 +1,7 @@
 """Dashboard parameters: selectors declared in a dashboard's `params` and
 substituted into its queries via `{name}` placeholders.
 
-See docs/dashboard.md — "Dashboard parameters".
+See docs/system/dashboard.md — "Dashboard parameters".
 
     value       a literal: {region} -> 'eu'
     identifier  a table/column: {field} -> "city"

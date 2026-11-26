@@ -1,6 +1,6 @@
 // `<qv-select-view query>`: a paged results table over one of the dashboard's
 // queries, with field and order-by pickers and CSV. It never holds SQL: every
-// run asks the host by query name. See docs/dashboard.md, "Widgets".
+// run asks the host by query name. See docs/system/dashboard.md, "Widgets".
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 

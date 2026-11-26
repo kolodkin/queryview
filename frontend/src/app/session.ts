@@ -1,7 +1,8 @@
 // The session client: attach/heartbeat/release, the in-memory mirror every view
 // reads, and queued write-back. The server owns the state; this module keeps
 // a local copy so the UI renders from it synchronously and a patch in flight is
-// never something the user waits on. See docs/session.md.
+// never something the user waits on. A reply that read the session before a
+// switch finished is dropped, never adopted. See docs/system/session.md.
 
 import { apiFetch, postJson } from './api'
 import { SESSION_KEY, TAB_KEY, tabRead, tabWrite } from './tabStorage'
@@ -264,13 +265,15 @@ export async function flushPatches(): Promise<void> {
 // Runs a switch of session, connection or database with no heartbeat
 // overlapping it: the beat in flight lands first, none starts until `f`
 // settles. A beat straddling the switch would adopt the row from before it —
-// claiming the old session back, or handing the shell the old database.
+// claiming the old session back, or handing the shell the old database. A
+// patch reply sent before the switch ends is dropped for the same reason.
 export async function withoutHeartbeat<T>(f: () => Promise<T>): Promise<T> {
   holds++
   try {
     await beating
     return await f()
   } finally {
+    localGen++
     holds--
   }
 }

@@ -88,7 +88,7 @@ function ExplorerView({ connection }: { connection: Connection | null }) {
   // Sidebar width, dragged on its right edge and remembered across reloads so
   // long table names stay readable.
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth)
-  // Folder mode's glob entries: union_by_name on or off (docs/explorer.md).
+  // Folder mode's glob entries: union_by_name on or off (docs/system/explorer.md).
   const [union, setUnion] = useState(loadUnionByName)
   // Folder mode's list limit; the backend reads it from the session.
   const maxEntriesField = useNumberSetting(MAX_ENTRIES)
