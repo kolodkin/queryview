@@ -4,6 +4,13 @@ import { useLocation, useSearchParams } from 'react-router-dom'
 import {
   DashboardFrame,
   answerSnapshot,
+  connectionNames,
+  entrySql,
+  federate,
+  isFederated,
+  unfederate,
+  withConnection,
+  withSql,
   answerWidget,
   listenToFrame,
   markedRuns,
@@ -13,7 +20,9 @@ import {
   widgetQueryNames,
   withKeptText,
   type DashboardResults,
+  type FederatedConnection,
   type PendingSnapshot,
+  type QueryEntry,
   type ResolvedParam,
   type WidgetPost,
 } from '../core'
@@ -25,12 +34,15 @@ import DashboardSqlPanel from './DashboardSqlPanel'
 import { announceGitSync, gitStatus, onGitSync } from './gitsync'
 import { activeWorkspace, patchView, viewState } from './session'
 import { queryViewHtml, sharedPost } from './widgetHost'
+import { fetchConnections } from './savedConnections'
 
-// A dashboard names no connection: it runs on the viewing session's.
+// An unfederated dashboard's queries are SQL strings, run on the viewing
+// session's connection; a federated one's name each query's connection
+// (core/dashboard/entries.ts).
 export type DashboardPush = {
   name: string
   html: string
-  queries: Record<string, string>
+  queries: Record<string, QueryEntry>
   // Selector specs (docs/system/dashboard.md, "Dashboard parameters").
   params?: unknown[]
 }
@@ -44,18 +56,22 @@ function runError(data: { reason?: string; message?: string }): string {
   return data.message ?? 'Failed to run queries.'
 }
 
-type RunReply =
+// `connections` comes with a federated run, failed or not: the pill's rows.
+type RunReply = { connections?: FederatedConnection[] } &
   // `warning` names the params the backend left out as malformed; the rest still ran.
-  | { ok: true; results: DashboardResults; params: ResolvedParam[]; warning?: string }
-  // `params` survives a failing query, so the page keeps its selectors.
-  | { ok: false; message: string; params?: ResolvedParam[]; warning?: string }
+  (
+    | { ok: true; results: DashboardResults; params: ResolvedParam[]; warning?: string }
+    // `params` survives a failing query, so the page keeps its selectors.
+    | { ok: false; message: string; params?: ResolvedParam[]; warning?: string }
+  )
 
-// Run a dashboard's query templates on the session's connection. The backend
+// Run a dashboard's query templates on the session's connection, or a
+// federated one's on the connections they name. The backend
 // resolves the selectors from `values`, substitutes, and holds back a query
 // still waiting on a choice (`default: none`); shared by the load, set-params
 // and Execute.
 async function runDashboard(
-  queries: Record<string, string>,
+  queries: Record<string, QueryEntry>,
   params: unknown[] | undefined,
   values: Record<string, string>,
 ): Promise<RunReply> {
@@ -67,10 +83,12 @@ async function runDashboard(
     const data = await res.json().catch(() => ({}))
     const resolved = data.params as ResolvedParam[] | undefined
     const warning = typeof data.warning === 'string' ? data.warning : undefined
+    const connections = data.connections as FederatedConnection[] | undefined
     if (!res.ok || !data.ok)
-      return { ok: false, message: runError(data), params: resolved, warning }
+      return { ok: false, message: runError(data), params: resolved, warning, connections }
     return {
       ok: true,
+      connections,
       results: (data.results ?? {}) as DashboardResults,
       params: resolved ?? [],
       warning,
@@ -91,15 +109,15 @@ function restoredDraft(params: URLSearchParams): DashboardPush | null {
   if (params.has('name') || params.has('new')) return null
   const d = viewState(VIEW).draft as { html?: unknown; queries?: unknown } | null | undefined
   if (!d || typeof d.html !== 'string' || !d.queries || typeof d.queries !== 'object') return null
-  return { name: '', html: d.html, queries: d.queries as Record<string, string>, params: [] }
+  return { name: '', html: d.html, queries: d.queries as Record<string, QueryEntry>, params: [] }
 }
 
 // A query a <qv-select-view> names is the widget's alone: it runs per widget,
 // paged, so it is left out of the up-front run and of `window.queries`.
 function withoutWidgetQueries(
-  queries: Record<string, string>,
+  queries: Record<string, QueryEntry>,
   html: string,
-): Record<string, string> {
+): Record<string, QueryEntry> {
   const owned = new Set(widgetQueryNames(html))
   return Object.fromEntries(Object.entries(queries).filter(([name]) => !owned.has(name)))
 }
@@ -114,6 +132,9 @@ function DashboardView({
   onPushConsumed,
   runOn,
   remoteId = null,
+  activeConnection = null,
+  onFederated,
+  rerunNonce = 0,
 }: {
   pushed?: DashboardPush | null
   onPushConsumed?: () => void
@@ -121,6 +142,13 @@ function DashboardView({
   runOn?: string | null
   // The armed remote session, for the query popup's edit lock.
   remoteId?: string | null
+  // The session's connection name: what Federated gives every query.
+  activeConnection?: string | null
+  // A federated dashboard's connections for the shell's pill (names, then
+  // the last full run's statuses); null for an unfederated one or none.
+  onFederated?: (connections: FederatedConnection[] | string[] | null) => void
+  // Bumped by the shell after an Unlock: re-run, as Execute with nothing edited.
+  rerunNonce?: number
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const name = searchParams.get('name') ?? ''
@@ -150,7 +178,11 @@ function DashboardView({
   const snapshotRef = useRef<PendingSnapshot | null>(null)
   // The SQL as last run (load or Execute). The frame's widgets and param
   // re-runs use this, so a half-typed edit in the query popup never runs.
-  const executedRef = useRef<Record<string, string>>({})
+  const executedRef = useRef<Record<string, QueryEntry>>({})
+  // A kind or connection change since the last run: Execute re-runs everything.
+  const rerunAllRef = useRef(false)
+  // The instance's connection names, for the query popup's drop-down.
+  const [connectionList, setConnectionList] = useState<string[]>([])
   // The page-query results the frame holds as `window.queries`.
   const shownRef = useRef<DashboardResults>({})
   // The open dashboard with unsaved SQL-panel edits, or null.
@@ -353,11 +385,13 @@ function DashboardView({
       // editor and re-runs the SQL as last executed.
       if (dash !== editedRef.current) executedRef.current = dash.queries
       const executed = executedRef.current
+      report(executed)
 
       setLoading(true)
       try {
         const r = await runDashboard(withoutWidgetQueries(executed, dash.html), dash.params, {})
         if (cancelled) return
+        report(executed, r)
         if (r.ok) {
           setParams(r.params)
           resolvedRef.current = r.params
@@ -375,6 +409,8 @@ function DashboardView({
     return () => {
       cancelled = true
     }
+    // report reads only its arguments and the shell's setter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, localPush, runOn, reloadNonce])
 
   // Re-run the open dashboard's own queries, as last executed, and build the
@@ -412,6 +448,8 @@ function DashboardView({
     const executed = executedRef.current
     const queries = only ? Object.fromEntries(only.map((n) => [n, executed[n]])) : executed
     const r = await runDashboard(withoutWidgetQueries(queries, dash.html), dash.params, sent)
+    // A partial run's reply covers only its queries: the pill keeps the last full one.
+    if (!only) report(executed, r)
     if (r.params) resolvedRef.current = r.params
     if (!r.ok)
       return { type: 'params-results', ok: false, message: r.message, params: r.params ?? [] }
@@ -430,12 +468,60 @@ function DashboardView({
   // switch) keeps it in the editor; nothing runs it until Execute.
   function editQuery(query: string, sql: string) {
     if (!active) return
-    const next = { ...active, queries: { ...active.queries, [query]: sql } }
+    edit({
+      ...active,
+      queries: { ...active.queries, [query]: withSql(active.queries[query], sql) },
+    })
+  }
+
+  function edit(next: DashboardPush) {
     editedRef.current = next
     setActive(next)
     // Queued; written when the query popup is left (its edit lock flushes).
     if (!next.name) patchView(VIEW, { draft: { html: next.html, queries: next.queries } })
   }
+
+  // The query popup's connection drop-down.
+  function setConnection(query: string, connection: string) {
+    if (!active) return
+    rerunAllRef.current = true
+    const queries = {
+      ...active.queries,
+      [query]: withConnection(active.queries[query], connection),
+    }
+    edit({ ...active, queries })
+  }
+
+  // The Federated checkbox: the whole dashboard changes kind, on the session's
+  // connection, else the instance's first.
+  function setFederated(on: boolean) {
+    if (!active) return
+    const params = active.params ?? []
+    const connection = activeConnection ?? connectionList[0]
+    if (on && !connection) return
+    rerunAllRef.current = true
+    const next = on
+      ? federate(active.queries, params, connection)
+      : unfederate(active.queries, params)
+    edit({ ...active, ...next })
+  }
+
+  // The pill's connections for `queries` as run, with `r`'s statuses once it answered.
+  function report(queries: Record<string, QueryEntry>, r?: RunReply) {
+    onFederated?.(isFederated(queries) ? (r?.connections ?? connectionNames(queries)) : null)
+  }
+  useEffect(() => () => onFederated?.(null), [onFederated])
+
+  useEffect(() => {
+    if (!showSql) return
+    let live = true
+    fetchConnections()
+      .then((list) => live && setConnectionList(list.map((c) => c.name)))
+      .catch(() => {})
+    return () => {
+      live = false
+    }
+  }, [showSql])
 
   // Execute from the query popup: post into the live frame rather than rebuild
   // it, so the page keeps its state; its widgets re-query on the same message.
@@ -444,17 +530,31 @@ function DashboardView({
     const before = executedRef.current
     const changed = Object.keys(active.queries).filter((n) => active.queries[n] !== before[n])
     executedRef.current = active.queries
-    const only = changed.length ? changed : null
+    const only = changed.length && !rerunAllRef.current ? changed : null
+    rerunAllRef.current = false
+    await refresh(active, only)
+  }
+
+  // Re-run `only` of the executed queries, or all of them, into the live frame.
+  async function refresh(dash: DashboardPush, only: string[] | null) {
     const frame = frameRef.current
     if (!frame) {
       setReloadNonce((n) => n + 1)
       return
     }
     // Nothing edited: Execute refreshes everything.
-    const answer = await marked(() => rerun(active, null, only))
+    const answer = await marked(() => rerun(dash, null, only))
     // The page keeps its last results; the failure shows above it.
     if (answer) setError(answer.ok ? null : String(answer.message))
   }
+
+  // After an Unlock in the shell: the queries as last executed, all of them.
+  const firstNonce = useRef(rerunNonce)
+  useEffect(() => {
+    if (rerunNonce !== firstNonce.current && active) void refresh(active, null)
+    // Only the nonce asks; `active` is read as it is then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rerunNonce])
 
   // A re-run's results go to the dashboard's frame and the query popup's at
   // the same moment: their tables re-query on it, and an identical page they
@@ -498,9 +598,19 @@ function DashboardView({
       // hasOwn: a name like `constructor` must not find Object's own.
       if (!Object.hasOwn(executedRef.current, req.query))
         return { ok: false, message: `Unknown query “${req.query}”` }
-      const query = executedRef.current[req.query]
+      const entry = executedRef.current[req.query]
+      const query = entrySql(entry)
       if (!query.trim()) return { ok: false, message: 'Enter a query.' }
-      const body = { query, params, values: valuesOf(resolvedRef.current), ...widgetPage(req) }
+      // A federated query pages on its own connection.
+      const on =
+        typeof entry === 'string' ? {} : { connection: entry.connection, database: entry.database }
+      const body = {
+        query,
+        ...on,
+        params,
+        values: valuesOf(resolvedRef.current),
+        ...widgetPage(req),
+      }
       // Shared: the same page asked for by both frames runs once.
       return sharedPost(runOn ?? '', `/api/db/${kind}`, body)
     }
@@ -624,6 +734,10 @@ function DashboardView({
       {showSql && active && (
         <DashboardSqlPanel
           queries={active.queries}
+          federated={isFederated(active.queries)}
+          onFederated={setFederated}
+          onConnection={setConnection}
+          connections={connectionList}
           onChange={editQuery}
           onExecute={() => void execute()}
           onClose={() => setShowSql(false)}

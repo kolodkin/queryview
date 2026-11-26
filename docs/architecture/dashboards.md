@@ -42,7 +42,7 @@ any query runs, on the requesting session:
    `orders: connection "warehouse" is locked`.
 3. The database is the entry's `database`; else the session's selected one
    when the name is its active connection; else the saved connection's
-   stored one. None on a driver that needs one:
+   stored one; else the one its config pins. None on a driver that needs one:
    `orders: no database selected on "warehouse"`.
 
 A failed lookup fails the query (`reason: query`), or for an `options_sql`,

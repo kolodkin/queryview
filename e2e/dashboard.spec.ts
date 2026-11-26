@@ -355,7 +355,8 @@ test("a locked and an unknown connection show in the pill, and Unlock opens the 
     await page.getByTestId("passphrase-input").fill(passphrase);
     await page.getByTestId("passphrase-submit").click();
     await expect(rows.filter({ hasText: pg.name })).toContainText("🟢");
-    await expect(dashboardFrame(page).locator("#pg")).toHaveText("from-postgres");
+    // Runs fail fast: the unknown connection's query still fails the dashboard.
+    await expect(page.getByTestId("dashboard-error")).toContainText(`gone: unknown connection "${missing}"`);
   } finally {
     await api(`${baseURL}/api/db/lock`, { method: "DELETE", json: { name: pg.name, passphrase: "open sesame" }, ok: false });
     await pg.drop();

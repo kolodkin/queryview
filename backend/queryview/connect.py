@@ -436,7 +436,8 @@ async def connection_target(
     """Where a query naming connection `name` runs for session `sid`:
     `(type, config, database)`, or `(status, message)`. The database is
     `database`, else the session's selected one when `name` is its active
-    connection, else the stored one. See docs/architecture/dashboards.md —
+    connection, else the stored one, else the one its config pins (the only
+    one it opens). See docs/architecture/dashboards.md —
     "Which connection, which database"."""
     await _ensure_session(sid)  # also applies the session's settings, its query timeout among them
     found = await _resolve(sid, name)
@@ -452,6 +453,7 @@ async def connection_target(
             database = s.database
         elif not session_owned and (stored := await _connection_by_name(name)) is not None:
             database = stored.database
+    database = database or getattr(config, "database", None) or None
     if DRIVERS[conn_type].requires_database and not database:
         return "failed", f'no database selected on "{name}"'
     return conn_type, config, database

@@ -5,6 +5,7 @@ fail-fast on the first failing query."""
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -490,6 +491,26 @@ def test_a_connection_that_needs_a_database_and_has_none(monkeypatch):
     out = asyncio.run(run_dashboard("s-no-db", ORDERS, [], {}))
     assert (out["ok"], out["reason"], out["message"]) == (False, "query", 'orders: no database selected on "warehouse"')
     assert out["connections"][0]["status"] == "failed"
+
+
+class _PinnedDriver(_WarehouseDriver):
+    """Its config pins a database, as a Postgres one with `database` set does."""
+
+    def config_to_dict(self, c):
+        return vars(c)
+
+    def config_from_dict(self, d):
+        return SimpleNamespace(**d)
+
+
+# req: architecture/dashboards/named-connection
+def test_a_connection_whose_config_pins_a_database_runs_on_it(monkeypatch):
+    wh = _PinnedDriver(requires_database=True)
+    monkeypatch.setitem(DRIVERS, "whfake", wh)
+    pinned = SimpleNamespace(database="reporting")
+    assert asyncio.run(connect.connect_new("s-pin-owner", "warehouse", pinned, "whfake"))["ok"]
+    assert asyncio.run(run_dashboard("s-pin-other", ORDERS, [], {}))["ok"]
+    assert wh.databases == ["reporting"]
 
 
 # req: architecture/dashboards/named-connection
