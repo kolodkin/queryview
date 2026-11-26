@@ -14,8 +14,8 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .connect import _gated_session
-from .dashboard_entries import Entry, entry_connection, entry_sql
+from .connect import _gated_session, connection_target
+from .dashboard_entries import MIXED, Entry, entry_connection, entry_sql, is_federated
 from .dashboard_params import (
     Dialect,
     Param,
@@ -312,20 +312,50 @@ async def run_dashboard_on(
     return reply({**r, "params": resolved})
 
 
+def session_lookup(sid: str) -> Lookup:
+    """The app's Lookup: `connect.connection_target` on session `sid`."""
+
+    async def lookup(name: str, database: str | None) -> Target | LookupError_:
+        found = await connection_target(sid, name, database)
+        if len(found) == 2:
+            return LookupError_(*found)
+        conn_type, config, db = found
+        return Target(DRIVERS[conn_type], config, db)
+
+    return lookup
+
+
+def _federated(queries: Mapping[str, Entry], params: object) -> bool | dict[str, Any]:
+    """Whether the dashboard is federated, or a mixed one's failed reply."""
+    try:
+        return is_federated(queries, params)
+    except ValueError:
+        return {"ok": False, "reason": "query", "message": MIXED}
+
+
 async def run_dashboard_queries(
     sid: str,
-    queries: dict[str, str],
+    queries: Mapping[str, Entry],
     limit: int = DASHBOARD_ROW_CAP,
     offset: int = 0,
 ) -> dict[str, Any]:
     """run_queries_on session `sid`'s connection and selected database. Not
     connected or no database selected fails first (`reason`: no-session /
-    no-database)."""
+    no-database). A federated dashboard runs as run_dashboard's, from row 0."""
+    federated = _federated(queries, None)
+    if isinstance(federated, dict):
+        return federated
+    if federated:
+        r = await run_dashboard_on(None, session_lookup(sid), queries, [], {}, limit)
+        r.pop("params", None)
+        return r
     s, err = await _gated_session(sid)
     if s is None:
         return err  # type: ignore[return-value]
     target = Target(DRIVERS[s.type], s.config, s.database)
-    return await run_queries_on(dict.fromkeys(queries, target), queries, limit, offset)
+    return await run_queries_on(
+        dict.fromkeys(queries, target), {n: entry_sql(e) for n, e in queries.items()}, limit, offset
+    )
 
 
 async def _no_options(p: Param, sql: str) -> list[Any]:
@@ -335,7 +365,13 @@ async def _no_options(p: Param, sql: str) -> list[Any]:
 async def run_dashboard(
     sid: str, queries: Mapping[str, Entry], params: object, values: dict[str, str], limit: int = DASHBOARD_ROW_CAP
 ) -> dict[str, Any]:
-    """run_dashboard_on session `sid`'s connection and selected database."""
+    """run_dashboard_on session `sid`'s connection and selected database; a
+    federated dashboard on the connections it names, with no session gate."""
+    federated = _federated(queries, params)
+    if isinstance(federated, dict):
+        return federated
+    if federated:
+        return await run_dashboard_on(None, session_lookup(sid), queries, params, values, limit)
     declared = parse_params(params)
     if not queries and not any(p.options_sql for p in declared):
         # Nothing touches the database: no session, runner or dialect is used,

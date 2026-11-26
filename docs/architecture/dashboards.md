@@ -11,7 +11,16 @@ values. The backend resolves each selector's options and value, substitutes
 them into the queries, and runs each one on the session's connection and
 selected database (wrapped in a paginated subselect capped at 1000 rows). It
 returns column-oriented results and the resolved selectors. Up to five queries
-run at once. Switching the connection or database re-runs them.
+run at once, across connections. Switching the connection or database re-runs them.
+
+A [federated](../system/dashboard.md#the-push_dashboard-mcp-tool) dashboard's queries and
+`options_sql` each run on the connection they name instead, with no session
+gate: it runs in a disconnected session, or one on a locked connection. Its
+reply, failed or not, carries `connections`, one entry per named connection
+in first-use order: `{name, database, status, queries, message?}`, `status`
+being `ok`, `failed` (a query on it failed, or it has no database), `locked`
+or `unknown`. A mixed body is a `400`:
+`every query and options_sql names a connection, or none does`.
 
 <!-- req: fail-fast -->
 It is **fail-fast**: if any query fails, or the session is not connected or has
@@ -20,6 +29,27 @@ dashboard-level error banner instead of partial panels. On success every named
 query is present in `window.queries`. A failing query's message is prefixed with
 its panel name (e.g. `churn: Unknown table …`) so it's clear which one to fix. When
 several fail, the first in the dashboard's order is the one reported.
+
+## Which connection, which database
+
+<!-- req: named-connection -->
+Each `(connection, database)` a federated run names is looked up once, before
+any query runs, on the requesting session:
+
+1. The name resolves to this session's session connection, else the saved
+   one. None: `orders: unknown connection "warehouse"`.
+2. A locked saved connection needs this tab's unlock token. Without it:
+   `orders: connection "warehouse" is locked`.
+3. The database is the entry's `database`; else the session's selected one
+   when the name is its active connection; else the saved connection's
+   stored one. None on a driver that needs one:
+   `orders: no database selected on "warehouse"`.
+
+A failed lookup fails the query (`reason: query`), or for an `options_sql`,
+its params (`reason: params`). Placeholders are quoted in the dialect of the
+connection the SQL runs on. A [widget](../system/dashboard.md#widgets) over a
+federated query sends `connection` and `database` to `/api/db/query` and
+`/api/db/describe`, which apply the same lookup.
 
 ## Isolation & security
 

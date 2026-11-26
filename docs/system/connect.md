@@ -178,6 +178,8 @@ server issues for the passphrase and keeps in memory per session, kept in
 `sessionStorage` (`qv_token`) and sent as `X-QV-Token` on every request.
 Locking hands the locking tab its token, so the connection it is on keeps
 working.
+A [federated dashboard](./dashboard.md#the-push_dashboard-mcp-tool) naming a
+locked connection runs its queries only from a tab holding that token.
 
 - **Opening** a locked card lands on it like any other; the shell then asks
   for the passphrase unless the tab holds a token for it, as it does when a

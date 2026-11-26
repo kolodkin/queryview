@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from queryview import remote, sessions
 from queryview.conftest import app
 from queryview.connect import _data_dir, _save_active_connection
-from queryview.dashboard_entries import MIXED
+from queryview.dashboard_entries import MIXED, Entry
 from queryview.dashboards import (
     delete_dashboard,
     get_dashboard,
@@ -46,7 +46,7 @@ def test_upsert_creates_then_updates_by_name(default_ws_id):
 
 
 def test_get_dashboard_round_trips_queries_dict(default_ws_id):
-    queries = {"sales": "SELECT * FROM sales", "users": "SELECT count() FROM users"}
+    queries: dict[str, Entry] = {"sales": "SELECT * FROM sales", "users": "SELECT count() FROM users"}
     _run(upsert_dashboard("multi", "<div></div>", queries, workspace_id=default_ws_id))
     got = _run(get_dashboard("multi", default_ws_id))
     assert got is not None

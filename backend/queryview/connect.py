@@ -430,6 +430,33 @@ async def _resolve(sid: str, name: str) -> tuple[str, DriverConfig] | None:
     return (stored.type, stored.config) if stored is not None else None
 
 
+async def connection_target(
+    sid: str, name: str, database: str | None
+) -> tuple[str, DriverConfig, str | None] | tuple[str, str]:
+    """Where a query naming connection `name` runs for session `sid`:
+    `(type, config, database)`, or `(status, message)`. The database is
+    `database`, else the session's selected one when `name` is its active
+    connection, else the stored one. See docs/architecture/dashboards.md —
+    "Which connection, which database"."""
+    found = await _resolve(sid, name)
+    if found is None:
+        return "unknown", f'unknown connection "{name}"'
+    conn_type, config = found
+    session_owned = _session_conn(sid, name) is not None
+    if not session_owned and await _lock_hash_of(name) is not None and not _is_unlocked(sid, name):
+        return "locked", f'connection "{name}" is locked'
+    if database is None:
+        await _ensure_session(sid)
+        s = _get_session_entry(sid)
+        if s is not None and s.name == name:
+            database = s.database
+        elif not session_owned and (stored := await _connection_by_name(name)) is not None:
+            database = stored.database
+    if DRIVERS[conn_type].requires_database and not database:
+        return "failed", f'no database selected on "{name}"'
+    return conn_type, config, database
+
+
 def parse_driver_config(body: dict[str, Any]) -> tuple[str, DriverConfig | None, str | None]:
     """(type, config, error) from a body's `type` and driver fields."""
     raw_type = body.get("type")
