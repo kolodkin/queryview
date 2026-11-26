@@ -50,14 +50,6 @@ def _sendable(text: str) -> bool:
     return True
 
 
-def clean_queries(raw: object) -> dict[str, str]:
-    """Keep only string→string entries with a non-empty name and SQL; ignore
-    anything else so a malformed `queries` map can't reach the runner."""
-    if not isinstance(raw, dict):
-        return {}
-    return {k: v for k, v in raw.items() if isinstance(k, str) and k and isinstance(v, str) and v.strip()}
-
-
 def clean_values(raw: object) -> dict[str, str]:
     """A request's param values: the string entries of a mapping, a number or
     boolean as the text the page would send, the rest dropped."""

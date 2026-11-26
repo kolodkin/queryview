@@ -14,6 +14,7 @@ from urllib.parse import unquote
 
 import yaml
 
+from .dashboard_entries import is_federated, queries_error
 from .dashboards import get_dashboard, list_dashboards, list_dashboards_full, upsert_dashboards
 from .validation import dashboard_params_error
 from .workspaces import WorkspaceRec
@@ -129,12 +130,17 @@ def dashboard_from_data(
     # viewing session's connection.
     html = _require_str(data, "html", where) if require_html else str(data.get("html") or "")
     queries = data.get("queries") or {}
-    if not isinstance(queries, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in queries.items()):
-        raise YamlIOError(f"malformed {where}: queries must be a {{name: SQL}} map")
+    qerr = queries_error(queries)
+    if qerr is not None:
+        raise YamlIOError(f"malformed {where}: {qerr}")
     params = data.get("params") or []
     perr = dashboard_params_error(params)
     if perr is not None:
         raise YamlIOError(f"malformed {where}: {perr}")
+    try:
+        is_federated(queries, params)
+    except ValueError as e:
+        raise YamlIOError(f"malformed {where}: {e}") from e
     return {"name": name, "html": html, "queries": queries, "params": params}
 
 

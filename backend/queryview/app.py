@@ -41,8 +41,8 @@ from .connect import (
     session_settings,
     unlock_connection,
 )
+from .dashboard_entries import MIXED, clean_queries, is_federated
 from .dashboard_queries import (
-    clean_queries,
     clean_values,
     resolved_part,
     run_dashboard,
@@ -591,6 +591,10 @@ async def dashboards_upsert(request: Request):
     perr = dashboard_params_error(params)
     if perr is not None:
         return JSONResponse({"ok": False, "message": perr}, status_code=400)
+    try:
+        is_federated(queries, params)
+    except ValueError:
+        return JSONResponse({"ok": False, "message": MIXED}, status_code=400)
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws

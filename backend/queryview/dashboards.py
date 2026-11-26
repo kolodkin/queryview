@@ -13,6 +13,7 @@ from sqlmodel import Field, SQLModel, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from .connect import _engine_for_db, _ensure_schema, _now_ms
+from .dashboard_entries import Entry
 
 
 class Dashboard(SQLModel, table=True):
@@ -56,7 +57,7 @@ async def upsert_dashboards(items: list[dict[str, Any]], *, workspace_id: int) -
 async def upsert_dashboard(
     name: str,
     html: str,
-    queries: dict[str, str],
+    queries: dict[str, Entry],
     params: list[dict[str, Any]] | None = None,
     *,
     workspace_id: int,
@@ -170,7 +171,7 @@ async def list_dashboards_full(workspace_id: int) -> list[dict[str, Any]]:
 
 
 def _dashboard_event(
-    name: str, html: str, queries: dict[str, str], params: list[dict[str, Any]] | None = None
+    name: str, html: str, queries: dict[str, Entry], params: list[dict[str, Any]] | None = None
 ) -> dict[str, Any]:
     """The SSE payload the browser renders for a pushed dashboard."""
     return {

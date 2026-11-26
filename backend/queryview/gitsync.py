@@ -19,6 +19,7 @@ import yaml
 
 from . import connect
 from .connect import _data_dir
+from .dashboard_entries import Entry
 from .dashboards import (
     _dashboard_event,
     delete_dashboard,
@@ -568,7 +569,7 @@ async def save_and_push(
     ws: WorkspaceRec,
     name: str,
     html: str,
-    queries: dict[str, str],
+    queries: dict[str, Entry],
     session_id: str | None,
     params: list[dict[str, Any]] | None = None,
 ) -> tuple[bool, bool, str]:

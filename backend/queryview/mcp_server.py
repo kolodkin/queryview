@@ -11,7 +11,7 @@ from typing import Any
 
 from mcp.server.mcpserver import Context, MCPServer
 
-from . import dashboard_queries, gitsync, remote, sessions
+from . import dashboard_entries, dashboard_queries, gitsync, remote, sessions
 from .connect import (
     _data_dir,
     _gated_session,
@@ -515,7 +515,7 @@ async def run_dashboard(
             return {"ok": False, "message": str(e)}
         queries = d["queries"]
         params = d["params"] if params is None else params
-    queries = dashboard_queries.clean_queries(queries)  # a blank one is skipped, as on the page
+    queries = dashboard_entries.clean_queries(queries)  # a blank one is skipped, as on the page
     if not queries:
         return {"ok": False, "message": "no runnable query in `dir`" if dir else "pass `queries`, or `dir`"}
     perr = dashboard_params_error(params)
