@@ -213,12 +213,16 @@ def _param_targets(
 
 
 async def _resolve_with(
-    targets: Mapping[str, Target], params: list[Param], values: dict[str, str]
+    targets: Mapping[str, Target], params: list[Param], values: dict[str, str], failed: list[Param] | None = None
 ) -> list[dict[str, Any]]:
+    """resolve on `targets`; a param whose options_sql fails is appended to `failed`."""
+
     async def options(p: Param, sql: str) -> list[Any]:
         t = targets[p.name]
         r = await t.driver.run_query(t.config, sql, t.database, limit=DASHBOARD_ROW_CAP, offset=0, order_by=None)
         if isinstance(r, Err):
+            if failed is not None:
+                failed.append(p)
             raise ParamError(r.message)
         return [row[0] if row else None for row in r.rows.data]
 
@@ -279,7 +283,7 @@ async def run_dashboard_on(
     lookup fails it (`reason`: query, the first in order), a param's is a
     params error, and the reply carries `connections`:
     [{name, database, status, queries, message?}] in first-use order, a
-    connection whose query failed `failed` with the query's message."""
+    connection whose query or options_sql failed `failed` with its message."""
     declared = parse_params(params)
     if default is not None:
         found: dict[Pair, Target | LookupError_] = {}
@@ -291,9 +295,13 @@ async def run_dashboard_on(
     def reply(r: dict[str, Any]) -> dict[str, Any]:
         return r if connections is None else {**r, "connections": list(connections.values())}
 
+    failed_params: list[Param] = []
     try:
-        resolved = await _resolve_with(_param_targets(default, found, declared), declared, values)
+        resolved = await _resolve_with(_param_targets(default, found, declared), declared, values, failed_params)
     except ParamError as e:
+        if connections is not None and failed_params:
+            p = failed_params[0]
+            connections[_pair(p.connection, p.database)].update(status="failed", message=str(e))
         return reply(_params_error(str(e)))
     targets: dict[str, Target] = {}
     for name, entry in queries.items():

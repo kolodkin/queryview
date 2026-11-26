@@ -18,7 +18,7 @@ A [federated](../system/dashboard.md#the-push_dashboard-mcp-tool) dashboard's qu
 gate: it runs in a disconnected session, or one on a locked connection. Its
 reply, failed or not, carries `connections`, one entry per named connection
 in first-use order: `{name, database, status, queries, message?}`, `status`
-being `ok`, `failed` (a query on it failed, or it has no database), `locked`
+being `ok`, `failed` (a query or `options_sql` on it failed, or it has no database), `locked`
 or `unknown`. A mixed body is a `400`:
 `every query and options_sql names a connection, or none does`.
 

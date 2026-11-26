@@ -372,6 +372,18 @@ def test_an_unknown_connection_on_a_param_is_a_params_error():
     assert [c["status"] for c in out["connections"]] == ["unknown"]
 
 
+def test_a_failing_options_sql_fails_its_params_connection():
+    *_, lookup = _targets()
+    params = [{"name": "r", "options_sql": "fail", "connection": "warehouse"}]
+    q = {"sales": {"connection": "analytics", "sql": "SELECT {r}"}}
+    out = asyncio.run(run_dashboard_on(None, lookup, q, params, {}))
+    assert (out["ok"], out["reason"]) == (False, "params")
+    assert [(c["name"], c["status"], c.get("message")) for c in out["connections"]] == [
+        ("analytics", "ok", None),
+        ("warehouse", "failed", out["message"]),
+    ]
+
+
 def test_a_query_per_value_fans_out_on_its_own_connection():
     here, there, _, lookup = _targets()
     params = [{"name": "region", "kind": "each", "options": ["eu", "us"]}]
