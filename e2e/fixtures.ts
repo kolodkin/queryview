@@ -165,7 +165,8 @@ export async function startNewConnection(page: Page, driver: string): Promise<vo
 /** For federated dashboards: a `marks(v)` table on the worker's ClickHouse
  * ('from-clickhouse') and Postgres ('from-postgres') databases, and a saved
  * Postgres connection `name` on that database, made from another session `sid`
- * (so a tab under test holds no unlock token for it). `drop()` deletes it. */
+ * (so a tab under test holds no unlock token for it). `drop()` deletes it and
+ * the tables. */
 export async function savePostgresMarks(baseURL: string | undefined, seeds: Seeds) {
   const ch = await seeds.testDb();
   const pg = await seeds.pgDb();
@@ -180,7 +181,12 @@ export async function savePostgresMarks(baseURL: string | undefined, seeds: Seed
     json: { type: "postgres", name, host: PG_HOST, port: PG_PORT, username: PG_USER, password: PG_PASSWORD, database: pg },
     headers,
   });
-  const drop = () => api(`${baseURL}/api/db/connections`, { method: "DELETE", json: { name }, ok: false });
+  // The worker's databases are shared by its later tests (the explorer counts tables).
+  const drop = async () => {
+    await api(`${baseURL}/api/db/connections`, { method: "DELETE", json: { name }, ok: false });
+    await chExec(`DROP TABLE IF EXISTS ${ch}.marks`);
+    await dbExec("postgres", pg, "DROP TABLE IF EXISTS marks");
+  };
   return { name, sid, headers, drop };
 }
 

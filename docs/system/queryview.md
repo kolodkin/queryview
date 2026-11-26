@@ -58,12 +58,12 @@ redirects here, and `/studio` to a dashboard
   own, the agent's badged `agent`, then saved; the active one marked) switch
   on click, and **Disconnect** at the bottom drops the connection and goes to
   `/connect` (a picker-less driver's menu has just these two).
-  On a federated [dashboard](./dashboard.md#the-page-dashboard) the pill is the
-  federated one (below) instead.
   Next to it, an **agent icon** opens the remote-control popover (opt-in "Allow
   remote control"); see [mcp.md](./mcp.md). Then the
-  [**Timeout** chip](#query-timeout).
-<!-- req: federated-pill -->
+  [**Timeout** chip](#query-timeout). On a federated
+  [dashboard](./dashboard.md#the-page-dashboard) the pill is the federated one
+  (below) instead.
+  <!-- req: federated-pill -->
 - **Federated pill** — while `/dashboard` shows a federated dashboard, the
   top-left pill reads **⛓ Federated · N connections**, in any session state,
   and its list has a row per connection (status icon, name, database, query

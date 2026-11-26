@@ -80,7 +80,6 @@ you [armed](../system/mcp.md#arming-a-session).
   [federated](#federated-drafts) run needs no session connection, adds
   `connections: [{name, database, status, queries, message?}]` and has a null
   `database`.
-
 - `new_tab(name)` — a session of the agent's own; see [Tabs](../system/mcp.md#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
   <!-- req: git-tools -->
@@ -126,7 +125,7 @@ after a minute.
 connection the user [locked](../system/connect.md#locked-connections) behind a
 passphrase, the tools that query it, push to its tab, pick its database or
 switch to it refuse with `connection is locked`: `run_sql`, `run_script`,
-`run_dashboard`, `push_script`, `push_dashboard`, `open_explorer`,
+an unfederated `run_dashboard`, `push_script`, `push_dashboard`, `open_explorer`,
 `select_database` and `use_connection`. `session_info` reports only that it is locked, with no name,
 type, database or tables, and a refused tool names no database;
 `list_connections` leaves it out, and a dashboard query naming it reads as

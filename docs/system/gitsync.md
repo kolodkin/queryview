@@ -33,7 +33,7 @@ for that case is in [docker.md](../docker.md#git-sync).
 
 ```
 dashboards/{name}/dashboard.html   # the HTML, verbatim
-dashboards/{name}/queries.yaml     # {query_name: SQL}
+dashboards/{name}/queries.yaml     # {query_name: SQL or {connection, sql, database?}}
 dashboards/{name}/meta.yaml        # params, only when declared
 ```
 
@@ -43,6 +43,11 @@ key in `meta.yaml` is ignored. A dashboard needs `dashboard.html` and
 **Restore** returns 404 naming the file and a sync skips it. A sync also
 skips a folder the encoding would not write, such as `a%41` for `aA`, with a
 warning in the server log.
+
+`queries.yaml` holds each entry as written: a SQL string, or a
+[federated](./dashboard.md#the-push_dashboard-mcp-tool) map, so an untouched
+repo produces no diff. A folder mixing the two is refused with
+`malformed dashboard file: every query and options_sql names a connection, or none does`.
 
 Every QueryView on one repo, [viewer servers](./viewer_server.md)
 included, must read this layout: one that expects the name in `meta.yaml`

@@ -105,7 +105,8 @@ session id) exposes:
   the push edits; the agent cannot name a new one. Only the user's **Save**
   writes it to the store. Returns
   `{ok, pushed, message, database}`; an unknown/disarmed
-  `session_id` reports `pushed:false`, a disconnected one `not connected`.
+  `session_id` reports `pushed:false`, a disconnected one `not connected`
+  unless the draft is federated (below), which needs no session connection.
 - `run_dashboard` returns the rows of a draft's queries to the agent, to test
   them before a push: see [mcp.md](../architecture/mcp.md#tools).
 

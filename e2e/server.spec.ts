@@ -156,10 +156,12 @@ test("a federated dashboard runs on the configured connections it names", async 
     await expect(frame.locator("#a")).toHaveText("alpha");
     await expect(frame.locator("#b")).toHaveText("omega");
     await expect(page.getByTestId("viewer-connection")).toHaveCount(0);
+    await page.getByTestId("federated-pill").click();
     const rows = page.getByTestId("federated-pill-row");
     await expect(rows).toHaveCount(2);
-    await expect(rows.filter({ hasText: "local" })).toBeVisible();
-    await expect(rows.filter({ hasText: "other" })).toBeVisible();
+    await expect(rows.filter({ hasText: "local" })).toContainText("🟢");
+    await expect(rows.filter({ hasText: "other" })).toContainText("🟢");
+    await expect(page.getByTestId("federated-unlock")).toHaveCount(0);
   } finally {
     await v.stop();
   }

@@ -292,7 +292,7 @@ test("the dashboard's name can be copied", async ({ page, context, seeds, baseUR
 });
 
 // req: system/dashboard/sql-panel-connection
-test("the SQL panel federates a dashboard and back", async ({ page, seeds, baseURL }) => {
+test("the SQL panel makes a dashboard federated and back", async ({ page, seeds, baseURL }) => {
   await connect(page, CH, await seeds.testDb());
   const pg = await savePostgresMarks(baseURL, seeds);
   try {
@@ -326,8 +326,8 @@ test("the SQL panel federates a dashboard and back", async ({ page, seeds, baseU
 // req: system/queryview/federated-pill
 test("a locked and an unknown connection show in the pill, and Unlock opens the locked one", async ({ page, seeds, baseURL }) => {
   const pg = await savePostgresMarks(baseURL, seeds);
+  const passphrase = "open sesame";
   try {
-    const passphrase = "open sesame";
     // Locked from another session: this tab holds no token.
     await api(`${baseURL}/api/db/lock`, { json: { name: pg.name, passphrase }, headers: pg.headers });
     const missing = `missing-${uid()}`;
@@ -358,7 +358,7 @@ test("a locked and an unknown connection show in the pill, and Unlock opens the 
     // Runs fail fast: the unknown connection's query still fails the dashboard.
     await expect(page.getByTestId("dashboard-error")).toContainText(`gone: unknown connection "${missing}"`);
   } finally {
-    await api(`${baseURL}/api/db/lock`, { method: "DELETE", json: { name: pg.name, passphrase: "open sesame" }, ok: false });
+    await api(`${baseURL}/api/db/lock`, { method: "DELETE", json: { name: pg.name, passphrase }, ok: false });
     await pg.drop();
   }
 });
@@ -390,6 +390,6 @@ test("a dashboard mixing SQL strings and connection entries is refused", async (
     },
     ok: false,
   });
-  expect(r.status).toBeGreaterThanOrEqual(400);
+  expect(r.status).toBe(400);
   expect(JSON.stringify(r.body)).toContain("every query and options_sql names a connection, or none does");
 });

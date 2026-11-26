@@ -37,6 +37,11 @@ bundle carrying a non-empty `queries` list, is refused with
 `saved queries are no longer supported`. The bundle carries no workspace
 name, so it imports into whichever workspace you choose.
 
+A query entry is written as stored: a SQL string, or a
+[federated](./dashboard.md#the-push_dashboard-mcp-tool) map
+`{connection, sql, database?}`. A dashboard mixing the two is refused (`400`)
+with `every query and options_sql names a connection, or none does`.
+
 ## UI
 
 <!-- req: ui -->
