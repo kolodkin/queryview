@@ -13,7 +13,6 @@ from mcp.server.mcpserver import Context, MCPServer
 
 from . import dashboard_queries, gitsync, remote, sessions
 from .connect import (
-    LOCKED,
     _data_dir,
     _gated_session,
     _session_conn,
@@ -466,7 +465,9 @@ async def push_dashboard(
             "ok": pushed,
             "pushed": pushed,
             "message": message,
-            "database": None if message == LOCKED["message"] else await sessions.database_of(session_id),
+            "database": None
+            if (await get_session(session_id)).get("locked")
+            else await sessions.database_of(session_id),
         },
     )
 
