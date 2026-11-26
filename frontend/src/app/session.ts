@@ -269,8 +269,11 @@ export async function withoutHeartbeat<T>(f: () => Promise<T>): Promise<T> {
   holds++
   try {
     await beating
+    // A patch reply still in flight read the row from before the switch: drop it.
+    localGen++
     return await f()
   } finally {
+    localGen++
     holds--
   }
 }
