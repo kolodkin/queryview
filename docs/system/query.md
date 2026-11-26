@@ -7,7 +7,7 @@ the [explorer](./explorer.md), and the [Scripts](./scripts.md) page.
 
 ## Pagination
 
-<!-- req: system/query/pagination -->
+<!-- req: pagination -->
 The backend paginates by wrapping the query:
 
 ```sql
@@ -27,7 +27,7 @@ Writes go through [Scripts](./scripts.md).
 
 ## Fields, selection & ordering
 
-<!-- req: system/query/fields -->
+<!-- req: fields -->
 **Fields** describes the query's output columns (names and types) without
 scanning data, and fills two searchable dropdowns:
 
@@ -41,7 +41,7 @@ scanning data, and fills two searchable dropdowns:
 
 ## Default views for complex types
 
-<!-- req: system/query/default-views -->
+<!-- req: default-views -->
 Cells whose value is a collection — a ClickHouse **`Array`**, **`Map`**, or
 **`Tuple`**, or any JSON array/object another driver returns — get a built-in
 **default view** with no cell template: instead of the serialized text
@@ -71,7 +71,7 @@ value.
 
 ## Long values
 
-<!-- req: system/query/long-values -->
+<!-- req: long-values -->
 Each result column fits its header or its widest value on the page, **capped at
 50 characters**, so a table of short values fits on screen and one long-text
 column can't push the others off-screen. A longer value **scrolls inside its own
@@ -100,7 +100,7 @@ underlying value.
 
 ## Results & CSV
 
-<!-- req: system/query/results-csv -->
+<!-- req: results-csv -->
 Results come back as `{meta: [{name, type}], data: [[…]]}` — ClickHouse's
 `JSONCompact` shape, which the other drivers reproduce from their native rows.
 Values are JSON as the database emitted them; 64-bit integers and decimals are
@@ -112,7 +112,7 @@ tuples arrive as JSON arrays and objects (named tuples as objects).
 
 ## Co-edit & edit lock
 
-<!-- req: system/query/edit-lock -->
+<!-- req: edit-lock -->
 An agent (via the `push_dashboard` / `push_script` MCP tools) and a human can
 share a live session without clobbering each other, arbitrated by a
 **server-side edit lock** on the session (owner: none / human / agent, held in

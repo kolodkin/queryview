@@ -21,15 +21,17 @@ skill.
 ## Markers
 
 An ID is the page's path under `docs/` without `.md`, then a kebab-case slug.
-The doc defines it on the line above the statement:
+The doc defines it on the line above the statement, writing only the slug,
+since the page gives the prefix:
 
 ```md
-<!-- req: requirements/queryview/run-sql -->
+<!-- in docs/requirements/queryview.md: requirements/queryview/run-sql -->
+<!-- req: run-sql -->
 A user can run SQL, page through the rows, pick columns, and download CSV.
 ```
 
-A test names it directly above the test or group (`#` in Python; several IDs
-comma-separated):
+A test names the full ID directly above the test or group (`#` in Python;
+several IDs comma-separated):
 
 ```ts
 // req: requirements/queryview/run-sql

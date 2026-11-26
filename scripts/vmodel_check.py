@@ -1,7 +1,7 @@
 """Tie every test to the doc statement it proves through `req:` IDs.
 
-A doc defines an ID with `<!-- req: <id> -->`; a test names it with
-`// req: <id>` or `# req: <id>`. The rules live in the V-model skill,
+A doc defines an ID with `<!-- req: <slug> -->`, its page's path under `docs/`
+giving the prefix; a test names the full ID with `// req: <id>` or `# req: <id>`. The rules live in the V-model skill,
 `.claude/skills/vmodel/SKILL.md`. Errors (bad, duplicate, unknown or unproven
 IDs; undocumented unit modules) always fail; gaps (untagged docs and tests)
 fail only with `--strict`, which the pre-commit hook passes. Standard library only.
@@ -16,6 +16,7 @@ from pathlib import Path
 
 LAYER_DIRS = {"requirements": "user", "system": "system", "architecture": "integration"}
 ID_RE = re.compile(r"^(requirements|system|architecture)(/[a-z0-9_-]+)+$")
+SLUG_RE = re.compile(r"^[a-z0-9_-]+$")
 MARKER_RE = re.compile(r"^\s*(?:<!--|//|#)\s*req:\s*(.*?)\s*(?:-->)?\s*$")
 ACCEPTANCE = "e2e/acceptance.spec.ts"
 
@@ -80,12 +81,13 @@ def _definitions(root: Path, report: Report) -> dict[str, str]:
             for n, line in enumerate(_read(page).splitlines(), 1):
                 if line.lstrip().startswith("```"):
                     fenced = not fenced
-                for id_ in [] if fenced else parse_ids(line):
+                for slug in [] if fenced else parse_ids(line):
                     tagged = True
-                    if not ID_RE.match(id_):
-                        report.errors.append(f"{rel}:{n}: malformed ID {id_!r}")
-                    elif not id_.startswith(prefix):
-                        report.errors.append(f"{rel}:{n}: {id_} must start with the page prefix {prefix}")
+                    id_ = prefix + slug  # a doc names the slug; its page gives the prefix
+                    if not SLUG_RE.match(slug):
+                        report.errors.append(
+                            f"{rel}:{n}: {slug!r} is not a kebab-case slug (the page gives the prefix)"
+                        )
                     elif id_ in defined:
                         report.errors.append(f"{rel}:{n}: {id_} defined twice (first in {defined[id_]})")
                     else:

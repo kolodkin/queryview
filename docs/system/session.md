@@ -37,7 +37,7 @@ progress, fetched rows.
 
 ## Last visited
 
-<!-- req: system/session/last-visited -->
+<!-- req: last-visited -->
 Each connection the session has been on keeps the database and table it was
 last on. Reopening that connection in the same session — its card on the
 Connect page, the pill menu, `?connection=`, an agent's `use_connection` —
@@ -59,7 +59,7 @@ anywhere highlighted.
 
 ## Refresh, new tabs, and the claim
 
-<!-- req: system/session/refresh-new-tab -->
+<!-- req: refresh-new-tab -->
 What you get:
 
 - **Refresh** → the same session, same page, same everything.
@@ -74,13 +74,13 @@ An unnamed session is swept 90 seconds after it is both unheld and idle. A
 session whose tab still holds its claim but stopped heartbeating (a crash, a
 sleeping laptop) is kept — it may wake.
 
-<!-- req: system/session/taken-greys-out -->
+<!-- req: taken-greys-out -->
 A running tab is never moved silently. A sleeping laptop or a frozen tab can
 still let a claim lapse and another tab take its session: the tab greys out and
 stops writing until you pick **Use it here** (the other tab then greys out) or
 **New session**. Any session change re-syncs the whole shell.
 
-<!-- req: system/session/switch-elsewhere -->
+<!-- req: switch-elsewhere -->
 A switch of connection or database made elsewhere (another tab, an API caller)
 reaches the tab within a beat, and every view follows — the explorer reloads
 its tables, the dashboard and the query panel re-run what is on screen.
@@ -95,9 +95,9 @@ tab's session is highlighted with a ✓ and **this tab**. A session held by
 another live tab is shown but not selectable: two tabs on one session would
 overwrite each other's state.
 
-<!-- req: system/session/new-session -->
+<!-- req: new-session -->
 - **New session** starts a fresh one in this tab.
-  <!-- req: system/session/rename -->
+  <!-- req: rename -->
 - The pencil on this tab's row edits its name in place: Enter or focus-out
   saves, Escape cancels. A name pins the session, so it survives its tab;
   clearing it unpins. `Session <n>` names are refused: they belong to unnamed

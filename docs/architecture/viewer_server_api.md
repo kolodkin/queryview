@@ -1,6 +1,6 @@
 # Viewer server API
 
-<!-- req: architecture/viewer_server_api/names-not-sql -->
+<!-- req: names-not-sql -->
 The [viewer server](../system/viewer_server.md) (`queryview-server`) is a separate app with
 its own, smaller API. No session header; none of the app's
 [routes](api.md) exist on it.
@@ -18,7 +18,7 @@ name, `400` for a bad body, a bad value or a failing query.
 | POST   | `/api/query`             | `{connection, dashboard, query, values?, limit?, offset?, order_by?, format?}` | One page of a dashboard query, as the app's `/api/db/query`: `{ok, meta, data}`, or `{ok, output}` for `format:"csv"`. A query waiting on a choice → `400`. |
 | POST   | `/api/describe`          | `{connection, dashboard, query, values?}`        | The query's output columns: `{ok, fields}`. |
 
-<!-- req: architecture/viewer_server_api/values-checked -->
+<!-- req: values-checked -->
 Every POST resolves the selectors first, so a value outside a param's options
 falls back to its default and never reaches the SQL.
 

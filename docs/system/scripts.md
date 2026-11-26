@@ -29,14 +29,14 @@ database is selected the page redirects to Connect.
 +------------------------------------------------------------+
 ```
 
-<!-- req: system/scripts/textarea-sizes -->
+<!-- req: textarea-sizes -->
 - **SQL textarea** — the script. **Min / S / M / L / XL** set its height;
   **Min** collapses it, keeping the text, so the table gets the room.
-  <!-- req: system/scripts/run-current -->
+  <!-- req: run-current -->
 - **▶ Run** (**Ctrl/⌘+Enter**) — runs the **statement under the cursor**, or
   the **selection** when there is one. Just past a `;` on the same line still
   counts as that statement; a blank line below belongs to the next one.
-  <!-- req: system/scripts/run-all -->
+  <!-- req: run-all -->
 - **▶▶ Run all** (**Ctrl/⌘+Shift+Enter**) — runs the whole script.
 - **Status line** — one line per run; the statements are already in the
   textbox, so it never repeats them (see below).
@@ -55,14 +55,14 @@ strings), `"…"`, `` `…` ``, `$$…$$` and `$tag$…$tag$` bodies, `-- …` l
 comments and `/* … */` block comments; blank statements are dropped. An unterminated quote keeps the rest of
 the script in one statement, so the database reports the real syntax error.
 
-<!-- req: system/scripts/one-connection -->
+<!-- req: one-connection -->
 A run opens **one connection** (one server session on ClickHouse) and runs
 its statements **in order** on it, so `BEGIN; …; COMMIT;`, `SET` and temporary
 tables carry across statements of the same run but not from one Run to the
 next. A statement may run for up to **10 minutes** before it is given up on,
 unlike the 5-second limit of the other pages.
 
-<!-- req: system/scripts/error-stops -->
+<!-- req: error-stops -->
 **An error stops the run.** Nothing after the failing statement is sent, and
 nothing before it is rolled back — statements `1 … k-1` stay applied. Fix the
 failing one, then put the cursor on the next and use **▶ Run** (or select from
@@ -79,7 +79,7 @@ that supports transactions if partial application is not acceptable.
 
 A script's line starts with `N statements ·` and `T` is the total.
 
-<!-- req: system/scripts/row-cap -->
+<!-- req: row-cap -->
 The 100-row cap exists because the page has no pagination: a bare `SELECT *`
 must not pull a whole table into the browser. Page with your own
 `LIMIT`/`OFFSET`, or open the statement in a dashboard. Values arrive in the
@@ -108,7 +108,7 @@ same JSON shape as every other result
 
 ## Session
 
-<!-- req: system/scripts/session-text -->
+<!-- req: session-text -->
 The textbox's text is session state — a reload brings it back — but the status
 line and the table are not, like every other view ([session.md](./session.md));
 a reload never re-runs a script. Switching database clears them and keeps the
@@ -116,7 +116,7 @@ text.
 
 ## Agent pushes
 
-<!-- req: system/scripts/agent-push -->
+<!-- req: agent-push -->
 MCP `run_script` runs a script as Run all does and returns the results to the
 agent; `push_script` replaces the text (saved like an edit) and, with `run`,
 runs it here, usually in a [tab](./mcp.md#tabs) of the agent's own. Focus

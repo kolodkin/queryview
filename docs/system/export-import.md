@@ -39,7 +39,7 @@ name, so it imports into whichever workspace you choose.
 
 ## UI
 
-<!-- req: system/export-import/ui -->
+<!-- req: ui -->
 Next to the dashboard page's **Restore** button: **Export** downloads the saved DB state as a YAML file;
 **Import** picks a YAML file and upserts whatever its `kind` declares. The
 workspace manage panel (header dropdown → *Manage workspaces…*) has the same

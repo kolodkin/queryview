@@ -17,7 +17,7 @@ header; there is no session cookie. A session is a persisted row holding one
 tab's UI state — route, connection, database, workspace, view settings — so two
 tabs can be on two different connections at once.
 
-<!-- req: architecture/api/session-scoped-api -->
+<!-- req: session-scoped-api -->
 `/session`, `/connect`, `/open` and `/database` act on the header's session.
 
 Saved connections are shared (SQLite). See [session.md](../system/session.md).
@@ -68,7 +68,7 @@ and `git_history` / `git_restore`. They delegate to the in-process
 hubs the matching REST endpoints call. See [mcp.md](../system/mcp.md) and
 [dashboard.md](../system/dashboard.md).
 
-<!-- req: architecture/api/mcp-mount -->
+<!-- req: mcp-mount -->
 A slashless `/mcp` redirects to `/mcp/` for every MCP method (`POST`, `GET`,
 `DELETE`), and `/mcp/` itself is not redirected.
 
@@ -79,7 +79,7 @@ Connections are stored in SQLite via SQLModel. See
 
 ## Workspaces
 
-<!-- req: architecture/api/workspaces -->
+<!-- req: workspaces -->
 Dashboards belong to a workspace; each workspace syncs
 to its own git remote. The remote URL may embed a token — it is encrypted at
 rest and never returned by the API. See [workspace.md](../system/workspace.md).
@@ -93,7 +93,7 @@ rest and never returned by the API. See [workspace.md](../system/workspace.md).
 
 ## YAML export / import
 
-<!-- req: architecture/api/export-import -->
+<!-- req: export-import -->
 Dashboards can be downloaded as self-describing YAML
 documents and imported back — one at a time or a whole workspace at once. See
 [export-import.md](../system/export-import.md) for the document shapes.
@@ -105,7 +105,7 @@ documents and imported back — one at a time or a whole workspace at once. See
 
 ## Git sync
 
-<!-- req: architecture/api/git-sync -->
+<!-- req: git-sync -->
 Dashboards can be backed up to (and restored from) each
 workspace's git repository, per entity. Connections are never written to the
 repo. See [gitsync.md](../system/gitsync.md) for configuration, repository layout, and

@@ -8,8 +8,8 @@
   - `docs/architecture/`: components, contracts between them, storage,
     interface references.
 - A page holds one layer's content. A statement a test proves carries a
-  `<!-- req: <id> -->` comment on the line above it; the project `vmodel` skill
-  says how.
+  `<!-- req: <slug> -->` comment on the line above it (the page's path gives
+  the ID's prefix); the project `vmodel` skill says how.
 - The viewer server (`queryview-server`) follows the same layers. Its docs
   never go in an app page; an app page only links in.
 - A new page joins the `README.md` docs list under its layer's heading. A page
