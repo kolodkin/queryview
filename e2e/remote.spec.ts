@@ -13,6 +13,7 @@ import {
   openNewQuery,
   sessionId,
   test,
+  uid,
 } from "./fixtures";
 
 test("agent switch names the connection and toasts", async ({ page, seeds, baseURL }) => {
@@ -21,7 +22,7 @@ test("agent switch names the connection and toasts", async ({ page, seeds, baseU
   await seeds.testDb();
   await connect(page, CH, chDb());
   const sid = await sessionId(page);
-  const name = `agent-ch-${crypto.randomUUID().slice(0, 6)}`;
+  const name = `agent-ch-${uid(6)}`;
   const config = { host: CH_HOST, port: Number(CH_PORT), username: CH_USER, password: CH_PASSWORD };
   expect((await mcpCall(baseURL!, "add_connection", { session_id: sid, name, type: "clickhouse", config })).ok).toBeTruthy();
   expect((await mcpCall(baseURL!, "use_connection", { session_id: sid, name, database: chDb() })).ok).toBeTruthy();
@@ -63,7 +64,7 @@ test("mcp new_tab opens a session of the agent's own at its link", async ({ page
   const sid = made.session_id as string;
   expect(sid).not.toBe(mine);
   // The agent connects the tab and pushes before anyone has opened the link.
-  const name = `tab-ch-${crypto.randomUUID().slice(0, 6)}`;
+  const name = `tab-ch-${uid(6)}`;
   const config = { host: CH_HOST, port: Number(CH_PORT), username: CH_USER, password: CH_PASSWORD };
   expect((await mcpCall(baseURL!, "add_connection", { session_id: sid, name, type: "clickhouse", config })).ok).toBeTruthy();
   expect((await mcpCall(baseURL!, "use_connection", { session_id: sid, name, database: chDb() })).ok).toBeTruthy();

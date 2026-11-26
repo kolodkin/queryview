@@ -1,10 +1,10 @@
 // Workspaces, git sync controls and popovers: none needs a database. The YAML
 // and git round trips are in acceptance.spec.ts.
-import { api, expect, gitConfigured, sessionId, switchWorkspace, test } from "./fixtures";
+import { api, expect, gitConfigured, sessionId, switchWorkspace, test, uid } from "./fixtures";
 
 test("switcher isolates dashboards", async ({ page, baseURL }) => {
   // Uses a uniquely-named workspace and cleans it up so reruns are idempotent.
-  const ws = `e2e-${crypto.randomUUID().slice(0, 6)}`;
+  const ws = `e2e-${uid(6)}`;
   const dash = `ws dash ${ws}`;
   await api(`${baseURL}/api/workspaces`, { json: { name: ws } });
   await api(`${baseURL}/api/dashboards`, {

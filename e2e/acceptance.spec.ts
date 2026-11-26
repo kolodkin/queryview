@@ -24,9 +24,9 @@ import {
   startNewConnection,
   tableRow,
   test,
+  uid,
 } from "./fixtures";
 
-const uid = () => crypto.randomUUID().replace(/-/g, "").slice(0, 8);
 
 // req: requirements/queryview/add-connection
 for (const c of CASES) {
@@ -302,7 +302,7 @@ test("git save and restore dashboard round trip", async ({ page, baseURL, seeds,
   test.skip(!(await gitConfigured(baseURL!)), "git sync is not configured for this stack");
   // Unique per attempt: a CI retry shares the remote, which keeps the first
   // attempt's commit.
-  const name = `gs e2e ${crypto.randomUUID().slice(0, 6)}`;
+  const name = `gs e2e ${uid(6)}`;
   const save = (v: number) =>
     api(`${baseURL}/api/dashboards`, {
       json: { name, html: `<html><body>v${v}</body></html>`, queries: { q: `SELECT ${v}` } },

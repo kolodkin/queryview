@@ -240,6 +240,8 @@ export async function armRemote(page: Page): Promise<string> {
 
 export const tableRow = (page: Page, name: string) =>
   page.locator(`[data-testid="explorer-table"][data-table="${name}"]`);
+/** A random hex string for a unique test name (a table, a dashboard, a workspace). */
+export const uid = (n = 8) => crypto.randomUUID().replace(/-/g, "").slice(0, n);
 export const connCard = (page: Page, name: string) => page.locator(`[data-testid="conn-card"][data-conn="${name}"]`);
 
 /** Whether git sync is configured: the backend fixture points the default
