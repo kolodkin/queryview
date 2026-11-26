@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,8 @@ from .connect import (
 )
 from .connect import run_sql as connect_run_sql
 from .connect import select_database as connect_select_database
+from .dashboard_entries import Entry
+from .dashboard_params import parse_params
 from .dashboards import _dashboard_event, get_dashboard
 from .drivers.base import RUN_SQL_TIMEOUT_SECONDS
 from .mcp_skills import SkillsExtension
@@ -240,6 +243,7 @@ async def _databases_of(session_id: str, c: dict[str, Any]) -> dict[str, Any]:
 
 # Network drivers only: DuckDB's and SQLite's SQL read any file the backend can.
 _AGENT_DRIVERS = ("clickhouse", "postgres", "mysql")
+_FILE_REFUSED = f"the agent may switch only to {', '.join(_AGENT_DRIVERS)} connections"
 
 
 @mcp.tool()
@@ -298,10 +302,51 @@ async def use_connection(session_id: str, name: str, database: str | None = None
     {"ok": False, "message"}.
     """
     # shortcut: no switching to file drivers until DuckDB reads blob storage instead of local files
-    listed = next((c for c in await agent_connections_for(session_id) if c["name"] == name), None)
-    if listed is not None and listed["created_by"] != "agent" and listed["type"] not in _AGENT_DRIVERS:
-        return {"ok": False, "message": f"the agent may switch only to {', '.join(_AGENT_DRIVERS)} connections"}
+    listed = await _agent_listed(session_id, name)
+    if listed is not None and _file_refused(listed):
+        return {"ok": False, "message": _FILE_REFUSED}
     return await open_saved(session_id, name, database, by="agent")
+
+
+async def _agent_listed(session_id: str, name: str) -> dict[str, Any] | None:
+    return next((c for c in await agent_connections_for(session_id) if c["name"] == name), None)
+
+
+def _file_refused(listed: dict[str, Any]) -> bool:
+    return listed["created_by"] != "agent" and listed["type"] not in _AGENT_DRIVERS
+
+
+def _agent_lookup(session_id: str) -> dashboard_queries.Lookup:
+    """session_lookup held to use_connection's rules. A connection
+    list_connections hides, a locked one included, reads as unknown: the
+    agent learns nothing about it."""
+    inner = dashboard_queries.session_lookup(session_id)
+
+    async def lookup(name: str, database: str | None) -> dashboard_queries.Target | dashboard_queries.LookupError_:
+        listed = await _agent_listed(session_id, name)
+        if listed is None:
+            return dashboard_queries.LookupError_("unknown", f'unknown connection "{name}"')
+        if _file_refused(listed):
+            return dashboard_queries.LookupError_("failed", _FILE_REFUSED)
+        return await inner(name, database)
+
+    return lookup
+
+
+async def _named_refusal(session_id: str, queries: Mapping[str, Entry], params: object) -> str | None:
+    """The first named connection the agent may not reach, as
+    `"{query or param}: {why}"`, queries first; None when all are reachable."""
+    named = [(n, dashboard_entries.entry_connection(e)) for n, e in queries.items()]
+    named += [(p.name, (p.connection, p.database)) for p in parse_params(params) if p.options_sql and p.connection]
+    lookup, seen = _agent_lookup(session_id), set()
+    for who, pair in named:
+        if pair is None or pair in seen:
+            continue
+        seen.add(pair)
+        found = await lookup(*pair)
+        if isinstance(found, dashboard_queries.LookupError_):
+            return f"{who}: {found.message}"
+    return None
 
 
 @mcp.tool()
@@ -386,7 +431,7 @@ async def list_dashboards(session_id: str | None = None) -> dict[str, Any]:
 async def push_dashboard(
     session_id: str,
     html: str | None = None,
-    queries: dict[str, str] | None = None,
+    queries: Mapping[str, Entry] | None = None,
     params: list[dict[str, Any]] | None = None,
     name: str | None = None,
     dir: str | None = None,
@@ -400,8 +445,10 @@ async def push_dashboard(
     written to the store until the user's **Save** in the dashboard view. Omit `name` for a new dashboard:
     the user names it on Save. With the `name` of a saved dashboard (see
     list_dashboards) the push edits that one. Re-push to update it. Its queries
-    run on the viewing session's connection and selected database — a dashboard
-    never names a connection.
+    run on the viewing session's connection and selected database, unless every
+    one names a connection as `{connection, sql, database?}` (federated, see
+    docs/system/dashboard.md); a named connection follows use_connection's
+    rules, and one the agent may not use refuses the push.
 
     The browser consumes the results, not the agent: the HTML reads them from a
     `window.queries` global, a column-oriented map
@@ -424,20 +471,20 @@ async def push_dashboard(
     Args:
         session_id: The session id shown in the QueryView popover.
         html: The dashboard HTML document (renders in a sandboxed iframe).
-        queries: Map of query name to SQL.
+        queries: Map of query name to SQL or {connection, sql, database?}.
         params: Optional selector specs (see above).
         name: Optional name of an existing saved dashboard to edit; any other
             name is refused.
         dir: Absolute path of a folder holding `dashboard.html`,
-            `queries.yaml` (a {name: SQL} map) and optionally `meta.yaml`
+            `queries.yaml` (a map like `queries`) and optionally `meta.yaml`
             (`name`, `params`), instead of `html` and `queries`. Inline
             `name` / `params` win over meta.yaml.
 
     Returns {ok, pushed, message, database}; "not connected" if
-    the session has no connection.
+    the session has no connection and the dashboard is not federated.
     """
     rec = await sessions.get_session_rec(session_id) if session_id else None
-    if rec is None or rec.connection_name is None:
+    if rec is None:
         return _push_failed("not connected")
     if dir:
         if html is not None or queries is not None:
@@ -451,12 +498,20 @@ async def push_dashboard(
         params = d["params"] if params is None else params
     if html is None or queries is None:
         return _push_failed("pass `html` and `queries`, or `dir`")
-    perr = dashboard_params_error(params)
+    perr = dashboard_entries.queries_error(queries) or dashboard_params_error(params)
     if perr is not None:
         return _push_failed(perr)
+    try:
+        federated = dashboard_entries.is_federated(queries, params)
+    except ValueError as e:
+        return _push_failed(str(e))
+    if not federated and rec.connection_name is None:
+        return _push_failed("not connected")
+    if federated and (refusal := await _named_refusal(session_id, queries, params)):
+        return _push_failed(refusal)
     if name and await get_dashboard(name, (await _session_workspace_rec(session_id)).id) is None:
         return _push_failed(_NEW_NAME.format(kind="dashboard", name=name))
-    pushed, message = await push(session_id, _dashboard_event(name or "", html, queries, params))
+    pushed, message = await push(session_id, _dashboard_event(name or "", html, dict(queries), params))
     return _with_url(
         session_id,
         {
@@ -478,15 +533,16 @@ RUN_DASHBOARD_TIMEOUT_SECONDS: float = RUN_SQL_TIMEOUT_SECONDS
 @mcp.tool()
 async def run_dashboard(
     session_id: str,
-    queries: dict[str, str] | None = None,
+    queries: Mapping[str, Entry] | None = None,
     params: list[dict[str, Any]] | None = None,
     values: dict[str, Any] | None = None,
     dir: str | None = None,
     limit: int = 100,
 ) -> dict[str, Any]:
     """Run a draft dashboard's queries on the session's connection and selected
-    database with `values` substituted into their `{name}` placeholders, as the
-    page itself would, returning the rows to the agent. Use it to test a
+    database, or on the connections they name (see push_dashboard), with
+    `values` substituted into their `{name}` placeholders, as the page itself
+    would, returning the rows to the agent. Use it to test a
     draft's queries before push_dashboard: nothing reaches the browser.
 
     Returns {"ok": True, "database", "results": {query: {column: [values]}},
@@ -494,11 +550,13 @@ async def run_dashboard(
     (`results` is what the page reads as `window.queries`) or {"ok": False,
     "message"}, with "params" when they resolved. A query waiting on a param
     with no choice is absent from `results`. The run stops at the first failing
-    query, whose name opens the message, and after a minute.
+    query, whose name opens the message, and after a minute. A federated run
+    needs no session connection; its reply, failed or not, adds "connections":
+    [{name, database, status, queries, message?}], and "database" is null.
 
     Args:
         session_id: The session id shown in the QueryView popover.
-        queries: Map of query name to SQL.
+        queries: Map of query name to SQL or {connection, sql, database?}.
         params: Optional selector specs, as push_dashboard takes them.
         values: Map of param name to chosen value; a param left out, or given a
             value its options do not offer, takes its default.
@@ -515,6 +573,9 @@ async def run_dashboard(
             return {"ok": False, "message": str(e)}
         queries = d["queries"]
         params = d["params"] if params is None else params
+    qerr = None if queries is None else dashboard_entries.queries_error(queries)
+    if qerr is not None:
+        return {"ok": False, "message": qerr}
     queries = dashboard_entries.clean_queries(queries)  # a blank one is skipped, as on the page
     if not queries:
         return {"ok": False, "message": "no runnable query in `dir`" if dir else "pass `queries`, or `dir`"}
@@ -525,16 +586,19 @@ async def run_dashboard(
     try:
         async with asyncio.timeout(RUN_DASHBOARD_TIMEOUT_SECONDS):
             r = await dashboard_queries.run_dashboard(
-                session_id, queries, params, dashboard_queries.clean_values(values), limit
+                session_id, queries, params, dashboard_queries.clean_values(values), limit, _agent_lookup(session_id)
             )
     except TimeoutError:
         return {"ok": False, "message": f"dashboard run timed out after {RUN_DASHBOARD_TIMEOUT_SECONDS}s"}
+    federated = {"connections": r["connections"]} if "connections" in r else {}
     if not r["ok"]:
-        return {"ok": False, "message": r["message"], **dashboard_queries.resolved_part(r)}
+        return {"ok": False, "message": r["message"], **dashboard_queries.resolved_part(r), **federated}
     return {
         "ok": True,
-        "database": await sessions.database_of(session_id),
+        # A federated run is on no one database, and names not a locked session's.
+        "database": None if federated else await sessions.database_of(session_id),
         **{k: r[k] for k in ("results", "meta", "params")},
+        **federated,
     }
 
 

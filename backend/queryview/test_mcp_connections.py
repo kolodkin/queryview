@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import asyncio
 
-from queryview import remote, sessions
+from queryview import connect, remote, sessions
 from queryview.connect import _save_active_connection, open_saved
 from queryview.drivers.base import DatabasesResult
 from queryview.drivers.clickhouse import ChConfig
 from queryview.drivers.duckdb import DuckConfig
-from queryview.mcp_server import _AGENT_DRIVERS
+from queryview.mcp_server import _AGENT_DRIVERS, push_dashboard, run_dashboard
 
 
 def _run(coro):
@@ -340,3 +340,75 @@ def test_use_connection_marks_the_switch_as_the_agents():
         assert who(sid) == (None, "agent")
     finally:
         _run(remove_connection(sid, "ag-switch"))
+
+
+def _orders(connection: str) -> dict:
+    return {"orders": {"connection": connection, "sql": "SELECT 1"}}
+
+
+def _push(sid: str, **kw) -> tuple[dict, dict | None]:
+    """push_dashboard to armed session `sid`: the reply and what reached the browser."""
+    rid = remote.register(sid)
+    try:
+        return _run(push_dashboard(rid, **kw)), _run(remote.next_message(rid, 0.2))
+    finally:
+        remote.unregister(rid)
+
+
+# req: architecture/mcp/push-dashboard
+def test_push_takes_a_query_naming_a_connection():
+    sid = _run(sessions.create_session()).id  # disconnected: a federated push needs no connection
+    assert _agent_add(sid, "pd-wh")["ok"]
+    out, msg = _push(sid, html="<p></p>", queries=_orders("pd-wh"))
+    assert out["ok"] is True and out["pushed"] is True
+    assert msg is not None and msg["queries"] == _orders("pd-wh")
+
+
+# req: architecture/mcp/push-dashboard
+def test_push_refuses_a_file_connection_the_agent_did_not_add():
+    _run(_save_active_connection("pd-user-duck", DuckConfig(":memory:"), "duckdb"))
+    out, msg = _push(_run(sessions.create_session()).id, html="<p></p>", queries=_orders("pd-user-duck"))
+    assert out["pushed"] is False and msg is None
+    assert out["message"] == f"orders: the agent may switch only to {', '.join(_AGENT_DRIVERS)} connections"
+
+
+# req: architecture/mcp/push-dashboard
+def test_push_refuses_an_unknown_connection():
+    sid = _run(sessions.create_session()).id
+    assert _agent_add(sid, "pd-known")["ok"]
+    out, msg = _push(sid, html="<p></p>", queries=_orders("pd-absent"))
+    assert out["pushed"] is False and msg is None and out["message"] == 'orders: unknown connection "pd-absent"'
+    params = [{"name": "region", "options_sql": "SELECT 1", "connection": "pd-absent"}]
+    out, _ = _push(sid, html="<p></p>", queries=_orders("pd-known"), params=params)
+    assert out["message"] == 'region: unknown connection "pd-absent"'
+    out, _ = _push(sid, html="<p></p>", queries={"orders": {"connection": "", "sql": "SELECT 1"}})
+    assert out["message"] == "query 'orders': connection must be a non-empty string"
+    out, _ = _push(sid, html="<p></p>", queries={**_orders("pd-known"), "q": "SELECT 1"})
+    assert out["message"] == "every query and options_sql names a connection, or none does"
+
+
+# req: architecture/mcp/push-dashboard
+def test_push_reads_a_query_naming_a_connection_from_a_folder(tmp_path):
+    (tmp_path / "dashboard.html").write_text("<p></p>")
+    (tmp_path / "queries.yaml").write_text("orders:\n  connection: pd-dir-wh\n  sql: SELECT 1\n")
+    sid = _run(sessions.create_session()).id
+    assert _agent_add(sid, "pd-dir-wh")["ok"]
+    out, msg = _push(sid, dir=str(tmp_path))
+    assert out["pushed"] is True and msg is not None and msg["queries"] == _orders("pd-dir-wh")
+
+
+# req: architecture/mcp/locked-refuses-both
+def test_a_locked_connection_named_by_a_query_reads_as_unknown():
+    _run(connect.delete_connection("x", "warehouse", ""))
+    owner = _connected_session("warehouse")
+    assert _run(connect.lock_connection(owner, "warehouse", "open sesame"))["ok"]
+    try:
+        ran = _run(run_dashboard(owner, _orders("warehouse")))  # unlocked in the owner's tab, still hidden
+        pushed, msg = _push(_run(sessions.create_session()).id, html="<p></p>", queries=_orders("warehouse"))
+    finally:
+        assert _run(connect.delete_connection(owner, "warehouse", "open sesame"))["ok"]
+    assert msg is None
+    for out in (ran, pushed):
+        assert out["ok"] is False and out["message"] == 'orders: unknown connection "warehouse"'
+        assert "locked" not in str(out)
+    assert [c["status"] for c in ran["connections"]] == ["unknown"]

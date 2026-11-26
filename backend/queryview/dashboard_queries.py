@@ -363,15 +363,21 @@ async def _no_options(p: Param, sql: str) -> list[Any]:
 
 
 async def run_dashboard(
-    sid: str, queries: Mapping[str, Entry], params: object, values: dict[str, str], limit: int = DASHBOARD_ROW_CAP
+    sid: str,
+    queries: Mapping[str, Entry],
+    params: object,
+    values: dict[str, str],
+    limit: int = DASHBOARD_ROW_CAP,
+    lookup: Lookup | None = None,
 ) -> dict[str, Any]:
     """run_dashboard_on session `sid`'s connection and selected database; a
-    federated dashboard on the connections it names, with no session gate."""
+    federated dashboard on the connections it names (`lookup`, else
+    session_lookup), with no session gate."""
     federated = _federated(queries, params)
     if isinstance(federated, dict):
         return federated
     if federated:
-        return await run_dashboard_on(None, session_lookup(sid), queries, params, values, limit)
+        return await run_dashboard_on(None, lookup or session_lookup(sid), queries, params, values, limit)
     declared = parse_params(params)
     if not queries and not any(p.options_sql for p in declared):
         # Nothing touches the database: no session, runner or dialect is used,

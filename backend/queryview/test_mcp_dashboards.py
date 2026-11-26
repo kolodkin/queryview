@@ -7,9 +7,10 @@ import duckdb
 
 from queryview import mcp_server, sessions
 from queryview.connect import _save_active_connection, open_saved
+from queryview.dashboard_entries import MIXED
 from queryview.drivers.duckdb import DuckConfig
-from queryview.mcp_server import mcp, run_dashboard
-from queryview.test_mcp_connections import _connected_session, _run
+from queryview.mcp_server import _AGENT_DRIVERS, mcp, run_dashboard
+from queryview.test_mcp_connections import _agent_add, _connected_session, _run
 
 REGION = [{"name": "region", "options": ["eu", "us"]}]
 Q = {"q": "SELECT {region} AS v"}
@@ -129,3 +130,47 @@ def test_a_folder_needs_no_html(tmp_path):
 def test_a_blank_query_is_skipped():
     out = _run(run_dashboard(_connected_session("rd-blank"), {"q": "SELECT 7 AS n", "empty": "   "}))
     assert out["results"] == {"q": {"n": [7]}}
+
+
+def _orders(connection: str) -> dict:
+    return {"orders": {"connection": connection, "sql": "SELECT 2 AS n"}}
+
+
+# req: architecture/mcp/run-dashboard
+def test_a_query_runs_on_the_connection_it_names():
+    sid = _connected_session("rd-named-main")
+    assert _agent_add(sid, "rd-named-wh")["ok"]
+    out = _run(run_dashboard(sid, _orders("rd-named-wh")))
+    assert out["ok"] is True and out["results"] == {"orders": {"n": [2]}}
+    assert [(c["name"], c["status"], c["queries"]) for c in out["connections"]] == [("rd-named-wh", "ok", ["orders"])]
+
+
+# req: architecture/mcp/run-dashboard
+def test_a_disconnected_session_runs_named_queries():
+    sid = _run(sessions.create_session()).id
+    assert _agent_add(sid, "rd-loose-wh")["ok"]
+    out = _run(run_dashboard(sid, _orders("rd-loose-wh")))
+    assert out["ok"] is True and out["results"] == {"orders": {"n": [2]}} and out["database"] is None
+
+
+# req: architecture/mcp/run-dashboard
+def test_a_file_connection_the_agent_did_not_add_is_refused():
+    _run(_save_active_connection("rd-user-duck", DuckConfig(":memory:"), "duckdb"))
+    out = _run(run_dashboard(_run(sessions.create_session()).id, _orders("rd-user-duck")))
+    assert out["ok"] is False
+    assert out["message"] == f"orders: the agent may switch only to {', '.join(_AGENT_DRIVERS)} connections"
+    assert [c["status"] for c in out["connections"]] == ["failed"]
+
+
+# req: architecture/mcp/run-dashboard
+def test_a_malformed_entry_is_refused():
+    out = _run(run_dashboard(_connected_session("rd-malformed"), _orders("")))
+    assert out == {"ok": False, "message": "query 'orders': connection must be a non-empty string"}
+
+
+# req: architecture/mcp/run-dashboard
+def test_a_mixed_dashboard_is_refused():
+    sid = _connected_session("rd-mixed")
+    assert _agent_add(sid, "rd-mixed-wh")["ok"]
+    out = _run(run_dashboard(sid, {**_orders("rd-mixed-wh"), "q": "SELECT 1"}))
+    assert out == {"ok": False, "message": MIXED}
