@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from queryview import serving
 from queryview.drivers.sqlite import SqliteDriver
-from queryview.gitsync import GitSyncError
+from queryview.gitsync import GitSyncError, dashboard_reldir
 from queryview.server.config import ServerConfig, load_config
 from queryview.server.main import create_app
 from queryview.server.repo import Repo
@@ -452,6 +452,8 @@ def test_a_query_naming_an_unconfigured_connection_fails_by_name(fed_client, das
     assert [(c["name"], c["status"]) for c in r.json()["connections"]] == [("local", "ok"), ("nope", "unknown")]
     r = fed_client.post("/api/query", json={**ON_FED, "query": "orders"})
     assert r.status_code == 400 and 'unknown connection "nope"' in r.json()["message"]
+    r = fed_client.post("/api/describe", json={**ON_FED, "query": "orders"})
+    assert r.status_code == 400 and r.json()["message"] == 'orders: unknown connection "nope"'
 
 
 # req: architecture/viewer_server_api/named-connection
@@ -473,5 +475,7 @@ def test_the_dashboard_listing_never_carries_an_entry(fed_client):
 # req: architecture/viewer_server_api/named-connection
 def test_a_mixed_dashboard_is_not_served(fed_client, dash_repo):
     dash_repo.commit([{**FED, "name": "mixed", "queries": {**FED["queries"], "plain": "SELECT 1"}}])
-    asyncio.run(fed_client.app.state.repo.refresh())
+    assert (dash_repo.author / dashboard_reldir("mixed")).is_dir()  # in the repo...
+    assert asyncio.run(fed_client.app.state.repo.refresh())  # ...and the load ran on it
     assert fed_client.get("/api/dashboards").json() == [{"name": "fed"}, {"name": "sales"}]
+    assert fed_client.get("/api/dashboards/mixed").status_code == 404
