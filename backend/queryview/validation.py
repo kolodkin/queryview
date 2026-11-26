@@ -61,6 +61,8 @@ def _entry_error(entry: object, label: str) -> str | None:
     kind = entry.get("kind", "value")
     if kind not in KINDS:
         return f"invalid {label} kind must be one of {', '.join(KINDS)}"
+    if err := _connection_error(entry, label):
+        return err
     if kind == "text":
         # Free input: an optional opening text, no list to pick from.
         if entry.get("options") is not None or entry.get("options_sql") is not None:
@@ -78,7 +80,7 @@ def _entry_error(entry: object, label: str) -> str | None:
         return f"invalid {label} default must be 'none' when given"
     if kind == "dimension" and entry.get("options") is None and entry.get("options_sql") is None:
         return None
-    return _selector_error(entry, label) or _connection_error(entry, label)
+    return _selector_error(entry, label)
 
 
 def _twice(label: str, name: str) -> str:

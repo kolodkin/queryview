@@ -115,3 +115,11 @@ def test_a_param_may_name_a_connection():
     )
     for key in ("connection", "database"):
         assert dashboard_params_error([{**sel, key: ""}]) == f"invalid params[0] 'r' {key} must be a non-empty string"
+
+
+def test_a_text_param_or_bare_dimension_naming_a_connection_needs_options_sql():
+    for entry in ({"name": "t", "kind": "text"}, {"name": "t", "kind": "dimension"}):
+        for key in ("connection", "database"):
+            assert dashboard_params_error([{**entry, key: "warehouse"}]) == (
+                f"invalid params[0] 't' {key} needs options_sql"
+            )

@@ -126,8 +126,8 @@ def dashboard_from_data(
     if not isinstance(data, dict):
         raise YamlIOError(f"malformed {where}: expected a mapping")
     name = _require_str(data, "name", where) if require_name or "name" in data else None
-    # A `connection` key (older documents) is ignored: a dashboard runs on the
-    # viewing session's connection.
+    # A top-level `connection` key (older documents) is ignored: an unfederated
+    # dashboard runs on the viewing session's connection.
     html = _require_str(data, "html", where) if require_html else str(data.get("html") or "")
     queries = data.get("queries") or {}
     qerr = queries_error(queries)
