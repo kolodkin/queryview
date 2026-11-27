@@ -122,7 +122,8 @@ describes, table and database lists and the connect probe; an agent's `run_sql`
 and a script run connect within it, then have their own longer limits. Applied
 on blur or Enter, remembered with the session and read by the server on each
 request. ClickHouse, Postgres, MySQL and SQLite honour it; a DuckDB query runs to
-completion.
+completion. MySQL ends only a `SELECT` on the server at the limit; anything
+else runs on there after QueryView has given up on it.
 
 ## Why
 

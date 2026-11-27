@@ -4,6 +4,7 @@ picker lists the server's databases and the selected one is where queries run.""
 from __future__ import annotations
 
 import asyncio
+import re
 import struct
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
@@ -30,6 +31,7 @@ from .base import (
     TextResult,
     build_order_by,
     error_message,
+    mask_sql,
     parse_host_port_config,
     parse_json_text,
     query_timeout,
@@ -109,7 +111,11 @@ _CONV = {**conversions, FIELD_TYPE.TIME: str, FIELD_TYPE.BIT: lambda b: int.from
 _MULTI_STATEMENTS_OFF = struct.pack("<H", 1)
 
 
-async def _raw_connect(c: MySqlConfig, database: str | None):
+async def _raw_connect(c: MySqlConfig, database: str | None, timeout: float | None = None):
+    """Connect within the query timeout. A SELECT gets `timeout` (by default
+    the query timeout too) server-side as well: `max_execution_time` ends it
+    on the server when the client gives up on it."""
+    timeout = query_timeout.get() if timeout is None else timeout
     conn = await aiomysql.connect(
         host=c.host,
         port=c.port,
@@ -120,6 +126,7 @@ async def _raw_connect(c: MySqlConfig, database: str | None):
         autocommit=True,
         connect_timeout=query_timeout.get(),
         conv=_CONV,
+        init_command=f"SET SESSION max_execution_time = {int(timeout * 1000)}",
     )
     # aiomysql always negotiates multi-statements; one call must run one statement,
     # or `SET SESSION TRANSACTION READ WRITE; DELETE ...` escapes run_sql's read-only session.
@@ -133,22 +140,33 @@ async def _raw_connect(c: MySqlConfig, database: str | None):
 
 
 @asynccontextmanager
-async def _connect(c: MySqlConfig, database: str | None):
+async def _connect(c: MySqlConfig, database: str | None, timeout: float | None = None):
     """Short-lived connection, closed on exit. close() drops the socket rather
     than draining an unread result."""
-    conn = await _raw_connect(c, database)
+    conn = await _raw_connect(c, database, timeout)
     try:
         yield conn
     finally:
         conn.close()
 
 
+_INTERRUPTED = 1317
+
+
+async def _kill_query(c: MySqlConfig, thread_id: int) -> None:
+    """End the statement running on connection `thread_id` (a login may kill
+    its own) from a second connection."""
+    async with _connect(c, None) as killer:
+        await _fetch(killer, f"KILL QUERY {int(thread_id)}", None, query_timeout.get())
+
+
 async def _fetch(
-    conn: Any, sql: str, max_rows: int | None, timeout: float, drain: bool = False
+    conn: Any, sql: str, max_rows: int | None, timeout: float, stop: MySqlConfig | None = None
 ) -> tuple[Any, list[Any], int]:
     """Run `sql` and fetch up to `max_rows` rows (all when None) within `timeout`:
-    (description or None, rows, affected row count). `drain` reads past the
-    unfetched rest so the connection can run another statement."""
+    (description or None, rows, affected row count). With `stop`, the config it
+    connected with, a result with more rows is ended on the server with KILL
+    QUERY, so the connection can run another statement without reading the rest."""
 
     async def go():
         # Unbuffered when capped, so only the rows fetched cross the wire.
@@ -157,18 +175,22 @@ async def _fetch(
         if cur.description is None:
             return None, [], cur.rowcount
         rows = await (cur.fetchall() if max_rows is None else cur.fetchmany(max_rows))
-        if drain:
-            # shortcut: reads the unfetched rest of a big result; KILL QUERY from a second
-            # connection if scripts' capped SELECTs on large tables get slow.
-            await cur.close()
+        if stop is not None:
+            if len(rows) == max_rows:  # more may follow: stop sending them
+                await _kill_query(stop, conn.thread_id())
+            try:
+                await cur.close()  # reads what is already on the way
+            except MySQLError as e:
+                if e.args[0] != _INTERRUPTED:
+                    raise
         return cur.description, list(rows), cur.rowcount
 
-    # shortcut: a timeout only abandons the statement client-side (the connection
-    # is closed); use max_statement_time / max_execution_time if servers keep running them.
     return await asyncio.wait_for(go(), timeout)
 
 
 _DUP_FIELDNAME = 1060
+# `SELECT … INTO OUTFILE` / `INTO DUMPFILE` write a file on the server, read-only or not.
+_FILE_WRITE = re.compile(r"\bINTO\s+(OUTFILE|DUMPFILE)\b", re.IGNORECASE)
 # A session (not transaction) setting also refuses DDL and survives a COMMIT.
 _READ_ONLY = "SET SESSION TRANSACTION READ ONLY"
 
@@ -280,8 +302,10 @@ class MySqlDriver:
             return Err(error_message(e))
 
     async def run_sql(self, config: MySqlConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
+        if _FILE_WRITE.search(mask_sql(sql, mysql=True)):
+            return Err("run_sql refuses INTO OUTFILE and INTO DUMPFILE: they write a file on the server")
         try:
-            async with _connect(config, database) as conn:
+            async with _connect(config, database, RUN_SQL_TIMEOUT_SECONDS) as conn:
                 # Unwrapped SQL could otherwise write.
                 await _fetch(conn, _READ_ONLY, None, RUN_SQL_TIMEOUT_SECONDS)
                 description, rows, _ = await _fetch(conn, sql, max_rows, RUN_SQL_TIMEOUT_SECONDS)
@@ -315,12 +339,12 @@ class MySqlDriver:
 
     async def execute_script(self, config: MySqlConfig, sql: str, database: str | None) -> list[StatementResult]:
         try:
-            async with _connect(config, database) as conn:
+            async with _connect(config, database, SCRIPT_TIMEOUT_SECONDS) as conn:
 
                 async def run_one(stmt: str) -> StatementResult:
                     try:
                         description, rows, affected = await _fetch(
-                            conn, stmt, SCRIPT_ROW_CAP + 1, SCRIPT_TIMEOUT_SECONDS, drain=True
+                            conn, stmt, SCRIPT_ROW_CAP + 1, SCRIPT_TIMEOUT_SECONDS, stop=config
                         )
                         if description is None:
                             return StatementResult(stmt, True, status=f"OK, {max(affected, 0)} rows affected")
@@ -328,7 +352,7 @@ class MySqlDriver:
                         return StatementResult(stmt, False, message=error_message(e))
                     return StatementResult(stmt, True, rows=_to_rows(description, rows))
 
-                return await run_script(sql, run_one)
+                return await run_script(sql, run_one, mysql=True)
         except Exception as e:  # noqa: BLE001
             # The connection itself failed: report it against the whole script.
             return [StatementResult(sql, False, message=error_message(e))]

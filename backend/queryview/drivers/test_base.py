@@ -13,6 +13,7 @@ from queryview.drivers.base import (
     Column,
     QueryRows,
     build_order_by,
+    mask_sql,
     parse_host_port_config,
     rows_to_columns,
     select_all_sql,
@@ -120,6 +121,20 @@ def test_split_statements_ignores_semicolons_inside_quotes_and_comments():
         "-- trailing; comment\n/* block; comment */ SELECT 'it''s; here'",
         "SELECT $$dollar; quoted$$",
     ]
+
+
+def test_split_statements_reads_mysql_comments_only_for_mysql():
+    sql = "# don't; stop\nSELECT 1 /*! ; */; SELECT 2"
+    assert split_statements(sql, mysql=True) == ["# don't; stop\nSELECT 1 /*!", "*/", "SELECT 2"]
+    # Elsewhere `#` is code (a Postgres operator) and `/*! */` a comment.
+    assert split_statements("SELECT 1 # 2; SELECT '/*!'; SELECT 3") == ["SELECT 1 # 2", "SELECT '/*!'", "SELECT 3"]
+
+
+def test_mask_sql_blanks_quotes_and_comments_keeping_offsets():
+    sql = "SELECT 'a', \"b\" -- c\nFROM t /* d */ # e"
+    assert mask_sql(sql) == "SELECT    ,     " + " " * 4 + "\nFROM t " + " " * 7 + " # e"
+    assert mask_sql(sql, mysql=True).endswith("FROM t " + " " * 7 + "    ")
+    assert mask_sql("SELECT /*! INTO */ 1", mysql=True) == "SELECT /*! INTO */ 1"
 
 
 def test_split_statements_keeps_an_unterminated_quote_in_one_statement():

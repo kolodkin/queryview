@@ -4,38 +4,6 @@ Planned work, highest priority first. Each entry is a proposal, not yet
 implemented — the spec lives here until it ships, then moves into the relevant
 doc.
 
-## run_sql: server-side file access
-
-An agent's [`run_sql`](./architecture/mcp.md#tools) runs read-only, but read-only only
-blocks writes to tables. On MySQL, `SELECT … INTO OUTFILE` and `INTO DUMPFILE`
-still write files on the database server, and `LOAD_FILE()` reads them, when
-the login has the FILE privilege. `secure_file_priv` limits where, and an
-existing file is never overwritten. Postgres's `COPY … TO '<file>'` likely
-has the same gap for a superuser (untested).
-
-- **Refuse in `run_sql`.** Reject `INTO OUTFILE` / `INTO DUMPFILE` (MySQL) and
-  `COPY … TO` a file (Postgres), skipping comments and ignoring case. A
-  text check can be dodged, so it backs up the next item.
-- **Document the login.** [mcp.md](./user_guide/mcp.md) and [connect.md](./user_guide/connect.md)
-  advise an agent connection to use a login without file privileges: no FILE
-  on MySQL, no superuser or `pg_write_server_files` on Postgres.
-
-## MySQL driver follow-ups
-
-- **Scripts stop reading at the cap.** A script SELECT keeps 100 rows (see
-  [scripts.md](./user_guide/scripts.md#per-driver)), but the driver reads the rest of the
-  result to free the connection, so `SELECT * FROM big_table` transfers the
-  whole table. A `KILL QUERY` from a second connection would end it at the cap
-  instead.
-- **Server-side timeouts.** The **Query timeout** and `run_sql`'s limit end the
-  request in QueryView, but MySQL keeps running the statement. Setting
-  `max_execution_time` per session would stop it on the server too, as
-  Postgres's `statement_timeout` does.
-- **`#` comments in scripts.** The statement splitter knows `--` and `/* */`
-  comments, not MySQL's `#`, so an apostrophe in `# don't …` merges the rest
-  of the script into one statement, which then fails. `#` is an operator in
-  Postgres, so the splitter needs it per driver, with its frontend mirror.
-
 ## DuckDB file mode: schema picker
 
 A DuckDB connection whose `path` is a `.duckdb` file should navigate like
@@ -89,8 +57,6 @@ each workspace; multi-user sync needs git pulling or a webhook first.
 
 - [api.md](./architecture/api.md) — backend JSON API.
 - [connect.md](./user_guide/connect.md) — connecting, storage.
-- [mcp.md](./user_guide/mcp.md) — the agent tools, `run_sql` among them.
-- [scripts.md](./user_guide/scripts.md) — running scripts, per driver.
 - [gitsync.md](./user_guide/gitsync.md) — git backup & restore, whose follow-ups live here.
 - [workspace.md](./user_guide/workspace.md) — workspaces and their git remotes.
 - [session.md](./user_guide/session.md) — sessions and what they remember.

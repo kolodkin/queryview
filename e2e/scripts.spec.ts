@@ -8,6 +8,8 @@ import {
   CH,
   DUCK,
   type DriverCase,
+  armRemote,
+  caseById,
   chDb,
   chExec,
   closeQueries,
@@ -15,6 +17,7 @@ import {
   dashboardFrame,
   dbExec,
   expect,
+  mcpCall,
   test,
   uid,
 } from "./fixtures";
@@ -223,3 +226,41 @@ test("textarea sizes collapse and expand", async ({ page, seeds, shot }) => {
   await expect(textarea).toHaveAttribute("rows", "28");
   await expect(textarea).toHaveValue("SELECT 1 AS a");
 });
+
+// req: user_guide/scripts/mysql-script
+test("mysql reads # comments and stops a capped select", async ({ page, seeds }) => {
+  await connect(page, caseById("mysql"), await seeds.myDb());
+  await openScriptsPage(page);
+
+  // A million rows: the server stops sending them at the cap, and the run's
+  // connection is free for the next statement.
+  const big = "WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM s WHERE n < 1000) SELECT a.n FROM s a, s b";
+  const script = `# don't stop here; nor here\n${big};\nSELECT 42 AS after_cap`;
+  const textarea = page.getByTestId("scripts-input");
+  await textarea.fill(script);
+  // From the comment line, Run takes the comment and the statement below it.
+  await textarea.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(3, 3));
+  await page.getByTestId("scripts-run-current").click();
+  await expect(page.getByTestId("scripts-status")).toContainText("first 100 rows, more exist");
+
+  await page.getByTestId("scripts-run-all").click();
+  const status = page.getByTestId("scripts-status");
+  await expect(status).toContainText("2 statements");
+  await expect(status).toHaveAttribute("data-ok", "true");
+  await expect(page.getByTestId("scripts-output")).toContainText("42");
+});
+
+// req: user_guide/scripts/server-files
+for (const id of ["mysql", "postgres"]) {
+  test(`run_sql refuses server file writes [${id}]`, async ({ page, seeds, baseURL }) => {
+    const c = caseById(id);
+    await connect(page, c, await seeds[c.seed]());
+    const sessionId = await armRemote(page);
+    const mcp = (sql: string) => mcpCall(baseURL!, "run_sql", { session_id: sessionId, sql });
+
+    const write = id === "mysql" ? "SELECT 1 INTO OUTFILE '/tmp/qv_e2e_refused.csv'" : "COPY (SELECT 1) TO '/tmp/qv_e2e_refused.csv'";
+    expect(await mcp(write)).toEqual({ ok: false, message: expect.stringContaining("run_sql refuses") });
+    // In a string the words are only text.
+    expect((await mcp("SELECT 'INTO OUTFILE COPY' AS s")).ok).toBeTruthy();
+  });
+}

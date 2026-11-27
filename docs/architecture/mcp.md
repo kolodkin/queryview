@@ -38,7 +38,10 @@ you [armed](../user_guide/mcp.md#arming-a-session).
   typed as the driver returns them (64-bit integers and decimals as strings,
   collections as JSON); `truncated` means rows past `limit` were dropped. Fails
   with `not connected` on a disconnected session; stops after 60s, server-side
-  too. ClickHouse errors name the `query_id` to look up in `system.query_log`.
+  too (on MySQL, a `SELECT` only). Refuses what writes a file: DuckDB `COPY`,
+  SQLite `ATTACH`, MySQL `INTO OUTFILE`/`INTO DUMPFILE`, Postgres `COPY`/`DO`
+  ([scripts.md](../user_guide/scripts.md#file-writes)). ClickHouse errors name
+  the `query_id` to look up in `system.query_log`.
   <!-- req: run-script -->
 - `run_script(session_id, sql)` — run a script like the [Scripts](../user_guide/scripts.md)
   page's Run all, **writes included**, returning `{ok, database, results: [{sql,

@@ -38,6 +38,14 @@ describe('statementRangeAt', () => {
     const second = statementRangeAt(script, fn.length + 10)!
     expect(script.slice(second.start, second.end)).toBe("SELECT E'it\\'s; here'")
   })
+  it("reads MySQL's # comments only on MySQL", () => {
+    const script = "# don't; stop\nSELECT 1; SELECT 2"
+    const mine = statementRangeAt(script, 3, true)!
+    expect(script.slice(mine.start, mine.end)).toBe("# don't; stop\nSELECT 1")
+    // Elsewhere `#` is code, so the apostrophe opens a quote that keeps the rest.
+    const other = statementRangeAt(script, 3)!
+    expect(script.slice(other.start, other.end)).toBe(script)
+  })
   it('falls back to the last statement after trailing whitespace', () => {
     expect(statementRangeAt('SELECT 1;\n\n', 11)).toEqual({ start: 0, end: 8 })
     expect(statementRangeAt('   ', 1)).toBeNull()

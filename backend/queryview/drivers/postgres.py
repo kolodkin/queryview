@@ -3,6 +3,7 @@ lists real databases and the selected one is where queries run."""
 
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass
 from typing import Any
@@ -25,6 +26,7 @@ from .base import (
     TextResult,
     build_order_by,
     error_message,
+    mask_sql,
     parse_host_port_config,
     parse_json_text,
     query_timeout,
@@ -90,6 +92,10 @@ async def _connect(c: PgConfig, database: str | None, command_timeout: float | N
     finally:
         await conn.close()
 
+
+# `COPY … TO '<file>'` / `TO PROGRAM` write a file or run a command on the server
+# even in a read-only transaction, and a `DO` block can run one.
+_FILE_WRITE = re.compile(r"\s*(COPY|DO)\b", re.IGNORECASE)
 
 # json/jsonb and their arrays (`_json`, `_jsonb`), which asyncpg hands over as text.
 _JSON_TYPES = {"json", "jsonb", "_json", "_jsonb"}
@@ -213,6 +219,8 @@ class PostgresDriver:
             return Err(error_message(e))
 
     async def run_sql(self, config: PgConfig, sql: str, database: str | None, max_rows: int) -> RowsResult | Err:
+        if _FILE_WRITE.match(mask_sql(sql)):
+            return Err("run_sql refuses COPY and DO: they can write a file on the server")
         try:
             async with (
                 _connect(config, database, RUN_SQL_TIMEOUT_SECONDS) as conn,

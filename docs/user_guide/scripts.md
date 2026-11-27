@@ -63,8 +63,10 @@ first error.
 Statements are separated by `;`. The split skips semicolons inside `'…'` (a
 backslash escapes the next character, as in ClickHouse and Postgres `E''`
 strings), `"…"`, `` `…` ``, `$$…$$` and `$tag$…$tag$` bodies, `-- …` line
-comments and `/* … */` block comments; blank statements are dropped. An unterminated quote keeps the rest of
-the script in one statement, so the database reports the real syntax error.
+comments and `/* … */` block comments; blank statements are dropped. On
+MySQL, `# …` is a line comment too and `/*! … */` is code, as MySQL reads
+them. An unterminated quote keeps the rest of the script in one statement, so
+the database reports the real syntax error.
 
 <!-- req: one-connection -->
 A run opens **one connection** (one server session on ClickHouse) and runs
@@ -106,9 +108,13 @@ same JSON shape as every other result
 - **Postgres** — each statement is prepared and executed on the run's
   connection; rows are read through a cursor up to the cap, and a statement
   with no result columns reports its command tag.
-- **MySQL** — statements run in autocommit on the run's connection; rows
-  stream up to the cap (the rest is read and dropped), and a statement with no
-  result reports `OK, N rows affected`.
+<!-- req: mysql-script -->
+- **MySQL** — statements run in autocommit on the run's connection. Rows
+  stream up to the cap, then a `KILL QUERY` from a second connection stops the
+  rest, so a `SELECT *` on a big table transfers only what is shown. A
+  statement with no result reports `OK, N rows affected`. A `SELECT` past the
+  10 minutes is ended on the server too (`max_execution_time`); other
+  statements run on there.
 - **DuckDB** — the file is opened **read-write** for the run, while every other
   page opens it read-only. DuckDB refuses a second open of one file with a
   different mode in the same process, so the explorer and dashboards error on
@@ -148,6 +154,18 @@ CREATE TABLE x.customers_copy AS SELECT * FROM customers
 ```
 
 Keep an agent off file connections you wouldn't hand it the filesystem for.
+
+<!-- req: server-files -->
+On MySQL and Postgres the files are the database server's, and the login's
+privileges decide. MySQL's `SELECT … INTO OUTFILE` / `INTO DUMPFILE` write one
+and `LOAD_FILE()` reads one, given the FILE privilege; Postgres's `COPY … TO`
+writes one, or runs a command with `TO PROGRAM`, for a superuser, even in a
+read-only transaction. `run_sql` refuses `INTO OUTFILE`, `INTO DUMPFILE`,
+`COPY` and `DO` (a block can run a `COPY`), quoted text and comments aside.
+That check reads the text, so it can be dodged, and scripts get no check at
+all: give an agent's connection a login without file privileges — no FILE on
+MySQL; no superuser, `pg_read_server_files`, `pg_write_server_files` or
+`pg_execute_server_program` on Postgres.
 
 ## Related docs
 

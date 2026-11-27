@@ -703,6 +703,7 @@ function Shell() {
                 pushed={scriptPush}
                 onPushConsumed={() => setScriptPush(null)}
                 remoteId={remoteId}
+                mysql={connection?.type === 'mysql'}
               />,
             )}
           />
