@@ -84,7 +84,8 @@ Builder's call per section; the starting split:
 
 - Stay in `architecture/`: `overview.md`, `api.md`, `viewer_server_api.md`,
   `storage.md` (data directory, schema, encryption), the "Tools" contract in
-  `mcp.md`, "Isolation & security" in `dashboards.md`.
+  `mcp.md` with its IDs. "Isolation & security" (no ID, no test) folds into
+  `overview.md`, since `dashboards.md` is left with nothing else (my call).
 - Move to `designs/`: `sessions.md`; "Running the queries" and "Which
   connection, which database" from `dashboards.md`; "Federated drafts" and
   "How it works" from `mcp.md`; the folder-mode "Why" (into
@@ -103,7 +104,9 @@ the endpoint), `connect.md` "Storage & migrations", "Persistence (SQLite)",
 "Isolation & security". Where the user sees an effect, the guide keeps one
 line and links down ("Saved passwords are encrypted" → `storage.md`).
 
-Stay: the MCP tool reference, "The `window.queries` contract for HTML
+Stay: the guide's short list of what you can ask your agent, linking to the
+tool contract in `architecture/mcp.md` (my call: moving the contract up would
+need about 7 new browser tests), "The `window.queries` contract for HTML
 authors", the viewer server's config file, git-sync's repository layout, and
 the user-facing "Why" in `creds.md`.
 
@@ -112,7 +115,14 @@ the user-facing "Why" in `creds.md`.
 Each page opens with what the feature is for, then task sections ("Create a
 connection", "Edit or delete a connection"), each led by its statement, then
 what the screen shows. Second person. Heading renames require grepping code
-comments that quote them (project skill rule).
+comments that quote them (project skill rule). A rewording pass: untagged
+prose stays untagged and gets no new ID (my call; the generic skill's "Not
+covered" lets a wording change that alters no behavior skip the steps).
+
+## Published
+
+"Published" means linked from `README.md` (my call). No docs site; the
+README's relative links breaking on PyPI is outside this change.
 
 ## Index and instructions
 
