@@ -9,7 +9,7 @@ viewers is the [viewer server](./viewer_server.md).
 
 The agent never receives query results back: your **browser** runs the queries
 on your session's connection and feeds the results into the agent's HTML,
-which renders inside an isolated iframe.
+which renders inside an [isolated iframe](../architecture/overview.md#isolation--security).
 
 ## Live dashboard
 
@@ -449,3 +449,5 @@ stands at the current parameters. Print the file for a PDF.
 - [mcp.md](./mcp.md) — arming a session, the session id, the MCP server.
 - [api.md](../architecture/api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
 - [connect.md](./connect.md) — connections and their stored database.
+- [overview.md](../architecture/overview.md#isolation--security) — the sandbox the dashboard HTML runs in.
+- [designs/dashboards.md](../designs/dashboards.md) — how a dashboard's queries run.

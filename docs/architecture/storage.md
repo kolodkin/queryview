@@ -70,6 +70,10 @@ If the key changes (or a row predates encryption) the value can't be decrypted;
 a session on that connection reads as disconnected and the user reconnects,
 which re-encrypts it with the current key.
 
+A [workspace](../user_guide/workspace.md)'s git remote URL, which may embed a
+token, is encrypted with the same key, so a changed key also loses saved remote
+tokens until each remote is entered again.
+
 ## Related docs
 
 - [connect.md](../user_guide/connect.md) — connections, drivers and the Connect page.

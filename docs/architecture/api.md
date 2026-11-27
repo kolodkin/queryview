@@ -103,7 +103,7 @@ documents and imported back — one at a time or a whole workspace at once. See
 | Method | Path          | Body / params                              | Description |
 | ------ | ------------- | ------------------------------------------ | ----------- |
 | GET    | `/api/export` | `?kind=&name=&workspace=`                  | Download one dashboard (`kind=dashboard`, `name`) or the whole workspace (`kind=workspace`) as YAML, with a `Content-Disposition` filename (`{name}.dashboard.yaml` / `{workspace}.workspace.yaml`). `400` bad args, `404` unknown entity/workspace. |
-| POST   | `/api/import` | raw YAML body, `?workspace=`               | Import a document into a workspace, upserting by name; the document's `kind` decides what is written. `{ok, kind, dashboards}`. `400` malformed document, one carrying saved queries, or a new name that is too long; `409` a new name that is a case twin. |
+| POST   | `/api/import` | raw YAML body, `?workspace=`               | Import a document into a workspace, upserting by name; the document's `kind` decides what is written. `{ok, kind, dashboards}`, `dashboards` being the count upserted. `400` malformed document, missing arguments, one carrying saved queries, a dashboard mixing named and unnamed queries, or a new name that is too long; `404` unknown workspace; `409` a new name that is a case twin of a saved dashboard or of an earlier entry. |
 
 ## Git sync
 

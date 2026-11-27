@@ -72,9 +72,9 @@ top of it:
   instead.
 - UI labels are **bold**, exactly as the screen shows them. A page about a
   screen may open with a layout sketch; the `devpowers:ascii-sketch` skill draws it.
-- `docs/architecture/api.md` is the endpoint reference. A feature page's
-  `## API` section names its endpoints and links there, as `scripts.md` does;
-  bodies and responses are not repeated.
+- `docs/architecture/api.md` is the endpoint reference. A guide page names an
+  endpoint only where you call it yourself, and links there; bodies and
+  responses are not repeated.
 - Links are relative, `./page.md#anchor`. Code is named only when the reader
   must open it, as a module or package path. Code and docstrings that back-link
   a heading quote it word for word, so grep for the old text when renaming one.
