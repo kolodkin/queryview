@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from queryview import remote, sessions
 from queryview.conftest import app
 from queryview.connect import _data_dir, _save_active_connection
+from queryview.dashboard_entries import MIXED, Entry
 from queryview.dashboards import (
     delete_dashboard,
     get_dashboard,
@@ -45,7 +46,7 @@ def test_upsert_creates_then_updates_by_name(default_ws_id):
 
 
 def test_get_dashboard_round_trips_queries_dict(default_ws_id):
-    queries = {"sales": "SELECT * FROM sales", "users": "SELECT count() FROM users"}
+    queries: dict[str, Entry] = {"sales": "SELECT * FROM sales", "users": "SELECT count() FROM users"}
     _run(upsert_dashboard("multi", "<div></div>", queries, workspace_id=default_ws_id))
     got = _run(get_dashboard("multi", default_ws_id))
     assert got is not None
@@ -371,3 +372,14 @@ def test_dashboards_with_a_slash_rename_and_delete():
 def test_save_reports_no_commit_without_a_remote():
     r = TestClient(app).post("/api/dashboards", json={"name": f"nc {uuid.uuid4().hex}", "html": "<p/>", "queries": {}})
     assert r.json()["committed"] is False
+
+
+def test_dashboards_save_federated_entries():
+    client = TestClient(app)
+    name = f"fed-{uuid.uuid4().hex[:8]}"
+    orders = {"connection": "warehouse", "sql": "SELECT 1"}
+    body = {"name": name, "html": "<p>x</p>", "queries": {"orders": orders, "bad": {"sql": "SELECT 1"}}}
+    assert client.post("/api/dashboards", json=body).status_code == 200
+    assert client.get(f"/api/dashboards/{name}").json()["queries"] == {"orders": orders}
+    r = client.post("/api/dashboards", json={**body, "queries": {"orders": orders, "sales": "SELECT 1"}})
+    assert (r.status_code, r.json()["message"]) == (400, MIXED)

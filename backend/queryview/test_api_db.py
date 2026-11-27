@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from queryview import connect, sessions
 from queryview.conftest import app
+from queryview.dashboard_entries import MIXED
 
 
 def _row(sid: str) -> sessions.SessionRec:
@@ -385,3 +386,41 @@ def test_a_bad_value_is_a_400(tmp_path):
 def test_a_query_with_params_still_needs_a_session():
     r = TestClient(app).post("/api/db/query", json={"query": "SELECT {r}", "params": REGION, "values": {"r": "eu"}})
     assert r.status_code == 409
+
+
+def _named(tmp_path, name: str) -> TestClient:
+    """A fresh, never-connected session, and a saved DuckDB connection `name` holding table t."""
+    _duck(tmp_path, name).post("/api/db/execute", json={"sql": "INSERT INTO t VALUES (7)"})
+    return TestClient(app, headers={"X-QV-Session": f"{name}-viewer"})
+
+
+# req: architecture/dashboards/runqueries, architecture/dashboards/named-connection
+def test_runqueries_runs_a_federated_body_on_its_connections(tmp_path):
+    c = _named(tmp_path, "fed-run")
+    body = {"queries": {"orders": {"connection": "fed-run", "sql": "SELECT id FROM t"}}}
+    r = c.post("/api/runqueries", json=body)
+    assert r.status_code == 200, r.text
+    assert r.json()["results"] == {"orders": {"id": [7]}}
+    assert [(x["name"], x["status"], x["queries"]) for x in r.json()["connections"]] == [("fed-run", "ok", ["orders"])]
+    r = c.post("/api/runqueries", json={"queries": {**body["queries"], "sales": "SELECT 1"}, "params": []})
+    assert r.status_code == 400 and r.json()["message"] == MIXED
+
+
+# req: architecture/dashboards/named-connection
+def test_db_query_and_describe_run_on_a_named_connection(tmp_path):
+    c = _named(tmp_path, "fed-query")
+    r = c.post("/api/db/query", json={"query": "SELECT id FROM t", "connection": "fed-query"})
+    assert r.status_code == 200 and r.json()["data"] == [[7]], r.text
+    r = c.post("/api/db/query", json={"query": "SELECT id FROM t", "connection": "fed-query", "format": "csv"})
+    assert r.json()["output"].split() == ["id", "7"], r.text
+    r = c.post(
+        "/api/db/query",
+        json={"query": "SELECT {r} AS v", "connection": "fed-query", "params": REGION, "values": {"r": "us"}},
+    )
+    assert r.json()["data"] == [["us"]], r.text
+    r = c.post("/api/db/describe", json={"query": "SELECT id FROM t", "connection": "fed-query"})
+    assert r.status_code == 200 and [f["name"] for f in r.json()["fields"]] == ["id"], r.text
+    unknown = {"ok": False, "reason": "query", "message": 'unknown connection "nope"'}
+    for path in ("/api/db/query", "/api/db/describe"):
+        r = c.post(path, json={"query": "SELECT 1", "connection": "nope"})
+        assert r.status_code == 400 and r.json() == unknown, (path, r.text)

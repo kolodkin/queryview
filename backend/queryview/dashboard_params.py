@@ -9,13 +9,15 @@ See docs/system/dashboard.md — "Dashboard parameters".
     text        whatever the user typed, as a literal: {note} -> 'o''k'
     each        a list nobody picks from: a query naming it runs once per option
 
-Pure: no session, request or driver. The caller passes the dialect and a
-runner for `options_sql`."""
+Pure: no session, request or driver. The caller passes a dialect per query and
+per param, and a runner for `options_sql` that is given the param, so each
+`options_sql` can run on its param's own connection (`connection`/`database`,
+read beside `options_sql` only)."""
 
 from __future__ import annotations
 
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -56,10 +58,13 @@ class Param:
     auto_select: bool = True
     # A text param's opening value (its `default`, else empty).
     text: str | None = None
+    # The stored connection (and database) an options_sql runs on; None: the caller's one.
+    connection: str | None = None
+    database: str | None = None
 
 
-# One options_sql -> its first column's values. Raises ParamError on failure.
-Runner = Callable[[str], Awaitable[list[Any]]]
+# A param and its options_sql, substituted -> its first column's values. Raises ParamError on failure.
+Runner = Callable[[Param, str], Awaitable[list[Any]]]
 
 
 def option_text(v: Any) -> str:
@@ -93,7 +98,15 @@ def _parse_entry(o: dict[str, Any], name: str) -> Param | None:
         text = default if auto_select and isinstance(default, str) else ""
         return Param(name, kind, auto_select=auto_select, text=text)
     if sql:
-        return Param(name, kind, options_sql=sql, auto_select=auto_select)
+        conn, db = o.get("connection"), o.get("database")
+        return Param(
+            name,
+            kind,
+            options_sql=sql,
+            auto_select=auto_select,
+            connection=conn if isinstance(conn, str) and conn else None,
+            database=db if isinstance(db, str) and db else None,
+        )
     if has_options:
         texts = tuple(option_text(v) for v in options if v is not None and not isinstance(v, (dict, list)))
         return Param(name, kind, options=texts, auto_select=auto_select) if texts else None
@@ -244,12 +257,15 @@ def missing(sql: str, params: list[Param], values: dict[str, str]) -> list[str]:
     ]
 
 
-async def resolve(params: list[Param], values: dict[str, str], run: Runner, dialect: Dialect) -> list[dict[str, Any]]:
+async def resolve(
+    params: list[Param], values: dict[str, str], run: Runner, dialects: Mapping[str, Dialect]
+) -> list[dict[str, Any]]:
     """Every selector's options and chosen value, in dependency order:
     `[{name, kind, options, value}]`. A value is kept only while its options
     still offer it. A param whose options_sql depends on one not chosen yet
     resolves to no options and no value — with `default: none` that is the
-    normal opening state, not a failure. A text left out opens on its default."""
+    normal opening state, not a failure. A text left out opens on its default.
+    `dialects[p.name]` quotes param `p`'s options_sql; only params with one are looked up."""
     resolved: list[dict[str, Any]] = []
     chosen: dict[str, str] = {}
 
@@ -267,7 +283,9 @@ async def resolve(params: list[Param], values: dict[str, str], run: Runner, dial
             if missing(p.options_sql, params, chosen):
                 settle(p, [], "")
                 continue
-            options = [option_text(v) for v in await run(substitute(p.options_sql, params, chosen, dialect))]
+            options = [
+                option_text(v) for v in await run(p, substitute(p.options_sql, params, chosen, dialects[p.name]))
+            ]
         if p.kind == "each":
             options = list(dict.fromkeys(options))  # a repeated option runs once
             if len(options) > MAX_EACH:
@@ -293,9 +311,9 @@ def each_in(sql: str, params: list[Param]) -> Param | None:
 
 
 def apply_to_queries(
-    queries: dict[str, str], params: list[Param], resolved: list[dict[str, Any]], dialect: Dialect
+    queries: dict[str, str], params: list[Param], resolved: list[dict[str, Any]], dialects: Mapping[str, Dialect]
 ) -> dict[str, str | dict[str, str]]:
-    """The queries with the selections substituted. A query whose selectors
+    """The queries with the selections substituted, each in `dialects[name]`. A query whose selectors
     aren't all chosen yet is left out rather than run half-blank. One naming an
     `each` param is `{option: sql}`, a SQL per option in the list's order."""
     values = {p["name"]: p["value"] for p in resolved}
@@ -309,9 +327,10 @@ def apply_to_queries(
         except ParamError as e:
             raise ParamError(f"{name}: {e}") from None
         if each is None:
-            out[name] = substitute(sql, params, values, dialect)
+            out[name] = substitute(sql, params, values, dialects[name])
         elif missing(each.options_sql or "", params, values):
             continue  # its list waits on a choice, so the query does too
         else:
+            dialect = dialects[name]
             out[name] = {o: substitute(sql, params, {**values, each.name: o}, dialect) for o in options[each.name]}
     return out

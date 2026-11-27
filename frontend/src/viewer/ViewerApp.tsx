@@ -1,11 +1,14 @@
 // The viewer server's page (docs/system/viewer_server.md): pick a connection and a
 // dashboard, and see it as the app's dashboard page shows it. Display only:
-// it sends names and parameter values, never SQL.
+// it sends names and parameter values, never SQL. A federated dashboard names
+// its own connections: the picker gives way to the federated pill, and no
+// request carries `connection`.
 
 import { useEffect, useRef, useState } from 'react'
 
 import {
   DashboardFrame,
+  FederatedPill,
   answerSnapshot,
   answerWidget,
   listenToFrame,
@@ -15,6 +18,7 @@ import {
   widgetQueryNames,
   withKeptText,
   type DashboardResults,
+  type FederatedConnection,
   type PendingSnapshot,
   type ResolvedParam,
 } from '../core'
@@ -27,9 +31,21 @@ import {
   type Selection,
 } from './selection'
 
-type Dashboard = { name: string; html: string; queries: string[] }
+// `connections` only on a federated dashboard.
+type Dashboard = { name: string; html: string; queries: string[]; connections?: string[] }
 // What the frame is built from: one load of one dashboard on one connection.
 type Shown = { dashboard: Dashboard; results: DashboardResults; params: ResolvedParam[] }
+
+// The pill's rows: every name the dashboard lists, each as a run's `connections`
+// reports it (one row per database), else the name alone. A run leaves widget
+// queries out, so its reply alone may miss one.
+const pillRows = (named: string[], reply: unknown): (FederatedConnection | string)[] =>
+  named.flatMap((n): (FederatedConnection | string)[] => {
+    const rows = Array.isArray(reply)
+      ? (reply as FederatedConnection[]).filter((c) => c.name === n)
+      : []
+    return rows.length ? rows : [n]
+  })
 
 const names = (body: unknown): string[] =>
   Array.isArray(body) ? body.map((item) => String((item as { name?: unknown }).name ?? '')) : []
@@ -42,6 +58,8 @@ function ViewerApp() {
   const [shown, setShown] = useState<Shown | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // The federated pill's rows; null for an unfederated dashboard (or none).
+  const [federated, setFederated] = useState<(FederatedConnection | string)[] | null>(null)
   // Bumped per load, keying the frame so a re-pick never reuses a stale one.
   const [loadSeq, setLoadSeq] = useState(0)
   const frameRef = useRef<HTMLIFrameElement>(null)
@@ -104,10 +122,16 @@ function ViewerApp() {
       setError(null)
       // Also ends a load this pick cancelled.
       setLoading(Boolean(connection && dashboard))
-      if (!connection || !dashboard) return
+      if (!connection || !dashboard) {
+        setFederated(null)
+        return
+      }
+      // The pill stays until the next dashboard says its kind, so a switch
+      // between two federated ones does not flash the picker.
       const got = await getJson(`/api/dashboards/${encodeURIComponent(dashboard)}`)
       if (cancelled) return
       if (got.status !== 200) {
+        setFederated(null)
         setLoading(false)
         setError(
           got.status === 404 ? `Dashboard “${dashboard}” not found.` : 'Failed to load dashboard.',
@@ -115,15 +139,18 @@ function ViewerApp() {
         return
       }
       const dash = got.body as Dashboard
+      const named = dash.connections
+      setFederated(named ?? null)
       const widgets = new Set(widgetQueryNames(dash.html))
       const run = await postJson('/api/run', {
-        connection,
+        ...(named ? {} : { connection }),
         dashboard,
         queries: dash.queries.filter((q) => !widgets.has(q)),
         values: {},
       })
       if (cancelled) return
       setLoading(false)
+      if (named) setFederated(pillRows(named, run.connections))
       if (!run.ok) {
         setError(String(run.message ?? 'Failed to run queries.'))
         return
@@ -144,7 +171,8 @@ function ViewerApp() {
   // widgets and its snapshot. Every request names the dashboard's own queries.
   useEffect(() => {
     if (!shown) return
-    const on = { connection, dashboard: shown.dashboard.name }
+    const named = shown.dashboard.connections
+    const on = { ...(named ? {} : { connection }), dashboard: shown.dashboard.name }
     const widgets = new Set(widgetQueryNames(shown.dashboard.html))
     const own = shown.dashboard.queries.filter((q) => !widgets.has(q))
     return listenToFrame(() => [frameRef.current], {
@@ -169,6 +197,7 @@ function ViewerApp() {
         })
         const params = run.params as ResolvedParam[] | undefined
         if (params) resolvedRef.current = params
+        if (named && run.connections) setFederated(pillRows(named, run.connections))
         // Gone from the repo since it was opened: the page says so. A failing
         // query stays the frame's to show, as in the app.
         setError(run.status === 404 ? String(run.message ?? 'Dashboard not found.') : null)
@@ -194,19 +223,23 @@ function ViewerApp() {
     <main className="min-h-screen px-3 py-6 text-slate-100" data-testid="viewer">
       <div className="mb-4 flex flex-wrap items-center justify-center gap-3">
         <h1 className="text-2xl font-bold tracking-tight text-white">QueryView</h1>
-        <select
-          data-testid="viewer-connection"
-          aria-label="Connection"
-          value={connection}
-          onChange={(e) => choose({ connection: e.target.value, dashboard })}
-          className="glass-input min-w-40 px-3 py-2 text-sm"
-        >
-          {connections.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+        {federated ? (
+          <FederatedPill connections={federated} />
+        ) : (
+          <select
+            data-testid="viewer-connection"
+            aria-label="Connection"
+            value={connection}
+            onChange={(e) => choose({ connection: e.target.value, dashboard })}
+            className="glass-input min-w-40 px-3 py-2 text-sm"
+          >
+            {connections.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        )}
         <select
           data-testid="viewer-dashboard"
           aria-label="Dashboards"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   BrowserRouter,
   Link,
@@ -9,7 +9,7 @@ import {
   useNavigate,
 } from 'react-router-dom'
 
-import { SearchPanel, useDismiss } from '../core'
+import { FederatedPill, SearchPanel, useDismiss, type FederatedConnection } from '../core'
 import { PARENT, childFolders, folderLabel, fullPath, isFolderNav, parentFolder } from './folderNav'
 import { MAX_ENTRIES } from './explorerSettings'
 import { loadNumber } from './numberSetting'
@@ -216,6 +216,18 @@ function Shell() {
   const [scriptPush, setScriptPush] = useState<ScriptPush | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
+  // The open federated dashboard's connections: its pill replaces the
+  // session's while set (docs/system/queryview.md).
+  const [federated, setFederated] = useState<(FederatedConnection | string)[] | null>(null)
+  // The pill row whose Unlock is asking for a passphrase; a success bumps the nonce,
+  // which re-runs the dashboard.
+  const [unlocking, setUnlocking] = useState<string | null>(null)
+  const [rerunNonce, setRerunNonce] = useState(0)
+  // A prompt left open must not reopen on the next federated dashboard.
+  const showFederated = useCallback((rows: (FederatedConnection | string)[] | null) => {
+    setFederated(rows)
+    if (!rows) setUnlocking(null)
+  }, [])
   // The pill menu's connection list, refetched on open and on a `connections`
   // push; the nonce also refreshes Connect.
   const [connections, setConnections] = useState<SavedConnection[]>([])
@@ -484,54 +496,76 @@ function Shell() {
       {/* One row: labels truncate as the window narrows instead of the two
           groups overlapping. */}
       <header className="absolute inset-x-4 top-4 z-10 flex items-center gap-2">
-        {ready && connection && (
+        {(federated || (ready && connection)) && (
           <div className="flex min-w-0 items-center gap-2">
-            <div ref={dbRef} className="relative min-w-0">
-              {/* The copy icon is a sibling of the toggle, not a child: a
-                  button cannot nest a button. */}
-              <div className="glass-chip group flex max-w-full items-center text-sm font-medium">
-                <button
-                  type="button"
-                  data-testid="connection-status"
-                  onClick={() => setDbOpen((o) => !o)}
-                  aria-haspopup="listbox"
-                  aria-expanded={dbOpen}
-                  title={
-                    isFolderNav(connection)
-                      ? fullPath(connection.root ?? '', connection.database ?? '.')
-                      : undefined
-                  }
-                  className={`flex min-w-0 items-center gap-2 py-1.5 pl-3 ${connection.database ? '' : 'pr-3'}`}
-                >
-                  <span
-                    className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
-                    data-testid="connection-indicator"
-                    aria-label="connected"
+            {federated ? (
+              <FederatedPill connections={federated} onUnlock={setUnlocking}>
+                {unlocking && (
+                  <PassphrasePrompt
+                    title={`${unlocking} is locked`}
+                    action="Unlock"
+                    onSubmit={async (passphrase) => {
+                      const r = await unlockConnection(unlocking, passphrase)
+                      if (!r.ok) return r.message
+                      setUnlocking(null)
+                      setRerunNonce((n) => n + 1)
+                      return null
+                    }}
+                    onCancel={() => setUnlocking(null)}
                   />
-                  <span className="truncate">
-                    {connection.database
-                      ? `${connection.name} · ${isFolderNav(connection) ? folderLabel(connection.database, connection.root) : connection.database}`
-                      : connection.name}
-                  </span>
-                  <span className="text-xs text-slate-400">▾</span>
-                </button>
-                {connection.database && (
-                  <CopyName name={connection.database} testid="status-db-copy" />
                 )}
-              </div>
-              {dbOpen && (
-                <DatabaseMenu
-                  connection={connection}
-                  connections={connections}
-                  onSelect={(db) => void switchDatabase(db)}
-                  onOpenConnection={(name) => {
-                    setDbOpen(false)
-                    if (name !== connection.name) void openConnection(name)
-                  }}
-                  onDisconnect={() => void disconnect()}
-                />
-              )}
-            </div>
+              </FederatedPill>
+            ) : (
+              ready &&
+              connection && (
+                <div ref={dbRef} className="relative min-w-0">
+                  {/* The copy icon is a sibling of the toggle, not a child: a
+                  button cannot nest a button. */}
+                  <div className="glass-chip group flex max-w-full items-center text-sm font-medium">
+                    <button
+                      type="button"
+                      data-testid="connection-status"
+                      onClick={() => setDbOpen((o) => !o)}
+                      aria-haspopup="listbox"
+                      aria-expanded={dbOpen}
+                      title={
+                        isFolderNav(connection)
+                          ? fullPath(connection.root ?? '', connection.database ?? '.')
+                          : undefined
+                      }
+                      className={`flex min-w-0 items-center gap-2 py-1.5 pl-3 ${connection.database ? '' : 'pr-3'}`}
+                    >
+                      <span
+                        className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500"
+                        data-testid="connection-indicator"
+                        aria-label="connected"
+                      />
+                      <span className="truncate">
+                        {connection.database
+                          ? `${connection.name} · ${isFolderNav(connection) ? folderLabel(connection.database, connection.root) : connection.database}`
+                          : connection.name}
+                      </span>
+                      <span className="text-xs text-slate-400">▾</span>
+                    </button>
+                    {connection.database && (
+                      <CopyName name={connection.database} testid="status-db-copy" />
+                    )}
+                  </div>
+                  {dbOpen && (
+                    <DatabaseMenu
+                      connection={connection}
+                      connections={connections}
+                      onSelect={(db) => void switchDatabase(db)}
+                      onOpenConnection={(name) => {
+                        setDbOpen(false)
+                        if (name !== connection.name) void openConnection(name)
+                      }}
+                      onDisconnect={() => void disconnect()}
+                    />
+                  )}
+                </div>
+              )
+            )}
             <div ref={agentRef} className="relative shrink-0">
               <button
                 type="button"
@@ -703,6 +737,9 @@ function Shell() {
                 onPushConsumed={() => setDashboardPush(null)}
                 runOn={connectionKey(connection)}
                 remoteId={remoteId}
+                activeConnection={connection?.name ?? null}
+                onFederated={showFederated}
+                rerunNonce={rerunNonce}
               />
             }
           />

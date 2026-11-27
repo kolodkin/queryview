@@ -59,15 +59,16 @@ you [armed](../system/mcp.md#arming-a-session).
   doesn't list it). Returns `{ok, message, database}`; past the switch, a
   failure still leaves the session on `database`.
   <!-- req: push-dashboard -->
-- `push_dashboard(session_id, html?, queries?, params?, name?, dir?)` — push a dashboard
-  **draft** on the session's connection; the browser navigates to it and
-  renders it. Without `name` the push is an unnamed draft; `name` selects a
-  saved dashboard to [edit](../system/mcp.md#naming-and-saving): it must be
-  one `list_dashboards` returns, and any other is refused. `dir` reads the draft from
+- `push_dashboard(session_id, html?, queries?, params?, name?, dir?)` — push a
+  dashboard **draft**; the browser navigates to it and renders it. Without
+  `name` the push is an unnamed draft; `name` selects a saved dashboard to
+  [edit](../system/mcp.md#naming-and-saving): it must be one `list_dashboards`
+  returns, and any other is refused. `dir` reads the draft from
   [a folder](../system/dashboard.md#pushing-from-a-folder) instead of `html` and
   `queries`. Returns
   `{ok, pushed, message, database}`; a disconnected session fails with
-  `not connected`. See [dashboard.md](../system/dashboard.md).
+  `not connected` unless the draft is [federated](#federated-drafts). See
+  [dashboard.md](../system/dashboard.md).
   <!-- req: run-dashboard -->
 - `run_dashboard(session_id, queries?, params?, values?, dir?, limit?=100)` — run
   a draft's queries with `values` substituted into their
@@ -76,7 +77,10 @@ you [armed](../system/mcp.md#arming-a-session).
   the `window.queries` shape, at most `limit` rows a query (max 1000). A param
   without a value takes its default; a number or boolean value is read as its
   text (`2`, `true`); see [why](./decisions.md#why-a-param-value-is-matched-as-the-pages-text). Stops at the first failing query, whose
-  name opens the `message`, and after 60s; nothing reaches the browser.
+  name opens the `message`, and after 60s; nothing reaches the browser. A
+  [federated](#federated-drafts) run needs a known session (else
+  `unknown session`) but no session connection, adds `connections: [{name,
+  database, status, queries, message?}]` and has a null `database`.
 - `new_tab(name)` — a session of the agent's own; see [Tabs](../system/mcp.md#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
   <!-- req: git-tools -->
@@ -85,6 +89,19 @@ you [armed](../system/mcp.md#arming-a-session).
 
 A pushed dashboard's queries run through the browser's own `/api/runqueries`
 and `/api/db/query` calls; the push layer never talks to a database.
+
+## Federated drafts
+
+Both dashboard tools take a query as SQL or as a
+[federated](../system/dashboard.md#federated-dashboards)
+`{connection, sql, database?}` map, and refuse a malformed entry or a mixed
+dashboard before anything runs. A pushed page's script can send
+`window.queries` anywhere, so either tool reads data, and a named connection
+obeys `use_connection`'s rules: one `list_connections` does not show is
+`unknown connection "warehouse"`, and a DuckDB or SQLite one the agent did not
+add gets `use_connection`'s refusal. `run_dashboard` fails that query;
+`push_dashboard` refuses the push, naming the first query or param that names
+it (`orders: unknown connection "warehouse"`).
 
 ## How it works
 
@@ -109,10 +126,12 @@ after a minute.
 connection the user [locked](../system/connect.md#locked-connections) behind a
 passphrase, the tools that query it, push to its tab, pick its database or
 switch to it refuse with `connection is locked`: `run_sql`, `run_script`,
-`run_dashboard`, `push_script`, `push_dashboard`, `open_explorer`,
+an unfederated `run_dashboard`, `push_script`, `push_dashboard`,
+`open_explorer`,
 `select_database` and `use_connection`. `session_info` reports only that it is locked, with no name,
 type, database or tables, and a refused tool names no database;
-`list_connections` leaves it out. REST calls without the tab's unlock token are
+`list_connections` leaves it out, and a dashboard query naming it reads as
+`unknown connection`, never `locked`. REST calls without the tab's unlock token are
 refused too, so copying a session id into `/api/db/query` gets the agent
 nowhere.
 

@@ -66,6 +66,7 @@ dashboard discards it.
 
 - a drop-down of the dashboard's queries (its `queries.yaml`);
 - the picked query's SQL;
+- on a federated dashboard, the query's connection;
 - its rows, in a results table like a [`<qv-select-view>`](#widgets),
   whatever the dashboard's HTML does with that query.
 
@@ -75,6 +76,15 @@ edited): in the popup's table, on the page and in the widgets over them. A
 page of rows the popup and a widget both show runs once. The frame is not
 reloaded, so the page keeps its state; a failing page query shows its error
 above the frame. Until **Execute**, everything runs the SQL as last executed.
+
+<!-- req: sql-panel-connection -->
+A **Federated** checkbox sets the dashboard's kind. Ticking it gives every
+query and `options_sql` the session's active connection (else the first saved
+one); unticking makes every query a string again and drops the params'
+`connection` and `database`. While federated, a drop-down beside the query
+picks its connection; a name the instance lacks stays listed and selected.
+Editing the text changes only `sql`. **Execute** after a kind change re-runs
+everything.
 
 <!-- req: save-edits -->
 **Close**, Escape or a press outside the popup keeps the edits; **Save**
@@ -95,21 +105,51 @@ session id) exposes:
   the push edits; the agent cannot name a new one. Only the user's **Save**
   writes it to the store. Returns
   `{ok, pushed, message, database}`; an unknown/disarmed
-  `session_id` reports `pushed:false`, a disconnected one `not connected`.
+  `session_id` reports `pushed:false`, a disconnected one `not connected`
+  unless the draft is federated (below), which needs no session connection.
 - `run_dashboard` returns the rows of a draft's queries to the agent, to test
   them before a push: see [mcp.md](../architecture/mcp.md#tools).
-
-<!-- req: viewing-connection -->
-A dashboard never names a [connection](./connect.md): it runs on the
-**viewing** session's connection and selected database. So
-a dashboard is portable across sessions, instances and git sync; opened in a
-disconnected session it asks you to connect, unless nothing in it queries the
-database. Select a database first, or
-fully-qualify tables as `db.table`.
 
 The REST mirror `POST /api/dashboards` takes the inline fields (plus optional
 `session_id`) and drives the same persist-and-push path (used by the e2e suite).
 See [api.md](../architecture/api.md) for the full endpoint list.
+
+<!-- req: viewing-connection -->
+An unfederated dashboard (its queries are plain SQL strings) names no
+[connection](./connect.md): it runs on the **viewing** session's connection and
+selected database. So it is portable across sessions, instances and git sync;
+opened in a disconnected session it asks you to connect, unless nothing in it
+queries the database. Select a database first, or fully-qualify tables as
+`db.table`.
+
+## Federated dashboards
+
+<!-- req: federated -->
+A **federated** dashboard names a connection per query, so one page shows
+several databases. A query entry is a SQL string, or a map:
+
+```yaml
+orders:
+  connection: warehouse    # required: a connection name
+  database: sales_reporting  # optional
+  sql: SELECT day, count(*) AS orders FROM orders GROUP BY day
+```
+
+- `connection` and `sql` are required, `database` is optional; any other key
+  is malformed. A param with `options_sql` may carry `connection` and
+  `database` the same way.
+- The database is the entry's `database`; else the session's selected one when
+  the name is its active connection; else the saved connection's own; else the
+  one its config pins.
+- A failing lookup fails that query with `orders: unknown connection
+  "warehouse"`, `orders: connection "warehouse" is locked` (a locked
+  connection runs only in a tab that unlocked it) or `orders: no database
+  selected on "warehouse"`.
+- Every query, widget queries and `options_sql` included, names a connection or
+  none does; a mixed dashboard is refused with `every query and options_sql
+  names a connection, or none does`.
+- It needs no connected session. The page's [pill](./queryview.md#layout)
+  lists the connections.
 
 ## Pushing from a folder
 
@@ -123,7 +163,7 @@ push_dashboard(session_id, dir="/tmp/agent-scratch/sales-overview")
 
 sales-overview/
   dashboard.html
-  queries.yaml     {query name: SQL}
+  queries.yaml     {query name: SQL, or {connection, database?, sql}}
   meta.yaml        optional: name, params
 ```
 
@@ -186,6 +226,9 @@ column the query lacks shows `Unknown column “…”`. An element a script add
 later is filled on the next re-run.
 
 ## Widgets
+
+A `<qv-select-view>` over a federated query pages on that query's connection;
+the widget still names only the query.
 
 Dashboard HTML may use two tags anywhere in its own layout. They render in the
 frame with the rest of the page; only dashboards that use one load them.
@@ -254,6 +297,9 @@ params:
   - name: category
     kind: dimension
 ```
+
+A param with `options_sql` on a federated dashboard may add `connection` and
+`database`, as a query entry does.
 
 with a query referencing the placeholders:
 

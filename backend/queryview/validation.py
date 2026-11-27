@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from .dashboard_params import KINDS, MAX_EACH, ParamError, parse_params, parse_params_dropping, resolve_order
 
 MAX_LIMIT = 10000
@@ -23,6 +25,17 @@ def _selector_error(entry: object, label: str) -> str | None:
             return f"invalid {label} options must be a non-empty list"
         if any(isinstance(v, (dict, list)) or v is None for v in options):
             return f"invalid {label} options must be scalars"
+    return None
+
+
+def _connection_error(entry: dict[str, Any], label: str) -> str | None:
+    """A selector's optional `connection` / `database`: only beside options_sql, each non-empty."""
+    for key in ("connection", "database"):
+        if key in entry:
+            if entry.get("options_sql") is None:
+                return f"invalid {label} {key} needs options_sql"
+            if not isinstance(entry[key], str) or not entry[key].strip():
+                return f"invalid {label} {key} must be a non-empty string"
     return None
 
 
@@ -48,6 +61,8 @@ def _entry_error(entry: object, label: str) -> str | None:
     kind = entry.get("kind", "value")
     if kind not in KINDS:
         return f"invalid {label} kind must be one of {', '.join(KINDS)}"
+    if err := _connection_error(entry, label):
+        return err
     if kind == "text":
         # Free input: an optional opening text, no list to pick from.
         if entry.get("options") is not None or entry.get("options_sql") is not None:

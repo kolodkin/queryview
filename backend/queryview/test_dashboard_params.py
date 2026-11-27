@@ -37,7 +37,10 @@ async def _no_run(sql: str):
 
 
 def _resolve(params, values, run=_no_run, dialect=CH):
-    return asyncio.run(resolve(params, values, run, dialect))
+    async def runner(p, sql):
+        return await run(sql)
+
+    return asyncio.run(resolve(params, values, runner, {p.name: dialect for p in params}))
 
 
 # --- parse_params ----------------------------------------------------------
@@ -72,6 +75,32 @@ def test_parses_a_dimension_param_which_needs_no_options():
 )
 def test_drops_what_it_cannot_read(raw):
     assert parse_params(raw) == []
+
+
+def test_reads_a_connection_and_database_beside_options_sql_only():
+    raw = [
+        {"name": "t", "options_sql": "SELECT 1", "connection": "warehouse", "database": "sales_reporting"},
+        {"name": "r", "options": ["eu"], "connection": "warehouse", "database": "sales_reporting"},
+    ]
+    assert parse_params(raw) == [
+        Param("t", "value", options_sql="SELECT 1", connection="warehouse", database="sales_reporting"),
+        Param("r", "value", options=("eu",)),
+    ]
+
+
+def test_each_options_sql_runs_with_its_own_param_and_dialect():
+    seen = []
+
+    async def run(p, sql):
+        seen.append((p.name, sql))
+        return ["x"]
+
+    params = [
+        Param("a", "value", options_sql="SELECT 1"),
+        Param("b", "value", options_sql="SELECT {a} FROM {a:identifier}"),
+    ]
+    asyncio.run(resolve(params, {}, run, {"a": PG, "b": CH}))
+    assert seen == [("a", "SELECT 1"), ("b", "SELECT 'x' FROM `x`")]
 
 
 def test_static_options_drop_null_and_containers():
@@ -280,9 +309,11 @@ def test_an_unchecked_dimension_stays_unchecked():
 def test_apply_to_queries_holds_back_a_query_waiting_on_a_selector():
     params = [Param(name="table", kind="identifier", options=("t",), auto_select=False)]
     resolved = [{"name": "table", "kind": "identifier", "options": ["t"], "value": ""}]
-    assert apply_to_queries({"a": "SELECT 1", "b": "SELECT * FROM {table}"}, params, resolved, PG) == {"a": "SELECT 1"}
+    assert apply_to_queries({"a": "SELECT 1", "b": "SELECT * FROM {table}"}, params, resolved, {"a": PG, "b": PG}) == {
+        "a": "SELECT 1"
+    }
     chosen = [{**resolved[0], "value": "t"}]
-    assert apply_to_queries({"b": "SELECT * FROM {table}"}, params, chosen, PG) == {"b": 'SELECT * FROM "t"'}
+    assert apply_to_queries({"b": "SELECT * FROM {table}"}, params, chosen, {"b": PG}) == {"b": 'SELECT * FROM "t"'}
 
 
 # --- text params -----------------------------------------------------------
@@ -359,7 +390,7 @@ REGION = Param("region", "each", options=("eu", "us"))
 
 
 def _apply(queries, params):
-    return apply_to_queries(queries, params, _resolve(params, {}), CH)
+    return apply_to_queries(queries, params, _resolve(params, {}), dict.fromkeys(queries, CH))
 
 
 def test_an_each_param_resolves_to_its_list_and_no_value():

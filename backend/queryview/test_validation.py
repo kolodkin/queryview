@@ -105,3 +105,21 @@ def test_an_each_param_is_checked_when_pushed():
         {"name": "city", "options_sql": "SELECT city FROM t WHERE region = {region}"},
     ]
     assert "cannot use the each param region" in str(dashboard_params_error(used))
+
+
+def test_a_param_may_name_a_connection():
+    sel = {"name": "r", "options_sql": "SELECT 1", "connection": "warehouse", "database": "reporting"}
+    assert dashboard_params_error([sel]) is None
+    assert dashboard_params_error([{"name": "r", "options": ["a"], "connection": "warehouse"}]) == (
+        "invalid params[0] 'r' connection needs options_sql"
+    )
+    for key in ("connection", "database"):
+        assert dashboard_params_error([{**sel, key: ""}]) == f"invalid params[0] 'r' {key} must be a non-empty string"
+
+
+def test_a_text_param_or_bare_dimension_naming_a_connection_needs_options_sql():
+    for entry in ({"name": "t", "kind": "text"}, {"name": "t", "kind": "dimension"}):
+        for key in ("connection", "database"):
+            assert dashboard_params_error([{**entry, key: "warehouse"}]) == (
+                f"invalid params[0] 't' {key} needs options_sql"
+            )

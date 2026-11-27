@@ -7,13 +7,14 @@ import asyncio
 import json
 import sqlite3
 import time
+from dataclasses import replace
 
 import pytest
 from fastapi.testclient import TestClient
 
 from queryview import serving
 from queryview.drivers.sqlite import SqliteDriver
-from queryview.gitsync import GitSyncError
+from queryview.gitsync import GitSyncError, dashboard_reldir
 from queryview.server.config import ServerConfig, load_config
 from queryview.server.main import create_app
 from queryview.server.repo import Repo
@@ -397,3 +398,95 @@ def test_a_widget_page_runs_only_the_options_its_query_needs(client, dash_repo, 
     ran.clear()
     assert client.post("/api/query", json={**on, "query": "plain"}).status_code == 200
     assert ran == ["SELECT * FROM orders"]
+
+
+FED = {
+    "name": "fed",
+    "html": '<qv-select-view query="orders"></qv-select-view>',
+    "queries": {
+        "total": {"connection": "local", "sql": "SELECT sum(amount) AS t FROM orders"},
+        "orders": {"connection": "warehouse", "sql": "SELECT sku, qty FROM stock ORDER BY sku"},
+    },
+    "params": [],
+}
+
+
+@pytest.fixture
+def fed_client(tmp_path, dash_repo):
+    """The `sales` config plus a `warehouse` sqlite file only it holds `stock` in."""
+    dash_repo.commit([SALES, FED])
+    config = _config(tmp_path, dash_repo)
+    wh = tmp_path / "warehouse.sqlite"
+    with sqlite3.connect(wh) as con:
+        con.execute("CREATE TABLE stock (sku TEXT, qty INTEGER)")
+        con.executemany("INSERT INTO stock VALUES (?, ?)", [("a", 1), ("b", 2)])
+    local = config.connections["local"]
+    config.connections["warehouse"] = replace(local, name="warehouse", config=replace(local.config, path=str(wh)))
+    with TestClient(create_app(config)) as c:
+        yield c
+
+
+ON_FED = {"dashboard": "fed"}
+
+
+# req: architecture/viewer_server_api/named-connection
+def test_a_query_runs_on_the_connection_it_names(fed_client):
+    r = fed_client.post("/api/run", json={**ON_FED, "connection": "ignored"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["results"]["total"] == {"t": [30]}
+    assert body["results"]["orders"] == {"sku": ["a", "b"], "qty": [1, 2]}
+    assert [(c["name"], c["status"], c["queries"]) for c in body["connections"]] == [
+        ("local", "ok", ["total"]),
+        ("warehouse", "ok", ["orders"]),
+    ]
+
+
+# req: architecture/viewer_server_api/named-connection
+def test_a_query_naming_an_unconfigured_connection_fails_by_name(fed_client, dash_repo):
+    dash_repo.commit([{**FED, "queries": {**FED["queries"], "orders": {"connection": "nope", "sql": "SELECT 1"}}}])
+    asyncio.run(fed_client.app.state.repo.refresh())
+    r = fed_client.post("/api/run", json=ON_FED)
+    assert r.status_code == 400
+    assert r.json()["message"] == 'orders: unknown connection "nope"'
+    assert [(c["name"], c["status"]) for c in r.json()["connections"]] == [("local", "ok"), ("nope", "unknown")]
+    r = fed_client.post("/api/query", json={**ON_FED, "query": "orders"})
+    assert r.status_code == 400 and 'unknown connection "nope"' in r.json()["message"]
+    r = fed_client.post("/api/describe", json={**ON_FED, "query": "orders"})
+    assert r.status_code == 400 and r.json()["message"] == 'orders: unknown connection "nope"'
+
+
+# req: architecture/viewer_server_api/named-connection
+def test_a_widget_pages_on_its_querys_connection(fed_client):
+    r = fed_client.post("/api/query", json={**ON_FED, "query": "orders", "limit": 1})
+    assert r.json()["data"] == [["a", 1]]
+    r = fed_client.post("/api/describe", json={**ON_FED, "query": "orders"})
+    assert [f["name"] for f in r.json()["fields"]] == ["sku", "qty"]
+
+
+# req: architecture/viewer_server_api/named-connection, architecture/viewer_server_api/names-not-sql
+def test_the_dashboard_listing_never_carries_an_entry(fed_client):
+    r = fed_client.get("/api/dashboards/fed")
+    assert r.json()["queries"] == ["total", "orders"]
+    assert r.json()["connections"] == ["local", "warehouse"]
+    assert "sql" not in r.text and "SELECT" not in r.text
+
+
+# req: architecture/viewer_server_api/named-connection
+def test_the_dashboard_listing_names_its_params_connections_too(fed_client, dash_repo):
+    params = [
+        {"name": "s", "options_sql": "SELECT sku FROM stock", "connection": "warehouse"},
+        {"name": "r", "options_sql": "SELECT 1", "connection": "archive"},
+    ]
+    dash_repo.commit([{**FED, "name": "picked", "params": params}])
+    asyncio.run(fed_client.app.state.repo.refresh())
+    assert fed_client.get("/api/dashboards/picked").json()["connections"] == ["local", "warehouse", "archive"]
+
+
+# req: architecture/viewer_server_api/named-connection
+def test_a_mixed_dashboard_is_not_served(fed_client, dash_repo):
+    dash_repo.commit([{**FED, "name": "mixed", "queries": {**FED["queries"], "plain": "SELECT 1"}}])
+    assert (dash_repo.author / dashboard_reldir("mixed")).is_dir()  # in the repo...
+    assert asyncio.run(fed_client.app.state.repo.refresh())  # ...and the load ran on it
+    assert fed_client.get("/api/dashboards").json() == [{"name": "fed"}, {"name": "sales"}]
+    assert fed_client.get("/api/dashboards/mixed").status_code == 404

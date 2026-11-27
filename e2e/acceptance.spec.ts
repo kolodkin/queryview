@@ -21,6 +21,7 @@ import {
   openConnect,
   openDashboard,
   openNewQuery,
+  savePostgresMarks,
   startNewConnection,
   tableRow,
   test,
@@ -401,4 +402,44 @@ test("mcp push_script fills and runs the scripts editor", async ({ page, seeds, 
   // ...and a push to an unknown id is reported as not delivered.
   const lost = await mcpCall(baseURL!, "push_script", { session_id: "deadbeef", sql: "SELECT 2" });
   expect(lost.ok).toBe(false);
+});
+
+// req: requirements/queryview/dashboard-many-connections, system/dashboard/federated, system/queryview/federated-pill
+test("one dashboard shows ClickHouse and Postgres side by side", async ({ page, seeds, baseURL }) => {
+  await connect(page, CH, await seeds.testDb());
+  const pg = await savePostgresMarks(baseURL, seeds);
+  try {
+    const name = `fed-${uid()}`;
+    await api(`${baseURL}/api/dashboards`, {
+      json: {
+        name,
+        html: '<b id="ch" data-qv-query="ch" data-qv-column="v"></b><b id="pg" data-qv-query="pg" data-qv-column="v"></b>',
+        queries: {
+          ch: { connection: "clickhouse", sql: "SELECT v FROM marks" },
+          pg: { connection: pg.name, sql: "SELECT v FROM marks" },
+        },
+      },
+    });
+    await page.getByTestId("nav-dashboard").click();
+    await page.getByTestId("dashboard-select").selectOption(name);
+    const frame = dashboardFrame(page);
+    await expect(frame.locator("#ch")).toHaveText("from-clickhouse");
+    await expect(frame.locator("#pg")).toHaveText("from-postgres");
+
+    // The pill lists both connections, answered.
+    const pill = page.getByTestId("federated-pill");
+    await expect(pill).toContainText("Federated · 2 connections");
+    await pill.click();
+    const rows = page.getByTestId("federated-pill-row");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.filter({ hasText: "clickhouse" })).toContainText("🟢");
+    await expect(rows.filter({ hasText: pg.name })).toContainText("🟢");
+
+    // Leaving the page shows the session's own connection again.
+    await page.getByTestId("nav-explorer").click();
+    await expect(page.getByTestId("federated-pill")).toHaveCount(0);
+    await expect(page.getByTestId("connection-status")).toContainText(`clickhouse · ${chDb()}`);
+  } finally {
+    await pg.drop();
+  }
 });

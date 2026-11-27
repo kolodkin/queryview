@@ -8,9 +8,12 @@ import asyncio
 import pytest
 import yaml
 
+from queryview.dashboard_entries import MIXED
 from queryview.dashboards import get_dashboard, upsert_dashboard
 from queryview.yamlio import (
     YamlIOError,
+    dashboard_from_data,
+    dashboard_to_data,
     export_dashboard,
     export_workspace,
     import_text,
@@ -184,3 +187,23 @@ def test_import_refuses_twins_inside_one_bundle(default_ws_id):
         _run(import_text(yaml.safe_dump({"kind": "workspace", "dashboards": entries}), default_ws_id))
     assert e.value.status == 409
     assert _run(get_dashboard("imp A", default_ws_id)) is None and _run(get_dashboard("imp a", default_ws_id)) is None
+
+
+_ORDERS = {"connection": "warehouse", "sql": "SELECT 1"}
+
+
+def test_dashboard_from_data_entries():
+    def from_data(q):
+        return dashboard_from_data({"name": "d", "html": "<p>", "queries": q})
+
+    assert from_data({"orders": _ORDERS})["queries"] == {"orders": _ORDERS}
+    with pytest.raises(YamlIOError, match="query 'orders': connection must be a non-empty string"):
+        from_data({"orders": {"sql": "SELECT 1"}})
+    with pytest.raises(YamlIOError, match=MIXED):
+        from_data({"orders": _ORDERS, "sales": "SELECT 1"})
+    plain = {"name": "d", "html": "<p>", "queries": {"sales": "SELECT 1"}, "params": []}
+    assert dashboard_to_data(dashboard_from_data(plain)) == {
+        "name": "d",
+        "html": "<p>",
+        "queries": {"sales": "SELECT 1"},
+    }

@@ -33,6 +33,20 @@ export { useDismiss } from './useDismiss'
 export { useCopy } from './useCopy'
 export { downloadText } from './download'
 export { DashboardFrame } from './dashboard/DashboardFrame'
+export { FederatedPill } from './dashboard/FederatedPill'
+export {
+  connectionNames,
+  entryConnection,
+  entrySql,
+  federate,
+  federatedRows,
+  isFederated,
+  unfederate,
+  withConnection,
+  withSql,
+  type FederatedConnection,
+  type QueryEntry,
+} from './dashboard/entries'
 export {
   answerWidget,
   listenToFrame,

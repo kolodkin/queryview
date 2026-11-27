@@ -41,16 +41,22 @@ from .connect import (
     session_settings,
     unlock_connection,
 )
+from .dashboard_entries import MIXED, clean_queries, is_federated
 from .dashboard_queries import (
-    clean_queries,
+    LookupError_,
+    Target,
     clean_values,
+    dialect_of,
+    ready_sql,
     resolved_part,
     run_dashboard,
     run_dashboard_queries,
+    session_lookup,
     session_sql,
 )
 from .dashboards import get_dashboard, list_dashboards
 from .drivers import DRIVERS
+from .drivers.base import Err
 from .drivers.clickhouse import close_client
 from .mcp_server import mcp
 from .serving import serve_static
@@ -394,7 +400,23 @@ async def _with_params(
     return sql, _gate_error(err, reasons_409, default=400 if err.get("reason") == "params" else 200)
 
 
-# Run a SQL query (paginated) against this session's selected database.
+async def _on_connection(request: Request, b: dict[str, Any], sql: str) -> tuple[Target, str] | JSONResponse:
+    """A federated widget's query: the target its `connection` and `database`
+    name (docs/architecture/dashboards.md — "Which connection, which database")
+    and the SQL with any `values` substituted, or the failed response."""
+    database = b.get("database")
+    t = await session_lookup(request.state.sid)(b["connection"], database if isinstance(database, str) else None)
+    if isinstance(t, LookupError_):
+        return JSONResponse({"ok": False, "reason": "query", "message": t.message}, status_code=400)
+    if "params" not in b:
+        return t, sql
+    ready, why = ready_sql(sql, b["params"], clean_values(b.get("values")), dialect_of(t.driver))
+    if ready is None:
+        return JSONResponse({"ok": False, "message": why, "reason": "params"}, status_code=400)
+    return t, ready
+
+
+# Run a SQL query (paginated) against this session's selected database, or a named connection.
 @router.post("/api/db/query")
 async def db_query(request: Request):
     body = await _read_json(request)
@@ -403,12 +425,24 @@ async def db_query(request: Request):
     sql = raw_sql.strip() if isinstance(raw_sql, str) else ""
     if not sql:
         return JSONResponse({"ok": False, "message": "query required"}, status_code=400)
-    sql, failed = await _with_params(request, b, sql, ("no-session",))
-    if failed is not None:
-        return failed
     limit, offset = page_bounds(b.get("limit"), b.get("offset"))
     raw_order = b.get("order_by")
     order_by = raw_order if isinstance(raw_order, list) else None
+    if isinstance(b.get("connection"), str):
+        on = await _on_connection(request, b, sql)
+        if isinstance(on, JSONResponse):
+            return on
+        t, sql = on
+        if b.get("format") == "csv":
+            csv = await t.driver.export_csv(t.config, sql, t.database, limit, offset, order_by)
+            return {"ok": False, "message": csv.message} if isinstance(csv, Err) else {"ok": True, "output": csv.text}
+        rows = await t.driver.run_query(t.config, sql, t.database, limit, offset, order_by)
+        if isinstance(rows, Err):
+            return {"ok": False, "message": rows.message}
+        return {"ok": True, "meta": [c._asdict() for c in rows.rows.meta], "data": rows.rows.data}
+    sql, failed = await _with_params(request, b, sql, ("no-session",))
+    if failed is not None:
+        return failed
     if b.get("format") == "csv":
         r = await export_csv(request.state.sid, sql, limit, offset, order_by)
         if not r["ok"]:
@@ -452,6 +486,13 @@ async def db_describe(request: Request):
     sql = raw_sql.strip() if isinstance(raw_sql, str) else ""
     if not sql:
         return JSONResponse({"ok": False, "message": "query required"}, status_code=400)
+    if isinstance(b.get("connection"), str):
+        on = await _on_connection(request, b, sql)
+        if isinstance(on, JSONResponse):
+            return on
+        t, sql = on
+        d = await t.driver.describe_query(t.config, sql, t.database)
+        return {"ok": False, "message": d.message} if isinstance(d, Err) else {"ok": True, "fields": d.fields}
     sql, failed = await _with_params(request, b, sql, ("no-session", "no-database"))
     if failed is not None:
         return failed
@@ -546,7 +587,8 @@ async def remote_lock(request: Request):
 
 
 # Run a dashboard's named queries on this session's connection and selected
-# database. Fail-fast: any failure returns an HTTP error and no partial results.
+# database, or a federated one's on the connections they name. Fail-fast: any
+# failure returns an HTTP error and no partial results.
 @router.post("/api/runqueries")
 async def run_queries(request: Request):
     body = await _read_json(request)
@@ -562,6 +604,8 @@ async def run_queries(request: Request):
     else:
         r = await run_dashboard_queries(request.state.sid, queries)
     resolved = resolved_part(r)
+    if "connections" in r:
+        resolved["connections"] = r["connections"]
     # Reading drops a malformed param rather than refuse the dashboard; say which, as saving would.
     dropped = dashboard_params_dropped(b["params"]) if with_params else []
     if dropped:
@@ -591,6 +635,10 @@ async def dashboards_upsert(request: Request):
     perr = dashboard_params_error(params)
     if perr is not None:
         return JSONResponse({"ok": False, "message": perr}, status_code=400)
+    try:
+        is_federated(queries, params)
+    except ValueError:
+        return JSONResponse({"ok": False, "message": MIXED}, status_code=400)
     ws = await _resolve_workspace(b.get("workspace"))
     if isinstance(ws, JSONResponse):
         return ws

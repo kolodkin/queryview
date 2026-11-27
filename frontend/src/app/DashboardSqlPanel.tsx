@@ -1,6 +1,6 @@
 import { useState, type Ref } from 'react'
 
-import { DashboardFrame, useDismiss } from '../core'
+import { DashboardFrame, entryConnection, entrySql, useDismiss, type QueryEntry } from '../core'
 import { useEditLock } from './sessionLock'
 import { queryViewHtml } from './widgetHost'
 import TextareaSizes from './controls/TextareaSizes'
@@ -13,9 +13,14 @@ const NO_RESULTS = {}
 // frame's widgets only ever name a query, so SQL is typed here alone. The rows
 // are a `<qv-select-view>` in a frame of the popup's own, answered by the
 // dashboard page like any widget. Focus inside holds the human edit lock,
-// like the Scripts page.
+// like the Scripts page. **Federated** switches the whole dashboard's kind;
+// while on, each query picks its connection (docs/system/dashboard.md).
 function DashboardSqlPanel({
   queries,
+  federated,
+  onFederated,
+  onConnection,
+  connections,
   onChange,
   onExecute,
   onClose,
@@ -23,7 +28,12 @@ function DashboardSqlPanel({
   frameRef,
   loadSeq,
 }: {
-  queries: Record<string, string>
+  queries: Record<string, QueryEntry>
+  federated: boolean
+  onFederated: (on: boolean) => void
+  onConnection: (query: string, connection: string) => void
+  // The instance's connection names, for the per-query drop-down.
+  connections: string[]
   onChange: (name: string, sql: string) => void
   onExecute: () => void
   onClose: () => void
@@ -41,6 +51,9 @@ function DashboardSqlPanel({
   useEditLock(panelRef, remoteId)
   // The picked query may be gone after another dashboard loads.
   const name = names.includes(picked) ? picked : (names[0] ?? '')
+  const own = name ? entryConnection(queries[name]) : null
+  // A name the instance lacks stays listed, so opening the panel never rewrites an entry.
+  const choices = own && !connections.includes(own) ? [...connections, own] : connections
 
   return (
     <div
@@ -68,6 +81,30 @@ function DashboardSqlPanel({
               </option>
             ))}
           </select>
+          {federated && name && (
+            <select
+              data-testid="dash-sql-connection"
+              aria-label="Connection"
+              value={own ?? ''}
+              onChange={(e) => onConnection(name, e.target.value)}
+              className="glass-input min-w-40 px-3 py-1 text-sm"
+            >
+              {choices.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+          <label className="flex items-center gap-1.5 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              data-testid="dash-sql-federated"
+              checked={federated}
+              onChange={(e) => onFederated(e.target.checked)}
+            />
+            Federated
+          </label>
           <TextareaSizes
             rows={rows}
             onChange={setRows}
@@ -84,7 +121,7 @@ function DashboardSqlPanel({
           </button>
         </div>
         <textarea
-          value={queries[name] ?? ''}
+          value={name ? entrySql(queries[name]) : ''}
           onChange={(e) => onChange(name, e.target.value)}
           disabled={!name}
           aria-label="SQL"

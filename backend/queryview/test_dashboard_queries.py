@@ -5,17 +5,25 @@ fail-fast on the first failing query."""
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
+
+import pytest
 
 import queryview.connect as connect
+from queryview import sessions
+from queryview.dashboard_entries import MIXED
 from queryview.dashboard_queries import (
     DASHBOARD_CONCURRENCY,
+    LookupError_,
+    Target,
     clean_values,
     ready_sql,
     run_dashboard,
+    run_dashboard_on,
     run_dashboard_queries,
 )
 from queryview.drivers import DRIVERS
-from queryview.drivers.base import Column, DatabasesResult, Err, QueryRows, RowsResult
+from queryview.drivers.base import Column, DatabasesResult, Err, QueryRows, RowsResult, query_timeout
 from queryview.test_dashboard_params import PG
 
 
@@ -265,3 +273,263 @@ def test_values_past_a_full_cap_are_not_waited_for(monkeypatch):
         {"sales": "SELECT {region} -- many odd"},
     )
     assert out["ok"] and len(out["results"]["sales"]["region"]) == 1000
+
+
+# --- A query entry naming its connection (federated): each runs on its own target ---
+
+
+class _BacktickDriver(_SeenDriver):
+    ident_quote = "`"
+    backslash_escapes = True
+
+
+def _target(driver, config, database):
+    return Target(driver, config, database)  # an untyped fake driver, as DRIVERS holds them
+
+
+def _targets():
+    here, there = _SeenDriver(), _BacktickDriver()
+    looked: list[tuple[str, str | None]] = []
+
+    async def lookup(name, database):
+        looked.append((name, database))
+        if name == "warehouse":
+            return _target(there, {"v": 2}, database or "reporting")
+        if name == "analytics":
+            return _target(here, {"v": 1}, "main")
+        return LookupError_("unknown", f'unknown connection "{name}"')
+
+    return here, there, looked, lookup
+
+
+def test_each_entry_runs_on_its_own_connection():
+    here, there, looked, lookup = _targets()
+    q = {
+        "sales": {"connection": "analytics", "sql": "SELECT 1"},
+        "orders": {"connection": "warehouse", "sql": "SELECT 2"},
+    }
+    out = asyncio.run(run_dashboard_on(None, lookup, q, [], {}))
+    assert out["ok"] and set(out["results"]) == {"sales", "orders"}
+    assert here.seen == ["SELECT 1"] and there.seen == ["SELECT 2"]
+    assert [(c["name"], c["status"], c["queries"]) for c in out["connections"]] == [
+        ("analytics", "ok", ["sales"]),
+        ("warehouse", "ok", ["orders"]),
+    ]
+    assert [c["database"] for c in out["connections"]] == ["main", "reporting"]
+
+
+def test_a_connection_is_looked_up_once_per_run():
+    _, there, looked, lookup = _targets()
+    q = {n: {"connection": "warehouse", "sql": f"SELECT {i}"} for i, n in enumerate("abc")}
+    asyncio.run(run_dashboard_on(None, lookup, q, [], {}))
+    assert looked == [("warehouse", None)] and len(there.seen) == 3
+
+
+def test_an_unknown_connection_fails_its_query_by_name():
+    *_, lookup = _targets()
+    q = {"sales": {"connection": "analytics", "sql": "SELECT 1"}, "orders": {"connection": "nope", "sql": "SELECT 2"}}
+    out = asyncio.run(run_dashboard_on(None, lookup, q, [], {}))
+    assert (out["ok"], out["reason"], out["message"]) == (False, "query", 'orders: unknown connection "nope"')
+    assert {c["name"]: c["status"] for c in out["connections"]} == {"analytics": "ok", "nope": "unknown"}
+    assert out["connections"][1]["message"] == 'unknown connection "nope"' and out["params"] == []
+
+
+def test_a_failing_query_fails_its_connection_only():
+    *_, lookup = _targets()
+    q = {"sales": {"connection": "analytics", "sql": "SELECT 1"}, "orders": {"connection": "warehouse", "sql": "fail"}}
+    out = asyncio.run(run_dashboard_on(None, lookup, q, [], {}))
+    assert (out["ok"], out["message"]) == (False, "orders: bad sql")
+    assert [(c["status"], c.get("message")) for c in out["connections"]] == [
+        ("ok", None),
+        ("failed", "orders: bad sql"),
+    ]
+
+
+def test_a_value_is_quoted_for_the_connection_its_query_runs_on():
+    here, there, _, lookup = _targets()
+    params = [{"name": "col", "kind": "identifier", "options": ["city"]}, {"name": "who", "options": ["a\\b"]}]
+    sql = "SELECT {col} WHERE u = {who}"
+    q = {"sales": {"connection": "analytics", "sql": sql}, "orders": {"connection": "warehouse", "sql": sql}}
+    asyncio.run(run_dashboard_on(None, lookup, q, params, {}))
+    assert here.seen == ["SELECT \"city\" WHERE u = 'a\\b'"]
+    assert there.seen == ["SELECT `city` WHERE u = 'a\\\\b'"]
+
+
+def test_options_sql_runs_on_the_params_connection():
+    here, there, _, lookup = _targets()
+    params = [{"name": "r", "options_sql": "SELECT r", "connection": "warehouse"}]
+    q = {"sales": {"connection": "analytics", "sql": "SELECT {r}"}}
+    out = asyncio.run(run_dashboard_on(None, lookup, q, params, {}))
+    assert there.seen == ["SELECT r"] and len(here.seen) == 1
+    assert [(c["name"], c["queries"]) for c in out["connections"]] == [("analytics", ["sales"]), ("warehouse", [])]
+
+
+def test_an_unknown_connection_on_a_param_is_a_params_error():
+    *_, lookup = _targets()
+    params = [{"name": "r", "options_sql": "SELECT r", "connection": "nope"}]
+    out = asyncio.run(run_dashboard_on(None, lookup, {}, params, {}))
+    assert (out["ok"], out["reason"], out["message"]) == (False, "params", 'r: unknown connection "nope"')
+    assert [c["status"] for c in out["connections"]] == ["unknown"]
+
+
+def test_a_failing_options_sql_fails_its_params_connection():
+    *_, lookup = _targets()
+    params = [{"name": "r", "options_sql": "fail", "connection": "warehouse"}]
+    q = {"sales": {"connection": "analytics", "sql": "SELECT {r}"}}
+    out = asyncio.run(run_dashboard_on(None, lookup, q, params, {}))
+    assert (out["ok"], out["reason"]) == (False, "params")
+    assert [(c["name"], c["status"], c.get("message")) for c in out["connections"]] == [
+        ("analytics", "ok", None),
+        ("warehouse", "failed", out["message"]),
+    ]
+
+
+def test_a_query_per_value_fans_out_on_its_own_connection():
+    here, there, _, lookup = _targets()
+    params = [{"name": "region", "kind": "each", "options": ["eu", "us"]}]
+    q = {"orders": {"connection": "warehouse", "sql": "SELECT {region}"}}
+    asyncio.run(run_dashboard_on(None, lookup, q, params, {}))
+    assert there.seen == ["SELECT 'eu'", "SELECT 'us'"] and here.seen == []
+
+
+def test_an_unfederated_run_is_unchanged():
+    here = _SeenDriver()
+    out = asyncio.run(run_dashboard_on(_target(here, {"v": 1}, "main"), None, {"sales": "SELECT 1"}, [], {}))
+    assert out["ok"] and here.seen == ["SELECT 1"] and "connections" not in out
+
+
+# --- In the app: named connections looked up on the session (docs/architecture/dashboards.md) ---
+
+
+class _WarehouseDriver(_SeenDriver):
+    type = "whfake"
+
+    def __init__(self, requires_database=False):
+        super().__init__()
+        self.requires_database = requires_database
+        self.databases: list[str | None] = []
+        self.timeouts: list[int] = []
+
+    async def list_databases(self, c, limit=1000, current=None):
+        return DatabasesResult(["today", "yesterday"])
+
+    async def run_query(self, c, sql, database, limit, offset, order_by):
+        self.databases.append(database)
+        self.timeouts.append(query_timeout.get())
+        return await super().run_query(c, sql, database, limit, offset, order_by)
+
+
+@pytest.fixture(autouse=True)
+def _drop_warehouse():
+    """No `warehouse` row of a fake driver type is left for later modules."""
+    yield
+    asyncio.run(connect.delete_connection("", "warehouse", ""))
+
+
+def _warehouse(monkeypatch, owner="s-wh-owner", requires_database=False):
+    """`warehouse`, a second driver type, saved from session `owner`."""
+    asyncio.run(connect.delete_connection(owner, "warehouse", ""))
+    wh = _WarehouseDriver(requires_database)
+    monkeypatch.setitem(DRIVERS, "whfake", wh)
+    assert asyncio.run(connect.connect_new(owner, "warehouse", {"v": 2}, "whfake"))["ok"]
+    return wh
+
+
+ORDERS = {"orders": {"connection": "warehouse", "sql": "SELECT 2"}}
+
+
+# req: architecture/dashboards/named-connection
+def test_a_named_saved_connection_runs_from_any_session(monkeypatch):
+    main = _connected(monkeypatch, "s-a")
+    wh = _warehouse(monkeypatch)
+    out = asyncio.run(run_dashboard("s-a", ORDERS, [], {}))
+    assert out["ok"] and wh.seen == ["SELECT 2"] and main.seen == []
+    assert [(c["name"], c["status"]) for c in out["connections"]] == [("warehouse", "ok")]
+    assert asyncio.run(run_dashboard_queries("s-a", ORDERS))["ok"]
+
+
+# req: architecture/dashboards/named-connection
+def test_all_named_queries_need_no_session(monkeypatch):
+    _warehouse(monkeypatch)
+    out = asyncio.run(run_dashboard("s-never-connected", ORDERS, [], {}))
+    assert out["ok"] is True
+    assert asyncio.run(run_dashboard_queries("s-never-connected", ORDERS))["ok"] is True
+
+
+# req: architecture/dashboards/named-connection
+def test_a_federated_dashboard_runs_on_a_locked_session(monkeypatch):
+    _connected(monkeypatch, "s-locked-own")
+    assert asyncio.run(connect.lock_connection("s-locked-own", "s-locked-own", "open sesame"))["ok"]
+    _warehouse(monkeypatch)
+    assert asyncio.run(run_dashboard("s-locked-own", {"q": "SELECT 1"}, [], {}))["reason"] == "locked"
+    assert asyncio.run(run_dashboard("s-locked-own", ORDERS, [], {}))["ok"]
+
+
+# req: architecture/dashboards/named-connection
+def test_a_mixed_dashboard_is_refused(monkeypatch):
+    main = _connected(monkeypatch, "s-mixed")
+    wh = _warehouse(monkeypatch)
+    mixed = {**ORDERS, "sales": "SELECT 1"}
+    for out in (
+        asyncio.run(run_dashboard("s-mixed", mixed, [], {})),
+        asyncio.run(run_dashboard_queries("s-mixed", mixed)),
+    ):
+        assert out == {"ok": False, "reason": "query", "message": MIXED}
+    assert main.seen == [] and wh.seen == []
+
+
+# req: architecture/dashboards/named-connection
+def test_naming_the_sessions_own_connection_uses_its_selected_database(monkeypatch):
+    wh = _warehouse(monkeypatch, owner="s-own-db")
+    assert asyncio.run(connect.select_database("s-own-db", "today"))["ok"]
+    asyncio.run(connect._save_selected_database("warehouse", "yesterday"))
+    assert asyncio.run(run_dashboard("s-own-db", ORDERS, [], {}))["ok"]
+    assert asyncio.run(run_dashboard("s-other-db", ORDERS, [], {}))["ok"]
+    assert wh.databases == ["today", "yesterday"]
+
+
+# req: architecture/dashboards/named-connection
+def test_the_entrys_database_wins(monkeypatch):
+    wh = _warehouse(monkeypatch, owner="s-entry-db")
+    assert asyncio.run(connect.select_database("s-entry-db", "today"))["ok"]
+    q = {"orders": {"connection": "warehouse", "sql": "SELECT 2", "database": "archive"}}
+    out = asyncio.run(run_dashboard("s-entry-db", q, [], {}))
+    assert out["ok"] and wh.databases == ["archive"] and out["connections"][0]["database"] == "archive"
+
+
+# req: architecture/dashboards/named-connection
+def test_a_connection_that_needs_a_database_and_has_none(monkeypatch):
+    _warehouse(monkeypatch, requires_database=True)
+    out = asyncio.run(run_dashboard("s-no-db", ORDERS, [], {}))
+    assert (out["ok"], out["reason"], out["message"]) == (False, "query", 'orders: no database selected on "warehouse"')
+    assert out["connections"][0]["status"] == "failed"
+
+
+class _PinnedDriver(_WarehouseDriver):
+    """Its config pins a database, as a Postgres one with `database` set does."""
+
+    def config_to_dict(self, c):
+        return vars(c)
+
+    def config_from_dict(self, d):
+        return SimpleNamespace(**d)
+
+
+# req: architecture/dashboards/named-connection
+def test_a_connection_whose_config_pins_a_database_runs_on_it(monkeypatch):
+    wh = _PinnedDriver(requires_database=True)
+    monkeypatch.setitem(DRIVERS, "whfake", wh)
+    pinned = SimpleNamespace(database="reporting")
+    assert asyncio.run(connect.connect_new("s-pin-owner", "warehouse", pinned, "whfake"))["ok"]
+    assert asyncio.run(run_dashboard("s-pin-other", ORDERS, [], {}))["ok"]
+    assert wh.databases == ["reporting"]
+
+
+# req: architecture/dashboards/named-connection
+def test_a_query_with_its_own_database_runs_under_the_sessions_timeout(monkeypatch):
+    wh = _warehouse(monkeypatch)
+    sid = asyncio.run(sessions.create_session()).id
+    asyncio.run(sessions.patch_session(sid, ui={"app": {"queryTimeout": 45}}))
+    q = {"orders": {"connection": "warehouse", "sql": "SELECT 2", "database": "archive"}}
+    assert asyncio.run(run_dashboard(sid, q, [], {}))["ok"]
+    assert wh.timeouts == [45]

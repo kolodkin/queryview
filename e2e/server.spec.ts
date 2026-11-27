@@ -137,3 +137,32 @@ test("Snapshot downloads the dashboard as a static file", async ({ page }) => {
   ]);
   expect(download.suggestedFilename()).toBe("items.html");
 });
+
+// req: system/viewer_server/federated
+test("a federated dashboard runs on the configured connections it names", async ({ page }) => {
+  const v = await startViewer([
+    {
+      name: "pair",
+      html: '<b id="a" data-qv-query="a" data-qv-column="name"></b><b id="b" data-qv-query="b" data-qv-column="name"></b>',
+      queries: {
+        a: { connection: "local", sql: "SELECT name FROM items WHERE id = 1" },
+        b: { connection: "other", sql: "SELECT name FROM items" },
+      },
+    },
+  ]);
+  try {
+    await page.goto(`${v.url}/?name=pair`);
+    const frame = dashboardFrame(page);
+    await expect(frame.locator("#a")).toHaveText("alpha");
+    await expect(frame.locator("#b")).toHaveText("omega");
+    await expect(page.getByTestId("viewer-connection")).toHaveCount(0);
+    await page.getByTestId("federated-pill").click();
+    const rows = page.getByTestId("federated-pill-row");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.filter({ hasText: "local" })).toContainText("🟢");
+    await expect(rows.filter({ hasText: "other" })).toContainText("🟢");
+    await expect(page.getByTestId("federated-unlock")).toHaveCount(0);
+  } finally {
+    await v.stop();
+  }
+});
