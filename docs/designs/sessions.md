@@ -5,7 +5,7 @@ How a session is stored and how a tab claims one. What a session is to a user is
 ## How it is stored
 
 One row per session in SQLite (`sessions`), alongside connections and workspaces
-— see [storage.md](./storage.md#storage--migrations).
+— see [storage.md](../architecture/storage.md#storage--migrations).
 
 ```sql
 id              TEXT PRIMARY KEY  -- also the agent channel id
@@ -81,7 +81,7 @@ sequenceDiagram
     Srv-->>New: session state with your last edits
 ```
 
-The `/api/sessions/*` shapes are in [api.md](./api.md). Connection and database
+The `/api/sessions/*` shapes are in [api.md](../architecture/api.md). Connection and database
 are not among them — `/api/db/connect`, `/open` and `/database` write those
 through, so connection changes keep one path.
 
@@ -111,7 +111,7 @@ re-claims the session well within it.
 
 <!-- req: lapsed-claim-409 -->
 A tab whose claim lapsed learns it on its next heartbeat (sent with `keep`, see
-[api.md](./api.md)), which gets a `409`.
+[api.md](../architecture/api.md)), which gets a `409`.
 
 The row is also the truth for the connection and its database. Every row the tab
 adopts is checked against the connection it shows. A switch the tab makes itself
@@ -121,6 +121,6 @@ with the old database.
 ## Related docs
 
 - [session.md](../user_guide/session.md) — sessions: what a tab remembers, refresh and the claim.
-- [storage.md](./storage.md) — the SQLite data directory and migrations.
-- [mcp.md](./mcp.md) — the MCP tools and channels.
-- [api.md](./api.md) — backend JSON API.
+- [storage.md](../architecture/storage.md) — the SQLite data directory and migrations.
+- [mcp.md](../architecture/mcp.md) — the MCP tools and channels.
+- [api.md](../architecture/api.md) — backend JSON API.

@@ -402,7 +402,7 @@ async def _with_params(
 
 async def _on_connection(request: Request, b: dict[str, Any], sql: str) -> tuple[Target, str] | JSONResponse:
     """A federated widget's query: the target its `connection` and `database`
-    name (docs/architecture/dashboards.md — "Which connection, which database")
+    name (docs/designs/dashboards.md — "Which connection, which database")
     and the SQL with any `values` substituted, or the failed response."""
     database = b.get("database")
     t = await session_lookup(request.state.sid)(b["connection"], database if isinstance(database, str) else None)

@@ -79,7 +79,7 @@ test("a malformed param is named above the dashboard, which still renders", asyn
   await expect(page.getByTestId("dashboard-error")).toHaveCount(0);
 });
 
-// req: architecture/dashboards/fail-fast
+// req: designs/dashboards/fail-fast
 test("dashboard runqueries error shows banner", async ({ page, seeds, baseURL, shot }) => {
   // A dashboard whose query is invalid opens on a fail-fast error banner
   // instead of rendering the iframe.

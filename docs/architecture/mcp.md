@@ -103,23 +103,7 @@ add gets `use_connection`'s refusal. `run_dashboard` fails that query;
 `push_dashboard` refuses the push, naming the first query or param that names
 it (`orders: unknown connection "warehouse"`).
 
-## How it works
-
-When armed, the browser opens an SSE stream
-(`GET /api/remote/events?session=<id>`); the backend registers an in-memory
-channel **keyed by that session's id** (see [session.md](../user_guide/session.md)).
-The push tools enqueue onto that channel; the SSE stream delivers the payload
-and the page renders it.
-
-Because the channel is named after a session, the agent's session-scoped tools
-read that session's database and workspace straight from its row — the browser
-reports nothing (see [workspace.md](../user_guide/workspace.md)).
-
-<!-- req: tab-queue -->
-A push to a [tab](../user_guide/mcp.md#tabs) nobody has opened yet lands in a channel `new_tab`
-opened in advance, which answers `queued for the tab`; arming takes that
-channel over with its pushes queued. One whose tab never comes is dropped
-after a minute.
+## Security
 
 <!-- req: locked-refuses-both -->
 **Locked connections keep the agent out.** While a session is on a saved
@@ -147,9 +131,7 @@ The id is stable across refreshes
 and re-arms, so the command you copy stops changing under you; equally, an id
 you have shared stays usable whenever that session is armed.
 
-State is in-memory and per-process (like the active-connection session map): a
-backend restart drops channels; the browser reconnects while armed and gets a
-new id.
+How the channel carries pushes is in [designs/mcp.md](../designs/mcp.md).
 
 ## Why a param value is matched as the page's text
 

@@ -424,7 +424,7 @@ declares, reviewable in `queries.yaml`.
 
 ## Running the queries: `/api/runqueries`
 
-The request the page sends to run a dashboard's queries is in [dashboards.md](../architecture/dashboards.md#running-the-queries-apirunqueries).
+The request the page sends to run a dashboard's queries is in [dashboards.md](../designs/dashboards.md#running-the-queries-apirunqueries).
 
 ## Snapshot
 
@@ -446,7 +446,7 @@ stands at the current parameters. Print the file for a PDF.
 
 ## Isolation & security
 
-The sandbox the dashboard HTML runs in is described in [dashboards.md](../architecture/dashboards.md#isolation--security).
+The sandbox the dashboard HTML runs in is described in [overview.md](../architecture/overview.md#isolation--security).
 
 ## Related docs
 

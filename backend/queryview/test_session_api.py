@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from queryview.conftest import app
 
 
-# req: architecture/sessions/attach
+# req: designs/sessions/attach
 def test_attach_creates_a_session_and_returns_it():
     client = TestClient(app)
     r = client.post("/api/sessions/attach", json={"tab": "tab-http-1"})
@@ -18,7 +18,7 @@ def test_attach_creates_a_session_and_returns_it():
     assert body["session"]["id"]
 
 
-# req: architecture/sessions/attach
+# req: designs/sessions/attach
 def test_attach_requires_a_tab_token():
     client = TestClient(app)
     r = client.post("/api/sessions/attach", json={})
@@ -51,7 +51,7 @@ def test_delete_refuses_a_held_session():
     assert r.status_code == 409
 
 
-# req: architecture/sessions/release-then-attach
+# req: designs/sessions/release-then-attach
 def test_release_frees_the_claim_so_the_next_tab_resumes_it():
     client = TestClient(app)
     sid = client.post("/api/sessions/attach", json={"tab": "tab-http-4"}).json()["session"]["id"]
@@ -62,7 +62,7 @@ def test_release_frees_the_claim_so_the_next_tab_resumes_it():
     assert again["session"]["id"] == sid
 
 
-# req: architecture/sessions/release-then-attach
+# req: designs/sessions/release-then-attach
 def test_release_applies_the_state_the_tab_had_not_flushed():
     """A reload fires pagehide inside the client's debounce window, so the
     beacon carries the pending patch and it must not be lost."""
@@ -80,7 +80,7 @@ def test_release_applies_the_state_the_tab_had_not_flushed():
     assert resumed["ui"]["explorer"]["sidebarWidth"] == 376
 
 
-# req: architecture/sessions/lapsed-claim-409
+# req: designs/sessions/lapsed-claim-409
 def test_a_heartbeat_on_a_taken_session_is_409_and_force_takes_it_back():
     client = TestClient(app)
     sid = client.post("/api/sessions/attach", json={"tab": "tab-http-6"}).json()["session"]["id"]

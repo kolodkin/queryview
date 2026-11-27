@@ -231,7 +231,7 @@ Each **session** has one active connection, so two tabs can sit on two
 different connections and databases at once. Saved connections themselves are
 shared; the *active* one is per session. See [session.md](./session.md); how
 the session's row records it is in
-[sessions.md](../architecture/sessions.md#how-it-is-stored).
+[sessions.md](../designs/sessions.md#how-it-is-stored).
 
 Opening the app attaches a session and reconnects whatever connection that
 session was on:
@@ -260,4 +260,4 @@ resumes normally.
 
 ## CI
 
-What CI exercises is in [storage.md](../architecture/storage.md#ci).
+What CI exercises is in [storage.md](../contributor.md#ci).

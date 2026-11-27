@@ -437,7 +437,7 @@ async def connection_target(
     `(type, config, database)`, or `(status, message)`. The database is
     `database`, else the session's selected one when `name` is its active
     connection, else the stored one, else the one its config pins (the only
-    one it opens). See docs/architecture/dashboards.md —
+    one it opens). See docs/designs/dashboards.md —
     "Which connection, which database"."""
     await _ensure_session(sid)  # also applies the session's settings, its query timeout among them
     found = await _resolve(sid, name)

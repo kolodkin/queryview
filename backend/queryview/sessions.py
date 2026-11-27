@@ -38,7 +38,7 @@ class ReservedLabelError(ValueError):
 
 
 # Session writes run one at a time, so a reload's `attach` sees the pagehide
-# beacon's patch committed. See docs/architecture/sessions.md, "How it is stored".
+# beacon's patch committed. See docs/designs/sessions.md, "How it is stored".
 _writes = asyncio.Lock()
 
 

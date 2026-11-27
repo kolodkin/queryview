@@ -15,7 +15,7 @@
 - The viewer server never accepts SQL and never puts an unchecked value into SQL.
 - The browser never parses SQL or `{placeholders}`: dependencies come from `uses`.
 - Both servers check each value against its param's options (the app too).
-- A dashboard is federated (every query and `options_sql` names a connection) or not; the shared run takes a target per query and returns `connections` for a federated one (see `docs/architecture/dashboards.md`, `named-connection`).
+- A dashboard is federated (every query and `options_sql` names a connection) or not; the shared run takes a target per query and returns `connections` for a federated one (see `docs/designs/dashboards.md`, `named-connection`).
 - `window.queries`, `window.params`, `setParams`, `<qv-select-view>`, `<qv-param>` keep their meaning for dashboard authors.
 - Explorer and Scripts keep `/api/db/query` and `/api/db/describe`.
 - A query's page defaults to no sort, offset 0, limit 1000 (`DASHBOARD_ROW_CAP`); a given limit is clamped to 1..1000.

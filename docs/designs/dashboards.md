@@ -1,6 +1,8 @@
-# Dashboard internals
+# Dashboard query runs
 
-How a dashboard's queries run and how its HTML is isolated. Building and using a dashboard is in [dashboard.md](../user_guide/dashboard.md).
+How a dashboard's queries run and which connection each runs on. Building and
+using a dashboard is in [dashboard.md](../user_guide/dashboard.md); the request
+and reply are in [api.md](../architecture/api.md).
 
 ## Running the queries: `/api/runqueries`
 
@@ -52,27 +54,8 @@ connection the SQL runs on. A [widget](../user_guide/dashboard.md#widgets) over 
 federated query sends `connection` and `database` to `/api/db/query` and
 `/api/db/describe`, which apply the same lookup.
 
-## Isolation & security
-
-The HTML renders in
-`<iframe sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcdoc=…>`
-**without** `allow-same-origin`, giving it an opaque origin: it can run JS and load CDN
-assets but cannot read the app's storage or call `/api/*` as the session (it
-has neither the session id nor any credential). A link the page opens with
-`target="_blank"` lands in a normal tab. The page cannot print or download;
-[Snapshot](../user_guide/dashboard.md#snapshot) is the way out; its file runs no script because the
-host puts a script-blocking policy ahead of the frame's text. Data reaches the page only through the
-injected `window.queries` and the [widget](../user_guide/dashboard.md#widgets) replies; the
-`window.queries` JSON has `<` escaped so result data containing `</script>` can't break out
-of the prologue.
-
-Persisted dashboards are shared via SQLite and keyed by name within their
-[workspace](../user_guide/workspace.md). The agent HTML
-is untrusted and confined to the sandbox; it never sees connection secrets or
-the session id.
-
 ## Related docs
 
 - [dashboard.md](../user_guide/dashboard.md) — dashboards and how agents author them.
-- [api.md](./api.md) — `/api/runqueries` and `/api/dashboards`.
-- [workspace.md](../user_guide/workspace.md) — workspaces.
+- [api.md](../architecture/api.md) — `/api/runqueries`, `/api/db/query` and `/api/db/describe`.
+- [overview.md](../architecture/overview.md#isolation--security) — how a dashboard's HTML is isolated.

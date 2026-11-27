@@ -86,7 +86,7 @@ reaches the tab within a beat, and every view follows — the explorer reloads
 its tables, the dashboard and the query panel re-run what is on screen.
 
 How tabs claim, heartbeat and release a session is in
-[sessions.md](../architecture/sessions.md#claims-and-the-heartbeat).
+[sessions.md](../designs/sessions.md#claims-and-the-heartbeat).
 
 ## The session dropdown
 
@@ -137,4 +137,4 @@ opens from such a link.
 
 ## How it is stored
 
-The `sessions` table and how its writes are timed are in [sessions.md](../architecture/sessions.md#how-it-is-stored).
+The `sessions` table and how its writes are timed are in [sessions.md](../designs/sessions.md#how-it-is-stored).

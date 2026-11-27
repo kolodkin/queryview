@@ -81,7 +81,7 @@ The agent drafts and edits; the user names and saves. No tool saves.
 
 ## How it works
 
-The SSE channel behind arming is described in [mcp.md](../architecture/mcp.md#how-it-works).
+The SSE channel behind arming is described in [designs/mcp.md](../designs/mcp.md#how-the-channel-works).
 
 ## Related docs
 

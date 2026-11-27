@@ -1,6 +1,6 @@
-# Storage and CI
+# Storage
 
-Where connections live and how they are kept: the SQLite data directory, migrations, the `connections` table, config encryption and CI. Connecting from the app is in [connect.md](../user_guide/connect.md).
+Where connections live and how they are kept: the SQLite data directory, migrations, the `connections` table and config encryption. Connecting from the app is in [connect.md](../user_guide/connect.md).
 
 ## Storage & migrations
 
@@ -69,13 +69,6 @@ memoized on first use:
 If the key changes (or a row predates encryption) the value can't be decrypted;
 a session on that connection reads as disconnected and the user reconnects,
 which re-encrypts it with the current key.
-
-## CI
-
-CI runs a real `clickhouse/clickhouse-server` service container so the e2e suite
-exercises an actual connection: it asserts that connecting succeeds, a database
-can be selected, the indicator shows `<connection> · <database>`, and a query
-against a seeded `test` database returns its rows.
 
 ## Related docs
 

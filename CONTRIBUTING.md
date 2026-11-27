@@ -24,13 +24,21 @@ layers are described in [docs/AGENTS.md](docs/AGENTS.md).
 
 ### Architecture
 
-- [overview.md](docs/architecture/overview.md) — the components and the contracts between them.
+- [overview.md](docs/architecture/overview.md) — the components, the contracts between them, and dashboard isolation.
 - [api.md](docs/architecture/api.md) — the full HTTP endpoint reference.
 - [viewer_server_api.md](docs/architecture/viewer_server_api.md) — the viewer server's endpoints.
-- [storage.md](docs/architecture/storage.md) — the data directory, migrations, connection table, encryption, CI.
-- [sessions.md](docs/architecture/sessions.md) — how a session is stored and how a tab claims one.
-- [mcp.md](docs/architecture/mcp.md) — the MCP tools and the channel behind arming.
-- [dashboards.md](docs/architecture/dashboards.md) — running a dashboard's queries and its sandbox.
+- [storage.md](docs/architecture/storage.md) — the data directory, migrations, connection table, encryption.
+- [mcp.md](docs/architecture/mcp.md) — the MCP tools and what a locked connection refuses.
+
+### Designs
+
+- [sessions.md](docs/designs/sessions.md) — how a session is stored and how a tab claims one.
+- [dashboards.md](docs/designs/dashboards.md) — running a dashboard's queries, and which connection each uses.
+- [mcp.md](docs/designs/mcp.md) — the channel an MCP push travels to the tab.
+
+### Other
+
+- [contributor.md](docs/contributor.md) — what CI exercises.
 
 ## Prerequisites
 

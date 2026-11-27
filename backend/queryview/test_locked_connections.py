@@ -331,7 +331,7 @@ def test_list_databases_reports_a_failing_connection_without_failing_the_rest(mo
     assert out["connections"] == [{"name": "list-fail-duck", "type": "duckdb", "error": "RuntimeError: server gone"}]
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_a_dashboard_reaches_a_locked_connection_only_with_the_token():
     _run(connect.delete_connection("", "warehouse", ""))
     owner = _connected("warehouse")
