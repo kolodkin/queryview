@@ -40,6 +40,12 @@ workspace tools. It works in the workspace of the session you invited it into
 tools use the fallback when given no session. Creating and configuring
 workspaces stays in the app, since a remote can carry a secret.
 
+## Why
+
+Connections are shared across workspaces rather than owned by one: a workspace
+is then a cheap namespace for one team's dashboards, with no connection to
+re-enter per workspace.
+
 ## Related docs
 
 - [gitsync.md](./gitsync.md) — backup & restore mechanics.

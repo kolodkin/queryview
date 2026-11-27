@@ -4,7 +4,10 @@ The components of QueryView and the contracts between them: [api.md](./api.md)
 (endpoints), [mcp.md](./mcp.md) (agent tools),
 [storage.md](./storage.md) (the data directory) and
 [viewer_server_api.md](./viewer_server_api.md) (the viewer server). How
-components work together is in [designs/](../designs/sessions.md).
+components work together is in the design pages:
+[sessions.md](../designs/sessions.md) (session rows and claims),
+[dashboards.md](../designs/dashboards.md) (dashboard query runs) and
+[mcp.md](../designs/mcp.md) (the agent channel).
 
 ## Components
 

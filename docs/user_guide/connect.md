@@ -19,6 +19,25 @@ database.
 - Connecting saves the connection under the name given; it is listed among the
   saved connections when you come back.
 
+A **New connection** card shows its driver's form in place of the cards
+(ClickHouse below); **← Connections** goes back without saving.
+
+| Field    | Default     | Notes                                          |
+| -------- | ----------- | ---------------------------------------------- |
+| Name     | `clickhouse`| Label for the connection (unique key in storage). |
+| Host     | `localhost` | ClickHouse host.                               |
+| Port     | `8123`      | ClickHouse HTTP interface port.                |
+| Username | `default`   | ClickHouse user.                               |
+| Password | *(empty)*   | ClickHouse password.                           |
+| Show all | on          | Checked while **Database** is blank; checking it clears it. |
+| Database | *(empty)*   | The only database listed, opened on connect.   |
+
+Two actions:
+
+- **Test connection** — `POST /api/db/test`. Shows a pass/fail message
+  inline. No side effects.
+- **Connect** — `POST /api/db/connect`. On success the picker opens.
+
 ## Open a database
 
 <!-- req: open-database -->
@@ -31,6 +50,26 @@ next time.
 - Opening the app again reconnects to the same connection and database; the
   saved connection is marked active and reopens on that database.
 - The database can be switched from any page.
+
+After connecting, the picker lists the databases (`SHOW DATABASES`), the last
+one used highlighted; **← Connections** returns to the cards, leaving the
+connection open. A filter input (focused on open) narrows the list by case-insensitive
+substring; **Enter** selects the first remaining match, and an empty result
+shows "No databases match". Each row has a copy icon for its name. Selecting a database:
+
+- sets the session's selected database,
+- persists it on the saved connection (`POST /api/db/database`),
+- collapses the picker and shows the top-left indicator `🟢 <connection> · <database>`,
+- makes the [Scripts](./scripts.md) page available,
+- and lands on the explorer (see
+  [queryview.md](./queryview.md#landing-page)).
+
+Clicking the `🟢 <connection> · <database>` pill reopens the same list as a
+dropdown — same filter, plus **Escape** to close — so the database can be
+switched from any page without going back to Connect. Below the databases it
+lists the connections; clicking one opens it. Both the dropdown and the picker
+re-list the databases on open, so one created since the connect appears; a
+failed re-list keeps the list on screen.
 
 ## Drivers
 
@@ -55,7 +94,7 @@ When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`
 fails, the error suggests `host.docker.internal` (see
 [Connecting to databases on your machine](./docker.md#connecting-to-databases-on-your-machine)).
 
-## Concepts
+## Testing and connecting
 
 - **Test connection** — a throwaway connectivity check (`SELECT 1`). It reports
   pass/fail and nothing else: it does **not** save the connection, does not open
@@ -71,27 +110,6 @@ fails, the error suggests `host.docker.internal` (see
   session goes straight back to it (see
   [session.md](./session.md#last-visited)).
 
-## Creating a connection
-
-A **New connection** card shows its driver's form in place of the cards
-(ClickHouse below); **← Connections** goes back without saving.
-
-| Field    | Default     | Notes                                          |
-| -------- | ----------- | ---------------------------------------------- |
-| Name     | `clickhouse`| Label for the connection (unique key in storage). |
-| Host     | `localhost` | ClickHouse host.                               |
-| Port     | `8123`      | ClickHouse HTTP interface port.                |
-| Username | `default`   | ClickHouse user.                               |
-| Password | *(empty)*   | ClickHouse password.                           |
-| Show all | on          | Checked while **Database** is blank; checking it clears it. |
-| Database | *(empty)*   | The only database listed, opened on connect.   |
-
-Two actions:
-
-- **Test connection** — `POST /api/db/test`. Shows a pass/fail message
-  inline. No side effects.
-- **Connect** — `POST /api/db/connect`. On success the picker opens.
-
 ## Editing and deleting
 
 Each saved card has **✎** and **✕**:
@@ -104,7 +122,7 @@ Each saved card has **✎** and **✕**:
 
 A session connection has **✕** only.
 
-## Flow
+## From the cards to a database
 
 ```
 cards -- "New connection" card --> connection form
@@ -120,28 +138,6 @@ cards -- "New connection" card --> connection form
 cards -- saved card --> opens <name>, activates it --> last visited database
                                                      (else the picker --> pick)
 ```
-
-## Database picker
-
-After connecting, the picker lists the databases (`SHOW DATABASES`), the last
-one used highlighted; **← Connections** returns to the cards, leaving the
-connection open. A filter input (focused on open) narrows the list by case-insensitive
-substring; **Enter** selects the first remaining match, and an empty result
-shows "No databases match". Each row has a copy icon for its name. Selecting a database:
-
-- sets the session's selected database,
-- persists it on the saved connection (`POST /api/db/database`),
-- collapses the picker and shows the top-left indicator `🟢 <connection> · <database>`,
-- makes the [Scripts](./scripts.md) page available,
-- and lands on the explorer (see
-  [queryview.md](./queryview.md#landing-page)).
-
-Clicking the `🟢 <connection> · <database>` pill reopens the same list as a
-dropdown — same filter, plus **Escape** to close — so the database can be
-switched from any page without going back to Connect. Below the databases it
-lists the connections; clicking one opens it. Both the dropdown and the picker
-re-list the databases on open, so one created since the connect appears; a
-failed re-list keeps the list on screen.
 
 ## Session connections
 
@@ -194,7 +190,7 @@ Locking hands the locking tab its token, so the connection it is on keeps
 working.
 A [federated dashboard](./dashboard.md#federated-dashboards) naming a
 locked connection runs its queries only from a tab holding that token; the
-[federated pill](./queryview.md#layout) marks it 🔒 with **Unlock**.
+[federated pill](./queryview.md#whats-on-the-page) marks it 🔒 with **Unlock**.
 
 - **Opening** a locked card lands on it like any other; the shell then asks
   for the passphrase unless the tab holds a token for it, as it does when a

@@ -11,7 +11,7 @@ The agent never receives query results back: your **browser** runs the queries
 on your session's connection and feeds the results into the agent's HTML,
 which renders inside an [isolated iframe](../architecture/overview.md#isolation--security).
 
-## Live dashboard
+## Open a dashboard
 
 <!-- req: live-dashboard -->
 You can open a saved dashboard that re-runs its queries against live data.
@@ -163,7 +163,7 @@ orders:
 - Every query, widget queries and `options_sql` included, names a connection or
   none does; a mixed dashboard is refused with `every query and options_sql
   names a connection, or none does`.
-- It needs no connected session. The page's [pill](./queryview.md#layout)
+- It needs no connected session. The page's [pill](./queryview.md#whats-on-the-page)
   lists the connections.
 
 ## Pushing from a folder

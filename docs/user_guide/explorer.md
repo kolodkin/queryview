@@ -1,9 +1,10 @@
 # Explorer — the classical table navigator
 
-The landing page for a live connection (`/explorer`, next to
-[Scripts](./scripts.md) and [dashboards](./dashboard.md) in the corner nav —
-see [queryview.md](./queryview.md#landing-page)): a sidebar lists the active
-database's tables; clicking one browses its rows. No SQL is typed — the page generates
+Look through a database's tables and rows without writing SQL. The explorer
+(`/explorer`) is where you land once a database is open, next to
+[Scripts](./scripts.md) and [dashboards](./dashboard.md) in the corner nav (see
+[queryview.md](./queryview.md#landing-page)): a sidebar lists the database's
+tables, and clicking one browses its rows. You type no SQL: the page generates
 `SELECT * FROM "<table>"` and drives it with the same field select and
 order-by select the [dashboard widget](./query.md#fields-selection--ordering) uses.
 
@@ -17,7 +18,7 @@ You can browse tables and page through their rows without typing SQL.
 - Picking a table shows its rows.
 - The rows can be ordered by a column, a column hidden, and the rows paged.
 
-## Layout
+## What's on the page
 
 ```
 +------------------------------------------------------------+

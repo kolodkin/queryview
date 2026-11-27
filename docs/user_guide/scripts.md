@@ -19,7 +19,7 @@ first error.
 - A failing statement stops the run: you are told which one failed and
   why, and the statements after it do not run.
 
-## Layout
+## What's on the page
 
 ```
 +------------------------------------------------------------+

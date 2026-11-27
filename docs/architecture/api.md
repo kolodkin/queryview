@@ -120,8 +120,7 @@ the UI.
 | GET    | `/api/git/history` | `?kind=&name=&before=&limit=10&workspace=` | The entity's revisions, newest first. `{ok, revisions: [{sha, date, message}], has_more}`. |
 | POST   | `/api/git/restore` | `{kind, name, ref?, workspace?}`                | Overwrite the local DB row with the entity's content at `ref`: a sha from history or a branch name (read as `origin/<name>`), by default the remote branch head. `{ok, restored, sha, imported, conflicts}`. Bringing back a name [its folder can't hold](../user_guide/gitsync.md#repository-layout) → `400` / `409`, as on Save. |
 
-`kind` is `"dashboard"`;
-`workspace` defaults to the fallback workspace (see [workspace.md](../user_guide/workspace.md)). MCP tools `git_history` and
+`kind` is `"dashboard"`. MCP tools `git_history` and
 `git_restore` mirror the same surface, resolving the workspace from an
 optional `session_id` (see [workspace.md](../user_guide/workspace.md)).
 

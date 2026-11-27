@@ -10,12 +10,12 @@ tools: [mcp.md](./mcp.md).
 
 ## Credentials at rest
 
-A saved connection's config — host, port, username, password — is encrypted
-with AES-GCM before it is written to the SQLite store. The 256-bit key lives
-in `encryption.key` in the data directory (`~/.queryview` by default), created
-`0600` on first run, or supplied as `DB_ENCRYPTION_KEY`. The store holds only
-ciphertext; a config is decrypted in memory to open a driver connection and
-never written back in the clear.
+A saved connection's config — host, port, username, password — is stored
+encrypted, never in the clear, with a key kept in `encryption.key` in the data
+directory (`~/.queryview` by default) or supplied as `DB_ENCRYPTION_KEY`. Keep
+that file as private as the credentials: whoever reads it can decrypt them. The
+cipher and what happens when the key changes are in
+[storage.md](../architecture/storage.md#config-encryption).
 
 ## The agent never reads credentials
 
@@ -112,3 +112,4 @@ own statements can write; `ATTACH` is available there.
 
 - [connect.md](./connect.md) — creating, saving, and locking connections.
 - [mcp.md](./mcp.md) — the agent's tools and what they expose.
+- [storage.md](../architecture/storage.md#config-encryption) — how configs are encrypted.

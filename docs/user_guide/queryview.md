@@ -1,14 +1,16 @@
 # QueryView — the Connect page
 
-The Connect page (`/connect`) is where a disconnected session lands: a card per
-saved connection and a "new connection" card per driver. The other pages are
+Start here: the Connect page (`/connect`) is where you land with no connection
+open, with a card per saved connection and a "new connection" card per driver
+([connect.md](./connect.md) walks through them). Once a database is open, you
+move between the other pages from the corner nav:
 `/scripts` (the SQL scratchpad, see [scripts.md](./scripts.md); redirects here
 until a database is selected), `/explorer` (see [explorer.md](./explorer.md))
 and `/dashboard` (see [dashboard.md](./dashboard.md)). The old `/prompt` URL
 redirects here, and `/studio` to a dashboard
 [**New query**](./dashboard.md#the-page-dashboard) draft.
 
-## Layout
+## What's on the page
 
 ```
 +----------------------------------------------------------+
