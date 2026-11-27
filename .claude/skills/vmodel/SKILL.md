@@ -17,6 +17,12 @@ work into tasks, each task follows both.
 | Integration | `docs/architecture/` | routes, stores, MCP tools, drivers working together | `backend/queryview/**/test_*.py`, `frontend/src/**/*.test.ts(x)` naming an `architecture/` ID |
 | Unit | the module's docstring (Python) or leading comment (TypeScript) | one module's logic | the test file beside the module, named after it, no ID |
 
+The layers are named after their tests and replace the generic layout: the
+generic User layer is split into `requirements/` (what a user needs) and
+`system/` (what each feature shows); the generic Architecture and Design
+layers merge into `architecture/`, wire contracts included, proved by
+integration tests rather than browser tests.
+
 The docs root is `docs/`: `requirements/queryview/run-sql` is defined in
 `docs/requirements/queryview.md` as `<!-- req: run-sql -->`, and named by a
 test as `// req: requirements/queryview/run-sql` (`#` in Python).
@@ -67,12 +73,11 @@ Every docs edit ends with the `devpowers:shortify` checklist on the pages you
 touched; it owns brevity, heading depth and link hygiene. The house style on
 top of it:
 
-- A page holds one layer's content; a change to an existing feature is a
-  section on its page. Copy the shape of the nearest page.
-- A requirements page has no design and no screen detail.
-- Present tense, describing current behavior.
-  No history ("now", "previously", "since vX"); proposals go in `future.md`
-  and move into the feature's page when they ship.
+- A change to an existing feature is a section on its page.
+- One fact, one layer: a requirement states the need, its system page adds
+  what the screen shows and links up, without restating it. A requirements
+  page has no design and no screen detail.
+- Proposals go in `future.md` and move into the feature's page when they ship.
 - On a system page, the opening paragraph names the route (`/dashboard`,
   `/explorer`, …) and links the neighboring pages a reader may have meant
   instead.
