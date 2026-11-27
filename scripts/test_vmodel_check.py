@@ -45,7 +45,9 @@ def test_a_doc_slug_takes_its_pages_prefix(tmp_path):
 
 
 def test_a_doc_marker_names_a_slug_not_a_full_id(tmp_path):
-    r = check(repo(tmp_path, {"docs/user_guide/dash.md": "<!-- req: user_guide/dash/rerun -->\n", "e2e/dash.spec.ts": SPEC}))
+    r = check(
+        repo(tmp_path, {"docs/user_guide/dash.md": "<!-- req: user_guide/dash/rerun -->\n", "e2e/dash.spec.ts": SPEC})
+    )
     assert any("slug" in e for e in r.errors)
 
 
