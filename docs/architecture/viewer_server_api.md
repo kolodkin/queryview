@@ -32,7 +32,8 @@ unnamed queries is not served.
 
 <!-- req: values-checked -->
 Every POST resolves the selectors first, so a value outside a param's options
-falls back to its default and never reaches the SQL.
+falls back to its default and never reaches the SQL
+([why](./mcp.md#why-a-param-value-is-matched-as-the-pages-text)).
 
 ## Related docs
 

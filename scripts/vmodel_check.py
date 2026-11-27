@@ -94,8 +94,7 @@ def _definitions(root: Path, report: Report) -> dict[str, str]:
                     else:
                         defined[id_] = rel
                         report.matrix[layer][id_] = []
-            exempt = page.name == "decisions.md" or _rel(root / "docs", page) in UNTESTED
-            if not tagged and not exempt:  # a decision explains a statement; no test proves it
+            if not tagged and _rel(root / "docs", page) not in UNTESTED:
                 report.gaps.append(f"{rel}: no req: marker")
     return defined
 

@@ -31,7 +31,6 @@ layers are described in [docs/AGENTS.md](docs/AGENTS.md).
 - [sessions.md](docs/architecture/sessions.md) — how a session is stored and how a tab claims one.
 - [mcp.md](docs/architecture/mcp.md) — the MCP tools and the channel behind arming.
 - [dashboards.md](docs/architecture/dashboards.md) — running a dashboard's queries and its sandbox.
-- [decisions.md](docs/architecture/decisions.md) — why a param value is matched as text.
 
 ## Prerequisites
 

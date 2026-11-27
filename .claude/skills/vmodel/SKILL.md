@@ -50,10 +50,12 @@ statement.
 ## Every file is tagged
 
 Every layer page defines at least one ID and every test file names one. The
-exceptions: a `decisions.md` page, and a unit test file, which pairs with its
-module by name (`test_main.py` also with `__main__.py`).
-`docs/user_guide/creds.md` "Why" is the example of a decision beside its
-statement.
+exceptions: the two deployment pages (`user_guide/docker.md`,
+`user_guide/viewer_server_docker.md`), which no test here can prove, and a unit
+test file, which pairs with its module by name (`test_main.py` also with
+`__main__.py`). `docs/user_guide/creds.md` "Why" is the example of a decision
+beside its statement; `docs/architecture/mcp.md` "Why a param value is matched
+as the page's text" is one that spans pages, on the page stating its rule.
 
 ## Writing a doc
 

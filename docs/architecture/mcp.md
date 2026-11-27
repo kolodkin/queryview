@@ -76,7 +76,7 @@ you [armed](../user_guide/mcp.md#arming-a-session).
   returning `{ok, database, results, meta, params}` to the agent: `results` in
   the `window.queries` shape, at most `limit` rows a query (max 1000). A param
   without a value takes its default; a number or boolean value is read as its
-  text (`2`, `true`); see [why](./decisions.md#why-a-param-value-is-matched-as-the-pages-text). Stops at the first failing query, whose
+  text (`2`, `true`); see [why](#why-a-param-value-is-matched-as-the-pages-text). Stops at the first failing query, whose
   name opens the `message`, and after 60s; nothing reaches the browser. A
   [federated](#federated-drafts) run needs a known session (else
   `unknown session`) but no session connection, adds `connections: [{name,
@@ -151,8 +151,28 @@ State is in-memory and per-process (like the active-connection session map): a
 backend restart drops channels; the browser reconnects while armed and gets a
 new id.
 
+## Why a param value is matched as the page's text
+
+A request's param value (`run_dashboard` above, [api.md](./api.md),
+[viewer_server_api.md](./viewer_server_api.md)) is compared with the options
+as the text the page shows for them. A number or boolean becomes that text
+(`2`, `true`), and a value no option offers takes the param's default without
+an error:
+
+- **One rule for every caller.** The page sends the option text it showed, so
+  an agent or a script sending `2` selects the same option the page would.
+- **No guessing across spellings.** `false` does not select an option declared
+  as the string `"False"`: matching case-insensitively would make `"false"`
+  and `"False"` one option where a dashboard declares both.
+- **A stale value is not an error.** A selection saved before the options
+  changed falls back to the default, so an unoffered value has to do the same.
+- The cost: a mistyped value runs the default silently. The reply's `params`
+  carries each param's `options` and chosen `value`, which is where a caller
+  sees it.
+
 ## Related docs
 
 - [mcp.md](../user_guide/mcp.md) — connecting an agent, arming a session, naming and saving.
 - [session.md](../user_guide/session.md) — sessions and agent tabs.
 - [api.md](./api.md) — backend JSON API.
+- [dashboard.md](../user_guide/dashboard.md#dashboard-parameters) — dashboard parameters.

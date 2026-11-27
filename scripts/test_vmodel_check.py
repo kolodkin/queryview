@@ -180,5 +180,6 @@ def test_test_main_pairs_with_dunder_main(tmp_path):
     assert r.errors == [] and r.gaps == []
 
 
-def test_a_decisions_page_needs_no_id(tmp_path):
-    assert check(repo(tmp_path, {"docs/architecture/decisions.md": "Why.\n"})).gaps == []
+def test_a_decisions_page_is_an_untagged_page(tmp_path):
+    gaps = check(repo(tmp_path, {"docs/architecture/decisions.md": "Why.\n"})).gaps
+    assert gaps == ["docs/architecture/decisions.md: no req: marker"]
