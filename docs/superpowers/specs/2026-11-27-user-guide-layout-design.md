@@ -2,7 +2,7 @@
 
 ## Intent
 
-Bring QueryView's docs onto the layout `devpowers:vmodel` 1.20.2 recommends,
+Bring QueryView's docs onto the layout `devpowers:vmodel` 1.20.3 recommends,
 so the project's layers match the generic skill instead of being mapped onto
 it. The user layer becomes a real, published user guide; everything that is
 not guide material is architecture or design.
@@ -66,11 +66,12 @@ name architecture and design IDs together (the project's one shared pair).
   `gitsync.md`; `yaml-export-import` → `export-import.md`; `agent-drives` →
   `mcp.md`. A slug that collides with one on the target page is the builder's
   to resolve (keep both statements, suffix the newer slug).
-- "Design principles" goes to `docs/designs/decisions.md` (no ID, exempt).
+- "Design principles" becomes the `## Why` of `user_guide/queryview.md`, the
+  page whose layout they explain.
 - `git mv docs/system docs/user_guide`; delete `docs/requirements/`.
 - Move `docs/docker.md` and `docs/viewer_server_docker.md` into
-  `user_guide/`; the checker exempts them by name, like `decisions.md`
-  (decided: running the image is a user task, but no test can prove it here).
+  `user_guide/`; the checker exempts them by name (decided: running the image
+  is a user task, but no test can prove it here).
 - Rewrite every marker and link: e2e markers, `../system/` and
   `../requirements/` links, code comments and docstrings that name
   `docs/system/...`, and the MCP tool descriptions in
@@ -88,11 +89,21 @@ Builder's call per section; the starting split:
   `overview.md`, since `dashboards.md` is left with nothing else (my call).
 - Move to `designs/`: `sessions.md`; "Running the queries" and "Which
   connection, which database" from `dashboards.md`; "Federated drafts" and
-  "How it works" from `mcp.md`; the folder-mode "Why" (into
-  `designs/decisions.md`).
+  "How it works" from `mcp.md`. The folder-mode `## Why` stays on
+  `user_guide/explorer.md`.
 - `storage.md` "CI" moves to a contributor page at the `docs/` root (no
   layer).
 - An ID moves with its statement and gets the new prefix.
+
+## Decisions: `## Why`, no `decisions.md`
+
+Per 1.20.3, a decision sits as a `## Why` on the page it explains; one that
+spans pages sits on the page that states its rule, and the others link to
+it. `architecture/decisions.md` goes: "Why a param value is matched as the
+page's text" becomes the `## Why` of `architecture/mcp.md` (its `run_dashboard`
+entry states the rule; `api.md` and `viewer_server_api.md` link to it). The
+checker drops its `decisions.md` exemption, and the project skill its
+`decisions.md` exception.
 
 ## Step 3 — move non-guide sections out of `user_guide/`
 
