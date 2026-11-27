@@ -149,10 +149,6 @@ CREATE TABLE x.customers_copy AS SELECT * FROM customers
 
 Keep an agent off file connections you wouldn't hand it the filesystem for.
 
-## API
-
-`POST /api/db/execute` — see [api.md](../architecture/api.md).
-
 ## Related docs
 
 - [query.md](./query.md) — querying: pagination, the results grid, CSV.

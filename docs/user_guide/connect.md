@@ -30,10 +30,6 @@ next time.
   saved connection is marked active and reopens on that database.
 - The database can be switched from any page.
 
-## Storage & migrations
-
-How connections are stored, encrypted and migrated is in [storage.md](../architecture/storage.md#storage--migrations).
-
 ## Drivers
 
 ClickHouse, Postgres and MySQL take host/port/username/password and present
@@ -145,14 +141,6 @@ lists the connections; clicking one opens it. Both the dropdown and the picker
 re-list the databases on open, so one created since the connect appears; a
 failed re-list keeps the list on screen.
 
-## Persistence (SQLite)
-
-The `connections` table is described in [storage.md](../architecture/storage.md#persistence-sqlite).
-
-## Config encryption
-
-The stored config is encrypted at rest; see [storage.md](../architecture/storage.md#config-encryption).
-
 ## Session connections
 
 A **session connection** lives only in one session's memory: never saved,
@@ -251,13 +239,3 @@ restarts.
 To open a **specific** connection on load, pass `…/?connection=<name>`
 (equivalent to clicking its card); the SPA then cleans the URL so a later reload
 resumes normally.
-
-## API
-
-`/api/db/test`, `/api/db/connect`, `/api/db/connections`, `/api/db/open`,
-`/api/db/lock`, `/api/db/unlock`, `/api/db/databases`, `/api/db/database`,
-`/api/db/query` and `/api/session` — see [api.md](../architecture/api.md).
-
-## CI
-
-What CI exercises is in [storage.md](../contributor.md#ci).

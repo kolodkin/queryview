@@ -83,6 +83,8 @@ Connections are stored in SQLite via SQLModel. See
 Dashboards belong to a workspace; each workspace syncs
 to its own git remote. The remote URL may embed a token — it is encrypted at
 rest and never returned by the API. See [workspace.md](../user_guide/workspace.md).
+Scoped endpoints (dashboards, export/import, `/api/git/*`) accept an optional
+`workspace` name, defaulting to the fallback workspace.
 
 | Method | Path                      | Body                          | Description |
 | ------ | ------------------------- | ----------------------------- | ----------- |
@@ -100,7 +102,7 @@ documents and imported back — one at a time or a whole workspace at once. See
 
 | Method | Path          | Body / params                              | Description |
 | ------ | ------------- | ------------------------------------------ | ----------- |
-| GET    | `/api/export` | `?kind=&name=&workspace=`                  | Download one dashboard (`kind=dashboard`, `name`) or the whole workspace (`kind=workspace`) as YAML, with a `Content-Disposition` filename. `400` bad args, `404` unknown entity/workspace. |
+| GET    | `/api/export` | `?kind=&name=&workspace=`                  | Download one dashboard (`kind=dashboard`, `name`) or the whole workspace (`kind=workspace`) as YAML, with a `Content-Disposition` filename (`{name}.dashboard.yaml` / `{workspace}.workspace.yaml`). `400` bad args, `404` unknown entity/workspace. |
 | POST   | `/api/import` | raw YAML body, `?workspace=`               | Import a document into a workspace, upserting by name; the document's `kind` decides what is written. `{ok, kind, dashboards}`. `400` malformed document, one carrying saved queries, or a new name that is too long; `409` a new name that is a case twin. |
 
 ## Git sync
@@ -116,7 +118,7 @@ the UI.
 | GET    | `/api/git/status`  | `?workspace=`                                    | Whether the workspace has a git remote configured, and the conflicts the last sync recorded. `{configured, conflicts: [{kind, name}]}`. |
 | POST   | `/api/git/sync`    | `{workspace?}`                                   | Merge the repo in (see [gitsync.md](../user_guide/gitsync.md#merge-in)). `{ok, imported, conflicts}`; no remote → `409`. |
 | GET    | `/api/git/history` | `?kind=&name=&before=&limit=10&workspace=` | The entity's revisions, newest first. `{ok, revisions: [{sha, date, message}], has_more}`. |
-| POST   | `/api/git/restore` | `{kind, name, ref?, workspace?}`                | Overwrite the local DB row with the entity's content at `ref`. `{ok, restored, sha}`. Bringing back a name [its folder can't hold](../user_guide/gitsync.md#repository-layout) → `400` / `409`, as on Save. |
+| POST   | `/api/git/restore` | `{kind, name, ref?, workspace?}`                | Overwrite the local DB row with the entity's content at `ref`: a sha from history or a branch name (read as `origin/<name>`), by default the remote branch head. `{ok, restored, sha, imported, conflicts}`. Bringing back a name [its folder can't hold](../user_guide/gitsync.md#repository-layout) → `400` / `409`, as on Save. |
 
 `kind` is `"dashboard"`;
 `workspace` defaults to the fallback workspace (see [workspace.md](../user_guide/workspace.md)). MCP tools `git_history` and

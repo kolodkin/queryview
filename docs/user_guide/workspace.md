@@ -25,17 +25,6 @@ without a remote is a pure namespace: its git controls are disabled.
 Deleting a workspace requires it to be empty (409 otherwise). The git remote
 keeps its history either way.
 
-## API
-
-- `GET /api/workspaces` → `{workspaces: [{name, branch, configured, remote}]}`
-- `POST /api/workspaces` `{name, remote?, branch?}`
-- `PATCH /api/workspaces/{name}` `{name?, remote?, branch?}` — a null
-  `remote` clears it; an absent key leaves it unchanged
-- `DELETE /api/workspaces/{name}`
-
-Scoped endpoints (dashboards, export/import, `/api/git/*`) accept an
-optional `workspace` name, defaulting to the fallback workspace.
-
 ## UI
 
 <!-- req: switcher -->

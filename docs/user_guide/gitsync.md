@@ -145,19 +145,6 @@ With a remote, the dashboard picker marks a dashboard no commit holds
 matches the repo but has no `commit_sha` recorded yet gets one on the next
 [merge-in](#merge-in), e.g. **Sync**.
 
-## API
-
-- `GET /api/git/status?workspace=` → `{configured, conflicts}`
-- `POST /api/git/sync` `{workspace?}` → `{ok, imported, conflicts}`
-- `GET /api/git/history?kind=&name=&before=&limit=10&workspace=` → `{ok, revisions: [{sha, date, message}], has_more}`
-- `POST /api/git/restore` `{kind, name, ref?, workspace?}` → `{ok, restored, sha, imported, conflicts}`
-  `ref` is a sha from history or a branch name (read as `origin/<name>`); default: the remote branch head.
-
-`kind` is `"dashboard"`;
-`workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_history` and
-`git_restore` mirror the same surface, resolving the workspace from an
-optional `session_id` (see [workspace.md](./workspace.md)).
-
 ## Related docs
 
 - [workspace.md](./workspace.md) — workspaces: per-workspace remotes.

@@ -79,10 +79,6 @@ The agent drafts and edits; the user names and saves. No tool saves.
   and **Delete** live on the dashboard page only. An agent asked to rename
   says so; pushing the same dashboard under a new name is not a rename.
 
-## How it works
-
-The SSE channel behind arming is described in [designs/mcp.md](../designs/mcp.md#how-the-channel-works).
-
 ## Related docs
 
 - [api.md](../architecture/api.md) — backend JSON API.

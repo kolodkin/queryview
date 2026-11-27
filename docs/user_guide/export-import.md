@@ -59,21 +59,6 @@ Next to the dashboard page's **Restore** button: **Export** downloads the saved 
 workspace manage panel (header dropdown → *Manage workspaces…*) has the same
 pair for the whole active workspace.
 
-## API
-
-- `GET /api/export?kind=&name=&workspace=` → the YAML document,
-  with a `Content-Disposition` download filename
-  (`{name}.dashboard.yaml` / `{workspace}.workspace.yaml`).
-- `POST /api/import?workspace=` with the raw YAML document as the request
-  body → `{ok, kind, dashboards}` (the count of upserted dashboards).
-
-`kind` is `"dashboard"` or `"workspace"`; `name` is required for a
-dashboard; `workspace` defaults to the fallback workspace.
-Errors: `400` malformed document or missing arguments, `404` unknown
-entity/workspace. Import also refuses a new name
-[its git-sync folder can't hold](./gitsync.md#repository-layout): `400` too
-long, `409` a case twin of a saved dashboard or of an earlier entry.
-
 ## Related docs
 
 - [gitsync.md](./gitsync.md) — versioned backup/restore of the same entities via git.

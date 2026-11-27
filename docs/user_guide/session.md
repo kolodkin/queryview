@@ -134,7 +134,3 @@ session as the switcher would (one held elsewhere or gone shows a toast, and
 the tab attaches as any new tab does) and drops the parameter from the URL. A
 tab session arms itself whenever a browser tab loads it. Any unheld session
 opens from such a link.
-
-## How it is stored
-
-The `sessions` table and how its writes are timed are in [sessions.md](../designs/sessions.md#how-it-is-stored).

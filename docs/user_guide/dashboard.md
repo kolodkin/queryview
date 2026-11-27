@@ -422,10 +422,6 @@ The page sends **values only, never SQL**, and the host answers only messages
 from the dashboard's own frame — so a dashboard's SQL stays what `queries`
 declares, reviewable in `queries.yaml`.
 
-## Running the queries: `/api/runqueries`
-
-The request the page sends to run a dashboard's queries is in [dashboards.md](../designs/dashboards.md#running-the-queries-apirunqueries).
-
 ## Snapshot
 
 <!-- req: snapshot -->
@@ -443,10 +439,6 @@ stands at the current parameters. Print the file for a PDF.
 - A WebGL chart or a canvas holding a cross-origin image comes out blank; a
   password field, empty.
 - It holds rendered query results: treat the file as data.
-
-## Isolation & security
-
-The sandbox the dashboard HTML runs in is described in [overview.md](../architecture/overview.md#isolation--security).
 
 ## Related docs
 

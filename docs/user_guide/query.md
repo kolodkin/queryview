@@ -143,13 +143,6 @@ The lock and channels live in one process's memory (like the SSE relay), so this
 assumes a single backend process; multi-worker deployments would need a shared
 backplane.
 
-## API
-
-`/api/db/query` (a page of rows, or CSV), `/api/db/describe` (output columns)
-and `/api/remote/lock` (the edit lock): see [api.md](../architecture/api.md). Queries run on
-the session's connection and selected database, within its
-[query timeout](./queryview.md#query-timeout).
-
 ## Related docs
 
 - [dashboard.md](./dashboard.md) — dashboards, the SQL panel and the widgets.
