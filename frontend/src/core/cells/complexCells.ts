@@ -2,7 +2,7 @@
 // Values arrive structured (JSON arrays and objects), so the only parsing left
 // is the column *type* string, which decides map (`key → value`) versus tuple
 // (`name: value`) labelling. No React here — see ComplexCell.tsx and
-// docs/system/query.md ("Default views for complex types").
+// docs/user_guide/query.md ("Default views for complex types").
 
 import { cellText, isContainer, type Cell } from '../results/rows'
 

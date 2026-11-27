@@ -287,7 +287,7 @@ def test_requests_run_within_the_session_query_timeout(monkeypatch, tmp_path):
     assert seen == [("test", 45), ("list", 45), ("query", 45), *[("query", 30)] * 4]
 
 
-# --- Dashboard params: substituted here, not in the browser (docs/system/dashboard.md#dashboard-parameters) ---
+# --- Dashboard params: substituted here, not in the browser (docs/user_guide/dashboard.md#dashboard-parameters) ---
 
 REGION = [{"name": "r", "options": ["eu", "us"]}]
 

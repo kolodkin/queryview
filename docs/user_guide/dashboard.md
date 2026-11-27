@@ -9,6 +9,19 @@ receives query results back. The **browser** (trusted code with a session) runs
 the queries on its session's connection and feeds the results into the
 agent-authored HTML, which renders inside an isolated iframe.
 
+## Live dashboard
+
+<!-- req: live-dashboard -->
+A user can open a saved dashboard that re-runs its queries against live data.
+
+- A saved dashboard is listed and opens by its link.
+- Opening it shows its queries' results as they are now: rows added since it
+  was saved appear.
+
+<!-- req: dashboard-many-connections -->
+A user can open one dashboard that shows data from several connections side
+by side, and see which connections it uses and whether each answered.
+
 ## The page (`/dashboard`)
 
 `/dashboard` is a top-level page beside Connect (`/connect`), the

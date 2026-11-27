@@ -1,6 +1,6 @@
 """Locked connections: a passphrase-locked saved connection serves only the
 tab holding its unlock token; the agent (MCP tools, or REST without the token)
-is refused. See docs/system/connect.md#locked-connections."""
+is refused. See docs/user_guide/connect.md#locked-connections."""
 
 from __future__ import annotations
 

@@ -6,6 +6,30 @@ connection** card on the Connect page (see [queryview.md](./queryview.md)),
 reopen it from its saved card. Connections persist in SQLite, and a session
 reconnects whichever one it was last on.
 
+## Add a connection
+
+<!-- req: add-connection -->
+A user can save a connection to a ClickHouse, Postgres, MySQL, DuckDB or SQLite
+database.
+
+- Each of the five drivers offers a new-connection form: host, port and
+  credentials, or a file path for DuckDB and SQLite.
+- Connecting saves the connection under the name given; it is listed among the
+  saved connections when the user comes back.
+
+## Open a database
+
+<!-- req: open-database -->
+A user can open a saved connection, pick a database, and find it reconnected
+next time.
+
+- Opening a saved connection offers its databases to pick from, narrowed by
+  typing.
+- Picking one opens its tables and shows the connection and database in use.
+- Opening the app again reconnects to the same connection and database; the
+  saved connection is marked active and reopens on that database.
+- The database can be switched from any page.
+
 ## Storage & migrations
 
 How connections are stored, encrypted and migrated is in [storage.md](../architecture/storage.md#storage--migrations).
@@ -31,7 +55,7 @@ letter instead.
 A saved card that fails to open reports the error under the cards.
 When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`
 fails, the error suggests `host.docker.internal` (see
-[Connecting to databases on your machine](../docker.md#connecting-to-databases-on-your-machine)).
+[Connecting to databases on your machine](./docker.md#connecting-to-databases-on-your-machine)).
 
 ## Concepts
 

@@ -8,6 +8,17 @@ wraps a single `SELECT` for paging, saving and presentation; the MCP `run_sql` t
 [Agent pushes](#agent-pushes) for the script tools). Before a
 database is selected the page redirects to Connect.
 
+## Run a script
+
+<!-- req: run-script -->
+A user can run a multi-statement script, writes included, that stops at the
+first error.
+
+- A `;`-separated script runs as written, `CREATE` and `INSERT` included, and
+  shows the last statement's rows.
+- A failing statement stops the run: the user is told which one failed and
+  why, and the statements after it do not run.
+
 ## Layout
 
 ```

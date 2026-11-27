@@ -1,5 +1,5 @@
 """connections: lock_hash — the salted scrypt hash of a locked connection's
-passphrase, null when unlocked (docs/system/connect.md#locked-connections)
+passphrase, null when unlocked (docs/user_guide/connect.md#locked-connections)
 
 Revision ID: b4c5d6e7f8a9
 Revises: a3b4c5d6e7f8

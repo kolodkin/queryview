@@ -23,4 +23,4 @@ an error:
 
 ## Related docs
 
-- [dashboard.md](../system/dashboard.md#dashboard-parameters) — dashboard parameters.
+- [dashboard.md](../user_guide/dashboard.md#dashboard-parameters) — dashboard parameters.

@@ -1,6 +1,6 @@
 """Workspace domain: named git-sync targets that own dashboards. The remote URL may embed a token, so it is encrypted at rest with
 connect.py's AES-GCM helpers and never returned by list_workspaces. Docs:
-docs/system/workspace.md."""
+docs/user_guide/workspace.md."""
 
 from __future__ import annotations
 

@@ -24,7 +24,7 @@ async function pickFolder(page: Page, name: string): Promise<void> {
 // The table names, not their sizes.
 const names = (page: Page) => page.locator('[data-testid="explorer-table"] > span:first-child');
 
-// req: system/explorer/folder-navigation
+// req: user_guide/explorer/folder-navigation
 test("folder connection navigates folders and browses files", async ({ page, seeds, shot }) => {
   const folder = await seeds.folder();
   await connectFolder(page, folder);
@@ -68,7 +68,7 @@ test("folder connection navigates folders and browses files", async ({ page, see
   await shot("union by name: glob entry across both files");
 });
 
-// req: system/explorer/folder-union-by-name
+// req: user_guide/explorer/folder-union-by-name
 test("union by name adds columns only some files have", async ({ page, seeds, shot }) => {
   await connectFolder(page, await seeds.mixedFolder());
   await tableRow(page, "*.csv").click();
@@ -87,7 +87,7 @@ test("union by name adds columns only some files have", async ({ page, seeds, sh
   await shot("glob with union by name: shared columns aligned, city added");
 });
 
-// req: system/explorer/folder-max-entries
+// req: user_guide/explorer/folder-max-entries
 test("max entries cuts lists and says so", async ({ page, seeds, shot }) => {
   const nums = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
   const files = nums.map((n) => `f${n}.csv`);
@@ -129,7 +129,7 @@ test("max entries cuts lists and says so", async ({ page, seeds, shot }) => {
   await expect(page.getByTestId("db-select-truncated")).toHaveCount(0);
 });
 
-// req: system/session/last-visited
+// req: user_guide/session/last-visited
 test("reopening a connection goes back to its last folder and file", async ({ page, seeds, shot }) => {
   await connectFolder(page, await seeds.folder(), "lv-folder");
   const status = page.getByTestId("connection-status");

@@ -1,23 +1,23 @@
 # MCP tools and channels
 
-The MCP tools and the channel they push through. Connecting an agent and arming a session are in [mcp.md](../system/mcp.md).
+The MCP tools and the channel they push through. Connecting an agent and arming a session are in [mcp.md](../user_guide/mcp.md).
 
 ## Tools
 
-Every tool acts on a browser session: a [tab](../system/mcp.md#tabs) of the agent's own, or one
-you [armed](../system/mcp.md#arming-a-session).
+Every tool acts on a browser session: a [tab](../user_guide/mcp.md#tabs) of the agent's own, or one
+you [armed](../user_guide/mcp.md#arming-a-session).
 
 <!-- req: session-info -->
 - `session_info(session_id)` — what the session is on: `{ok, connected,
   connection, type, database, databases, workspace, tables: [{name, …}]}`
   (`tables` lists the selected database's). The starting point for schema
   discovery. The agent may switch to any listed connection (below). On a
-  [locked](../system/connect.md#locked-connections) connection it returns
+  [locked](../user_guide/connect.md#locked-connections) connection it returns
   only `{ok, connected, locked: true, workspace, tables: []}`.
   <!-- req: connections -->
-- Connections ([access rule](../system/connect.md#session-connections)):
+- Connections ([access rule](../user_guide/connect.md#session-connections)):
   `list_connections(session_id)` tags each with `scope`, `created_by`,
-  `active`, leaving out [locked](../system/connect.md#locked-connections) ones;
+  `active`, leaving out [locked](../user_guide/connect.md#locked-connections) ones;
   `list_databases(session_id, connection?)` lists the databases of each listed
   connection, or of `connection` only.
   `add_connection(session_id, name, type, config)` adds a ClickHouse,
@@ -40,7 +40,7 @@ you [armed](../system/mcp.md#arming-a-session).
   with `not connected` on a disconnected session; stops after 60s, server-side
   too. ClickHouse errors name the `query_id` to look up in `system.query_log`.
   <!-- req: run-script -->
-- `run_script(session_id, sql)` — run a script like the [Scripts](../system/scripts.md)
+- `run_script(session_id, sql)` — run a script like the [Scripts](../user_guide/scripts.md)
   page's Run all, **writes included**, returning `{ok, database, results: [{sql,
   ok, status, message, columns, types, rows, truncated, elapsed_ms}]}` to the
   agent. Stops at the first failure; `columns`/`types`/`rows` are null for a
@@ -55,24 +55,24 @@ you [armed](../system/mcp.md#arming-a-session).
   <!-- req: open-explorer -->
 - `open_explorer(session_id, database, table?)` —
   switch the session to `database` and send the browser to its
-  [Explorer](../system/explorer.md), on `table` when given (refused when the database
+  [Explorer](../user_guide/explorer.md), on `table` when given (refused when the database
   doesn't list it). Returns `{ok, message, database}`; past the switch, a
   failure still leaves the session on `database`.
   <!-- req: push-dashboard -->
 - `push_dashboard(session_id, html?, queries?, params?, name?, dir?)` — push a
   dashboard **draft**; the browser navigates to it and renders it. Without
   `name` the push is an unnamed draft; `name` selects a saved dashboard to
-  [edit](../system/mcp.md#naming-and-saving): it must be one `list_dashboards`
+  [edit](../user_guide/mcp.md#naming-and-saving): it must be one `list_dashboards`
   returns, and any other is refused. `dir` reads the draft from
-  [a folder](../system/dashboard.md#pushing-from-a-folder) instead of `html` and
+  [a folder](../user_guide/dashboard.md#pushing-from-a-folder) instead of `html` and
   `queries`. Returns
   `{ok, pushed, message, database}`; a disconnected session fails with
   `not connected` unless the draft is [federated](#federated-drafts). See
-  [dashboard.md](../system/dashboard.md).
+  [dashboard.md](../user_guide/dashboard.md).
   <!-- req: run-dashboard -->
 - `run_dashboard(session_id, queries?, params?, values?, dir?, limit?=100)` — run
   a draft's queries with `values` substituted into their
-  [placeholders](../system/dashboard.md#dashboard-parameters), as the page would,
+  [placeholders](../user_guide/dashboard.md#dashboard-parameters), as the page would,
   returning `{ok, database, results, meta, params}` to the agent: `results` in
   the `window.queries` shape, at most `limit` rows a query (max 1000). A param
   without a value takes its default; a number or boolean value is read as its
@@ -81,11 +81,11 @@ you [armed](../system/mcp.md#arming-a-session).
   [federated](#federated-drafts) run needs a known session (else
   `unknown session`) but no session connection, adds `connections: [{name,
   database, status, queries, message?}]` and has a null `database`.
-- `new_tab(name)` — a session of the agent's own; see [Tabs](../system/mcp.md#tabs).
+- `new_tab(name)` — a session of the agent's own; see [Tabs](../user_guide/mcp.md#tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
   <!-- req: git-tools -->
 - `git_history` / `git_restore` — list and restore a saved dashboard's
-  versions in [workspace git](../system/gitsync.md); only the user's Save commits.
+  versions in [workspace git](../user_guide/gitsync.md); only the user's Save commits.
 
 A pushed dashboard's queries run through the browser's own `/api/runqueries`
 and `/api/db/query` calls; the push layer never talks to a database.
@@ -93,7 +93,7 @@ and `/api/db/query` calls; the push layer never talks to a database.
 ## Federated drafts
 
 Both dashboard tools take a query as SQL or as a
-[federated](../system/dashboard.md#federated-dashboards)
+[federated](../user_guide/dashboard.md#federated-dashboards)
 `{connection, sql, database?}` map, and refuse a malformed entry or a mixed
 dashboard before anything runs. A pushed page's script can send
 `window.queries` anywhere, so either tool reads data, and a named connection
@@ -107,23 +107,23 @@ it (`orders: unknown connection "warehouse"`).
 
 When armed, the browser opens an SSE stream
 (`GET /api/remote/events?session=<id>`); the backend registers an in-memory
-channel **keyed by that session's id** (see [session.md](../system/session.md)).
+channel **keyed by that session's id** (see [session.md](../user_guide/session.md)).
 The push tools enqueue onto that channel; the SSE stream delivers the payload
 and the page renders it.
 
 Because the channel is named after a session, the agent's session-scoped tools
 read that session's database and workspace straight from its row — the browser
-reports nothing (see [workspace.md](../system/workspace.md)).
+reports nothing (see [workspace.md](../user_guide/workspace.md)).
 
 <!-- req: tab-queue -->
-A push to a [tab](../system/mcp.md#tabs) nobody has opened yet lands in a channel `new_tab`
+A push to a [tab](../user_guide/mcp.md#tabs) nobody has opened yet lands in a channel `new_tab`
 opened in advance, which answers `queued for the tab`; arming takes that
 channel over with its pushes queued. One whose tab never comes is dropped
 after a minute.
 
 <!-- req: locked-refuses-both -->
 **Locked connections keep the agent out.** While a session is on a saved
-connection the user [locked](../system/connect.md#locked-connections) behind a
+connection the user [locked](../user_guide/connect.md#locked-connections) behind a
 passphrase, the tools that query it, push to its tab, pick its database or
 switch to it refuse with `connection is locked`: `run_sql`, `run_script`,
 an unfederated `run_dashboard`, `push_script`, `push_dashboard`,
@@ -153,6 +153,6 @@ new id.
 
 ## Related docs
 
-- [mcp.md](../system/mcp.md) — connecting an agent, arming a session, naming and saving.
-- [session.md](../system/session.md) — sessions and agent tabs.
+- [mcp.md](../user_guide/mcp.md) — connecting an agent, arming a session, naming and saving.
+- [session.md](../user_guide/session.md) — sessions and agent tabs.
 - [api.md](./api.md) — backend JSON API.

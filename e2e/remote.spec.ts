@@ -56,7 +56,7 @@ test("mcp open_explorer browses the table", async ({ page, seeds, baseURL }) => 
   expect(missing).toEqual({ ok: false, message: `no table "nope" in ${chDb()}`, database: chDb() });
 });
 
-// req: system/mcp/tabs
+// req: user_guide/mcp/tabs
 test("mcp new_tab opens a session of the agent's own at its link", async ({ page, context, seeds, baseURL }) => {
   await seeds.testDb();
   await connect(page, CH, chDb()); // the user's own tab, untouched below

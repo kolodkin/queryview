@@ -57,7 +57,7 @@ const sectionLabel = 'text-xs font-semibold uppercase tracking-wider text-slate-
 const cardGrid = 'grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'
 
 // The Connect page (`/connect`): saved-connection cards and a "new connection"
-// card per driver. See docs/system/queryview.md.
+// card per driver. See docs/user_guide/queryview.md.
 function ConnectView({
   connection,
   setConnection,
@@ -91,7 +91,7 @@ function ConnectView({
   const [opening, setOpening] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   // The passphrase prompt up, if any: to lock a card, remove its lock, or
-  // edit or delete a locked one (docs/system/connect.md#locked-connections). Opening
+  // edit or delete a locked one (docs/user_guide/connect.md#locked-connections). Opening
   // a locked card needs none: the shell asks once the session lands on it.
   const [prompt, setPrompt] = useState<{ kind: PromptKind; name: string } | null>(null)
 

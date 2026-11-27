@@ -1,6 +1,6 @@
 // Client for /api/workspaces. The active workspace is session state — see
 // activeWorkspace() in session.ts; an omitted workspace param means the
-// backend's fallback (the oldest workspace). See docs/system/workspace.md.
+// backend's fallback (the oldest workspace). See docs/user_guide/workspace.md.
 
 import { apiFetch, postJson } from './api'
 

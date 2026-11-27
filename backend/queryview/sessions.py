@@ -1,7 +1,7 @@
 """Session domain: a browser tab's persisted UI state — route and URL, active
 connection and database, workspace, and per-view settings. One row per session;
 a session is claimed by at most one tab at a time (see `attach`). No HTTP
-concerns here. Docs: docs/system/session.md."""
+concerns here. Docs: docs/user_guide/session.md."""
 
 from __future__ import annotations
 
@@ -62,12 +62,12 @@ class Session(SQLModel, table=True):
     url: str = Field(default=DEFAULT_URL)  # path + search
     ui: str = Field(default="{}")  # JSON, namespaced by view
     # JSON {connection: {database, table}}: where the session last was on each
-    # connection, so reopening one goes straight back (docs/system/session.md).
+    # connection, so reopening one goes straight back (docs/user_guide/session.md).
     last_visited: str = Field(default="{}")
     claimed_by: str | None = Field(default=None, index=True)  # tab token
     claim_seen_at: int | None = Field(default=None)  # unix ms
     last_active_at: int = Field(index=True)  # unix ms
-    # Set on a tab session (docs/system/session.md#tabs): what the agent opened it for.
+    # Set on a tab session (docs/user_guide/session.md#tabs): what the agent opened it for.
     tab: str | None = Field(default=None)
 
 
@@ -207,7 +207,7 @@ async def get_session_rec(sid: str) -> SessionRec | None:
 
 async def create_tab(name: str) -> SessionRec:
     """A fresh, unclaimed tab session named for what the agent opened it for
-    (docs/system/session.md#tabs)."""
+    (docs/user_guide/session.md#tabs)."""
     await _ensure_schema()
     now = _now_ms()
     async with _open() as s:
@@ -331,7 +331,7 @@ def _free(tab: str):
 
 async def _sweep(s: AsyncSession, now: int) -> None:
     """Delete unnamed sessions idle and unclaimed for a claim TTL — scratch, kept
-    only while a tab shows them (docs/system/session.md) — and forget their in-memory
+    only while a tab shows them (docs/user_guide/session.md) — and forget their in-memory
     connections. A lapsed claim (a crashed or sleeping tab) is left: it may wake."""
     gone = delete(Session).where(
         col(Session.label).is_(None),

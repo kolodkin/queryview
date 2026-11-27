@@ -5,6 +5,16 @@ grid: the [`<qv-select-view>`](./dashboard.md#widgets) widget on
 [dashboards](./dashboard.md) (ad-hoc SQL is a dashboard's **New query** draft),
 the [explorer](./explorer.md), and the [Scripts](./scripts.md) page.
 
+## Run SQL
+
+<!-- req: run-sql -->
+A user can run SQL, page through the rows, pick columns, and download CSV.
+
+- Running a query shows its rows under its column names.
+- A page size splits the rows into pages the user steps through.
+- Hiding a column removes it from the results; showing it brings it back.
+- The current page downloads as a CSV file.
+
 ## Pagination
 
 <!-- req: pagination -->

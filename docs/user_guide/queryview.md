@@ -122,7 +122,14 @@ on blur or Enter, remembered with the session and read by the server on each
 request. ClickHouse, Postgres, MySQL and SQLite honour it; a DuckDB query runs to
 completion.
 
-## Design principles
+## Why
 
-The app's design principles are on the
-[requirements page](../requirements/queryview.md#design-principles).
+The app follows four design principles:
+
+- **Click, don't type.** Every connection is a card; nothing needs a name
+  remembered or a command learned.
+- **One thing at a time.** The cards, a form or a picker — never two at once.
+- **State is visible.** Once a database is selected, the top-left indicator
+  makes the active connection and database obvious from anywhere.
+- **Resumable.** A session restores where you left off — page, connection and
+  query — so a refresh costs nothing and the common case needs no typing at all.

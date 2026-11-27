@@ -16,14 +16,14 @@ has the same gap for a superuser (untested).
 - **Refuse in `run_sql`.** Reject `INTO OUTFILE` / `INTO DUMPFILE` (MySQL) and
   `COPY … TO` a file (Postgres), skipping comments and ignoring case. A
   text check can be dodged, so it backs up the next item.
-- **Document the login.** [mcp.md](./system/mcp.md) and [connect.md](./system/connect.md)
+- **Document the login.** [mcp.md](./user_guide/mcp.md) and [connect.md](./user_guide/connect.md)
   advise an agent connection to use a login without file privileges: no FILE
   on MySQL, no superuser or `pg_write_server_files` on Postgres.
 
 ## MySQL driver follow-ups
 
 - **Scripts stop reading at the cap.** A script SELECT keeps 100 rows (see
-  [scripts.md](./system/scripts.md#per-driver)), but the driver reads the rest of the
+  [scripts.md](./user_guide/scripts.md#per-driver)), but the driver reads the rest of the
   result to free the connection, so `SELECT * FROM big_table` transfers the
   whole table. A `KILL QUERY` from a second connection would end it at the cap
   instead.
@@ -43,13 +43,13 @@ Postgres: the picker lists the file's schemas (`duckdb_schemas()`, `main`
 first, internal ones hidden) as the "databases", and the explorer lists the
 tables and views of the picked schema with the estimates the driver already
 computes. Same driver and same picker as folder mode (see
-[explorer.md](./system/explorer.md)); the `path` decides the mode. Today file mode has
+[explorer.md](./user_guide/explorer.md)); the `path` decides the mode. Today file mode has
 no picker and lists only what `SHOW TABLES` returns.
 
 ## Dashboards
 
 - **Unsaved edits survive a reload.** A **New query** draft is kept in the
-  [session](./system/session.md); [SQL panel](./system/dashboard.md#the-sql-panel) edits to
+  [session](./user_guide/session.md); [SQL panel](./user_guide/dashboard.md#the-sql-panel) edits to
   a saved dashboard are not, and are lost on leaving it.
 - **Driver scope.** A dashboard's SQL is written for one driver, yet every
   dashboard lists for every connection. An optional driver on the dashboard
@@ -58,7 +58,7 @@ no picker and lists only what `SHOW TABLES` returns.
   kept out of the up-front run, only when the tag is written in the HTML: one
   a script creates is not seen.
 - **Snapshots for agents.** An agent building a report from one or more
-  dashboards needs their [snapshots](./system/dashboard.md#snapshot) as files. The
+  dashboards needs their [snapshots](./user_guide/dashboard.md#snapshot) as files. The
   server would render them in a headless browser of its own (the same snapshot
   code, written to a file whose path the tool returns) so no user tab is in
   the loop and reports can be batched or scheduled. Open: a browser engine in
@@ -75,7 +75,7 @@ no picker and lists only what `SHOW TABLES` returns.
 - **Local vs git status.** Show, per dashboard on the dashboard page, how the
   local copy stands against the repo: in sync, local changes, behind (the
   repo's copy changed since they last agreed) or conflict. The
-  [merge-in](./system/gitsync.md#merge-in) already tracks this per entity.
+  [merge-in](./user_guide/gitsync.md#merge-in) already tracks this per entity.
 - **No Save while behind.** Today a Save pushes the local copy over a newer
   one in the repo. Refuse Save when the dashboard is behind, until the user
   takes the repo's copy with **Restore**.
@@ -88,11 +88,11 @@ each workspace; multi-user sync needs git pulling or a webhook first.
 ## Related docs
 
 - [api.md](./architecture/api.md) — backend JSON API.
-- [connect.md](./system/connect.md) — connecting, storage.
-- [mcp.md](./system/mcp.md) — the agent tools, `run_sql` among them.
-- [scripts.md](./system/scripts.md) — running scripts, per driver.
-- [gitsync.md](./system/gitsync.md) — git backup & restore, whose follow-ups live here.
-- [workspace.md](./system/workspace.md) — workspaces and their git remotes.
-- [session.md](./system/session.md) — sessions and what they remember.
-- [queryview.md](./system/queryview.md) — the Connect page and the app's pages.
-- [query.md](./system/query.md) — querying: pagination, the results grid, CSV.
+- [connect.md](./user_guide/connect.md) — connecting, storage.
+- [mcp.md](./user_guide/mcp.md) — the agent tools, `run_sql` among them.
+- [scripts.md](./user_guide/scripts.md) — running scripts, per driver.
+- [gitsync.md](./user_guide/gitsync.md) — git backup & restore, whose follow-ups live here.
+- [workspace.md](./user_guide/workspace.md) — workspaces and their git remotes.
+- [session.md](./user_guide/session.md) — sessions and what they remember.
+- [queryview.md](./user_guide/queryview.md) — the Connect page and the app's pages.
+- [query.md](./user_guide/query.md) — querying: pagination, the results grid, CSV.

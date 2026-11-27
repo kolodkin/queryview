@@ -389,7 +389,7 @@ Keep every security test (`a value outside the options never reaches the sql`, `
 ### Task 8: Remove the old paths, and the docs
 
 **Files:**
-- Modify: `backend/queryview/app.py`, `backend/queryview/dashboard_queries.py`, their tests; `frontend/src/core/widgets/SelectView.tsx`, `frameChannel.ts`, `frontend/src/core/dashboard/frameHost.ts` (+ test); `docs/architecture/api.md`, `docs/architecture/viewer_server_api.md`, `docs/system/dashboard.md`
+- Modify: `backend/queryview/app.py`, `backend/queryview/dashboard_queries.py`, their tests; `frontend/src/core/widgets/SelectView.tsx`, `frameChannel.ts`, `frontend/src/core/dashboard/frameHost.ts` (+ test); `docs/architecture/api.md`, `docs/architecture/viewer_server_api.md`, `docs/user_guide/dashboard.md`
 - Delete: `docs/superpowers/specs/2026-11-24-one-run-per-page-design.md`, this plan
 
 What goes:

@@ -1,4 +1,4 @@
-// The header's Query timeout chip (docs/system/queryview.md): the seconds one request
+// The header's Query timeout chip (docs/user_guide/queryview.md): the seconds one request
 // to the database may take, remembered with the session. The shell keys it by
 // session, so a switch shows that session's value.
 

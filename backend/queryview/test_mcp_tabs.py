@@ -1,5 +1,5 @@
 """new_tab gives the agent a session of its own and its link; pushes to it
-queue until the browser tab arms (docs/system/mcp.md#tabs)."""
+queue until the browser tab arms (docs/user_guide/mcp.md#tabs)."""
 
 from __future__ import annotations
 

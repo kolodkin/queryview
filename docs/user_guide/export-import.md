@@ -6,6 +6,15 @@ Unlike [git sync](./gitsync.md) this needs no git remote — just a file you can
 share or use to copy content between workspaces and instances. Connections are
 never exported (their config is encrypted credentials).
 
+## Move a dashboard as YAML
+
+<!-- req: yaml-export-import -->
+A user can move a dashboard between instances as YAML.
+
+- Export downloads the dashboard as a YAML file.
+- Importing that file saves the dashboard as it was exported, over any copy of
+  the same name.
+
 ## Documents
 
 Every exported document is self-describing via a top-level `kind`; import

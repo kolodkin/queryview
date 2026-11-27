@@ -451,7 +451,7 @@ async def push_dashboard(
     list_dashboards) the push edits that one. Re-push to update it. Its queries
     run on the viewing session's connection and selected database, unless every
     one names a connection as `{connection, sql, database?}` (federated, see
-    docs/system/dashboard.md); a named connection follows use_connection's
+    docs/user_guide/dashboard.md); a named connection follows use_connection's
     rules, and one the agent may not use refuses the push.
 
     The browser consumes the results, not the agent: the HTML reads them from a
@@ -463,7 +463,7 @@ async def push_dashboard(
     placeholders (kinds value / identifier / dimension / text / each, `options`
     or `options_sql`, `default: none`; a query naming an `each` runs once per
     option, rows stacked); the page gets them as `window.params` and
-    re-runs with `window.setParams({...})`. See docs/system/dashboard.md.
+    re-runs with `window.setParams({...})`. See docs/user_guide/dashboard.md.
 
     The HTML may use `<qv-select-view query="name">` (a paged results table
     over that query, with `<template column="col">` children designing cells
@@ -659,7 +659,7 @@ def _push_failed(message: str) -> dict[str, Any]:
 @mcp.tool()
 async def new_tab(name: str, ctx: Context) -> dict[str, Any]:
     """A fresh QueryView session for your work and the link that shows it (see
-    docs/system/mcp.md, "Tabs"). Open `url` in the user's browser yourself: `open
+    docs/user_guide/mcp.md, "Tabs"). Open `url` in the user's browser yourself: `open
     <url>` on macOS, `xdg-open <url>` on Linux; otherwise give the user the
     link. The tab lists as "Agent › <name>", arms itself on load and is gone
     once closed. Connect it with use_connection or add_connection, then push

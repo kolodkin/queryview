@@ -3,7 +3,7 @@
 ## Intent
 
 A dashboard page loads through several kinds of request, and the app and the
-[viewer server](../../system/viewer_server.md) each have their own:
+[viewer server](../../user_guide/viewer_server.md) each have their own:
 
 | | App | Viewer server |
 |---|---|---|

@@ -4,6 +4,16 @@ Dashboards can be backed up to a git repository (e.g.
 GitHub) and restored from any past revision, per entity. Connections are never
 written to the repo (their config is encrypted credentials).
 
+## Back up a workspace to git
+
+<!-- req: workspace-git -->
+A user can back a workspace up to a git remote and restore a dashboard from it.
+
+- Each save of a dashboard is a commit on the workspace's remote.
+- A dashboard changed outside git is marked as such.
+- The dashboard's revisions are listed; restoring one brings that version back
+  and clears the mark.
+
 ## Configuration
 
 Each workspace (see [workspace.md](./workspace.md)) carries its own remote URL
@@ -27,7 +37,7 @@ Git never runs interactively: stdin is closed, prompts are disabled, SSH runs in
 batch mode, and each invocation is capped at two minutes. A missing credential,
 a key passphrase or an unknown host fails instead of blocking a request — which
 is why a container wants a token rather than a key it cannot unlock. Mounting
-for that case is in [docker.md](../docker.md#git-sync).
+for that case is in [docker.md](./docker.md#git-sync).
 
 ## Repository layout
 

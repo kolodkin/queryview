@@ -15,7 +15,7 @@ import {
   test,
 } from "./fixtures";
 
-// req: system/dashboard/loading-mark
+// req: user_guide/dashboard/loading-mark
 test("the frame marks itself while a re-run is in flight", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -46,7 +46,7 @@ test("the frame marks itself while a re-run is in flight", async ({ page, seeds,
   await expect(frame.locator("html")).not.toHaveAttribute("data-qv-loading");
 });
 
-// req: system/dashboard/qv-param
+// req: user_guide/dashboard/qv-param
 test("a text param takes what is typed, as a literal", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -66,7 +66,7 @@ test("a text param takes what is typed, as a literal", async ({ page, seeds, bas
   await expect(frame.locator("#v")).toHaveText("—");
 });
 
-// req: system/dashboard/qv-param
+// req: user_guide/dashboard/qv-param
 test("typed text survives another selector changed before its re-run answers", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -93,7 +93,7 @@ test("typed text survives another selector changed before its re-run answers", a
   await expect(frame.locator("input")).toHaveValue("typed");
 });
 
-// req: system/dashboard/qv-param
+// req: user_guide/dashboard/qv-param
 test("qv-param reruns the dashboard", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -110,7 +110,7 @@ test("qv-param reruns the dashboard", async ({ page, seeds, baseURL }) => {
   await expect(frame.locator("#out")).toHaveText("beta");
 });
 
-// req: system/dashboard/bound-values
+// req: user_guide/dashboard/bound-values
 test("data-qv-query binds an element to a value and follows a param", async ({
   page,
   seeds,
@@ -145,7 +145,7 @@ test("data-qv-query binds an element to a value and follows a param", async ({
 const VIEW = '<qv-select-view query="q" limit="2" order-by="id"></qv-select-view>';
 const ITEMS = { q: "SELECT id, name FROM items" };
 
-// req: system/dashboard/select-view
+// req: user_guide/dashboard/select-view
 test("qv-select-view pages a query", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, { name: "paging", html: VIEW, queries: ITEMS });
@@ -160,7 +160,7 @@ test("qv-select-view pages a query", async ({ page, seeds, baseURL }) => {
   await expect(rows.first()).toContainText("alpha");
 });
 
-// req: system/dashboard/cell-template
+// req: user_guide/dashboard/cell-template
 test("a cell template designs a column", async ({ page, seeds, baseURL, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -177,7 +177,7 @@ test("a cell template designs a column", async ({ page, seeds, baseURL, shot }) 
   await shot("select view with a cell template");
 });
 
-// req: system/dashboard/widget-owns-query
+// req: user_guide/dashboard/widget-owns-query
 test("a widget query error stays in the widget", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -189,7 +189,7 @@ test("a widget query error stays in the widget", async ({ page, seeds, baseURL }
   await expect(page.getByTestId("dashboard-error")).toHaveCount(0);
 });
 
-// req: system/dashboard/widget-owns-query
+// req: user_guide/dashboard/widget-owns-query
 test("an unknown query name runs nothing", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -200,7 +200,7 @@ test("an unknown query name runs nothing", async ({ page, seeds, baseURL }) => {
   await expect(frame.getByTestId("qv-error")).toHaveText("Unknown query “missing”");
 });
 
-// req: system/dashboard/select-view
+// req: user_guide/dashboard/select-view
 test("the fields picker stays open on an inside click", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, { name: "fields", html: VIEW, queries: ITEMS });
@@ -213,7 +213,7 @@ test("the fields picker stays open on an inside click", async ({ page, seeds, ba
   await expect(frame.getByTestId("qv-results").locator("th")).toHaveCount(1);
 });
 
-// req: system/dashboard/widget-owns-query
+// req: user_guide/dashboard/widget-owns-query
 test("a widget query is not in window.queries", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -228,7 +228,7 @@ test("a widget query is not in window.queries", async ({ page, seeds, baseURL })
   await expect(frame.getByTestId("qv-results").locator("tbody tr")).toHaveCount(2);
 });
 
-// req: system/dashboard/new-query-draft
+// req: user_guide/dashboard/new-query-draft
 test("New query runs ad-hoc SQL and saves as a dashboard", async ({ page, seeds, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openNewQuery(page);
@@ -247,7 +247,7 @@ test("New query runs ad-hoc SQL and saves as a dashboard", async ({ page, seeds,
   await expect(rows).toHaveCount(3);
 });
 
-// req: system/dashboard/execute
+// req: user_guide/dashboard/execute
 test("Execute keeps the page state", async ({ page, seeds, baseURL, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -274,7 +274,7 @@ test("Execute keeps the page state", async ({ page, seeds, baseURL, shot }) => {
   await expect(frame.locator("#keep")).toHaveValue("x");
 });
 
-// req: system/query/edit-lock
+// req: user_guide/query/edit-lock
 test("an agent push is blocked while the SQL panel has focus", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const sid = await armRemote(page);
@@ -293,7 +293,7 @@ test("an agent push is blocked while the SQL panel has focus", async ({ page, se
   await expect(page.getByTestId("dash-sql")).toHaveValue(ITEMS.q);
 });
 
-// req: system/dashboard/execute
+// req: user_guide/dashboard/execute
 test("Execute reports a failing chart query", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -309,7 +309,7 @@ test("Execute reports a failing chart query", async ({ page, seeds, baseURL }) =
   await expect(frame.locator("#out")).toHaveText("alpha"); // the page stays up
 });
 
-// req: system/dashboard/widget-owns-query
+// req: user_guide/dashboard/widget-owns-query
 test("a query named like an object builtin is unknown", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -320,7 +320,7 @@ test("a query named like an object builtin is unknown", async ({ page, seeds, ba
   await expect(frame.getByTestId("qv-error")).toHaveText("Unknown query “constructor”");
 });
 
-// req: system/dashboard/select-view
+// req: user_guide/dashboard/select-view
 test("limit and offset apply on Enter", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, { name: "limits", html: VIEW, queries: ITEMS });
@@ -334,7 +334,7 @@ test("limit and offset apply on Enter", async ({ page, seeds, baseURL }) => {
   await expect(limit).toHaveValue("1");
 });
 
-// req: system/dashboard/select-view
+// req: user_guide/dashboard/select-view
 test("a slow page does not overwrite a later one", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, { name: "slow", html: VIEW, queries: ITEMS });
@@ -355,7 +355,7 @@ test("a slow page does not overwrite a later one", async ({ page, seeds, baseURL
   await expect(rows).toHaveCount(2);
 });
 
-// req: system/dashboard/execute
+// req: user_guide/dashboard/execute
 test("a widget pages the executed SQL, not a half-typed edit", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, { name: "draft-sql", html: VIEW, queries: ITEMS });
@@ -369,7 +369,7 @@ test("a widget pages the executed SQL, not a half-typed edit", async ({ page, se
   await expect(rows.first()).toContainText("gamma");
 });
 
-// req: system/dashboard/save-edits
+// req: user_guide/dashboard/save-edits
 test("a saved edit is what reopens, not the draft it was saved from", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openNewQuery(page);
@@ -392,7 +392,7 @@ test("a saved edit is what reopens, not the draft it was saved from", async ({ p
   await expect(frame.getByTestId("qv-results")).toContainText("beta");
 });
 
-// req: system/dashboard/save-edits
+// req: user_guide/dashboard/save-edits
 test("saving a draft does not run a half-typed edit", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openNewQuery(page);
@@ -409,7 +409,7 @@ test("saving a draft does not run a half-typed edit", async ({ page, seeds }) =>
   await expect(page.getByTestId("dash-sql")).toHaveValue("SELECT name FROM items WHERE id = 3");
 });
 
-// req: system/dashboard/new-query-draft
+// req: user_guide/dashboard/new-query-draft
 test("Back from a draft opened by link leaves the dashboard page", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await page.getByTestId("nav-scripts").click();
@@ -420,7 +420,7 @@ test("Back from a draft opened by link leaves the dashboard page", async ({ page
   await expect(page.getByTestId("scripts-input")).toBeVisible();
 });
 
-// req: system/dashboard/select-view
+// req: user_guide/dashboard/select-view
 test("Fields keeps the columns already picked", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -435,7 +435,7 @@ test("Fields keeps the columns already picked", async ({ page, seeds, baseURL })
   await expect(heads).toHaveCount(1);
 });
 
-// req: system/dashboard/select-view
+// req: user_guide/dashboard/select-view
 test("a failed CSV download says why", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -448,7 +448,7 @@ test("a failed CSV download says why", async ({ page, seeds, baseURL }) => {
   await expect(page.getByTestId("dashboard-error")).toContainText("no_such_table");
 });
 
-// req: system/dashboard/new-query-draft
+// req: user_guide/dashboard/new-query-draft
 test("a New query draft survives leaving the page and a reload", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openNewQuery(page);
@@ -467,7 +467,7 @@ test("a New query draft survives leaving the page and a reload", async ({ page, 
   await expect(frame.getByTestId("qv-results")).toContainText("beta");
 });
 
-// req: system/dashboard/execute
+// req: user_guide/dashboard/execute
 test("Execute re-runs only the queries that were edited", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {

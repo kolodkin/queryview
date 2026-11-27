@@ -1,4 +1,4 @@
-// DuckDB folder mode (docs/system/explorer.md): the connection's "databases" are the
+// DuckDB folder mode (docs/user_guide/explorer.md): the connection's "databases" are the
 // folders under its root as relative paths, "." being the root. The pill menu
 // shows one level at a time; these helpers slice the flat list for it.
 

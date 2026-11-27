@@ -125,7 +125,7 @@ function ConnectionList({
 // Long connections list hundreds of databases, so it carries the landing
 // picker's filter; a picker-less driver gets just Disconnect. A DuckDB folder
 // connection lists one level at a time: the current folder's subfolders plus
-// `..`, under the folder's full path (docs/system/explorer.md).
+// `..`, under the folder's full path (docs/user_guide/explorer.md).
 function DatabaseMenu({
   connection,
   connections,
@@ -217,7 +217,7 @@ function Shell() {
   const [toast, setToast] = useState<string | null>(null)
   const [dbOpen, setDbOpen] = useState(false)
   // The open federated dashboard's connections: its pill replaces the
-  // session's while set (docs/system/queryview.md).
+  // session's while set (docs/user_guide/queryview.md).
   const [federated, setFederated] = useState<(FederatedConnection | string)[] | null>(null)
   // The pill row whose Unlock is asking for a passphrase; a success bumps the nonce,
   // which re-runs the dashboard.

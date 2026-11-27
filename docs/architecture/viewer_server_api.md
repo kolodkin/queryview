@@ -1,7 +1,7 @@
 # Viewer server API
 
 <!-- req: names-not-sql -->
-The [viewer server](../system/viewer_server.md) (`queryview-server`) is a separate app with
+The [viewer server](../user_guide/viewer_server.md) (`queryview-server`) is a separate app with
 its own, smaller API. No session header; none of the app's
 [routes](api.md) exist on it.
 A body names a `dashboard` and, for an unfederated one, a `connection`,
@@ -36,6 +36,6 @@ falls back to its default and never reaches the SQL.
 
 ## Related docs
 
-- [viewer_server.md](../system/viewer_server.md) — the viewer server.
+- [viewer_server.md](../user_guide/viewer_server.md) — the viewer server.
 - [api.md](api.md) — the app's API.
-- [dashboard.md](../system/dashboard.md#dashboard-parameters) — parameters and how they are substituted.
+- [dashboard.md](../user_guide/dashboard.md#dashboard-parameters) — parameters and how they are substituted.

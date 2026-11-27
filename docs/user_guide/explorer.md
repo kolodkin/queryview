@@ -7,6 +7,16 @@ database's tables; clicking one browses its rows. No SQL is typed — the page g
 `SELECT * FROM "<table>"` and drives it with the same field select and
 order-by select the [dashboard widget](./query.md#fields-selection--ordering) uses.
 
+## Browse tables
+
+<!-- req: browse-tables -->
+A user can browse tables and page through their rows without typing SQL.
+
+- The connected database's tables are listed, with row estimates where the
+  database keeps them.
+- Picking a table shows its rows.
+- The rows can be ordered by a column, a column hidden, and the rows paged.
+
 ## Layout
 
 ```

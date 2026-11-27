@@ -263,7 +263,7 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-# --- Locked connections (docs/system/connect.md#locked-connections) ---------------
+# --- Locked connections (docs/user_guide/connect.md#locked-connections) ---------------
 #
 # A locked saved connection serves only requests carrying the unlock token its
 # tab got for the passphrase. MCP tool calls have no browser behind them and
@@ -413,7 +413,7 @@ class _SessionConn:
 
 # Session connections: sid -> name -> connection. Memory only — never written to
 # the connections table, invisible to other sessions, gone on restart or when
-# the session is deleted. See docs/system/connect.md#session-connections.
+# the session is deleted. See docs/user_guide/connect.md#session-connections.
 _session_conns: dict[str, dict[str, _SessionConn]] = {}
 
 
@@ -518,7 +518,7 @@ def _bounded_int(raw: Any, hi: int, default: int) -> int:
 
 def _apply_settings(rec: SessionRec | None) -> int:
     """Set the drivers' per-request timeout to the session's **Query timeout**
-    (docs/system/queryview.md) and return its Explorer **Max entries** (docs/system/explorer.md):
+    (docs/user_guide/queryview.md) and return its Explorer **Max entries** (docs/user_guide/explorer.md):
     the two settings a driver call needs, read from one row."""
     ui = rec.ui if rec else {}
     app, explorer = ui.get("app"), ui.get("explorer")
@@ -938,7 +938,7 @@ async def select_database(sid: str, database: str) -> dict[str, Any]:
 
 async def _unlocked_session(sid: str) -> tuple[_SessionState | None, dict[str, Any] | None]:
     """This session's state, or why the request may not use its connection:
-    not connected, or locked without the tab's token (docs/system/connect.md#locked-connections)."""
+    not connected, or locked without the tab's token (docs/user_guide/connect.md#locked-connections)."""
     await _ensure_session(sid)
     s = _get_session_entry(sid)
     if s is None:

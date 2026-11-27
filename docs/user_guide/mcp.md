@@ -16,6 +16,18 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 - **Localhost only:** `/mcp/` has no auth and can query every connection and
   rewrite workspace git state. Don't expose the port.
 
+## Let an agent drive the tab
+
+<!-- req: agent-drives -->
+A user can have an agent run a query in the user's open tab over MCP.
+
+- Once the user allows remote control, a script the agent sends appears in the
+  tab and runs there.
+- While the user is typing, the agent's script is refused and the user's text
+  kept.
+- Once the user withdraws remote control, the agent can no longer reach the
+  tab.
+
 ## Tabs
 
 <!-- req: tabs -->
@@ -77,4 +89,4 @@ The SSE channel behind arming is described in [mcp.md](../architecture/mcp.md#ho
 - [session.md](./session.md) — sessions and agent tabs.
 - [dashboard.md](./dashboard.md) — how agents author dashboards.
 - [query.md](./query.md) — querying: pagination, the results grid, CSV.
-- [docker.md](../docker.md) — port mapping when running the container.
+- [docker.md](./docker.md) — port mapping when running the container.

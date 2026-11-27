@@ -1,4 +1,4 @@
-"""The viewer server's API (docs/system/viewer_server.md): display only. It takes names and
+"""The viewer server's API (docs/user_guide/viewer_server.md): display only. It takes names and
 values, never SQL, and none of the app's routes exist."""
 
 from __future__ import annotations
