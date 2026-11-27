@@ -14,7 +14,7 @@ query name or (unfederated) connection, `400` for a bad body, a bad value or a f
 | GET    | `/api/connections`       | —                                                | `[{name, type}]`, in config order; never a config. |
 | GET    | `/api/dashboards`        | —                                                | `[{name}]`, the dashboards at the repo's head. |
 | GET    | `/api/dashboards/{name}` | —                                                | `{name, html, queries:[name], connections?:[name]}`: names only, no SQL. |
-| POST   | `/api/run`               | `{connection?, dashboard, queries?:[name], values?}` | Resolve the selectors from `values` and run the named queries (all when omitted), as the app's `/api/runqueries` does with `params`: `{ok, results, params}`, plus `connections` when federated. |
+| POST   | `/api/run`               | `{connection?, dashboard, queries?:[name], values?}` | Run the dashboard's own queries, picked by name (all when omitted), with its selectors resolved from `values`: `{ok, results, params}`, plus `connections`, each connection's status, when federated. The SQL and connections come from the repo copy, never the body; `connection` is the viewer's pick and is used only for an unfederated dashboard. |
 | POST   | `/api/query`             | `{connection?, dashboard, query, values?, limit?, offset?, order_by?, format?}` | One page of a dashboard query, as the app's `/api/db/query`: `{ok, meta, data}`, or `{ok, output}` for `format:"csv"`. A query waiting on a choice → `400`. |
 | POST   | `/api/describe`          | `{connection?, dashboard, query, values?}`        | The query's output columns: `{ok, fields}`. |
 
