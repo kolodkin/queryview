@@ -146,7 +146,9 @@ async def _run_queries(
 
     # One run per SQL: a plain query's under None, a fan-out's under each value.
     runs = {qname: {None: sql} if isinstance(sql, str) else sql for qname, sql in queries.items()}
-    tasks = {(q, v): asyncio.create_task(one(targets[q], sql)) for q, parts in runs.items() for v, sql in parts.items()}
+    # Every target first: a missing one raises before any task is started.
+    jobs = [((q, v), targets[q], sql) for q, parts in runs.items() for v, sql in parts.items()]
+    tasks = {key: asyncio.create_task(one(t, sql)) for key, t, sql in jobs}
     results: dict[str, dict[str, list[Any]]] = {}
     meta: dict[str, list[dict[str, str]]] = {}
     try:
@@ -345,11 +347,10 @@ async def run_dashboard_queries(
     sid: str,
     queries: Mapping[str, Entry],
     limit: int = DASHBOARD_ROW_CAP,
-    offset: int = 0,
 ) -> dict[str, Any]:
     """run_queries_on session `sid`'s connection and selected database. Not
     connected or no database selected fails first (`reason`: no-session /
-    no-database). A federated dashboard runs as run_dashboard's, from row 0."""
+    no-database). A federated dashboard runs as run_dashboard's."""
     federated = _federated(queries, None)
     if isinstance(federated, dict):
         return federated
@@ -361,9 +362,7 @@ async def run_dashboard_queries(
     if s is None:
         return err  # type: ignore[return-value]
     target = Target(DRIVERS[s.type], s.config, s.database)
-    return await run_queries_on(
-        dict.fromkeys(queries, target), {n: entry_sql(e) for n, e in queries.items()}, limit, offset
-    )
+    return await run_queries_on(dict.fromkeys(queries, target), {n: entry_sql(e) for n, e in queries.items()}, limit)
 
 
 async def _no_options(p: Param, sql: str) -> list[Any]:

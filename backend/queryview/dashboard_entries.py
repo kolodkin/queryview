@@ -49,15 +49,17 @@ def queries_error(raw: object) -> str | None:
     return None
 
 
+def _runnable(entry: object) -> bool:
+    if isinstance(entry, str):
+        return bool(entry.strip())
+    return isinstance(entry, dict) and map_error(entry) is None
+
+
 def clean_queries(raw: object) -> dict[str, Entry]:
     """Lenient: the entries of `raw` with a non-empty name that can run."""
     if not isinstance(raw, dict):
         return {}
-    return {
-        k: v
-        for k, v in raw.items()
-        if isinstance(k, str) and k and (v.strip() if isinstance(v, str) else isinstance(v, dict) and not map_error(v))
-    }
+    return {k: v for k, v in raw.items() if isinstance(k, str) and k and _runnable(v)}
 
 
 def entry_sql(entry: Entry) -> str:
@@ -70,7 +72,8 @@ def entry_connection(entry: Entry) -> tuple[str, str | None] | None:
 
 
 def is_federated(queries: Mapping[str, Entry], params: object) -> bool:
-    """Whether the dashboard names connections; ValueError(MIXED) when it only partly does."""
+    """Whether the dashboard names connections; ValueError(MIXED) when it only partly does.
+    A param's `connection: ""` counts as none: validation, run first, refuses it."""
     named = [not isinstance(e, str) for e in queries.values()]
     if isinstance(params, list):
         named += [bool(p.get("connection")) for p in params if isinstance(p, dict) and p.get("options_sql")]

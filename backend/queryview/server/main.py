@@ -101,13 +101,13 @@ def create_app(config: ServerConfig) -> FastAPI:
         if not isinstance(body, dict):
             return _fail("a JSON object is required")
         cname, dname = body.get("connection"), body.get("dashboard")
+        conn = config.connections.get(cname) if isinstance(cname, str) else None
         dash = repo.get(dname) if isinstance(dname, str) else None
         if dash is None:
-            conn = config.connections.get(cname) if isinstance(cname, str) else None
+            # An unknown connection is reported first, as before dashboards could be federated.
             return _fail("unknown connection" if conn is None else _not_found(dname), 404)
         if is_federated(dash["queries"], dash["params"]):
             return None, dash, body
-        conn = config.connections.get(cname) if isinstance(cname, str) else None
         if conn is None:
             return _fail("unknown connection", 404)
         return Target(DRIVERS[conn.type], conn.config, conn.database), dash, body
@@ -123,7 +123,9 @@ def create_app(config: ServerConfig) -> FastAPI:
             return _fail("unknown query", 404)
         target = default
         if target is None:
-            found = await lookup(*(entry_connection(entry) or ("", None)))
+            named = entry_connection(entry)
+            assert named is not None  # every query of a federated dashboard names one
+            found = await lookup(*named)
             if isinstance(found, LookupError_):
                 return _fail(f"{qname}: {found.message}")
             target = found

@@ -119,14 +119,19 @@ function ViewerApp() {
     let cancelled = false
     void (async () => {
       setShown(null)
-      setFederated(null)
       setError(null)
       // Also ends a load this pick cancelled.
       setLoading(Boolean(connection && dashboard))
-      if (!connection || !dashboard) return
+      if (!connection || !dashboard) {
+        setFederated(null)
+        return
+      }
+      // The pill stays until the next dashboard says its kind, so a switch
+      // between two federated ones does not flash the picker.
       const got = await getJson(`/api/dashboards/${encodeURIComponent(dashboard)}`)
       if (cancelled) return
       if (got.status !== 200) {
+        setFederated(null)
         setLoading(false)
         setError(
           got.status === 404 ? `Dashboard “${dashboard}” not found.` : 'Failed to load dashboard.',
@@ -135,7 +140,7 @@ function ViewerApp() {
       }
       const dash = got.body as Dashboard
       const named = dash.connections
-      if (named) setFederated(named)
+      setFederated(named ?? null)
       const widgets = new Set(widgetQueryNames(dash.html))
       const run = await postJson('/api/run', {
         ...(named ? {} : { connection }),

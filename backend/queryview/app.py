@@ -412,7 +412,7 @@ async def _on_connection(request: Request, b: dict[str, Any], sql: str) -> tuple
         return t, sql
     ready, why = ready_sql(sql, b["params"], clean_values(b.get("values")), dialect_of(t.driver))
     if ready is None:
-        return JSONResponse({"ok": False, "message": why}, status_code=400)
+        return JSONResponse({"ok": False, "message": why, "reason": "params"}, status_code=400)
     return t, ready
 
 

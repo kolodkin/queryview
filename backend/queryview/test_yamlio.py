@@ -193,7 +193,9 @@ _ORDERS = {"connection": "warehouse", "sql": "SELECT 1"}
 
 
 def test_dashboard_from_data_entries():
-    from_data = lambda q: dashboard_from_data({"name": "d", "html": "<p>", "queries": q})  # noqa: E731
+    def from_data(q):
+        return dashboard_from_data({"name": "d", "html": "<p>", "queries": q})
+
     assert from_data({"orders": _ORDERS})["queries"] == {"orders": _ORDERS}
     with pytest.raises(YamlIOError, match="query 'orders': connection must be a non-empty string"):
         from_data({"orders": {"sql": "SELECT 1"}})
