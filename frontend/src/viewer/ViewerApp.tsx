@@ -1,4 +1,4 @@
-// The viewer server's page (docs/system/viewer_server.md): pick a connection and a
+// The viewer server's page (docs/user_guide/viewer_server.md): pick a connection and a
 // dashboard, and see it as the app's dashboard page shows it. Display only:
 // it sends names and parameter values, never SQL. A federated dashboard names
 // its own connections: the picker gives way to the federated pill, and no
@@ -214,7 +214,7 @@ function ViewerApp() {
     })
   }, [shown, connection])
 
-  // Download the dashboard as one static HTML file (docs/system/dashboard.md).
+  // Download the dashboard as one static HTML file (docs/user_guide/dashboard.md).
   function snapshot() {
     if (shown) requestSnapshot(frameRef, shown.dashboard.name, snapshotRef, setError)
   }

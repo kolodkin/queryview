@@ -4,7 +4,7 @@ import { complexCellItems, PREVIEW_COUNT, type ComplexType } from './complexCell
 
 // Built-in default view for an Array/Map/Tuple result cell: a plain vertical
 // list of items, collapsed to the first PREVIEW_COUNT with an expander. See
-// docs/system/query.md ("Default views for complex types"). Values are plain text
+// docs/user_guide/query.md ("Default views for complex types"). Values are plain text
 // nodes (React-escaped), so DB content can't inject markup.
 export function ComplexCell({
   type,

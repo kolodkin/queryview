@@ -13,7 +13,7 @@ const ICON: Record<FederatedConnection['status'], string> = {
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 // The pill a federated dashboard shows in place of the session's connection
-// (docs/system/queryview.md): its connections, and per connection the last
+// (docs/user_guide/queryview.md): its connections, and per connection the last
 // run's status. Before the first reply it has the names alone. Without
 // `onUnlock` (the viewer server) a locked row offers no Unlock. `children` is
 // the dialog an Unlock opened: inside the pill, so a press in it keeps the list open.

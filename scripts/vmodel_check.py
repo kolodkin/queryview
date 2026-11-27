@@ -14,11 +14,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-LAYER_DIRS = {"requirements": "user", "system": "system", "architecture": "integration"}
-ID_RE = re.compile(r"^(requirements|system|architecture)(/[a-z0-9_-]+)+$")
+LAYER_DIRS = {"user_guide": "acceptance", "architecture": "system", "designs": "integration"}
+ID_RE = re.compile(r"^(user_guide|architecture|designs)(/[a-z0-9_-]+)+$")
 SLUG_RE = re.compile(r"^[a-z0-9_-]+$")
 MARKER_RE = re.compile(r"^\s*(?:<!--|//|#)\s*req:\s*(.*?)\s*(?:-->)?\s*$")
-ACCEPTANCE = "e2e/acceptance.spec.ts"
+# Guide pages no test here can prove (running the image); exempt from the untagged-page gap.
+UNTESTED = {"user_guide/docker.md", "user_guide/viewer_server_docker.md"}
 
 
 @dataclass
@@ -63,11 +64,11 @@ def _paired_module(test: Path) -> Path | None:
 
 
 # Per layer: whether a test file proves its IDs, and where the error says to look.
-# User and system may share a test; no other layers do.
+# Architecture and designs share one location, so a test may name both.
 PROOF = {
-    "requirements": (lambda t: t == ACCEPTANCE, ACCEPTANCE),
-    "system": (lambda t: t.startswith("e2e/"), "e2e/"),
+    "user_guide": (lambda t: t.startswith("e2e/"), "e2e/"),
     "architecture": (lambda t: not t.startswith("e2e/"), "backend/ or frontend/"),
+    "designs": (lambda t: not t.startswith("e2e/"), "backend/ or frontend/"),
 }
 
 
@@ -93,7 +94,7 @@ def _definitions(root: Path, report: Report) -> dict[str, str]:
                     else:
                         defined[id_] = rel
                         report.matrix[layer][id_] = []
-            if not tagged and page.name != "decisions.md":  # a decision explains a statement; no test proves it
+            if not tagged and _rel(root / "docs", page) not in UNTESTED:
                 report.gaps.append(f"{rel}: no req: marker")
     return defined
 
@@ -127,7 +128,7 @@ def check(root: Path) -> Report:
         if rel.startswith("e2e/"):
             if not marked:
                 report.gaps.append(f"{rel}: no req: marker")
-        elif not any(i.startswith("architecture/") for i in ids):
+        elif not any(i.startswith(("architecture/", "designs/")) for i in ids):
             module = _paired_module(path)
             if module is None:
                 report.gaps.append(f"{rel}: unit test with no module of the same name beside it")

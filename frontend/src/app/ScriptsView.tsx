@@ -25,13 +25,13 @@ type ScriptsViewProps = {
   remoteId: string | null
 }
 
-// The Scripts page (`/scripts`, docs/system/scripts.md), mounted by the App shell only
+// The Scripts page (`/scripts`, docs/user_guide/scripts.md), mounted by the App shell only
 // for a ready connection: a flat SQL textbox whose statements run as written.
 // Run takes the statement under the cursor (or the selection), Run all the
 // whole script; a run leaves one status line and the last statement's rows.
 function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
   const navigate = useNavigate()
-  // The text is restored from the session; results never are (docs/system/session.md).
+  // The text is restored from the session; results never are (docs/user_guide/session.md).
   const [sql, setSql] = useState(() => {
     const saved = viewState('scripts').sql
     return typeof saved === 'string' ? saved : ''

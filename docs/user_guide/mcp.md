@@ -1,8 +1,14 @@
 # MCP server
 
-QueryView serves an MCP server (Streamable HTTP) at `http://localhost:8000/mcp/`,
-inside the same process — nothing extra to start. Register it once with your
-agent:
+Let an AI agent query your databases and drive your open tab. QueryView serves
+an MCP server (Streamable HTTP) at `http://localhost:8000/mcp/`, inside the
+same process, so there is nothing extra to start. Sessions and agent tabs are
+in [session.md](./session.md); what an agent can build is in
+[dashboard.md](./dashboard.md).
+
+## Connect your agent
+
+Register the server once with your agent:
 
 ```bash
 claude mcp add --scope user --transport http queryview http://localhost:8000/mcp/
@@ -16,7 +22,19 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 - **Localhost only:** `/mcp/` has no auth and can query every connection and
   rewrite workspace git state. Don't expose the port.
 
-## Tabs
+## Let an agent drive the tab
+
+<!-- req: agent-drives -->
+You can have an agent run a query in your open tab over MCP.
+
+- Once you allow remote control, a script the agent sends appears in the
+  tab and runs there.
+- While you are typing, the agent's script is refused and your text
+  kept.
+- Once you withdraw remote control, the agent can no longer reach the
+  tab.
+
+## Let the agent open its own tabs
 
 <!-- req: tabs -->
 An agent works in browser tabs of its own, one per task, and leaves your
@@ -42,39 +60,34 @@ session's **id** and a copyable command, e.g.:
 Turning the toggle off (or closing the tab) disarms the session immediately —
 pushes to its id are then reported as not delivered.
 
-Without a copied id the agent works in a [tab](#tabs) of its own.
+Without a copied id the agent works in a [tab](#let-the-agent-open-its-own-tabs)
+of its own. How a push travels to the tab is in
+[designs/mcp.md](../designs/mcp.md#how-the-channel-works).
 
-## Agent skill
+## What the agent knows and can do
 
 The server publishes one skill over the MCP Skills extension,
 `skill://queryview/SKILL.md` ([source](../../backend/queryview/skills/queryview/SKILL.md)):
-the default workflow for tabs, connections, SQL and dashboards.
-Naming a tool overrides it.
-
-## Tools
-
-The tools an agent can call are listed in [mcp.md](../architecture/mcp.md#tools).
+the default workflow for tabs, connections, SQL and dashboards. Naming a tool
+overrides it. The tools themselves are listed in
+[architecture/mcp.md](../architecture/mcp.md#tools).
 
 ## Naming and saving
 
-The agent drafts and edits; the user names and saves. No tool saves.
+The agent drafts and edits; you name and save. No tool saves.
 
-- **New work is unnamed.** The agent pushes a draft. The user names it at the
+- **New work is unnamed.** The agent pushes a draft. You name it at the
   prompt of the dashboard's **Save**, which refuses a name already taken.
 - **The agent edits a saved dashboard by its name**, and only a saved one.
-- **A push persists nothing.** The user's **Save** does.
-- **No tool renames or deletes.** The store's names are the user's: **Rename**
+- **A push persists nothing.** Your **Save** does.
+- **No tool renames or deletes.** The store's names are yours: **Rename**
   and **Delete** live on the dashboard page only. An agent asked to rename
   says so; pushing the same dashboard under a new name is not a rename.
 
-## How it works
-
-The SSE channel behind arming is described in [mcp.md](../architecture/mcp.md#how-it-works).
-
 ## Related docs
 
-- [api.md](../architecture/api.md) — backend JSON API.
 - [session.md](./session.md) — sessions and agent tabs.
 - [dashboard.md](./dashboard.md) — how agents author dashboards.
 - [query.md](./query.md) — querying: pagination, the results grid, CSV.
-- [docker.md](../docker.md) — port mapping when running the container.
+- [docker.md](./docker.md) — port mapping when running the container.
+- [architecture/mcp.md](../architecture/mcp.md) — the tools and what a locked connection refuses.

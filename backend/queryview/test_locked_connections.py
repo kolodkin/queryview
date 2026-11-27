@@ -1,6 +1,6 @@
 """Locked connections: a passphrase-locked saved connection serves only the
 tab holding its unlock token; the agent (MCP tools, or REST without the token)
-is refused. See docs/system/connect.md#locked-connections."""
+is refused. See docs/user_guide/connect.md#locked-connections."""
 
 from __future__ import annotations
 
@@ -331,7 +331,7 @@ def test_list_databases_reports_a_failing_connection_without_failing_the_rest(mo
     assert out["connections"] == [{"name": "list-fail-duck", "type": "duckdb", "error": "RuntimeError: server gone"}]
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_a_dashboard_reaches_a_locked_connection_only_with_the_token():
     _run(connect.delete_connection("", "warehouse", ""))
     owner = _connected("warehouse")

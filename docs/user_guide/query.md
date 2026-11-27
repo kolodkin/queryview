@@ -5,6 +5,16 @@ grid: the [`<qv-select-view>`](./dashboard.md#widgets) widget on
 [dashboards](./dashboard.md) (ad-hoc SQL is a dashboard's **New query** draft),
 the [explorer](./explorer.md), and the [Scripts](./scripts.md) page.
 
+## Run SQL
+
+<!-- req: run-sql -->
+You can run SQL, page through the rows, pick columns, and download CSV.
+
+- Running a query shows its rows under its column names.
+- A page size splits the rows into pages you step through.
+- Hiding a column removes it from the results; showing it brings it back.
+- The current page downloads as a CSV file.
+
 ## Pagination
 
 <!-- req: pagination -->
@@ -132,13 +142,6 @@ memory).
 The lock and channels live in one process's memory (like the SSE relay), so this
 assumes a single backend process; multi-worker deployments would need a shared
 backplane.
-
-## API
-
-`/api/db/query` (a page of rows, or CSV), `/api/db/describe` (output columns)
-and `/api/remote/lock` (the edit lock): see [api.md](../architecture/api.md). Queries run on
-the session's connection and selected database, within its
-[query timeout](./queryview.md#query-timeout).
 
 ## Related docs
 

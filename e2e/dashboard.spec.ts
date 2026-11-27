@@ -20,7 +20,7 @@ const DASHBOARD_HTML =
   "document.getElementById('out').textContent = items ? items.name.join(',') : 'NO DATA';" +
   "</script>";
 
-// req: system/dashboard/reopen-by-name
+// req: user_guide/dashboard/reopen-by-name
 test("dashboard push and reopen", async ({ page, seeds, baseURL, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await shot("connected");
@@ -58,7 +58,7 @@ test("dashboard push and reopen", async ({ page, seeds, baseURL, shot }) => {
   await shot("reopened from store");
 });
 
-// req: system/dashboard/malformed-param
+// req: user_guide/dashboard/malformed-param
 test("a malformed param is named above the dashboard, which still renders", async ({ page, seeds, baseURL, shot }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const name = `odd ${uid(6)}`;
@@ -79,7 +79,7 @@ test("a malformed param is named above the dashboard, which still renders", asyn
   await expect(page.getByTestId("dashboard-error")).toHaveCount(0);
 });
 
-// req: architecture/dashboards/fail-fast
+// req: designs/dashboards/fail-fast
 test("dashboard runqueries error shows banner", async ({ page, seeds, baseURL, shot }) => {
   // A dashboard whose query is invalid opens on a fail-fast error banner
   // instead of rendering the iframe.
@@ -95,7 +95,7 @@ test("dashboard runqueries error shows banner", async ({ page, seeds, baseURL, s
   await shot("fail-fast error banner");
 });
 
-// req: system/dashboard/viewing-connection
+// req: user_guide/dashboard/viewing-connection
 test("a dashboard runs on the viewing sessions connection", async ({ page, seeds, baseURL }) => {
   // A saved dashboard names no connection: a disconnected session is told to
   // connect rather than failing on some connection the dashboard remembers.
@@ -129,7 +129,7 @@ const PARAMS_HTML =
   "window.onQueryResults = function(q){show(q);};" +
   "</script>";
 
-// req: system/dashboard/set-params
+// req: user_guide/dashboard/set-params
 test("dashboard params resolve and rerun through setParams", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await api(`${baseURL}/api/dashboards`, {
@@ -152,7 +152,7 @@ test("dashboard params resolve and rerun through setParams", async ({ page, seed
   await expect(frame.locator("#out")).toHaveText("beta");
 });
 
-// req: system/dashboard/each-param
+// req: user_guide/dashboard/each-param
 test("a query naming an each param is the rows of every value", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await openDashboard(page, baseURL, {
@@ -164,7 +164,7 @@ test("a query naming an each param is the rows of every value", async ({ page, s
   await expect(dashboardFrame(page).locator("#out")).toHaveText("alpha,beta,gamma");
 });
 
-// req: system/dashboard/rename-delete
+// req: user_guide/dashboard/rename-delete
 test("rename and delete a saved dashboard", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const tag = uid(6);
@@ -197,7 +197,7 @@ test("rename and delete a saved dashboard", async ({ page, seeds, baseURL }) => 
   expect((await api(`${baseURL}/api/dashboards/${encodeURIComponent(renamed)}`, { ok: false })).status).toBe(404);
 });
 
-// req: system/dashboard/snapshot
+// req: user_guide/dashboard/snapshot
 test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, baseURL, browser }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -248,7 +248,7 @@ test("Snapshot downloads the dashboard as a static file", async ({ page, seeds, 
   await context.close();
 });
 
-// req: system/dashboard/snapshot
+// req: user_guide/dashboard/snapshot
 test("Snapshot is refused while a widget is loading", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const release = await holdRoute(page, "**/api/db/query");
@@ -268,7 +268,7 @@ test("Snapshot is refused while a widget is loading", async ({ page, seeds, base
   await expect(page.getByTestId("dashboard-error")).toHaveCount(0); // the refusal is cleared
 });
 
-// req: system/dashboard/snapshot
+// req: user_guide/dashboard/snapshot
 test("Snapshot is not held up by a qv- tag the bundle does not know", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openDashboard(page, baseURL, {
@@ -281,7 +281,7 @@ test("Snapshot is not held up by a qv- tag the bundle does not know", async ({ p
   expect(download.suggestedFilename()).toBe("unknown-tag.html");
 });
 
-// req: system/dashboard/picker
+// req: user_guide/dashboard/picker
 test("the dashboard's name can be copied", async ({ page, context, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   await expect(page.getByTestId("dashboard-copy")).toHaveCount(0); // nothing open: nothing to copy
@@ -291,7 +291,7 @@ test("the dashboard's name can be copied", async ({ page, context, seeds, baseUR
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("copy me");
 });
 
-// req: system/dashboard/sql-panel-connection
+// req: user_guide/dashboard/sql-panel-connection
 test("the SQL panel makes a dashboard federated and back", async ({ page, seeds, baseURL }) => {
   await connect(page, CH, await seeds.testDb());
   const pg = await savePostgresMarks(baseURL, seeds);
@@ -323,7 +323,7 @@ test("the SQL panel makes a dashboard federated and back", async ({ page, seeds,
   }
 });
 
-// req: system/queryview/federated-pill
+// req: user_guide/queryview/federated-pill
 test("a locked and an unknown connection show in the pill, and Unlock opens the locked one", async ({ page, seeds, baseURL }) => {
   const pg = await savePostgresMarks(baseURL, seeds);
   const passphrase = "open sesame";
@@ -373,7 +373,7 @@ test("a locked and an unknown connection show in the pill, and Unlock opens the 
   }
 });
 
-// req: system/queryview/federated-pill
+// req: user_guide/queryview/federated-pill
 test("closing a federated dashboard shows the session's pill again", async ({ page, seeds, baseURL }) => {
   await connect(page, CH, await seeds.testDb());
   const name = `fed-close-${uid()}`;
@@ -390,7 +390,7 @@ test("closing a federated dashboard shows the session's pill again", async ({ pa
   await expect(page.getByTestId("connection-status")).toContainText(`clickhouse · ${chDb()}`);
 });
 
-// req: system/queryview/federated-pill
+// req: user_guide/queryview/federated-pill
 test("a re-run answering after the page was left leaves no federated pill", async ({ page, seeds, baseURL }) => {
   await connect(page, CH, await seeds.testDb());
   const name = `fed-late-${uid()}`;
@@ -420,7 +420,7 @@ test("a re-run answering after the page was left leaves no federated pill", asyn
   await expect(page.getByTestId("connection-status")).toContainText(`clickhouse · ${chDb()}`);
 });
 
-// req: system/dashboard/federated
+// req: user_guide/dashboard/federated
 test("a dashboard mixing SQL strings and connection entries is refused", async ({ baseURL }) => {
   const r = await api(`${baseURL}/api/dashboards`, {
     json: {

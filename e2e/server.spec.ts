@@ -1,7 +1,7 @@
 import { type Download, type Page } from "@playwright/test";
 import { dashboardFrame, expect, holdRoute, startViewer, test, type Dash, type Viewer } from "./fixtures";
 
-// The viewer server (docs/system/viewer_server.md): display only, on its own entrypoint.
+// The viewer server (docs/user_guide/viewer_server.md): display only, on its own entrypoint.
 
 const ITEMS: Dash = {
   name: "items",
@@ -29,7 +29,7 @@ const open = async (page: Page, search = "") => {
   return dashboardFrame(page);
 };
 
-// req: system/viewer_server/same-rendering
+// req: user_guide/viewer_server/same-rendering
 test("shows a dashboard from the repo, and a param re-runs its query", async ({ page, shot }) => {
   const frame = await open(page);
   await expect(page.getByTestId("viewer-connection")).toHaveValue("local");
@@ -41,7 +41,7 @@ test("shows a dashboard from the repo, and a param re-runs its query", async ({ 
   await shot("viewer server");
 });
 
-// req: system/viewer_server/same-rendering
+// req: user_guide/viewer_server/same-rendering
 test("a widget pages through the server", async ({ page }) => {
   const frame = await open(page, "?connection=local&name=items");
   const rows = frame.getByTestId("qv-results").locator("tbody tr");
@@ -52,7 +52,7 @@ test("a widget pages through the server", async ({ page }) => {
   await expect(rows.first()).toContainText("gamma");
 });
 
-// req: system/viewer_server/shareable
+// req: user_guide/viewer_server/shareable
 test("a link opens directly, the last pick reopens, and the connection can change", async ({ page }) => {
   const frame = await open(page, "?connection=other&name=items");
   await expect(page.getByTestId("viewer-connection")).toHaveValue("other");
@@ -67,7 +67,7 @@ test("a link opens directly, the last pick reopens, and the connection can chang
   await expect(dashboardFrame(page).locator("#v")).toHaveText("alpha");
 });
 
-// req: system/viewer_server/display-only
+// req: user_guide/viewer_server/display-only
 test("there is nothing to edit with, and the app's API is absent", async ({ page }) => {
   await open(page, "?connection=local&name=items");
   for (const id of ["dashboard-save", "dashboard-edit-queries", "dashboard-new-query", "dash-sql", "connection-status"]) {
@@ -82,7 +82,7 @@ test("there is nothing to edit with, and the app's API is absent", async ({ page
   expect(shown).not.toContain("SELECT");
 });
 
-// req: system/viewer_server/sync
+// req: user_guide/viewer_server/sync
 test("a push to the repo shows after the sync interval", async ({ page }) => {
   await viewer.push([{ ...ITEMS, name: "fresh" }]);
   await expect(async () => {
@@ -125,7 +125,7 @@ test("a dashboard deleted while open says so on the next param change", async ({
   await expect(page.getByTestId("viewer-error")).toHaveText("Dashboard “doomed” not found.");
 });
 
-// req: system/viewer_server/same-rendering
+// req: user_guide/viewer_server/same-rendering
 test("Snapshot downloads the dashboard as a static file", async ({ page }) => {
   const frame = await open(page, "?connection=local&name=items");
   await expect(frame.locator("#v")).toHaveText("alpha");
@@ -138,7 +138,7 @@ test("Snapshot downloads the dashboard as a static file", async ({ page }) => {
   expect(download.suggestedFilename()).toBe("items.html");
 });
 
-// req: system/viewer_server/federated
+// req: user_guide/viewer_server/federated
 test("a federated dashboard runs on the configured connections it names", async ({ page }) => {
   const v = await startViewer([
     {

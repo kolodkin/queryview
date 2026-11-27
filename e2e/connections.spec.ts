@@ -1,7 +1,7 @@
 // Saved cards edit and delete, and passphrase-locked connections: the tab that
 // knows the passphrase keeps working, the agent is refused on every path, and a
 // lock survives a reload but asks again in a fresh tab
-// (docs/system/connect.md#locked-connections).
+// (docs/user_guide/connect.md#locked-connections).
 import type { Page } from "@playwright/test";
 import {
   DUCK,
@@ -88,7 +88,7 @@ test("a locked connection edits and deletes with its passphrase", async ({ page,
   await expect(c).toHaveCount(0);
 });
 
-// req: system/connect/locked-hidden-from-agent, system/creds/locked-until-unlocked
+// req: user_guide/connect/locked-hidden-from-agent, user_guide/creds/locked-until-unlocked
 test("locked connection keeps the agent out", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const sessionId = await armRemote(page);

@@ -1,6 +1,6 @@
-// Acceptance tests: one per user requirement in docs/requirements/queryview.md,
-// each under the `req:` ID it proves. Only those tests live here; how a
-// feature behaves in detail is tested in the other spec files.
+// Acceptance tests: one end-to-end journey per user goal stated in the user
+// guide (docs/user_guide/), each under the `req:` ID it proves; how a feature
+// behaves in detail is tested in the other spec files.
 import { readFileSync } from "node:fs";
 import {
   CASES,
@@ -29,7 +29,7 @@ import {
 } from "./fixtures";
 
 
-// req: requirements/queryview/add-connection
+// req: user_guide/connect/add-connection
 for (const c of CASES) {
   test(`a new connection is saved [${c.id}]`, async ({ page, seeds, baseURL }) => {
     const seed = await seeds[c.seed]();
@@ -54,7 +54,7 @@ for (const c of CASES) {
   });
 }
 
-// req: requirements/queryview/open-database
+// req: user_guide/connect/open-database
 test("connect, pick a database, find it reconnected after a reload", async ({ page }) => {
   // loads the app and shows the heading
   await openConnect(page);
@@ -139,7 +139,7 @@ test("connect, pick a database, find it reconnected after a reload", async ({ pa
   await expect(page.getByTestId("connection-status")).toContainText("· system");
 });
 
-// req: requirements/queryview/run-sql
+// req: user_guide/query/run-sql
 test("run SQL, pick columns, page and download CSV", async ({ page, seeds }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const frame = await openNewQuery(page);
@@ -176,7 +176,7 @@ test("run SQL, pick columns, page and download CSV", async ({ page, seeds }) => 
   expect(csv).not.toContain("alpha");
 });
 
-// req: requirements/queryview/run-script
+// req: user_guide/scripts/run-script
 test("a script runs its writes and stops at the first error", async ({ page, seeds }) => {
   const seed = await seeds.duckdb();
   const table = `qv_accept_${uid()}`;
@@ -208,7 +208,7 @@ test("a script runs its writes and stops at the first error", async ({ page, see
   }
 });
 
-// req: requirements/queryview/browse-tables
+// req: user_guide/explorer/browse-tables
 for (const c of CASES) {
   test(`explorer browse, order, fields, paginate [${c.id}]`, async ({ page, seeds, shot }) => {
     await connect(page, c, await seeds[c.seed]());
@@ -273,7 +273,7 @@ for (const c of CASES) {
   });
 }
 
-// req: requirements/queryview/live-dashboard
+// req: user_guide/dashboard/live-dashboard
 test("a saved dashboard shows its data as it is now", async ({ page, seeds, baseURL }) => {
   await seeds.testDb();
   const table = `${chDb()}.live_${uid()}`;
@@ -298,7 +298,7 @@ test("a saved dashboard shows its data as it is now", async ({ page, seeds, base
   }
 });
 
-// req: requirements/queryview/workspace-git, system/gitsync/restore-ui, system/gitsync/not-in-git
+// req: user_guide/gitsync/workspace-git, user_guide/gitsync/restore-ui, user_guide/gitsync/not-in-git
 test("git save and restore dashboard round trip", async ({ page, baseURL, seeds, shot }) => {
   test.skip(!(await gitConfigured(baseURL!)), "git sync is not configured for this stack");
   // Unique per attempt: a CI retry shares the remote, which keeps the first
@@ -338,7 +338,7 @@ test("git save and restore dashboard round trip", async ({ page, baseURL, seeds,
   expect(body.queries).toEqual({ q: "SELECT 1" });
 });
 
-// req: requirements/queryview/yaml-export-import, system/export-import/ui
+// req: user_guide/export-import/yaml-export-import, user_guide/export-import/ui
 test("dashboard export import round trip", async ({ page, baseURL, shot }, testInfo) => {
   // Download a dashboard as YAML from the UI, drift the stored copy, then
   // import the downloaded file back and verify it overwrote the drift.
@@ -369,7 +369,7 @@ test("dashboard export import round trip", async ({ page, baseURL, shot }, testI
   expect(body.queries).toEqual({ q: "SELECT 1" });
 });
 
-// req: requirements/queryview/agent-drives, system/mcp/arming, system/scripts/agent-push, system/query/edit-lock
+// req: user_guide/mcp/agent-drives, user_guide/mcp/arming, user_guide/scripts/agent-push, user_guide/query/edit-lock
 test("mcp push_script fills and runs the scripts editor", async ({ page, seeds, baseURL }) => {
   await connect(page, DUCK, await seeds.duckdb());
   const sid = await armRemote(page);
@@ -404,7 +404,7 @@ test("mcp push_script fills and runs the scripts editor", async ({ page, seeds, 
   expect(lost.ok).toBe(false);
 });
 
-// req: requirements/queryview/dashboard-many-connections, system/dashboard/federated, system/queryview/federated-pill
+// req: user_guide/dashboard/dashboard-many-connections, user_guide/dashboard/federated, user_guide/queryview/federated-pill
 test("one dashboard shows ClickHouse and Postgres side by side", async ({ page, seeds, baseURL }) => {
   await connect(page, CH, await seeds.testDb());
   const pg = await savePostgresMarks(baseURL, seeds);

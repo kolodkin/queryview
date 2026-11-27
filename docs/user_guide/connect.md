@@ -1,14 +1,75 @@
 # Connecting
 
-Connections have two halves: a **type** (the driver, e.g. `clickhouse`) and a
+Add the databases you want to query, open one, and pick a database, all from
+the Connect page (`/connect`, laid out in [queryview.md](./queryview.md)). A
+connection has two halves: a **type** (the driver, e.g. `clickhouse`) and a
 **name** (your label, e.g. `clickhouse`, `prod-ch`). Create one from a **New
-connection** card on the Connect page (see [queryview.md](./queryview.md)),
-reopen it from its saved card. Connections persist in SQLite, and a session
-reconnects whichever one it was last on.
+connection** card and reopen it from its saved card; your session reconnects
+whichever one it was last on. How credentials are kept is in
+[creds.md](./creds.md).
 
-## Storage & migrations
+## Add a connection
 
-How connections are stored, encrypted and migrated is in [storage.md](../architecture/storage.md#storage--migrations).
+<!-- req: add-connection -->
+You can save a connection to a ClickHouse, Postgres, MySQL, DuckDB or SQLite
+database.
+
+- Each of the five drivers offers a new-connection form: host, port and
+  credentials, or a file path for DuckDB and SQLite.
+- Connecting saves the connection under the name given; it is listed among the
+  saved connections when you come back.
+
+A **New connection** card shows its driver's form in place of the cards
+(ClickHouse below); **← Connections** goes back without saving.
+
+| Field    | Default     | Notes                                          |
+| -------- | ----------- | ---------------------------------------------- |
+| Name     | `clickhouse`| Label for the connection (unique key in storage). |
+| Host     | `localhost` | ClickHouse host.                               |
+| Port     | `8123`      | ClickHouse HTTP interface port.                |
+| Username | `default`   | ClickHouse user.                               |
+| Password | *(empty)*   | ClickHouse password.                           |
+| Show all | on          | Checked while **Database** is blank; checking it clears it. |
+| Database | *(empty)*   | The only database listed, opened on connect.   |
+
+Two actions:
+
+- **Test connection** — `POST /api/db/test`. Shows a pass/fail message
+  inline. No side effects.
+- **Connect** — `POST /api/db/connect`. On success the picker opens.
+
+## Open a database
+
+<!-- req: open-database -->
+You can open a saved connection, pick a database, and find it reconnected
+next time.
+
+- Opening a saved connection offers its databases to pick from, narrowed by
+  typing.
+- Picking one opens its tables and shows the connection and database in use.
+- Opening the app again reconnects to the same connection and database; the
+  saved connection is marked active and reopens on that database.
+- The database can be switched from any page.
+
+After connecting, the picker lists the databases (`SHOW DATABASES`), the last
+one used highlighted; **← Connections** returns to the cards, leaving the
+connection open. A filter input (focused on open) narrows the list by case-insensitive
+substring; **Enter** selects the first remaining match, and an empty result
+shows "No databases match". Each row has a copy icon for its name. Selecting a database:
+
+- sets the session's selected database,
+- persists it on the saved connection (`POST /api/db/database`),
+- collapses the picker and shows the top-left indicator `🟢 <connection> · <database>`,
+- makes the [Scripts](./scripts.md) page available,
+- and lands on the explorer (see
+  [queryview.md](./queryview.md#landing-page)).
+
+Clicking the `🟢 <connection> · <database>` pill reopens the same list as a
+dropdown — same filter, plus **Escape** to close — so the database can be
+switched from any page without going back to Connect. Below the databases it
+lists the connections; clicking one opens it. Both the dropdown and the picker
+re-list the databases on open, so one created since the connect appears; a
+failed re-list keeps the list on screen.
 
 ## Drivers
 
@@ -31,9 +92,9 @@ letter instead.
 A saved card that fails to open reports the error under the cards.
 When QueryView runs in a container and a connect to `localhost` / `127.0.0.1`
 fails, the error suggests `host.docker.internal` (see
-[Connecting to databases on your machine](../docker.md#connecting-to-databases-on-your-machine)).
+[Connecting to databases on your machine](./docker.md#connecting-to-databases-on-your-machine)).
 
-## Concepts
+## Testing and connecting
 
 - **Test connection** — a throwaway connectivity check (`SELECT 1`). It reports
   pass/fail and nothing else: it does **not** save the connection, does not open
@@ -43,32 +104,11 @@ fails, the error suggests `host.docker.internal` (see
   connection, then shows the database picker.
 - **Active connection** — held at the **session** level (see
   [queryview.md](./queryview.md)). One per session.
-- **Database selection** — after connecting, the user picks a database. Only
+- **Database selection** — after connecting, you pick a database. Only
   then does the top-left indicator read `🟢 <connection> · <database>`. The choice
   is remembered with the connection, and reopening the connection in the same
   session goes straight back to it (see
   [session.md](./session.md#last-visited)).
-
-## Creating a connection
-
-A **New connection** card shows its driver's form in place of the cards
-(ClickHouse below); **← Connections** goes back without saving.
-
-| Field    | Default     | Notes                                          |
-| -------- | ----------- | ---------------------------------------------- |
-| Name     | `clickhouse`| Label for the connection (unique key in storage). |
-| Host     | `localhost` | ClickHouse host.                               |
-| Port     | `8123`      | ClickHouse HTTP interface port.                |
-| Username | `default`   | ClickHouse user.                               |
-| Password | *(empty)*   | ClickHouse password.                           |
-| Show all | on          | Checked while **Database** is blank; checking it clears it. |
-| Database | *(empty)*   | The only database listed, opened on connect.   |
-
-Two actions:
-
-- **Test connection** — `POST /api/db/test`. Shows a pass/fail message
-  inline. No side effects.
-- **Connect** — `POST /api/db/connect`. On success the picker opens.
 
 ## Editing and deleting
 
@@ -82,7 +122,7 @@ Each saved card has **✎** and **✕**:
 
 A session connection has **✕** only.
 
-## Flow
+## From the cards to a database
 
 ```
 cards -- "New connection" card --> connection form
@@ -99,36 +139,6 @@ cards -- saved card --> opens <name>, activates it --> last visited database
                                                      (else the picker --> pick)
 ```
 
-## Database picker
-
-After connecting, the picker lists the databases (`SHOW DATABASES`), the last
-one used highlighted; **← Connections** returns to the cards, leaving the
-connection open. A filter input (focused on open) narrows the list by case-insensitive
-substring; **Enter** selects the first remaining match, and an empty result
-shows "No databases match". Each row has a copy icon for its name. Selecting a database:
-
-- sets the session's selected database,
-- persists it on the saved connection (`POST /api/db/database`),
-- collapses the picker and shows the top-left indicator `🟢 <connection> · <database>`,
-- makes the [Scripts](./scripts.md) page available,
-- and lands on the explorer (see
-  [queryview.md](./queryview.md#landing-page)).
-
-Clicking the `🟢 <connection> · <database>` pill reopens the same list as a
-dropdown — same filter, plus **Escape** to close — so the database can be
-switched from any page without going back to Connect. Below the databases it
-lists the connections; clicking one opens it. Both the dropdown and the picker
-re-list the databases on open, so one created since the connect appears; a
-failed re-list keeps the list on screen.
-
-## Persistence (SQLite)
-
-The `connections` table is described in [storage.md](../architecture/storage.md#persistence-sqlite).
-
-## Config encryption
-
-The stored config is encrypted at rest; see [storage.md](../architecture/storage.md#config-encryption).
-
 ## Session connections
 
 A **session connection** lives only in one session's memory: never saved,
@@ -138,10 +148,10 @@ restarts (the session then reads as disconnected).
 - Each carries `scope` (`session` | `saved`) and `created_by` (`agent` |
   `user`); connections the agent added get an `agent` badge on their card and
   in the pill menu's connection list (session ones listed apart from saved, the
-  active one marked). The user's own get none.
+  active one marked). Your own get none.
 - When one is added or removed, an armed tab's lists refresh. The session row
   records who switched (`connection_by`: `agent` | `user`); a tab that sees the
-  agent's `use_connection` toasts "Agent switched to <name>", never the user's.
+  agent's `use_connection` toasts "Agent switched to <name>", never yours.
 - You add one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved connections and all sessions' ones.
 - The agent may switch to any unlocked ClickHouse, Postgres or MySQL connection and
@@ -180,7 +190,7 @@ Locking hands the locking tab its token, so the connection it is on keeps
 working.
 A [federated dashboard](./dashboard.md#federated-dashboards) naming a
 locked connection runs its queries only from a tab holding that token; the
-[federated pill](./queryview.md#layout) marks it 🔒 with **Unlock**.
+[federated pill](./queryview.md#whats-on-the-page) marks it 🔒 with **Unlock**.
 
 - **Opening** a locked card lands on it like any other; the shell then asks
   for the passphrase unless the tab holds a token for it, as it does when a
@@ -207,7 +217,7 @@ Each **session** has one active connection, so two tabs can sit on two
 different connections and databases at once. Saved connections themselves are
 shared; the *active* one is per session. See [session.md](./session.md); how
 the session's row records it is in
-[sessions.md](../architecture/sessions.md#how-it-is-stored).
+[sessions.md](../designs/sessions.md#how-it-is-stored).
 
 Opening the app attaches a session and reconnects whatever connection that
 session was on:
@@ -227,13 +237,3 @@ restarts.
 To open a **specific** connection on load, pass `…/?connection=<name>`
 (equivalent to clicking its card); the SPA then cleans the URL so a later reload
 resumes normally.
-
-## API
-
-`/api/db/test`, `/api/db/connect`, `/api/db/connections`, `/api/db/open`,
-`/api/db/lock`, `/api/db/unlock`, `/api/db/databases`, `/api/db/database`,
-`/api/db/query` and `/api/session` — see [api.md](../architecture/api.md).
-
-## CI
-
-What CI exercises is in [storage.md](../architecture/storage.md#ci).

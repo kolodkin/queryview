@@ -13,7 +13,7 @@ login and assumes it is reachable only from localhost — don't expose its port.
 **Give QueryView only read-only, least-privilege database credentials — never
 production write credentials.** It is an agent-driven analytic tool, and the
 agent can run any statement the credentials allow, writes included; see
-[creds.md](docs/system/creds.md).
+[creds.md](docs/user_guide/creds.md).
 
 ## Quick start
 
@@ -32,11 +32,11 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 `--scope user` is recommended: QueryView is one local server, so registering it
 once makes it available in every project instead of only the current one.
 
-Prefer Docker? See [docker.md](docs/docker.md).
+Prefer Docker? See [docker.md](docs/user_guide/docker.md).
 
 ## What you can do
 
-Ask your agent ([MCP usage](docs/system/mcp.md)) — it drives the page for you in your open tab at
+Ask your agent ([MCP usage](docs/user_guide/mcp.md)) — it drives the page for you in your open tab at
 http://localhost:8000. Or do it by hand on that page:
 
 | Ask your agent | Or open this page | What happens |
@@ -52,12 +52,12 @@ Beyond those pages:
 
 - **Workspaces** group your saved dashboards, and each can sync to
   its own git remote for backup, history and restore —
-  [workspace.md](docs/system/workspace.md), [gitsync.md](docs/system/gitsync.md).
+  [workspace.md](docs/user_guide/workspace.md), [gitsync.md](docs/user_guide/gitsync.md).
 - **YAML export/import** moves a single query, a dashboard, or a whole
   workspace between instances with no git involved —
-  [export-import.md](docs/system/export-import.md).
+  [export-import.md](docs/user_guide/export-import.md).
 - **MCP** lets an agent query your databases and author dashboards — see
-  [mcp.md](docs/system/mcp.md).
+  [mcp.md](docs/user_guide/mcp.md).
 
 ## Where your data lives
 
@@ -65,46 +65,28 @@ All state lives in one data directory, `~/.queryview` on every OS, relocated
 with `DATA_DIR`. Inside are the SQLite store `db.sqlite`, the local
 password-encryption key `encryption.key`, and the workspace git-sync clones
 under `gitsync/`. Back that directory up — or give each workspace a git remote
-and let [git sync](docs/system/gitsync.md) do it.
+and let [git sync](docs/user_guide/gitsync.md) do it.
 
 ## Documentation
 
-### Requirements
+The user guide:
 
-- [queryview.md](docs/requirements/queryview.md) — what a user can do, and the design principles.
-
-### System
-
-- [queryview.md](docs/system/queryview.md) — the Connect page and the app's pages.
-- [connect.md](docs/system/connect.md) — connections, drivers, locking and reconnecting.
-- [creds.md](docs/system/creds.md) — how connection credentials are stored and protected.
-- [session.md](docs/system/session.md) — sessions: what a tab remembers, refresh and
+- [queryview.md](docs/user_guide/queryview.md) — the Connect page, the app's pages and its design principles.
+- [connect.md](docs/user_guide/connect.md) — connections, drivers, locking and reconnecting.
+- [creds.md](docs/user_guide/creds.md) — how connection credentials are stored and protected.
+- [session.md](docs/user_guide/session.md) — sessions: what a tab remembers, refresh and
   new-tab behaviour, the session switcher.
-- [query.md](docs/system/query.md) — querying: pagination, the results grid, CSV.
-- [scripts.md](docs/system/scripts.md) — the SQL scratchpad: scripts run as written.
-- [explorer.md](docs/system/explorer.md) — the table navigator.
-- [dashboard.md](docs/system/dashboard.md) — dashboards and how agents author them.
-- [workspace.md](docs/system/workspace.md) — workspaces.
-- [gitsync.md](docs/system/gitsync.md) — git backup, history and restore.
-- [export-import.md](docs/system/export-import.md) — YAML export and import.
-- [mcp.md](docs/system/mcp.md) — connecting an agent, arming a session, and who names and saves.
-- [viewer_server.md](docs/system/viewer_server.md) — the display-only viewer server.
-
-### Architecture
-
-- [overview.md](docs/architecture/overview.md) — the components and the contracts between them.
-- [api.md](docs/architecture/api.md) — the full HTTP endpoint reference.
-- [viewer_server_api.md](docs/architecture/viewer_server_api.md) — the viewer server's endpoints.
-- [storage.md](docs/architecture/storage.md) — the data directory, migrations, connection table, encryption, CI.
-- [sessions.md](docs/architecture/sessions.md) — how a session is stored and how a tab claims one.
-- [mcp.md](docs/architecture/mcp.md) — the MCP tools and the channel behind arming.
-- [dashboards.md](docs/architecture/dashboards.md) — running a dashboard's queries and its sandbox.
-- [decisions.md](docs/architecture/decisions.md) — why folder mode lists one level at a time; why a param value is matched as text.
-
-### Deployment
-
-- [docker.md](docs/docker.md) — running the container image and persisting its state.
-- [viewer_server_docker.md](docs/viewer_server_docker.md) — running the viewer server from the image.
+- [query.md](docs/user_guide/query.md) — querying: pagination, the results grid, CSV.
+- [scripts.md](docs/user_guide/scripts.md) — the SQL scratchpad: scripts run as written.
+- [explorer.md](docs/user_guide/explorer.md) — the table navigator.
+- [dashboard.md](docs/user_guide/dashboard.md) — dashboards and how agents author them.
+- [workspace.md](docs/user_guide/workspace.md) — workspaces.
+- [gitsync.md](docs/user_guide/gitsync.md) — git backup, history and restore.
+- [export-import.md](docs/user_guide/export-import.md) — YAML export and import.
+- [mcp.md](docs/user_guide/mcp.md) — connecting an agent, arming a session, and who names and saves.
+- [viewer_server.md](docs/user_guide/viewer_server.md) — the display-only viewer server.
+- [docker.md](docs/user_guide/docker.md) — running the container image and persisting its state.
+- [viewer_server_docker.md](docs/user_guide/viewer_server_docker.md) — running the viewer server from the image.
 
 ## Contributing
 

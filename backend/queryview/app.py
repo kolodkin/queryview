@@ -111,7 +111,7 @@ async def session_header(request: Request, call_next):
     """Identify the session from the header the SPA sends on every /api call.
     There is no cookie: a session is named by its id, not by the browser."""
     request.state.sid = request.headers.get("X-QV-Session") or ""
-    # The unlock token for a locked connection (docs/system/connect.md#locked-connections).
+    # The unlock token for a locked connection (docs/user_guide/connect.md#locked-connections).
     request_token.set(request.headers.get("X-QV-Token"))
     return await call_next(request)
 
@@ -389,7 +389,7 @@ async def _with_params(
     request: Request, b: dict[str, Any], sql: str, reasons_409: tuple[str, ...]
 ) -> tuple[str, JSONResponse | None]:
     """A dashboard widget's query: with `params` in the body, `sql` is a
-    template and `values` are substituted here (docs/system/dashboard.md#dashboard-parameters).
+    template and `values` are substituted here (docs/user_guide/dashboard.md#dashboard-parameters).
     Returns the SQL to run, or the failed response."""
     if "params" not in b:
         return sql, None
@@ -402,7 +402,7 @@ async def _with_params(
 
 async def _on_connection(request: Request, b: dict[str, Any], sql: str) -> tuple[Target, str] | JSONResponse:
     """A federated widget's query: the target its `connection` and `database`
-    name (docs/architecture/dashboards.md — "Which connection, which database")
+    name (docs/designs/dashboards.md — "Which connection, which database")
     and the SQL with any `values` substituted, or the failed response."""
     database = b.get("database")
     t = await session_lookup(request.state.sid)(b["connection"], database if isinstance(database, str) else None)
@@ -620,7 +620,7 @@ async def run_queries(request: Request):
 
 
 # The user's Save: upsert a dashboard (in a synced workspace also one commit,
-# docs/system/gitsync.md) and, with a session_id, push it to a live browser session.
+# docs/user_guide/gitsync.md) and, with a session_id, push it to a live browser session.
 @router.post("/api/dashboards")
 async def dashboards_upsert(request: Request):
     body = await _read_json(request)
@@ -669,7 +669,7 @@ async def dashboards_get(name: str, request: Request):
     return d
 
 
-# Rename / Delete: a user action, one commit in a synced workspace (docs/system/gitsync.md).
+# Rename / Delete: a user action, one commit in a synced workspace (docs/user_guide/gitsync.md).
 # `:path`: a name may contain "/", which arrives decoded.
 @router.post("/api/dashboards/{name:path}/rename")
 async def dashboards_rename(name: str, request: Request):
@@ -692,7 +692,7 @@ async def dashboards_delete(name: str, request: Request):
     return await _gitsync_json(gitsync.delete(ws, name))
 
 
-# --- Git sync: per-entity backup/restore (see docs/system/gitsync.md) -------------
+# --- Git sync: per-entity backup/restore (see docs/user_guide/gitsync.md) -------------
 
 
 def _gitsync_args(kind: Any, name: Any) -> tuple[str, str] | JSONResponse:
@@ -774,7 +774,7 @@ async def git_restore(request: Request):
     return await _gitsync_json(gitsync.restore(ws, kind, name, _clean_str(b.get("ref")) or None))
 
 
-# --- YAML export / import (see docs/system/export-import.md) ----------------------
+# --- YAML export / import (see docs/user_guide/export-import.md) ----------------------
 
 
 # Download one entity — or the whole workspace — as a self-describing YAML
@@ -814,7 +814,7 @@ async def import_yaml(request: Request):
     return {"ok": True, **r}
 
 
-# --- Workspaces (see docs/system/workspace.md) ------------------------------------
+# --- Workspaces (see docs/user_guide/workspace.md) ------------------------------------
 # Admin configuration with secrets (the remote URL may embed a token): exposed
 # over REST/UI only, deliberately not over MCP.
 

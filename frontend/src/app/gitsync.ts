@@ -1,5 +1,5 @@
-// Client for the /api/git backup/restore endpoints (see docs/system/gitsync.md).
-// Every operation is scoped to a workspace (see docs/system/workspace.md).
+// Client for the /api/git backup/restore endpoints (see docs/user_guide/gitsync.md).
+// Every operation is scoped to a workspace (see docs/user_guide/workspace.md).
 
 import { apiFetch, postJson } from './api'
 
@@ -61,7 +61,7 @@ export type GitSyncResult = {
   message?: string
 }
 
-// Merge the repo into `workspace` (see docs/system/gitsync.md, "Merge-in").
+// Merge the repo into `workspace` (see docs/user_guide/gitsync.md, "Merge-in").
 export async function gitSync(workspace: string): Promise<GitSyncResult> {
   const res = await postJson('/api/git/sync', { workspace })
   const data = await res.json()

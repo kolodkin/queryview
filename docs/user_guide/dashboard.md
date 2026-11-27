@@ -1,13 +1,28 @@
 # Dashboards (agent-authored, pushed to a live session)
 
-A **dashboard** is an HTML layout plus a set of named SQL queries. An AI agent
-authors one and pushes it into a live, armed QueryView browser session over MCP;
-it is also persisted so it can be reopened later by name.
+Open, edit and save dashboards on the dashboard page (`/dashboard`). A
+**dashboard** is an HTML layout plus a set of named SQL queries: your agent
+authors one and pushes it into your armed tab over [MCP](./mcp.md), and you save
+it by name to reopen later. Ad-hoc SQL is a dashboard's **New query** draft
+([query.md](./query.md) covers its results grid); a display-only deployment for
+viewers is the [viewer server](./viewer_server.md).
 
-Responsibilities mirror the [remote-control](./mcp.md) layer: the agent never
-receives query results back. The **browser** (trusted code with a session) runs
-the queries on its session's connection and feeds the results into the
-agent-authored HTML, which renders inside an isolated iframe.
+The agent never receives query results back: your **browser** runs the queries
+on your session's connection and feeds the results into the agent's HTML,
+which renders inside an [isolated iframe](../architecture/overview.md#isolation--security).
+
+## Open a dashboard
+
+<!-- req: live-dashboard -->
+You can open a saved dashboard that re-runs its queries against live data.
+
+- A saved dashboard is listed and opens by its link.
+- Opening it shows its queries' results as they are now: rows added since it
+  was saved appear.
+
+<!-- req: dashboard-many-connections -->
+You can open one dashboard that shows data from several connections side
+by side, and see which connections it uses and whether each answered.
 
 ## The page (`/dashboard`)
 
@@ -25,7 +40,7 @@ agent-authored HTML, which renders inside an isolated iframe.
   <!-- req: rename-delete -->
 - **Rename** and **Delete** — for a saved dashboard; Rename asks for the new
   name and keeps unsaved SQL-panel edits, Delete asks to confirm. Both are
-  the user's: no [MCP tool](./mcp.md#naming-and-saving) does either. A new
+  yours: no [MCP tool](./mcp.md#naming-and-saving) does either. A new
   name [its git-sync folder can't hold](./gitsync.md#repository-layout) is
   refused with the reason, on Save too;
 - **Edit queries** — the [SQL panel](#the-sql-panel);
@@ -101,8 +116,8 @@ session id) exposes:
 - `push_dashboard(session_id, html?, queries?, params?, name?, dir?)` — push the
   dashboard **draft** to the browser identified by `session_id`, which navigates
   to the dashboard view and renders it. Without `name` the draft is new:
-  **Save** asks the user for its name. `name` must be a saved dashboard, which
-  the push edits; the agent cannot name a new one. Only the user's **Save**
+  **Save** asks you for its name. `name` must be a saved dashboard, which
+  the push edits; the agent cannot name a new one. Only your **Save**
   writes it to the store. Returns
   `{ok, pushed, message, database}`; an unknown/disarmed
   `session_id` reports `pushed:false`, a disconnected one `not connected`
@@ -148,7 +163,7 @@ orders:
 - Every query, widget queries and `options_sql` included, names a connection or
   none does; a mixed dashboard is refused with `every query and options_sql
   names a connection, or none does`.
-- It needs no connected session. The page's [pill](./queryview.md#layout)
+- It needs no connected session. The page's [pill](./queryview.md#whats-on-the-page)
   lists the connections.
 
 ## Pushing from a folder
@@ -409,10 +424,6 @@ The page sends **values only, never SQL**, and the host answers only messages
 from the dashboard's own frame — so a dashboard's SQL stays what `queries`
 declares, reviewable in `queries.yaml`.
 
-## Running the queries: `/api/runqueries`
-
-The request the page sends to run a dashboard's queries is in [dashboards.md](../architecture/dashboards.md#running-the-queries-apirunqueries).
-
 ## Snapshot
 
 <!-- req: snapshot -->
@@ -431,10 +442,6 @@ stands at the current parameters. Print the file for a PDF.
   password field, empty.
 - It holds rendered query results: treat the file as data.
 
-## Isolation & security
-
-The sandbox the dashboard HTML runs in is described in [dashboards.md](../architecture/dashboards.md#isolation--security).
-
 ## Related docs
 
 - [queryview.md](./queryview.md) — the pages and the Connect page.
@@ -442,3 +449,5 @@ The sandbox the dashboard HTML runs in is described in [dashboards.md](../archit
 - [mcp.md](./mcp.md) — arming a session, the session id, the MCP server.
 - [api.md](../architecture/api.md) — `/api/runqueries`, `/api/dashboards`, the `dashboard` SSE event.
 - [connect.md](./connect.md) — connections and their stored database.
+- [overview.md](../architecture/overview.md#isolation--security) — the sandbox the dashboard HTML runs in.
+- [designs/dashboards.md](../designs/dashboards.md) — how a dashboard's queries run.

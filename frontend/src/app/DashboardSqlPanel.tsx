@@ -14,7 +14,7 @@ const NO_RESULTS = {}
 // are a `<qv-select-view>` in a frame of the popup's own, answered by the
 // dashboard page like any widget. Focus inside holds the human edit lock,
 // like the Scripts page. **Federated** switches the whole dashboard's kind;
-// while on, each query picks its connection (docs/system/dashboard.md).
+// while on, each query picks its connection (docs/user_guide/dashboard.md).
 function DashboardSqlPanel({
   queries,
   federated,

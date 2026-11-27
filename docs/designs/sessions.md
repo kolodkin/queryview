@@ -1,11 +1,11 @@
 # Session storage
 
-How a session is stored and how a tab claims one. What a session is to a user is in [session.md](../system/session.md).
+How a session is stored and how a tab claims one. What a session is to a user is in [session.md](../user_guide/session.md).
 
 ## How it is stored
 
 One row per session in SQLite (`sessions`), alongside connections and workspaces
-— see [storage.md](./storage.md#storage--migrations).
+— see [storage.md](../architecture/storage.md#storage--migrations).
 
 ```sql
 id              TEXT PRIMARY KEY  -- also the agent channel id
@@ -46,7 +46,7 @@ session.
 
 **Nothing is written while you are still typing.** Leaving the query panel is
 what "done editing" means, so that is when its state is written — the same
-focus-out signal the [edit lock](../system/mcp.md) uses, so both agree on when you
+focus-out signal the [edit lock](../user_guide/mcp.md) uses, so both agree on when you
 have finished. Discrete acts (a navigation, a workspace switch, a rename) write
 at once.
 
@@ -81,14 +81,14 @@ sequenceDiagram
     Srv-->>New: session state with your last edits
 ```
 
-The `/api/sessions/*` shapes are in [api.md](./api.md). Connection and database
+The `/api/sessions/*` shapes are in [api.md](../architecture/api.md). Connection and database
 are not among them — `/api/db/connect`, `/open` and `/database` write those
 through, so connection changes keep one path.
 
 ## Claims and the heartbeat
 
 What a user sees of this is in
-[session.md](../system/session.md#refresh-new-tabs-and-the-claim).
+[session.md](../user_guide/session.md#refresh-new-tabs-and-the-claim).
 
 Each tab keeps `qv_tab` (a token it mints) and `qv_session` (what it is attached
 to) in `sessionStorage`. Both survive a refresh, neither crosses to a new tab —
@@ -111,7 +111,7 @@ re-claims the session well within it.
 
 <!-- req: lapsed-claim-409 -->
 A tab whose claim lapsed learns it on its next heartbeat (sent with `keep`, see
-[api.md](./api.md)), which gets a `409`.
+[api.md](../architecture/api.md)), which gets a `409`.
 
 The row is also the truth for the connection and its database. Every row the tab
 adopts is checked against the connection it shows. A switch the tab makes itself
@@ -120,7 +120,7 @@ with the old database.
 
 ## Related docs
 
-- [session.md](../system/session.md) — sessions: what a tab remembers, refresh and the claim.
-- [storage.md](./storage.md) — the SQLite data directory and migrations.
-- [mcp.md](./mcp.md) — the MCP tools and channels.
-- [api.md](./api.md) — backend JSON API.
+- [session.md](../user_guide/session.md) — sessions: what a tab remembers, refresh and the claim.
+- [storage.md](../architecture/storage.md) — the SQLite data directory and migrations.
+- [mcp.md](../architecture/mcp.md) — the MCP tools and channels.
+- [api.md](../architecture/api.md) — backend JSON API.

@@ -1,5 +1,5 @@
 // Whether a cell's text is serialized JSON/YAML worth showing parsed in the
-// cell popup. See docs/system/query.md, "Long values".
+// cell popup. See docs/user_guide/query.md, "Long values".
 
 import yaml from 'js-yaml'
 

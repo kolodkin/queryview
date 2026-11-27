@@ -10,36 +10,30 @@ the steps down and up the V, where a decision goes). This skill holds only
 what is particular to QueryView. When a `docs/superpowers/` plan splits the
 work into tasks, each task follows both.
 
-| Layer | Doc of record | A test covers | Proved in |
+| Doc layer | Doc of record | Test layer | Proved in |
 |---|---|---|---|
-| User | `docs/requirements/` | a user requirement end to end | `e2e/acceptance.spec.ts` |
-| System | `docs/system/` | one feature through the browser | any `e2e/*.spec.ts`, by convention `e2e/<feature>.spec.ts` |
-| Integration | `docs/architecture/` | routes, stores, MCP tools, drivers working together | `backend/queryview/**/test_*.py`, `frontend/src/**/*.test.ts(x)` naming an `architecture/` ID |
-| Unit | the module's docstring (Python) or leading comment (TypeScript) | one module's logic | the test file beside the module, named after it, no ID |
+| User | `docs/user_guide/` | Acceptance | any `e2e/*.spec.ts`, by convention `e2e/<feature>.spec.ts` |
+| Architecture | `docs/architecture/` | System | `backend/queryview/**/test_*.py`, `frontend/src/**/*.test.ts(x)` naming an `architecture/` ID |
+| Design | `docs/designs/` | Integration | the same locations, naming a `designs/` ID |
+| Implementation | the module's docstring (Python) or leading comment (TypeScript) | Unit | the test file beside the module, named after it, no ID |
 
-The docs root is `docs/`: `requirements/queryview/run-sql` is defined in
-`docs/requirements/queryview.md` as `<!-- req: run-sql -->`, and named by a
-test as `// req: requirements/queryview/run-sql` (`#` in Python).
+The docs root is `docs/`: `user_guide/query/run-sql` is defined in
+`docs/user_guide/query.md` as `<!-- req: run-sql -->`, and named by a test as
+`// req: user_guide/query/run-sql` (`#` in Python). `e2e/acceptance.spec.ts`
+holds one journey per user goal a guide page opens with.
 
 ## Tests on two layers
 
-User and system share tests, and only they do: the line between a user
-journey and a feature's behavior is the least sharp one. A shared test lives
-in `e2e/acceptance.spec.ts` and names both IDs:
-
-```ts
-// req: requirements/queryview/browse-tables, system/explorer/browse
-```
-
-A user requirement is proved only in `e2e/acceptance.spec.ts`. An integration
-test proves no system statement.
+Architecture and designs share tests: they have one "Proved in" location, so a
+test may name IDs from both. A browser test proves no architecture or design
+statement.
 
 ## Steps
 
 - **Entry layer.** A contract between components here is an API route, an MCP
   tool, a store or a driver. Example: raising the maximum query timeout enters
-  at system (`docs/system/queryview.md`, "Query timeout"); the bound check
-  inside the module that applies it is unit. On a system page, give IDs to
+  at user (`docs/user_guide/queryview.md`, "Query timeout"); the bound check
+  inside the module that applies it is unit. On a guide page, give IDs to
   what a user can see.
 - **Go up.** The suites are independent, so run them side by side:
   - the touched unit and integration test files first, as a quick check;
@@ -50,16 +44,18 @@ test proves no system statement.
   - `uv run python scripts/vmodel_check.py --strict` (also the pre-commit
     hook). It must exit 0: an untagged page or test file fails like an error.
 - **A failure that starts lower** than the browser test showing it (a driver,
-  a client-side race) is stated on the architecture page at integration, or in
-  the module's docstring or leading comment at unit.
+  a client-side race) is stated on its `architecture/` or `designs/` page, or
+  in the module's docstring or leading comment at implementation.
 
 ## Every file is tagged
 
 Every layer page defines at least one ID and every test file names one. The
-exceptions: a `decisions.md` page, and a unit test file, which pairs with its
-module by name (`test_main.py` also with `__main__.py`).
-`docs/system/creds.md` "Why" is the example of a decision beside its
-statement.
+exceptions: the two deployment pages (`user_guide/docker.md`,
+`user_guide/viewer_server_docker.md`), which no test here can prove, and a unit
+test file, which pairs with its module by name (`test_main.py` also with
+`__main__.py`). `docs/user_guide/creds.md` "Why" is the example of a decision
+beside its statement; `docs/architecture/mcp.md` "Why a param value is matched
+as the page's text" is one that spans pages, on the page stating its rule.
 
 ## Writing a doc
 
@@ -67,20 +63,18 @@ Every docs edit ends with the `devpowers:shortify` checklist on the pages you
 touched; it owns brevity, heading depth and link hygiene. The house style on
 top of it:
 
-- A page holds one layer's content; a change to an existing feature is a
-  section on its page. Copy the shape of the nearest page.
-- A requirements page has no design and no screen detail.
-- Present tense, describing current behavior.
-  No history ("now", "previously", "since vX"); proposals go in `future.md`
-  and move into the feature's page when they ship.
-- On a system page, the opening paragraph names the route (`/dashboard`,
+- A change to an existing feature is a section on its page.
+- A guide page holds no architecture or design: it keeps one line on what the
+  user sees and links down to the page that explains it.
+- Proposals go in `future.md` and move into the feature's page when they ship.
+- On a guide page, the opening paragraph names the route (`/dashboard`,
   `/explorer`, …) and links the neighboring pages a reader may have meant
   instead.
 - UI labels are **bold**, exactly as the screen shows them. A page about a
   screen may open with a layout sketch; the `devpowers:ascii-sketch` skill draws it.
-- `docs/architecture/api.md` is the endpoint reference. A feature page's
-  `## API` section names its endpoints and links there, as `scripts.md` does;
-  bodies and responses are not repeated.
+- `docs/architecture/api.md` is the endpoint reference. A guide page names an
+  endpoint only where you call it yourself, and links there; bodies and
+  responses are not repeated.
 - Links are relative, `./page.md#anchor`. Code is named only when the reader
   must open it, as a module or package path. Code and docstrings that back-link
   a heading quote it word for word, so grep for the old text when renaming one.

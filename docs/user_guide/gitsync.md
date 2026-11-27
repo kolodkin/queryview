@@ -1,8 +1,20 @@
 # Git sync — backup & restore
 
-Dashboards can be backed up to a git repository (e.g.
-GitHub) and restored from any past revision, per entity. Connections are never
-written to the repo (their config is encrypted credentials).
+Back your dashboards up to a git repository (e.g. GitHub) and restore any past
+revision, from the dashboard page (`/dashboard`) and the workspace manage
+panel. Each [workspace](./workspace.md) has its own remote; to copy dashboards
+as a file instead, see [export-import.md](./export-import.md). Connections are
+never written to the repo (their config holds credentials).
+
+## Back up a workspace to git
+
+<!-- req: workspace-git -->
+You can back a workspace up to a git remote and restore a dashboard from it.
+
+- Each save of a dashboard is a commit on the workspace's remote.
+- A dashboard changed outside git is marked as such.
+- The dashboard's revisions are listed; restoring one brings that version back
+  and clears the mark.
 
 ## Configuration
 
@@ -27,7 +39,7 @@ Git never runs interactively: stdin is closed, prompts are disabled, SSH runs in
 batch mode, and each invocation is capped at two minutes. A missing credential,
 a key passphrase or an unknown host fails instead of blocking a request — which
 is why a container wants a token rather than a key it cannot unlock. Mounting
-for that case is in [docker.md](../docker.md#git-sync).
+for that case is in [docker.md](./docker.md#git-sync).
 
 ## Repository layout
 
@@ -91,7 +103,7 @@ Changing a workspace's remote or branch drops its clone and that file.
 
 ## Versioning
 
-Git commits are the versions — each [user action](#committing) makes exactly one commit touching
+Git commits are the versions — each [action of yours](#committing) makes exactly one commit touching
 one entity, so an entity's history is `git log -- <its path>`. Restore reads
 files at a chosen commit (`git show`) and overwrites the local DB row; HEAD
 never moves and history is append-only.
@@ -103,7 +115,7 @@ remote, and a YAML import clears it, since no commit holds that content.
 
 ## Committing
 
-Only a user's action on the [dashboard page](./dashboard.md#the-page-dashboard)
+Only your action on the [dashboard page](./dashboard.md#the-page-dashboard)
 commits; agent pushes, Import and Restore never do. In a workspace with a
 remote, each is one commit and push:
 
@@ -121,7 +133,7 @@ Rename and Delete of a dashboard the repo doesn't hold make no commit; a
 Rename onto a name the repo already holds is refused. Without a remote, the
 three only change the workspace.
 
-## UI
+## Back up and restore from the app
 
 <!-- req: restore-ui -->
 **Restore**, next to the dashboard page's **Save**, opens the entity's
@@ -134,19 +146,6 @@ With a remote, the dashboard picker marks a dashboard no commit holds
 (`commit_sha` is `NULL`) as `<name> · not in git`. A row whose content
 matches the repo but has no `commit_sha` recorded yet gets one on the next
 [merge-in](#merge-in), e.g. **Sync**.
-
-## API
-
-- `GET /api/git/status?workspace=` → `{configured, conflicts}`
-- `POST /api/git/sync` `{workspace?}` → `{ok, imported, conflicts}`
-- `GET /api/git/history?kind=&name=&before=&limit=10&workspace=` → `{ok, revisions: [{sha, date, message}], has_more}`
-- `POST /api/git/restore` `{kind, name, ref?, workspace?}` → `{ok, restored, sha, imported, conflicts}`
-  `ref` is a sha from history or a branch name (read as `origin/<name>`); default: the remote branch head.
-
-`kind` is `"dashboard"`;
-`workspace` defaults to the fallback workspace (see [workspace.md](./workspace.md)). MCP tools `git_history` and
-`git_restore` mirror the same surface, resolving the workspace from an
-optional `session_id` (see [workspace.md](./workspace.md)).
 
 ## Related docs
 

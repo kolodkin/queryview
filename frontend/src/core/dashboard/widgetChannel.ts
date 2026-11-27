@@ -1,4 +1,4 @@
-// The widget half of the dashboard frame channel (docs/system/dashboard.md, "Widgets").
+// The widget half of the dashboard frame channel (docs/user_guide/dashboard.md, "Widgets").
 // A `<qv-select-view>` in the frame names one of the dashboard's queries and
 // sends values only; the host substitutes and runs the dashboard's own SQL.
 

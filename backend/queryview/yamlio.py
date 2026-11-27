@@ -5,7 +5,7 @@ import dispatches on file content, never on the filename. Import validates the
 whole document before writing anything, then upserts (same overwrite semantics
 as gitsync restore). This module also owns the entity <-> plain-mapping codec
 and the YAML dumper that gitsync's per-entity repo files build on.
-Docs: docs/system/export-import.md."""
+Docs: docs/user_guide/export-import.md."""
 
 from __future__ import annotations
 

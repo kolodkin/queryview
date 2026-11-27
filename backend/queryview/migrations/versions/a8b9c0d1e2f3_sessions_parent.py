@@ -1,5 +1,5 @@
 """sessions: a `tab` column, set on the sessions an agent opens for itself,
-and no standing Agent session (docs/system/session.md#tabs)
+and no standing Agent session (docs/user_guide/session.md#tabs)
 
 Revision ID: a8b9c0d1e2f3
 Revises: b7c8d9e0f1a2

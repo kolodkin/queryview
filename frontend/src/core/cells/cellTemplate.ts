@@ -1,5 +1,5 @@
 // A `<template column>` child of `<qv-select-view>`: HTML used per row, with
-// `{cell}` and `{row.<column>}` substituted. See docs/system/dashboard.md, "Widgets".
+// `{cell}` and `{row.<column>}` substituted. See docs/user_guide/dashboard.md, "Widgets".
 
 import { escapeHtml, substituteCellTemplate } from './cellView'
 

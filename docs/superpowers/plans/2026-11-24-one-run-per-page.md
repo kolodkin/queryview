@@ -15,7 +15,7 @@
 - The viewer server never accepts SQL and never puts an unchecked value into SQL.
 - The browser never parses SQL or `{placeholders}`: dependencies come from `uses`.
 - Both servers check each value against its param's options (the app too).
-- A dashboard is federated (every query and `options_sql` names a connection) or not; the shared run takes a target per query and returns `connections` for a federated one (see `docs/architecture/dashboards.md`, `named-connection`).
+- A dashboard is federated (every query and `options_sql` names a connection) or not; the shared run takes a target per query and returns `connections` for a federated one (see `docs/designs/dashboards.md`, `named-connection`).
 - `window.queries`, `window.params`, `setParams`, `<qv-select-view>`, `<qv-param>` keep their meaning for dashboard authors.
 - Explorer and Scripts keep `/api/db/query` and `/api/db/describe`.
 - A query's page defaults to no sort, offset 0, limit 1000 (`DASHBOARD_ROW_CAP`); a given limit is clamped to 1..1000.
@@ -389,7 +389,7 @@ Keep every security test (`a value outside the options never reaches the sql`, `
 ### Task 8: Remove the old paths, and the docs
 
 **Files:**
-- Modify: `backend/queryview/app.py`, `backend/queryview/dashboard_queries.py`, their tests; `frontend/src/core/widgets/SelectView.tsx`, `frameChannel.ts`, `frontend/src/core/dashboard/frameHost.ts` (+ test); `docs/architecture/api.md`, `docs/architecture/viewer_server_api.md`, `docs/system/dashboard.md`
+- Modify: `backend/queryview/app.py`, `backend/queryview/dashboard_queries.py`, their tests; `frontend/src/core/widgets/SelectView.tsx`, `frameChannel.ts`, `frontend/src/core/dashboard/frameHost.ts` (+ test); `docs/architecture/api.md`, `docs/architecture/viewer_server_api.md`, `docs/designs/dashboards.md`, `docs/user_guide/dashboard.md`
 - Delete: `docs/superpowers/specs/2026-11-24-one-run-per-page-design.md`, this plan
 
 What goes:
@@ -397,7 +397,7 @@ What goes:
 - `dashboard_queries.py`: `run_dashboard`, `run_dashboard_on`, `run_dashboard_queries`, `run_queries_on`, `session_sql`, `ready_sql`, `resolved_part`, and anything left with no caller. Grep each name across `backend/` before deleting; `rows_to_columns` in `drivers/base.py` goes too if nothing else uses it.
 - Tests of the removed functions and routes: port any behaviour not already covered by Tasks 2, 3 and 7 to `run_page` / `/api/run`, then delete the rest.
 - Frontend: `SelectView`'s legacy trigger and `onParamsResults`' query list if unused; `answerWidget`, `widgetPage` and `WidgetPost` in `frameHost.ts` if the page runner replaced them.
-- Docs: `/api/run` replaces `/api/runqueries` in `api.md` (also drop `params`/`values` from the `/api/db/query` and `/api/db/describe` rows); `viewer_server/api.md` drops `/api/query` and `/api/describe`; `dashboard.md`'s "Running the queries" and Widgets sections describe the one call and that a change re-runs only what uses it. Grep `docs/` and code comments for `runqueries` and the old heading text, and fix back-links.
+- Docs: `/api/run` replaces `/api/runqueries` in `api.md` (also drop `params`/`values` from the `/api/db/query` and `/api/db/describe` rows); `architecture/viewer_server_api.md` drops `/api/query` and `/api/describe`; `designs/dashboards.md`'s "Running the queries" (restate its `runqueries` and `fail-fast` statements and their test markers) and `user_guide/dashboard.md`'s Widgets section describe the one call and that a change re-runs only what uses it. Grep `docs/` and code comments for `runqueries` and the old heading text, and fix back-links.
 
 - [ ] **Step 1: Add the failing tests:** `test_runqueries_route_is_gone` (404) in `test_dashboards.py`; in `test_api_db.py`, `/api/db/query` with `params` in the body runs the query text as written.
 - [ ] **Step 2: Run them.** Expected: FAIL.

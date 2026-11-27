@@ -1,14 +1,16 @@
 # QueryView — the Connect page
 
-The Connect page (`/connect`) is where a disconnected session lands: a card per
-saved connection and a "new connection" card per driver. The other pages are
+Start here: the Connect page (`/connect`) is where you land with no connection
+open, with a card per saved connection and a "new connection" card per driver
+([connect.md](./connect.md) walks through them). Once a database is open, you
+move between the other pages from the corner nav:
 `/scripts` (the SQL scratchpad, see [scripts.md](./scripts.md); redirects here
 until a database is selected), `/explorer` (see [explorer.md](./explorer.md))
 and `/dashboard` (see [dashboard.md](./dashboard.md)). The old `/prompt` URL
 redirects here, and `/studio` to a dashboard
 [**New query**](./dashboard.md#the-page-dashboard) draft.
 
-## Layout
+## What's on the page
 
 ```
 +----------------------------------------------------------+
@@ -122,7 +124,14 @@ on blur or Enter, remembered with the session and read by the server on each
 request. ClickHouse, Postgres, MySQL and SQLite honour it; a DuckDB query runs to
 completion.
 
-## Design principles
+## Why
 
-The app's design principles are on the
-[requirements page](../requirements/queryview.md#design-principles).
+The app follows four design principles:
+
+- **Click, don't type.** Every connection is a card; nothing needs a name
+  remembered or a command learned.
+- **One thing at a time.** The cards, a form or a picker — never two at once.
+- **State is visible.** Once a database is selected, the top-left indicator
+  makes the active connection and database obvious from anywhere.
+- **Resumable.** A session restores where you left off — page, connection and
+  query — so a refresh costs nothing and the common case needs no typing at all.

@@ -56,7 +56,7 @@ class TextResult(Result):
 @dataclass(frozen=True)
 class DatabasesResult(Result):
     databases: list[str]
-    # The directory a folder-mode DuckDB connection browses (docs/system/explorer.md);
+    # The directory a folder-mode DuckDB connection browses (docs/user_guide/explorer.md);
     # None for every other driver and for a DuckDB file.
     root: str | None = None
     truncated: bool = False  # the current folder has more subfolders than the list limit
@@ -79,7 +79,7 @@ class FieldsResult(Result):
     fields: list[dict[str, str]]  # {"name", "type"}, the dialect's own type names
 
 
-# Row results of a script are capped (docs/system/scripts.md). A driver fetches at most
+# Row results of a script are capped (docs/user_guide/scripts.md). A driver fetches at most
 # SCRIPT_ROW_CAP + 1 rows; run_script trims to the cap and flags `truncated`.
 SCRIPT_ROW_CAP = 100
 # How long one script statement may run: a bulk INSERT or an ALTER is not a
@@ -95,7 +95,7 @@ RUN_SQL_TIMEOUT_SECONDS = 60
 # How long one request to the database may take — a query page, a describe, a
 # table or database list, a connect probe, and the connect of a longer run.
 # The session layer sets it per request from the **Query timeout** chip
-# (docs/system/queryview.md); the default covers anything outside a session.
+# (docs/user_guide/queryview.md); the default covers anything outside a session.
 DEFAULT_QUERY_TIMEOUT_SECONDS = 30
 MAX_QUERY_TIMEOUT_SECONDS = SCRIPT_TIMEOUT_SECONDS
 query_timeout: ContextVar[int] = ContextVar("query_timeout", default=DEFAULT_QUERY_TIMEOUT_SECONDS)

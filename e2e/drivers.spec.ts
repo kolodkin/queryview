@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { CASES, caseById, connect, executeSql, expect, openNewQuery, test } from "./fixtures";
 
 for (const c of CASES) {
-  // req: system/query/pagination, system/query/results-csv
+  // req: user_guide/query/pagination, user_guide/query/results-csv
   test(`connect, query, paginate, csv [${c.id}]`, async ({ page, seeds, shot }) => {
     await connect(page, c, await seeds[c.seed]());
     await shot(`${c.id} connected`);
@@ -41,7 +41,7 @@ for (const c of CASES) {
     await shot(`${c.id} results page 2`);
   });
 
-  // req: system/query/fields
+  // req: user_guide/query/fields
   test(`fields describe [${c.id}]`, async ({ page, seeds, shot }) => {
     await connect(page, c, await seeds[c.seed]());
     const frame = await openNewQuery(page);
@@ -57,7 +57,7 @@ for (const c of CASES) {
   });
 }
 
-// req: system/query/default-views
+// req: user_guide/query/default-views
 test("postgres jsonb renders structured", async ({ page, seeds, shot }) => {
   // jsonb arrives as a collection, so it gets the default list view (like a
   // ClickHouse JSON column), not the serialized text.

@@ -75,7 +75,7 @@ def test_run_queries_needs_a_connected_session():
     assert out["ok"] is False and out["reason"] == "no-session"
 
 
-# --- With params: resolved and substituted here (docs/system/dashboard.md#dashboard-parameters) ---
+# --- With params: resolved and substituted here (docs/user_guide/dashboard.md#dashboard-parameters) ---
 
 
 class _SeenDriver(_RowsDriver):
@@ -195,7 +195,7 @@ def test_a_failing_query_stops_the_ones_still_running(monkeypatch):
     assert driver.finished == [] and driver.running == 0
 
 
-# --- A query run once per value of an `each` param (docs/system/dashboard.md) ---
+# --- A query run once per value of an `each` param (docs/user_guide/dashboard.md) ---
 
 EACH = [{"name": "region", "kind": "each", "options": ["eu", "us", "ap"]}]
 
@@ -398,7 +398,7 @@ def test_an_unfederated_run_is_unchanged():
     assert out["ok"] and here.seen == ["SELECT 1"] and "connections" not in out
 
 
-# --- In the app: named connections looked up on the session (docs/architecture/dashboards.md) ---
+# --- In the app: named connections looked up on the session (docs/designs/dashboards.md) ---
 
 
 class _WarehouseDriver(_SeenDriver):
@@ -438,7 +438,7 @@ def _warehouse(monkeypatch, owner="s-wh-owner", requires_database=False):
 ORDERS = {"orders": {"connection": "warehouse", "sql": "SELECT 2"}}
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_a_named_saved_connection_runs_from_any_session(monkeypatch):
     main = _connected(monkeypatch, "s-a")
     wh = _warehouse(monkeypatch)
@@ -448,7 +448,7 @@ def test_a_named_saved_connection_runs_from_any_session(monkeypatch):
     assert asyncio.run(run_dashboard_queries("s-a", ORDERS))["ok"]
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_all_named_queries_need_no_session(monkeypatch):
     _warehouse(monkeypatch)
     out = asyncio.run(run_dashboard("s-never-connected", ORDERS, [], {}))
@@ -456,7 +456,7 @@ def test_all_named_queries_need_no_session(monkeypatch):
     assert asyncio.run(run_dashboard_queries("s-never-connected", ORDERS))["ok"] is True
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_a_federated_dashboard_runs_on_a_locked_session(monkeypatch):
     _connected(monkeypatch, "s-locked-own")
     assert asyncio.run(connect.lock_connection("s-locked-own", "s-locked-own", "open sesame"))["ok"]
@@ -465,7 +465,7 @@ def test_a_federated_dashboard_runs_on_a_locked_session(monkeypatch):
     assert asyncio.run(run_dashboard("s-locked-own", ORDERS, [], {}))["ok"]
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_a_mixed_dashboard_is_refused(monkeypatch):
     main = _connected(monkeypatch, "s-mixed")
     wh = _warehouse(monkeypatch)
@@ -478,7 +478,7 @@ def test_a_mixed_dashboard_is_refused(monkeypatch):
     assert main.seen == [] and wh.seen == []
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_naming_the_sessions_own_connection_uses_its_selected_database(monkeypatch):
     wh = _warehouse(monkeypatch, owner="s-own-db")
     assert asyncio.run(connect.select_database("s-own-db", "today"))["ok"]
@@ -488,7 +488,7 @@ def test_naming_the_sessions_own_connection_uses_its_selected_database(monkeypat
     assert wh.databases == ["today", "yesterday"]
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_the_entrys_database_wins(monkeypatch):
     wh = _warehouse(monkeypatch, owner="s-entry-db")
     assert asyncio.run(connect.select_database("s-entry-db", "today"))["ok"]
@@ -497,7 +497,7 @@ def test_the_entrys_database_wins(monkeypatch):
     assert out["ok"] and wh.databases == ["archive"] and out["connections"][0]["database"] == "archive"
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_a_connection_that_needs_a_database_and_has_none(monkeypatch):
     _warehouse(monkeypatch, requires_database=True)
     out = asyncio.run(run_dashboard("s-no-db", ORDERS, [], {}))
@@ -515,7 +515,7 @@ class _PinnedDriver(_WarehouseDriver):
         return SimpleNamespace(**d)
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_a_connection_whose_config_pins_a_database_runs_on_it(monkeypatch):
     wh = _PinnedDriver(requires_database=True)
     monkeypatch.setitem(DRIVERS, "whfake", wh)
@@ -525,7 +525,7 @@ def test_a_connection_whose_config_pins_a_database_runs_on_it(monkeypatch):
     assert wh.databases == ["reporting"]
 
 
-# req: architecture/dashboards/named-connection
+# req: designs/dashboards/named-connection
 def test_a_query_with_its_own_database_runs_under_the_sessions_timeout(monkeypatch):
     wh = _warehouse(monkeypatch)
     sid = asyncio.run(sessions.create_session()).id

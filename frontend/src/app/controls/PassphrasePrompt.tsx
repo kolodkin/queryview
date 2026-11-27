@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 
-// A modal asking for a locked connection's passphrase (docs/system/connect.md#locked-connections).
+// A modal asking for a locked connection's passphrase (docs/user_guide/connect.md#locked-connections).
 // `onSubmit` resolves to an error message to show, or null when done — the
 // caller closes the prompt by unmounting it.
 export function PassphrasePrompt({

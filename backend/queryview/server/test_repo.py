@@ -1,5 +1,5 @@
 """The viewer server's repo reader: the dashboards at the branch head, kept
-in memory and refreshed by polling (docs/system/viewer_server.md)."""
+in memory and refreshed by polling (docs/user_guide/viewer_server.md)."""
 
 from __future__ import annotations
 

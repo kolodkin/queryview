@@ -381,7 +381,7 @@ async function startServer(
   }
 }
 
-// --- The viewer server (docs/system/viewer_server.md) ------------------------------------
+// --- The viewer server (docs/user_guide/viewer_server.md) ------------------------------------
 
 const git = (cwd: string, ...args: string[]) => promisify(execFile)("git", args, { cwd });
 

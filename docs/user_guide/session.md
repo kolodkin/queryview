@@ -3,7 +3,9 @@
 A **session** is one browser tab's working state: the page you are on and its
 URL, the connection and database you are querying, your workspace, and the
 per-view settings a reload should bring back. It lives in SQLite, so it survives
-a browser refresh *and* a backend restart.
+a browser refresh *and* a backend restart. You switch sessions from the
+dropdown in the header on every page; letting an agent into one is in
+[mcp.md](./mcp.md).
 
 One tab holds a session at a time. A **named** session outlives the tab that
 held it: close the tab and the next one you open picks it back up. An unnamed
@@ -86,7 +88,7 @@ reaches the tab within a beat, and every view follows — the explorer reloads
 its tables, the dashboard and the query panel re-run what is on screen.
 
 How tabs claim, heartbeat and release a session is in
-[sessions.md](../architecture/sessions.md#claims-and-the-heartbeat).
+[sessions.md](../designs/sessions.md#claims-and-the-heartbeat).
 
 ## The session dropdown
 
@@ -123,7 +125,7 @@ stable, so the command you copy stops changing under you. See
 ## Tabs
 
 A session an agent opened for itself with `new_tab`
-([mcp.md](./mcp.md#tabs)): an unnamed session whose `tab` names the
+([mcp.md](./mcp.md#let-the-agent-open-its-own-tabs)): an unnamed session whose `tab` names the
 work, listed as **Agent › orders** until you pin a name on it. Scratch like
 any unnamed session: swept once its browser tab has been closed for a claim
 TTL, never resumed by a new tab. It has no connection until the agent opens
@@ -134,7 +136,3 @@ session as the switcher would (one held elsewhere or gone shows a toast, and
 the tab attaches as any new tab does) and drops the parameter from the URL. A
 tab session arms itself whenever a browser tab loads it. Any unheld session
 opens from such a link.
-
-## How it is stored
-
-The `sessions` table and how its writes are timed are in [sessions.md](../architecture/sessions.md#how-it-is-stored).
