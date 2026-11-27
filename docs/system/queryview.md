@@ -49,37 +49,36 @@ redirects here, and `/studio` to a dashboard
   - **driver chips** (with counts) narrow to one driver;
   - the new-connection cards are hidden; **+ New** remains.
 - **← Connections** — on the form and the picker; back to the cards.
-  <!-- req: connection-status -->
 - **Connection status** — the one element that persists across every page: a
-  pill in the **top-left** corner, hidden until a database is selected, then
-  showing 🟢 `<connection> · <database>`, with a copy icon for the database name.
-  Clicking it opens a searchable database switcher; each row's **copy** icon
-  copies the name without switching. Below it, the connections (this session's
-  own, the agent's badged `agent`, then saved; the active one marked) switch
-  on click, and **Disconnect** at the bottom drops the connection and goes to
-  `/connect` (a picker-less driver's menu has just these two).
-  Next to it, an **agent icon** opens the remote-control popover (opt-in "Allow
-  remote control"); see [mcp.md](./mcp.md). Then the
-  [**Timeout** chip](#query-timeout). On a
-  [federated dashboard](./dashboard.md#federated-dashboards) the pill is the federated one
-  (below) instead.
+  pill in the **top-left** corner. Next to it, an **agent icon** opens the
+  remote-control popover (opt-in "Allow remote control"); see
+  [mcp.md](./mcp.md). Then the [**Timeout** chip](#query-timeout). The pill has
+  two forms:
+  <!-- req: connection-status -->
+  - **Session** — hidden until a database is selected, then 🟢
+    `<connection> · <database>`, with a copy icon for the database name.
+    Clicking it opens a searchable database switcher; each row's **copy** icon
+    copies the name without switching. Below it, the connections (this
+    session's own, the agent's badged `agent`, then saved; the active one
+    marked) switch on click, and **Disconnect** at the bottom drops the
+    connection and goes to `/connect` (a picker-less driver's menu has just
+    these two).
   <!-- req: federated-pill -->
-- **Federated pill** — while `/dashboard` shows a federated dashboard, the
-  top-left pill reads **⛓ Federated · N connections**, in any session state,
-  and its list has a row per connection (status icon, name, database, query
-  count). The session's connection is unchanged, and leaving the page restores
-  its pill.
+  - **Federated** — while `/dashboard` shows a
+    [federated dashboard](./dashboard.md#federated-dashboards), in any session
+    state: **⛓ Federated · N connections**, whose list has a row per
+    connection (status icon, name, database, query count). The session's
+    connection is unchanged, and leaving the page restores the session pill.
 
-  ```
-  [⛓ Federated · 2 connections ▾]
-  | 🟢 analytics · sales_reporting     2 queries |
-  | 🔒 warehouse · reporting [Unlock]  1 query   |
-  ```
+    ```
+    [⛓ Federated · 2 connections ▾]
+    | 🟢 analytics · sales_reporting     2 queries |
+    | 🔒 warehouse · reporting [Unlock]  1 query   |
+    ```
 
-  Statuses: 🟢 ok; 🔴 failed, with the message under the row; 🔒 locked, with
-  **Unlock**, which asks for the passphrase and re-runs the dashboard; ⚪ not a
-  connection here ("Not a connection here"). Before the first reply rows show
-  names only.
+    Statuses: 🟢 ok; 🔴 failed, with the message under the row; 🔒 locked,
+    with **Unlock**, which asks for the passphrase and re-runs the dashboard;
+    ⚪ "Not a connection here". Before the first reply rows show names only.
 - **Narrow windows** — below `md` the cards stack in one column, the session,
   workspace and page links collapse into one **☰ &lt;page&gt;** menu, and
   full-height pages keep a 48rem minimum width, scrolling sideways rather than
