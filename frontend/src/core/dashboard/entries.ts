@@ -40,7 +40,9 @@ const hasOptionsSql = (p: unknown): p is Record<string, unknown> =>
   !!p && typeof p === 'object' && 'options_sql' in p
 
 const paramConnections = (params: unknown[]): string[] =>
-  params.flatMap((p) => (hasOptionsSql(p) && typeof p.connection === 'string' ? [p.connection] : []))
+  params.flatMap((p) =>
+    hasOptionsSql(p) && typeof p.connection === 'string' ? [p.connection] : [],
+  )
 
 // A query map, or (with no query naming one) an `options_sql` param's connection.
 export const isFederated = (queries: Queries, params: unknown[] = []): boolean =>
