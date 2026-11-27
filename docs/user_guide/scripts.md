@@ -11,12 +11,12 @@ database is selected the page redirects to Connect.
 ## Run a script
 
 <!-- req: run-script -->
-A user can run a multi-statement script, writes included, that stops at the
+You can run a multi-statement script, writes included, that stops at the
 first error.
 
 - A `;`-separated script runs as written, `CREATE` and `INSERT` included, and
   shows the last statement's rows.
-- A failing statement stops the run: the user is told which one failed and
+- A failing statement stops the run: you are told which one failed and
   why, and the statements after it do not run.
 
 ## Layout
@@ -130,7 +130,7 @@ text.
 <!-- req: agent-push -->
 MCP `run_script` runs a script as Run all does and returns the results to the
 agent; `push_script` replaces the text (saved like an edit) and, with `run`,
-runs it here, usually in a [tab](./mcp.md#tabs) of the agent's own. Focus
+runs it here, usually in a [tab](./mcp.md#let-the-agent-open-its-own-tabs) of the agent's own. Focus
 in the page holds the
 [edit lock](./query.md#co-edit--edit-lock), so a push is refused with
 `blocked, user editing` while you type. See [mcp.md](./mcp.md).

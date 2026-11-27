@@ -1,24 +1,32 @@
 # YAML export & import
 
-Dashboards can be exported to plain YAML files and imported back — one at a
-time, or a whole workspace as a single bundle.
-Unlike [git sync](./gitsync.md) this needs no git remote — just a file you can
-share or use to copy content between workspaces and instances. Connections are
-never exported (their config is encrypted credentials).
+Export a dashboard, or a whole workspace, as a plain YAML file and import it
+back, from the dashboard page (`/dashboard`) or the workspace manage panel.
+Unlike [git sync](./gitsync.md) this needs no git remote: it is a file you
+share or use to copy dashboards between workspaces and instances. Connections
+are never exported, since their config holds credentials.
 
 ## Move a dashboard as YAML
 
 <!-- req: yaml-export-import -->
-A user can move a dashboard between instances as YAML.
+You can move a dashboard between instances as YAML.
 
 - Export downloads the dashboard as a YAML file.
 - Importing that file saves the dashboard as it was exported, over any copy of
   the same name.
 
-## Documents
+## Export and import
 
-Every exported document is self-describing via a top-level `kind`; import
-dispatches on the file's content, never on its name.
+<!-- req: ui -->
+Next to the dashboard page's **Restore** button: **Export** downloads the saved DB state as a YAML file;
+**Import** picks a YAML file and upserts whatever its `kind` declares. The
+workspace manage panel (header dropdown → *Manage workspaces…*) has the same
+pair for the whole active workspace.
+
+## The file format
+
+Every exported file says what it holds in a top-level `kind`; import goes by
+the file's content, never its name.
 
 ```yaml
 # kind: dashboard — one dashboard
@@ -39,29 +47,21 @@ dashboards: # list of dashboard entries (as above, minus kind)
   - { name: ..., html: ..., queries: {} }
 ```
 
-Import upserts by name into the target workspace (same overwrite semantics as
-a git-sync restore) and validates the whole document before writing
-anything, so a malformed file changes nothing. A `kind: query` document, or a
+Import overwrites dashboards of the same name in the workspace you import into
+(as a git-sync restore does) and checks the whole file before writing
+anything, so a malformed file changes nothing. A `kind: query` file, or a
 bundle carrying a non-empty `queries` list, is refused with
-`saved queries are no longer supported`. The bundle carries no workspace
-name, so it imports into whichever workspace you choose.
+`saved queries are no longer supported`. A bundle names no workspace, so it
+imports into whichever one you choose.
 
 A query entry is written as stored: a SQL string, or a
 [federated](./dashboard.md#federated-dashboards) map
-`{connection, sql, database?}`. A dashboard mixing the two is refused (`400`)
-with `every query and options_sql names a connection, or none does`.
-
-## UI
-
-<!-- req: ui -->
-Next to the dashboard page's **Restore** button: **Export** downloads the saved DB state as a YAML file;
-**Import** picks a YAML file and upserts whatever its `kind` declares. The
-workspace manage panel (header dropdown → *Manage workspaces…*) has the same
-pair for the whole active workspace.
+`{connection, sql, database?}`. A dashboard mixing the two is refused with
+`every query and options_sql names a connection, or none does`.
 
 ## Related docs
 
 - [gitsync.md](./gitsync.md) — versioned backup/restore of the same entities via git.
 - [dashboard.md](./dashboard.md) — dashboards.
 - [workspace.md](./workspace.md) — workspaces: entity ownership.
-- [api.md](../architecture/api.md) — backend JSON API.
+- [api.md](../architecture/api.md) — the export and import endpoints.

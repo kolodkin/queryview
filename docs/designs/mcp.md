@@ -16,7 +16,7 @@ read that session's database and workspace straight from its row — the browser
 reports nothing (see [workspace.md](../user_guide/workspace.md)).
 
 <!-- req: tab-queue -->
-A push to a [tab](../user_guide/mcp.md#tabs) nobody has opened yet lands in a channel `new_tab`
+A push to a [tab](../user_guide/mcp.md#let-the-agent-open-its-own-tabs) nobody has opened yet lands in a channel `new_tab`
 opened in advance, which answers `queued for the tab`; arming takes that
 channel over with its pushes queued. One whose tab never comes is dropped
 after a minute.

@@ -1,26 +1,28 @@
 # Connecting
 
-Connections have two halves: a **type** (the driver, e.g. `clickhouse`) and a
+Add the databases you want to query, open one, and pick a database, all from
+the Connect page (`/connect`, laid out in [queryview.md](./queryview.md)). A
+connection has two halves: a **type** (the driver, e.g. `clickhouse`) and a
 **name** (your label, e.g. `clickhouse`, `prod-ch`). Create one from a **New
-connection** card on the Connect page (see [queryview.md](./queryview.md)),
-reopen it from its saved card. Connections persist in SQLite, and a session
-reconnects whichever one it was last on.
+connection** card and reopen it from its saved card; your session reconnects
+whichever one it was last on. How credentials are kept is in
+[creds.md](./creds.md).
 
 ## Add a connection
 
 <!-- req: add-connection -->
-A user can save a connection to a ClickHouse, Postgres, MySQL, DuckDB or SQLite
+You can save a connection to a ClickHouse, Postgres, MySQL, DuckDB or SQLite
 database.
 
 - Each of the five drivers offers a new-connection form: host, port and
   credentials, or a file path for DuckDB and SQLite.
 - Connecting saves the connection under the name given; it is listed among the
-  saved connections when the user comes back.
+  saved connections when you come back.
 
 ## Open a database
 
 <!-- req: open-database -->
-A user can open a saved connection, pick a database, and find it reconnected
+You can open a saved connection, pick a database, and find it reconnected
 next time.
 
 - Opening a saved connection offers its databases to pick from, narrowed by
@@ -63,7 +65,7 @@ fails, the error suggests `host.docker.internal` (see
   connection, then shows the database picker.
 - **Active connection** — held at the **session** level (see
   [queryview.md](./queryview.md)). One per session.
-- **Database selection** — after connecting, the user picks a database. Only
+- **Database selection** — after connecting, you pick a database. Only
   then does the top-left indicator read `🟢 <connection> · <database>`. The choice
   is remembered with the connection, and reopening the connection in the same
   session goes straight back to it (see
@@ -150,10 +152,10 @@ restarts (the session then reads as disconnected).
 - Each carries `scope` (`session` | `saved`) and `created_by` (`agent` |
   `user`); connections the agent added get an `agent` badge on their card and
   in the pill menu's connection list (session ones listed apart from saved, the
-  active one marked). The user's own get none.
+  active one marked). Your own get none.
 - When one is added or removed, an armed tab's lists refresh. The session row
   records who switched (`connection_by`: `agent` | `user`); a tab that sees the
-  agent's `use_connection` toasts "Agent switched to <name>", never the user's.
+  agent's `use_connection` toasts "Agent switched to <name>", never yours.
 - You add one with **Session only — don't save** on the new-connection form.
 - Names are unique across saved connections and all sessions' ones.
 - The agent may switch to any unlocked ClickHouse, Postgres or MySQL connection and

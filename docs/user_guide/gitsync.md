@@ -1,13 +1,15 @@
 # Git sync — backup & restore
 
-Dashboards can be backed up to a git repository (e.g.
-GitHub) and restored from any past revision, per entity. Connections are never
-written to the repo (their config is encrypted credentials).
+Back your dashboards up to a git repository (e.g. GitHub) and restore any past
+revision, from the dashboard page (`/dashboard`) and the workspace manage
+panel. Each [workspace](./workspace.md) has its own remote; to copy dashboards
+as a file instead, see [export-import.md](./export-import.md). Connections are
+never written to the repo (their config holds credentials).
 
 ## Back up a workspace to git
 
 <!-- req: workspace-git -->
-A user can back a workspace up to a git remote and restore a dashboard from it.
+You can back a workspace up to a git remote and restore a dashboard from it.
 
 - Each save of a dashboard is a commit on the workspace's remote.
 - A dashboard changed outside git is marked as such.
@@ -101,7 +103,7 @@ Changing a workspace's remote or branch drops its clone and that file.
 
 ## Versioning
 
-Git commits are the versions — each [user action](#committing) makes exactly one commit touching
+Git commits are the versions — each [action of yours](#committing) makes exactly one commit touching
 one entity, so an entity's history is `git log -- <its path>`. Restore reads
 files at a chosen commit (`git show`) and overwrites the local DB row; HEAD
 never moves and history is append-only.
@@ -113,7 +115,7 @@ remote, and a YAML import clears it, since no commit holds that content.
 
 ## Committing
 
-Only a user's action on the [dashboard page](./dashboard.md#the-page-dashboard)
+Only your action on the [dashboard page](./dashboard.md#the-page-dashboard)
 commits; agent pushes, Import and Restore never do. In a workspace with a
 remote, each is one commit and push:
 
@@ -131,7 +133,7 @@ Rename and Delete of a dashboard the repo doesn't hold make no commit; a
 Rename onto a name the repo already holds is refused. Without a remote, the
 three only change the workspace.
 
-## UI
+## Back up and restore from the app
 
 <!-- req: restore-ui -->
 **Restore**, next to the dashboard page's **Save**, opens the entity's

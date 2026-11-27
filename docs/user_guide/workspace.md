@@ -1,31 +1,18 @@
 # Workspaces
 
-Dashboards belong to a **workspace**; each workspace
-git-syncs to its own remote (see [gitsync.md](./gitsync.md)). Entity names are
-unique per workspace, so two workspaces can each have a "daily revenue"
-dashboard. Connections are global by design — any workspace can use any
-connection — so workspaces stay cheap namespaces for the single-team case.
+A **workspace** groups your dashboards, and each one can back up to its own git
+remote ([gitsync.md](./gitsync.md)). Names are unique per workspace, so two
+workspaces can each have a "daily revenue" dashboard. Connections are shared:
+any workspace can use any connection. To copy a workspace as a file instead,
+see [export-import.md](./export-import.md).
 
-A `default` workspace is seeded by migration, with no remote and on branch
-`main`. It is an ordinary row, renamable like any other. The **fallback**
-workspace — used for an omitted `workspace` parameter and for new sessions —
-is the oldest one, found by id, never by the name `default`. Renaming a
-workspace moves the sessions on it along; deleting one moves them to the
-fallback, and the last workspace can't be deleted.
+A `default` workspace exists from the start, with no remote and on branch
+`main`; you can rename it like any other. The **fallback** workspace, used for
+new sessions and when a request names none, is the oldest one, whatever its
+name. Renaming a workspace keeps its sessions on it; deleting one moves them to
+the fallback, and the last workspace can't be deleted.
 
-## Configuration
-
-Workspace settings live in the database, not env vars. The remote URL may
-embed a token, so it is encrypted at rest (same AES-GCM key as connection
-configs). The API returns it only with the credential stripped
-(`https://host/org/repo.git`, or an SSH URL as is), so the token itself is
-write-only. A workspace
-without a remote is a pure namespace: its git controls are disabled.
-
-Deleting a workspace requires it to be empty (409 otherwise). The git remote
-keeps its history either way.
-
-## UI
+## Switch and manage workspaces
 
 <!-- req: switcher -->
 The header shows a workspace switcher (dropdown + manage panel for
@@ -33,18 +20,29 @@ create/rename/remote/branch/delete). The active workspace is session state
 (see [session.md](./session.md)); switching reloads the query and dashboard
 lists.
 
-## MCP
+## Set a git remote
 
-MCP is workspace-unaware: no workspace parameter, no workspace tools. The
-armed browser session reports its active workspace (alongside the database);
-`list_dashboards` and the `git_*` tools take an optional
-`session_id` and resolve the workspace from it, else the fallback. The human picks the
-workspace; the agent works inside the session it was invited into. Workspace
-CRUD stays API/UI-only because it is admin configuration involving secrets.
+You set a workspace's remote and branch in the manage panel; they are kept in
+the app's database, not in environment variables. A token in the remote URL is
+stored encrypted and never shown again: the panel shows the URL with the
+credential stripped (`https://host/org/repo.git`, or an SSH URL as is). A
+workspace without a remote is a plain namespace, and its git controls are
+disabled.
+
+You can delete a workspace only once it is empty; the git remote keeps its
+history either way.
+
+## Workspaces and your agent
+
+Your agent never picks a workspace: it has no workspace parameter and no
+workspace tools. It works in the workspace of the session you invited it into
+([mcp.md](./mcp.md#arming-a-session)), and `list_dashboards` and the `git_*`
+tools use the fallback when given no session. Creating and configuring
+workspaces stays in the app, since a remote can carry a secret.
 
 ## Related docs
 
 - [gitsync.md](./gitsync.md) — backup & restore mechanics.
 - [dashboard.md](./dashboard.md) — dashboards.
-- [api.md](../architecture/api.md) — backend JSON API.
-- [future.md](../future.md) — planned work.
+- [export-import.md](./export-import.md) — copying a workspace as YAML.
+- [mcp.md](./mcp.md) — connecting an agent and arming a session.

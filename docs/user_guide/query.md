@@ -8,10 +8,10 @@ the [explorer](./explorer.md), and the [Scripts](./scripts.md) page.
 ## Run SQL
 
 <!-- req: run-sql -->
-A user can run SQL, page through the rows, pick columns, and download CSV.
+You can run SQL, page through the rows, pick columns, and download CSV.
 
 - Running a query shows its rows under its column names.
-- A page size splits the rows into pages the user steps through.
+- A page size splits the rows into pages you step through.
 - Hiding a column removes it from the results; showing it brings it back.
 - The current page downloads as a CSV file.
 

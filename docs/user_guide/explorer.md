@@ -10,7 +10,7 @@ order-by select the [dashboard widget](./query.md#fields-selection--ordering) us
 ## Browse tables
 
 <!-- req: browse-tables -->
-A user can browse tables and page through their rows without typing SQL.
+You can browse tables and page through their rows without typing SQL.
 
 - The connected database's tables are listed, with row estimates where the
   database keeps them.
@@ -186,6 +186,6 @@ scanned across the whole tree at connect:
 - **Checking each step of the path,** not just the final folder, is what keeps
   a symlink partway along (`link` -> `/etc`) from leading outside the root.
 - **A missing step stops at the nearest parent** rather than the root, so a
-  deleted folder leaves the user as close as possible to where they were.
+  deleted folder leaves you as close as possible to where you were.
 - The cost: the menu re-reads a level on each pick, and an agent listing
   folders without a selection sees only the root's top level.

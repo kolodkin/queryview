@@ -4,7 +4,7 @@ The MCP tools and the channel they push through. Connecting an agent and arming 
 
 ## Tools
 
-Every tool acts on a browser session: a [tab](../user_guide/mcp.md#tabs) of the agent's own, or one
+Every tool acts on a browser session: a [tab](../user_guide/mcp.md#let-the-agent-open-its-own-tabs) of the agent's own, or one
 you [armed](../user_guide/mcp.md#arming-a-session).
 
 <!-- req: session-info -->
@@ -81,7 +81,7 @@ you [armed](../user_guide/mcp.md#arming-a-session).
   [federated](#federated-drafts) run needs a known session (else
   `unknown session`) but no session connection, adds `connections: [{name,
   database, status, queries, message?}]` and has a null `database`.
-- `new_tab(name)` — a session of the agent's own; see [Tabs](../user_guide/mcp.md#tabs).
+- `new_tab(name)` — a session of the agent's own; see [agent tabs](../user_guide/mcp.md#let-the-agent-open-its-own-tabs).
 - `list_dashboards()` — list saved dashboards: `{dashboards: [{name, updated_at}]}`.
   <!-- req: git-tools -->
 - `git_history` / `git_restore` — list and restore a saved dashboard's

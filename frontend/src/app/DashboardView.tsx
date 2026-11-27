@@ -154,7 +154,7 @@ function DashboardView({
   const name = searchParams.get('name') ?? ''
 
   const [dashboards, setDashboards] = useState<DashboardSummary[]>([])
-  // With a remote, a dashboard no commit holds is marked in the picker (docs/user_guide/gitsync.md#ui).
+  // With a remote, a dashboard no commit holds is marked in the picker (docs/user_guide/gitsync.md#back-up-and-restore-from-the-app).
   const [gitOn, setGitOn] = useState(false)
   useEffect(() => {
     void gitStatus(activeWorkspace()).then(setGitOn)
