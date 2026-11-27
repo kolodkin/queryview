@@ -6,7 +6,8 @@ its own, smaller API. No session header; none of the app's
 [routes](api.md) exist on it.
 A body names a `dashboard` and, for an unfederated one, a `connection`,
 never SQL. Errors are `{ok:false, message}`: `404` for an unknown dashboard,
-query name or (unfederated) connection, `400` for a bad body, a bad value or a failing query.
+query name or (unfederated) connection, `400` for a bad body, a bad value or
+a failing query.
 
 | Method | Path                     | Body                                             | Description |
 | ------ | ------------------------ | ------------------------------------------------ | ----------- |
@@ -25,8 +26,9 @@ connection's own. The body needs no `connection`; one sent is ignored.
 `/api/run` also returns `connections: [{name, database, status, queries,
 message?}]`, `status` being `ok`, `failed` or `unknown`. A name the config
 lacks fails its query as `orders: unknown connection "nope"` (`400`).
-`connections` on `GET /api/dashboards/{name}` lists the names its queries, then its `options_sql` params, use, each once. A dashboard
-mixing named and unnamed queries is not served.
+`connections` on `GET /api/dashboards/{name}` lists the names its queries,
+then its `options_sql` params, use, each once. A dashboard mixing named and
+unnamed queries is not served.
 
 <!-- req: values-checked -->
 Every POST resolves the selectors first, so a value outside a param's options

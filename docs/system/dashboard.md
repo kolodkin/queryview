@@ -110,6 +110,10 @@ session id) exposes:
 - `run_dashboard` returns the rows of a draft's queries to the agent, to test
   them before a push: see [mcp.md](../architecture/mcp.md#tools).
 
+The REST mirror `POST /api/dashboards` takes the inline fields (plus optional
+`session_id`) and drives the same persist-and-push path (used by the e2e suite).
+See [api.md](../architecture/api.md) for the full endpoint list.
+
 <!-- req: viewing-connection -->
 An unfederated dashboard (its queries are plain SQL strings) names no
 [connection](./connect.md): it runs on the **viewing** session's connection and
@@ -118,7 +122,7 @@ opened in a disconnected session it asks you to connect, unless nothing in it
 queries the database. Select a database first, or fully-qualify tables as
 `db.table`.
 
-### Federated dashboards
+## Federated dashboards
 
 <!-- req: federated -->
 A **federated** dashboard names a connection per query, so one page shows
@@ -144,12 +148,8 @@ orders:
 - Every query, widget queries and `options_sql` included, names a connection or
   none does; a mixed dashboard is refused with `every query and options_sql
   names a connection, or none does`.
-- It needs no connected session. The page's [pill](./queryview.md)
+- It needs no connected session. The page's [pill](./queryview.md#layout)
   lists the connections.
-
-The REST mirror `POST /api/dashboards` takes the inline fields (plus optional
-`session_id`) and drives the same persist-and-push path (used by the e2e suite).
-See [api.md](../architecture/api.md) for the full endpoint list.
 
 ## Pushing from a folder
 

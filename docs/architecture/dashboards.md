@@ -11,15 +11,16 @@ values. The backend resolves each selector's options and value, substitutes
 them into the queries, and runs each one on the session's connection and
 selected database (wrapped in a paginated subselect capped at 1000 rows). It
 returns column-oriented results and the resolved selectors. Up to five queries
-run at once, across connections. Switching the connection or database re-runs them.
+run at once, across connections. Switching the connection or database re-runs
+them.
 
 A [federated](../system/dashboard.md#federated-dashboards) dashboard's queries and
 `options_sql` each run on the connection they name instead, with no session
 gate: it runs in a disconnected session, or one on a locked connection. Its
 reply, failed or not, carries `connections`, one entry per named connection
 in first-use order: `{name, database, status, queries, message?}`, `status`
-being `ok`, `failed` (a query or `options_sql` on it failed, or it has no database), `locked`
-or `unknown`. A mixed body is a `400`:
+being `ok`, `failed` (a query or `options_sql` on it failed, or it has no
+database), `locked` or `unknown`. A mixed body is a `400`:
 `every query and options_sql names a connection, or none does`.
 
 <!-- req: fail-fast -->
