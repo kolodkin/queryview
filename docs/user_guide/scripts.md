@@ -67,7 +67,8 @@ strings), `"…"`, `` `…` ``, `$$…$$` and `$tag$…$tag$` bodies, `-- …` l
 comments and `/* … */` block comments; blank statements are dropped. On
 MySQL the split reads the script as MySQL does: `# …` is a line comment, `--`
 starts one only before a space, `/*! … */` is code, `$` belongs to names and
-`"…"` takes backslash escapes. An unterminated quote keeps the rest of the script in one statement, so
+`"…"` takes backslash escapes. An unterminated quote keeps the rest of the
+script in one statement, so
 the database reports the real syntax error.
 
 <!-- req: one-connection -->
@@ -111,12 +112,10 @@ same JSON shape as every other result
   connection; rows are read through a cursor up to the cap, and a statement
   with no result columns reports its command tag.
 <!-- req: mysql-script -->
-- **MySQL** — statements run in autocommit on the run's connection. Rows
-  stream up to the cap, then a `KILL QUERY` from a second connection stops the
-  rest, so a `SELECT *` on a big table transfers only what is shown. Only a read
-  (`SELECT`, `SHOW`, …) outside a transaction is stopped; anything else is
-  read to its end: a `CALL`'s procedure may have more to do, and a
-  `FOR UPDATE` in a `BEGIN` locks only the rows it reaches. A
+- **MySQL** — statements run in autocommit on the run's connection. A read
+  (`SELECT`, `SHOW`, …) outside a transaction stops at the cap on the server
+  too, so a `SELECT *` on a big table transfers only what is shown; anything
+  else, a `CALL` or a `FOR UPDATE` in a `BEGIN`, is read to its end. A
   statement with no result reports `OK, N rows affected`. Past the 10 minutes,
   only a `SELECT` is ended on the server too
   ([Query timeout](./queryview.md#query-timeout)).
@@ -162,14 +161,18 @@ Keep an agent off file connections you wouldn't hand it the filesystem for.
 
 <!-- req: server-files -->
 On MySQL and Postgres the files are the database server's, and the login's
-privileges decide. MySQL's `SELECT … INTO OUTFILE` / `INTO DUMPFILE` write one
-and `LOAD_FILE()` reads one, given the FILE privilege; Postgres's `COPY … TO`
-writes one, or runs a command with `TO PROGRAM`, for a superuser, even in a
-read-only transaction. `run_sql` refuses `INTO OUTFILE`, `INTO DUMPFILE`,
-`COPY` and `DO` (a block can run a `COPY`), quoted text and comments aside.
-That check reads the text, so it can be dodged, and scripts get no check at
-all: give an agent's connection a login without file privileges — no FILE on
-MySQL; no superuser, `pg_read_server_files`, `pg_write_server_files` or
+privileges decide, read-only transaction or not:
+
+- **MySQL**, with the FILE privilege: `SELECT … INTO OUTFILE` / `INTO DUMPFILE`
+  write a file, `LOAD_FILE()` reads one.
+- **Postgres**, for a superuser: `COPY … TO` writes a file, `COPY … TO PROGRAM`
+  runs a command.
+
+`run_sql` refuses `INTO OUTFILE`, `INTO DUMPFILE`, `COPY` and `DO` (a block
+can run `COPY`) outside quotes and comments. The check reads the text, so it
+can be dodged, and scripts get none: give an agent's connection a login
+without file privileges — no FILE on MySQL; no superuser,
+`pg_read_server_files`, `pg_write_server_files` or
 `pg_execute_server_program` on Postgres.
 
 ## Related docs
