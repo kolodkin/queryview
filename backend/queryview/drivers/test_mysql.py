@@ -143,6 +143,13 @@ def test_a_killed_select_is_not_an_error(monkeypatch):
     assert not out[0].ok and "Lost connection" in out[0].message
 
 
+def test_a_capped_call_is_read_to_its_end(monkeypatch):
+    # The procedure may still write after its first result, so it is not killed.
+    log = _fake(monkeypatch, lambda sql: (ID, [(1,)] * (SCRIPT_ROW_CAP + 1)))
+    out = asyncio.run(MySqlDriver().execute_script(CFG, "call refresh_report()", "shop"))
+    assert out[0].truncated and log["sql"] == ["call refresh_report()"] and log["drained"] == 1
+
+
 def test_scripts_skip_hash_comments(monkeypatch):
     log = _fake(monkeypatch, lambda sql: (ID, [(1,)]))
     asyncio.run(MySqlDriver().execute_script(CFG, "# don't split here; nor here\nSELECT 1; SELECT 2", "shop"))

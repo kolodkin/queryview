@@ -291,23 +291,24 @@ def mask_sql(sql: str, mysql: bool = False) -> str:
     the next character in a single-quoted string, as ClickHouse and Postgres
     `E''` strings read it), `$$`/`$tag$` body and `--` or `/* */` comment
     blanked to spaces, keeping its length, so what is left is code. `mysql`
-    reads comments as MySQL does: `#` starts one, and `/*!…*/` is code. An
-    unterminated quote blanks the rest. Mirrored by maskSql in the frontend;
+    reads it as MySQL does: `#` starts a comment, `--` only before whitespace,
+    `/*!…*/` is code, `$` is part of a name and `"…"` takes backslash escapes.
+    An unterminated quote blanks the rest. Mirrored by maskSql in the frontend;
     keep the two in step."""
     parts: list[str] = []
     last = i = 0
     n = len(sql)
     while i < n:
         ch = sql[i]
-        if ch == "'":
-            end = _skip_single_quoted(sql, i)
+        if ch == "'" or (mysql and ch == '"'):
+            end = _skip_quoted(sql, i)
         elif ch in ('"', "`"):
             end = sql.find(ch, i + 1)
             end = n if end < 0 else end + 1
-        elif (tag := _DOLLAR_TAG.match(sql, i)) is not None:
+        elif not mysql and (tag := _DOLLAR_TAG.match(sql, i)) is not None:
             end = sql.find(tag.group(), tag.end())
             end = n if end < 0 else end + len(tag.group())
-        elif sql.startswith("--", i) or (mysql and ch == "#"):
+        elif (sql.startswith("--", i) and not (mysql and sql[i + 2 : i + 3].strip())) or (mysql and ch == "#"):
             end = sql.find("\n", i)
             end = n if end < 0 else end
         elif sql.startswith("/*", i) and not (mysql and sql.startswith("/*!", i)):
@@ -332,15 +333,17 @@ def split_statements(sql: str, mysql: bool = False) -> list[str]:
     return [s for s in (sql[a:b].strip() for a, b in zip(starts, ends + [len(sql)], strict=True)) if s]
 
 
-def _skip_single_quoted(sql: str, i: int) -> int:
-    """The index just past the single-quoted string opening at `i`, or the end
-    of the script when it never closes."""
+def _skip_quoted(sql: str, i: int) -> int:
+    """The index just past the string quoted by `sql[i]` opening at `i`, a
+    backslash escaping the next character, or the end of the script when it
+    never closes."""
+    quote = sql[i]
     i += 1
     n = len(sql)
     while i < n:
         if sql[i] == "\\":
             i += 2
-        elif sql[i] == "'":
+        elif sql[i] == quote:
             return i + 1
         else:
             i += 1

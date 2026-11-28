@@ -46,6 +46,16 @@ describe('statementRangeAt', () => {
     const other = statementRangeAt(script, 3)!
     expect(script.slice(other.start, other.end)).toBe(script)
   })
+  it('reads MySQL names, strings and dashes as MySQL does', () => {
+    const script = 'SELECT a$b$c; SELECT "x\\";y"; SELECT 1--1; SELECT 2'
+    const text = (cursor: number) => {
+      const span = statementRangeAt(script, cursor, true)!
+      return script.slice(span.start, span.end)
+    }
+    expect(text(2)).toBe('SELECT a$b$c')
+    expect(text(16)).toBe('SELECT "x\\";y"')
+    expect(text(script.indexOf('1--1'))).toBe('SELECT 1--1')
+  })
   it('falls back to the last statement after trailing whitespace', () => {
     expect(statementRangeAt('SELECT 1;\n\n', 11)).toEqual({ start: 0, end: 8 })
     expect(statementRangeAt('   ', 1)).toBeNull()

@@ -64,8 +64,9 @@ Statements are separated by `;`. The split skips semicolons inside `'…'` (a
 backslash escapes the next character, as in ClickHouse and Postgres `E''`
 strings), `"…"`, `` `…` ``, `$$…$$` and `$tag$…$tag$` bodies, `-- …` line
 comments and `/* … */` block comments; blank statements are dropped. On
-MySQL, `# …` is a line comment too and `/*! … */` is code, as MySQL reads
-them. An unterminated quote keeps the rest of the script in one statement, so
+MySQL the split reads the script as MySQL does: `# …` is a line comment, `--`
+starts one only before a space, `/*! … */` is code, `$` belongs to names and
+`"…"` takes backslash escapes. An unterminated quote keeps the rest of the script in one statement, so
 the database reports the real syntax error.
 
 <!-- req: one-connection -->
@@ -111,7 +112,8 @@ same JSON shape as every other result
 <!-- req: mysql-script -->
 - **MySQL** — statements run in autocommit on the run's connection. Rows
   stream up to the cap, then a `KILL QUERY` from a second connection stops the
-  rest, so a `SELECT *` on a big table transfers only what is shown. A
+  rest, so a `SELECT *` on a big table transfers only what is shown. A `CALL`
+  is read to its end: its procedure may have more to do. A
   statement with no result reports `OK, N rows affected`. A `SELECT` past the
   10 minutes is ended on the server too (`max_execution_time`); other
   statements run on there.

@@ -151,6 +151,8 @@ async def _connect(c: MySqlConfig, database: str | None, timeout: float | None =
 
 
 _INTERRUPTED = 1317
+# A procedure may still have work to do after its first result: it is not killed.
+_CALL = re.compile(r"\s*CALL\b", re.IGNORECASE)
 
 
 async def _kill_query(c: MySqlConfig, thread_id: int) -> None:
@@ -161,12 +163,18 @@ async def _kill_query(c: MySqlConfig, thread_id: int) -> None:
 
 
 async def _fetch(
-    conn: Any, sql: str, max_rows: int | None, timeout: float, stop: MySqlConfig | None = None
+    conn: Any,
+    sql: str,
+    max_rows: int | None,
+    timeout: float,
+    drain: bool = False,
+    stop: MySqlConfig | None = None,
 ) -> tuple[Any, list[Any], int]:
     """Run `sql` and fetch up to `max_rows` rows (all when None) within `timeout`:
-    (description or None, rows, affected row count). With `stop`, the config it
-    connected with, a result with more rows is ended on the server with KILL
-    QUERY, so the connection can run another statement without reading the rest."""
+    (description or None, rows, affected row count). `drain` reads past the
+    unfetched rest so the connection can run another statement; with `stop`,
+    the config it connected with, the server is first told to end it (KILL
+    QUERY), so the rest is not sent."""
 
     async def go():
         # Unbuffered when capped, so only the rows fetched cross the wire.
@@ -175,8 +183,8 @@ async def _fetch(
         if cur.description is None:
             return None, [], cur.rowcount
         rows = await (cur.fetchall() if max_rows is None else cur.fetchmany(max_rows))
-        if stop is not None:
-            if len(rows) == max_rows:  # more may follow: stop sending them
+        if drain:
+            if stop is not None and len(rows) == max_rows:  # more may follow: stop sending them
                 await _kill_query(stop, conn.thread_id())
             try:
                 await cur.close()  # reads what is already on the way
@@ -344,7 +352,12 @@ class MySqlDriver:
                 async def run_one(stmt: str) -> StatementResult:
                     try:
                         description, rows, affected = await _fetch(
-                            conn, stmt, SCRIPT_ROW_CAP + 1, SCRIPT_TIMEOUT_SECONDS, stop=config
+                            conn,
+                            stmt,
+                            SCRIPT_ROW_CAP + 1,
+                            SCRIPT_TIMEOUT_SECONDS,
+                            drain=True,
+                            stop=None if _CALL.match(mask_sql(stmt, mysql=True)) else config,
                         )
                         if description is None:
                             return StatementResult(stmt, True, status=f"OK, {max(affected, 0)} rows affected")

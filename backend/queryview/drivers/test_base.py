@@ -130,6 +130,17 @@ def test_split_statements_reads_mysql_comments_only_for_mysql():
     assert split_statements("SELECT 1 # 2; SELECT '/*!'; SELECT 3") == ["SELECT 1 # 2", "SELECT '/*!'", "SELECT 3"]
 
 
+def test_mysql_mode_reads_names_strings_and_dashes_as_mysql():
+    # `$` is part of a name, `"…"` takes backslash escapes, `--` needs a space after it.
+    sql = 'SELECT a$b$c FROM t; SELECT "x\\";y"; SELECT 1--1; SELECT 2 -- c;\nFROM dual'
+    assert split_statements(sql, mysql=True) == [
+        "SELECT a$b$c FROM t",
+        'SELECT "x\\";y"',
+        "SELECT 1--1",
+        "SELECT 2 -- c;\nFROM dual",
+    ]
+
+
 def test_mask_sql_blanks_quotes_and_comments_keeping_offsets():
     sql = "SELECT 'a', \"b\" -- c\nFROM t /* d */ # e"
     assert mask_sql(sql) == "SELECT    ,     " + " " * 4 + "\nFROM t " + " " * 7 + " # e"

@@ -21,20 +21,22 @@ export type Span = { start: number; end: number } // the trimmed statement's [st
 
 const DOLLAR_TAG = /\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$/y
 
-// The index just past the single-quoted string opening at `i` (a backslash
-// escapes the next character), or the end when it never closes.
-function skipSingleQuoted(text: string, i: number): number {
+// The index just past the string quoted by `text[i]` opening at `i` (a
+// backslash escapes the next character), or the end when it never closes.
+function skipQuoted(text: string, i: number): number {
+  const quote = text[i]
   for (i += 1; i < text.length; i += 1) {
     if (text[i] === '\\') i += 1
-    else if (text[i] === "'") return i + 1
+    else if (text[i] === quote) return i + 1
   }
   return text.length
 }
 
 // The script with every quote, `$$`/`$tag$` body and `--` or `/* */` comment
 // blanked to spaces, keeping its length, so what is left is code. `mysql` reads
-// comments as MySQL does: `#` starts one, and `/*!…*/` is code. The backend's
-// mask_sql; keep the two in step.
+// it as MySQL does: `#` starts a comment, `--` only before whitespace, `/*!…*/`
+// is code, `$` is part of a name and `"…"` takes backslash escapes. The
+// backend's mask_sql; keep the two in step.
 function maskSql(text: string, mysql: boolean): string {
   let out = ''
   let last = 0
@@ -45,15 +47,18 @@ function maskSql(text: string, mysql: boolean): string {
     DOLLAR_TAG.lastIndex = i
     let tag: RegExpExecArray | null
     let end: number
-    if (ch === "'") {
-      end = skipSingleQuoted(text, i)
+    if (ch === "'" || (mysql && ch === '"')) {
+      end = skipQuoted(text, i)
     } else if (ch === '"' || ch === '`') {
       end = text.indexOf(ch, i + 1)
       end = end < 0 ? n : end + 1
-    } else if ((tag = DOLLAR_TAG.exec(text)) !== null) {
+    } else if (!mysql && (tag = DOLLAR_TAG.exec(text)) !== null) {
       end = text.indexOf(tag[0], i + tag[0].length)
       end = end < 0 ? n : end + tag[0].length
-    } else if (text.startsWith('--', i) || (mysql && ch === '#')) {
+    } else if (
+      (text.startsWith('--', i) && !(mysql && /\S/.test(text.slice(i + 2, i + 3)))) ||
+      (mysql && ch === '#')
+    ) {
       end = text.indexOf('\n', i)
       end = end < 0 ? n : end
     } else if (text.startsWith('/*', i) && !(mysql && text.startsWith('/*!', i))) {
