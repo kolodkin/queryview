@@ -159,7 +159,8 @@ restarts (the session then reads as disconnected).
   ClickHouse, Postgres or MySQL only: DuckDB and SQLite read local files) and remove
   only its own. See [mcp.md](../architecture/mcp.md#tools).
 - This keeps a cooperating agent in its lane; it is not a security boundary.
-  For one, lock the connection.
+  For one, lock the connection, and give a connection the agent may use a
+  login without file privileges ([scripts.md](./scripts.md#file-writes)).
 
 ## Locked connections
 

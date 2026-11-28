@@ -20,69 +20,96 @@ export type StatementResult = {
 export type Span = { start: number; end: number } // the trimmed statement's [start, end)
 
 const DOLLAR_TAG = /\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$/y
+const MYSQL_CODE_COMMENT = /\/\*!\d*/y // `/*!` and its optional version, as in `/*!50000`
 
-// The index just past the single-quoted string opening at `i` (a backslash
-// escapes the next character), or the end when it never closes.
-function skipSingleQuoted(text: string, i: number): number {
+// The index just past the string quoted by `text[i]` opening at `i` (a
+// backslash escapes the next character), or the end when it never closes.
+function skipQuoted(text: string, i: number): number {
+  const quote = text[i]
   for (i += 1; i < text.length; i += 1) {
     if (text[i] === '\\') i += 1
-    else if (text[i] === "'") return i + 1
+    else if (text[i] === quote) return i + 1
   }
   return text.length
 }
 
-// The non-blank statements of a script as character spans — the same split as
-// the backend's split_statements (keep the two in step), so the statement under
-// the cursor is exactly what the server would run alone and the k-th result is
-// the k-th span.
-function statementSpans(text: string): Span[] {
-  const spans: Span[] = []
-  let start = 0
+// The script with every quote, `$$`/`$tag$` body and `--` or `/* */` comment
+// blanked to spaces, keeping its length, so what is left is code. `mysql` reads
+// it as MySQL does: `#` starts a comment, `--` only before whitespace, `/*!…*/`
+// is code (its `/*!` and version are blanked), `$` is part of a name and `"…"`
+// takes backslash escapes. The backend's mask_sql; split_cases.json in the
+// drivers package checks both.
+function maskSql(text: string, mysql: boolean): string {
+  let out = ''
+  let last = 0
   let i = 0
   const n = text.length
-  const push = (end: number) => {
-    let s = start
-    let e = end
-    while (s < e && /\s/.test(text[s])) s++
-    while (e > s && /\s/.test(text[e - 1])) e--
-    if (e > s) spans.push({ start: s, end: e })
-  }
   while (i < n) {
     const ch = text[i]
     DOLLAR_TAG.lastIndex = i
+    MYSQL_CODE_COMMENT.lastIndex = i
     let tag: RegExpExecArray | null
-    if (ch === "'") {
-      i = skipSingleQuoted(text, i)
+    let opener: RegExpExecArray | null
+    let end: number
+    if (ch === "'" || (mysql && ch === '"')) {
+      end = skipQuoted(text, i)
     } else if (ch === '"' || ch === '`') {
-      const end = text.indexOf(ch, i + 1)
-      i = end < 0 ? n : end + 1
-    } else if ((tag = DOLLAR_TAG.exec(text)) !== null) {
-      const end = text.indexOf(tag[0], i + tag[0].length)
-      i = end < 0 ? n : end + tag[0].length
-    } else if (text.startsWith('--', i)) {
-      const end = text.indexOf('\n', i)
-      i = end < 0 ? n : end + 1
+      end = text.indexOf(ch, i + 1)
+      end = end < 0 ? n : end + 1
+    } else if (!mysql && (tag = DOLLAR_TAG.exec(text)) !== null) {
+      end = text.indexOf(tag[0], i + tag[0].length)
+      end = end < 0 ? n : end + tag[0].length
+    } else if (
+      (text.startsWith('--', i) && !(mysql && /\S/.test(text.slice(i + 2, i + 3)))) ||
+      (mysql && ch === '#')
+    ) {
+      end = text.indexOf('\n', i) // the newline itself stays code
+      end = end < 0 ? n : end
+    } else if (mysql && (opener = MYSQL_CODE_COMMENT.exec(text)) !== null) {
+      end = i + opener[0].length
     } else if (text.startsWith('/*', i)) {
-      const end = text.indexOf('*/', i + 2)
-      i = end < 0 ? n : end + 2
-    } else if (ch === ';') {
-      push(i)
-      start = i + 1
-      i++
+      end = text.indexOf('*/', i + 2)
+      end = end < 0 ? n : end + 2
     } else {
       i++
+      continue
+    }
+    out += text.slice(last, i) + ' '.repeat(end - i)
+    last = i = end
+  }
+  return out + text.slice(last)
+}
+
+// The non-blank statements of a script as character spans — the same split as
+// the backend's split_statements (docs/designs/scripts.md, "One split, twice"),
+// so the statement under the cursor is exactly what the server would run alone
+// and the k-th result is the k-th span.
+export function statementSpans(text: string, mysql: boolean): Span[] {
+  const spans: Span[] = []
+  const push = (start: number, end: number) => {
+    while (start < end && /\s/.test(text[start])) start++
+    while (end > start && /\s/.test(text[end - 1])) end--
+    if (end > start) spans.push({ start, end })
+  }
+  const masked = maskSql(text, mysql)
+  let start = 0
+  for (let i = 0; i < masked.length; i++) {
+    if (masked[i] === ';') {
+      push(start, i)
+      start = i + 1
     }
   }
-  push(n)
+  push(start, text.length)
   return spans
 }
 
 // The statement the cursor is on: the one whose text contains it, else — in
 // the gap between two — the previous one while the cursor is still on its
 // line (just past the `;`), the next one from a blank line below. Trailing
-// whitespace belongs to the last statement. null for a blank script.
-export function statementRangeAt(text: string, cursor: number): Span | null {
-  const spans = statementSpans(text)
+// whitespace belongs to the last statement. null for a blank script. `mysql`
+// splits with MySQL's comments (see maskSql).
+export function statementRangeAt(text: string, cursor: number, mysql = false): Span | null {
+  const spans = statementSpans(text, mysql)
   if (spans.length === 0) return null
   const inside = spans.find((s) => s.start <= cursor && cursor <= s.end)
   if (inside) return inside
@@ -95,10 +122,15 @@ export function statementRangeAt(text: string, cursor: number): Span | null {
 // Where the failing statement of a run sits in the script, for marking it in
 // the textbox: `ran` is the text that was sent, starting at `offset`. null when
 // nothing failed.
-export function failedSpan(ran: string, offset: number, results: StatementResult[]): Span | null {
+export function failedSpan(
+  ran: string,
+  offset: number,
+  results: StatementResult[],
+  mysql = false,
+): Span | null {
   const last = results[results.length - 1]
   if (!last || last.ok) return null
-  const span = statementSpans(ran)[results.length - 1]
+  const span = statementSpans(ran, mysql)[results.length - 1]
   return span ? { start: offset + span.start, end: offset + span.end } : null
 }
 

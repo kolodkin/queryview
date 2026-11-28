@@ -9,7 +9,17 @@ import asyncio
 from pymysql.constants import COMMAND, FIELD_TYPE
 from pymysql.err import OperationalError
 
-from queryview.drivers.base import SCRIPT_ROW_CAP, Column, DatabasesResult, Err, RowsResult, TablesResult, TextResult
+from queryview.drivers.base import (
+    RUN_SQL_TIMEOUT_SECONDS,
+    SCRIPT_ROW_CAP,
+    SCRIPT_TIMEOUT_SECONDS,
+    Column,
+    DatabasesResult,
+    Err,
+    RowsResult,
+    TablesResult,
+    TextResult,
+)
 from queryview.drivers.mysql import _CONV, MySqlConfig, MySqlDriver, _raw_connect
 
 CFG = MySqlConfig("h", 3306, "u", "")
@@ -36,8 +46,16 @@ def _fake(monkeypatch, results):
 
         async def close(self):
             log["drained"] += 1
+            if "close_error" in log:
+                raise log["close_error"]
 
     class _Conn:
+        def thread_id(self):
+            return 7
+
+        def get_transaction_status(self):
+            return log.get("in_transaction", False)
+
         async def cursor(self, cls):
             log.setdefault("cursors", []).append(cls.__name__)
             return _Cursor()
@@ -45,8 +63,9 @@ def _fake(monkeypatch, results):
         def close(self):
             log["closed"] = True
 
-    async def fake_connect(c, database):
+    async def fake_connect(c, database, timeout=None):
         log["database"] = database
+        log.setdefault("timeouts", []).append(timeout)
         return _Conn()
 
     monkeypatch.setattr("queryview.drivers.mysql._raw_connect", fake_connect)
@@ -92,24 +111,95 @@ def test_run_sql_is_read_only_and_capped(monkeypatch):
     assert log["sql"] == ["SET SESSION TRANSACTION READ ONLY", "SHOW TABLES"]
 
 
-def test_execute_script_drains_rows_and_stops_at_the_first_error(monkeypatch):
+def test_execute_script_kills_a_capped_select_and_stops_at_the_first_error(monkeypatch):
     def results(sql):
         if "missing" in sql:
             raise RuntimeError("Table 'shop.missing' doesn't exist")
+        if sql == "SELECT 'x'":
+            return (ID, [("x",)])
         return (ID, [(i,) for i in range(SCRIPT_ROW_CAP + 5)]) if sql.startswith("SELECT") else None
 
     log = _fake(monkeypatch, results)
     out = asyncio.run(
         MySqlDriver().execute_script(
-            CFG, "INSERT INTO t VALUES (1),(2); SELECT id FROM t; SELECT * FROM missing; SELECT 1", "shop"
+            CFG, "INSERT INTO t VALUES (1),(2); SELECT id FROM t; SELECT 'x'; SELECT * FROM missing; SELECT 1", "shop"
         )
     )
-    assert [(r.ok, r.status) for r in out] == [(True, "OK, 2 rows affected"), (True, ""), (False, "")]
+    assert [(r.ok, r.status) for r in out] == [(True, "OK, 2 rows affected"), (True, ""), (True, ""), (False, "")]
     rows = out[1].rows
     assert out[1].truncated and rows is not None and len(rows.data) == SCRIPT_ROW_CAP
-    assert log["fetchmany"] == SCRIPT_ROW_CAP + 1 and log["drained"] == 1
-    assert set(log["cursors"]) == {"SSCursor"}  # capped: unbuffered
-    assert "missing" in out[2].message and len(log["sql"]) == 3
+    assert log["fetchmany"] == SCRIPT_ROW_CAP + 1 and log["drained"] == 2
+    assert log["cursors"].count("Cursor") == 1  # only the KILL; the capped statements are unbuffered
+    # Only the capped SELECT is killed, from a second connection, before its rest is read.
+    assert log["sql"][:4] == ["INSERT INTO t VALUES (1),(2)", "SELECT id FROM t", "KILL QUERY 7", "SELECT 'x'"]
+    assert "missing" in out[3].message and len(log["sql"]) == 5
+
+
+def test_a_killed_select_is_not_an_error(monkeypatch):
+    log = _fake(monkeypatch, lambda sql: (ID, [(1,)] * (SCRIPT_ROW_CAP + 1)))
+    log["close_error"] = OperationalError(1317, "Query execution was interrupted")
+    out = asyncio.run(MySqlDriver().execute_script(CFG, "SELECT id FROM t; SELECT id FROM t", "shop"))
+    assert [r.ok for r in out] == [True, True]
+    # Any other error while reading the rest stands.
+    log["close_error"] = OperationalError(2013, "Lost connection to MySQL server during query")
+    out = asyncio.run(MySqlDriver().execute_script(CFG, "SELECT id FROM t", "shop"))
+    assert not out[0].ok and "Lost connection" in out[0].message
+
+
+def test_a_capped_select_in_a_transaction_is_read_to_its_end(monkeypatch):
+    # A `FOR UPDATE` in the script's transaction locks only the rows it reaches.
+    log = _fake(monkeypatch, lambda sql: (ID, [(1,)] * (SCRIPT_ROW_CAP + 1)))
+    log["in_transaction"] = True
+    out = asyncio.run(MySqlDriver().execute_script(CFG, "SELECT id FROM t FOR UPDATE", "shop"))
+    assert out[0].truncated and log["sql"] == ["SELECT id FROM t FOR UPDATE"] and log["drained"] == 1
+
+
+def test_a_failed_kill_falls_back_to_reading_the_rest(monkeypatch):
+    def results(sql):
+        if sql.startswith("KILL"):
+            raise OperationalError(1040, "Too many connections")
+        return (ID, [(1,)] * (SCRIPT_ROW_CAP + 1))
+
+    log = _fake(monkeypatch, results)
+    out = asyncio.run(MySqlDriver().execute_script(CFG, "SELECT id FROM t", "shop"))
+    assert out[0].ok and out[0].truncated and log["drained"] == 1
+
+
+def test_a_capped_call_is_read_to_its_end(monkeypatch):
+    # Only a read is killed: a procedure may still write after its first result.
+    log = _fake(monkeypatch, lambda sql: (ID, [(1,)] * (SCRIPT_ROW_CAP + 1)))
+    out = asyncio.run(MySqlDriver().execute_script(CFG, "call refresh_report()", "shop"))
+    assert out[0].truncated and log["sql"] == ["call refresh_report()"] and log["drained"] == 1
+
+
+def test_scripts_skip_hash_comments(monkeypatch):
+    log = _fake(monkeypatch, lambda sql: (ID, [(1,)]))
+    asyncio.run(MySqlDriver().execute_script(CFG, "# don't split here; nor here\nSELECT 1; SELECT 2", "shop"))
+    assert log["sql"] == ["# don't split here; nor here\nSELECT 1", "SELECT 2"]
+
+
+def test_run_sql_refuses_file_writes_before_connecting(monkeypatch):
+    log = _fake(monkeypatch, lambda sql: (ID, [(1,)]))
+    for sql in (
+        "SELECT * FROM t INTO OUTFILE '/tmp/t.csv'",
+        "select 1 into /* x */ dumpfile '/tmp/t.bin'",
+        "SELECT 1 /*! INTO OUTFILE '/tmp/t.csv' */",
+        "SELECT 1 /*!50000INTO OUTFILE '/tmp/t.csv'*/",
+    ):
+        r = asyncio.run(MySqlDriver().run_sql(CFG, sql, "shop", 10))
+        assert isinstance(r, Err) and "INTO OUTFILE" in r.message
+    assert "sql" not in log or log["sql"] == []
+    # Quoted or commented out, the words are not code.
+    for sql in ("SELECT 'into outfile'", "SELECT 1 # INTO OUTFILE '/tmp/t'", "SELECT 1 AS `into dumpfile`"):
+        assert isinstance(asyncio.run(MySqlDriver().run_sql(CFG, sql, "shop", 10)), RowsResult)
+
+
+def test_each_connection_gets_its_timeout_server_side(monkeypatch):
+    log = _fake(monkeypatch, lambda sql: None if sql.startswith("SET") else (ID, [(1,)]))
+    asyncio.run(MySqlDriver().run_sql(CFG, "SELECT 1", "shop", 10))
+    asyncio.run(MySqlDriver().execute_script(CFG, "SELECT 1", "shop"))
+    asyncio.run(MySqlDriver().run_query(CFG, "SELECT 1", "shop", 10, 0, None))
+    assert log["timeouts"] == [RUN_SQL_TIMEOUT_SECONDS, SCRIPT_TIMEOUT_SECONDS, None]
 
 
 def test_errors_become_err(monkeypatch):
@@ -134,12 +224,17 @@ def test_connections_turn_multi_statements_off(monkeypatch):
         async def _read_packet(self):
             pass
 
+        async def query(self, sql):
+            sent.append(sql)
+
     async def fake_connect(**kwargs):
         return _Conn()
 
     monkeypatch.setattr("queryview.drivers.mysql.aiomysql.connect", fake_connect)
-    asyncio.run(_raw_connect(CFG, "shop"))
-    assert sent == [(COMMAND.COM_SET_OPTION, b"\x01\x00")]  # MYSQL_OPTION_MULTI_STATEMENTS_OFF
+    asyncio.run(_raw_connect(CFG, "shop", 60))
+    assert sent[0] == (COMMAND.COM_SET_OPTION, b"\x01\x00")  # MYSQL_OPTION_MULTI_STATEMENTS_OFF
+    # The server ends a SELECT at the same timeout the client gives up at.
+    assert sent[1:] == ["SET SESSION max_execution_time = 60000"]
 
 
 def test_duplicate_column_names_run_unwrapped(monkeypatch):

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { failedSpan, runSummary, statementRangeAt, type StatementResult } from './scriptRun'
+import cases from '../../../backend/queryview/drivers/split_cases.json?raw'
+import {
+  failedSpan,
+  runSummary,
+  statementRangeAt,
+  statementSpans,
+  type StatementResult,
+} from './scriptRun'
 
 const base: StatementResult = {
   ok: true,
@@ -12,6 +19,17 @@ const base: StatementResult = {
   elapsed_ms: 0,
   sql: '',
 }
+
+// req: designs/scripts/same-split
+describe('statementSpans', () => {
+  type Case = { name: string; mysql: boolean; script: string; statements: string[] }
+  for (const c of JSON.parse(cases) as Case[]) {
+    it(`matches the server's split: ${c.name}`, () => {
+      const spans = statementSpans(c.script, c.mysql)
+      expect(spans.map((s) => c.script.slice(s.start, s.end))).toEqual(c.statements)
+    })
+  }
+})
 
 describe('statementRangeAt', () => {
   const text = "SELECT 1;\n\nSELECT 'a;b' -- c;\n  ;SELECT 3"
@@ -29,14 +47,6 @@ describe('statementRangeAt', () => {
   })
   it('moves to the next statement from a blank line between two', () => {
     expect(at(10)).toBe("SELECT 'a;b' -- c;")
-  })
-  it('skips semicolons in tagged dollar quotes and backslash-escaped quotes', () => {
-    const fn = 'CREATE FUNCTION f() AS $body$ BEGIN RETURN 1; END $body$ LANGUAGE plpgsql'
-    const script = `${fn}; SELECT E'it\\'s; here'; SELECT 2`
-    const first = statementRangeAt(script, 5)!
-    expect(script.slice(first.start, first.end)).toBe(fn)
-    const second = statementRangeAt(script, fn.length + 10)!
-    expect(script.slice(second.start, second.end)).toBe("SELECT E'it\\'s; here'")
   })
   it('falls back to the last statement after trailing whitespace', () => {
     expect(statementRangeAt('SELECT 1;\n\n', 11)).toEqual({ start: 0, end: 8 })

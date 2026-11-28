@@ -60,11 +60,16 @@ first error.
 
 ## Statements
 
+<!-- req: statements -->
 Statements are separated by `;`. The split skips semicolons inside `'…'` (a
 backslash escapes the next character, as in ClickHouse and Postgres `E''`
 strings), `"…"`, `` `…` ``, `$$…$$` and `$tag$…$tag$` bodies, `-- …` line
-comments and `/* … */` block comments; blank statements are dropped. An unterminated quote keeps the rest of
-the script in one statement, so the database reports the real syntax error.
+comments and `/* … */` block comments; blank statements are dropped. On
+MySQL the split reads the script as MySQL does: `# …` is a line comment, `--`
+starts one only before a space, `/*! … */` is code, `$` belongs to names and
+`"…"` takes backslash escapes. An unterminated quote keeps the rest of the
+script in one statement, so
+the database reports the real syntax error.
 
 <!-- req: one-connection -->
 A run opens **one connection** (one server session on ClickHouse) and runs
@@ -106,9 +111,14 @@ same JSON shape as every other result
 - **Postgres** — each statement is prepared and executed on the run's
   connection; rows are read through a cursor up to the cap, and a statement
   with no result columns reports its command tag.
-- **MySQL** — statements run in autocommit on the run's connection; rows
-  stream up to the cap (the rest is read and dropped), and a statement with no
-  result reports `OK, N rows affected`.
+<!-- req: mysql-script -->
+- **MySQL** — statements run in autocommit on the run's connection. A read
+  (`SELECT`, `SHOW`, …) outside a transaction stops at the cap on the server
+  too, so a `SELECT *` on a big table transfers only what is shown; anything
+  else, a `CALL` or a `FOR UPDATE` in a `BEGIN`, is read to its end. A
+  statement with no result reports `OK, N rows affected`. Past the 10 minutes,
+  only a `SELECT` is ended on the server too
+  ([Query timeout](./queryview.md#query-timeout)).
 - **DuckDB** — the file is opened **read-write** for the run, while every other
   page opens it read-only. DuckDB refuses a second open of one file with a
   different mode in the same process, so the explorer and dashboards error on
@@ -149,9 +159,26 @@ CREATE TABLE x.customers_copy AS SELECT * FROM customers
 
 Keep an agent off file connections you wouldn't hand it the filesystem for.
 
+<!-- req: server-files -->
+On MySQL and Postgres the files are the database server's, and the login's
+privileges decide, read-only transaction or not:
+
+- **MySQL**, with the FILE privilege: `SELECT … INTO OUTFILE` / `INTO DUMPFILE`
+  write a file, `LOAD_FILE()` reads one.
+- **Postgres**, for a superuser: `COPY … TO` writes a file, `COPY … TO PROGRAM`
+  runs a command.
+
+`run_sql` refuses `INTO OUTFILE`, `INTO DUMPFILE`, `COPY` and `DO` (a block
+can run `COPY`) outside quotes and comments. The check reads the text, so it
+can be dodged, and scripts get none: give an agent's connection a login
+without file privileges — no FILE on MySQL; no superuser,
+`pg_read_server_files`, `pg_write_server_files` or
+`pg_execute_server_program` on Postgres.
+
 ## Related docs
 
 - [query.md](./query.md) — querying: pagination, the results grid, CSV.
 - [dashboard.md](./dashboard.md) — dashboards and **New query**.
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [session.md](./session.md) — what a session remembers.
+- [scripts.md](../designs/scripts.md) — how this page and the server split a script alike.

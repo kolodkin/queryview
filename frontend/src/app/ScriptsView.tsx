@@ -23,13 +23,15 @@ type ScriptsViewProps = {
   pushed: ScriptPush | null
   onPushConsumed: () => void
   remoteId: string | null
+  // The statements split with MySQL's comments, as the server splits them.
+  mysql: boolean
 }
 
 // The Scripts page (`/scripts`, docs/user_guide/scripts.md), mounted by the App shell only
 // for a ready connection: a flat SQL textbox whose statements run as written.
 // Run takes the statement under the cursor (or the selection), Run all the
 // whole script; a run leaves one status line and the last statement's rows.
-function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
+function ScriptsView({ pushed, onPushConsumed, remoteId, mysql }: ScriptsViewProps) {
   const navigate = useNavigate()
   // The text is restored from the session; results never are (docs/user_guide/session.md).
   const [sql, setSql] = useState(() => {
@@ -64,7 +66,7 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
     if (sql.slice(el.selectionStart, el.selectionEnd).trim()) {
       return { start: el.selectionStart, end: el.selectionEnd }
     }
-    return statementRangeAt(sql, el.selectionStart) ?? { start: 0, end: 0 }
+    return statementRangeAt(sql, el.selectionStart, mysql) ?? { start: 0, end: 0 }
   }
 
   // Runs the [start, end) slice of `script` (the textbox, unless a push's text
@@ -85,7 +87,7 @@ function ScriptsView({ pushed, onPushConsumed, remoteId }: ScriptsViewProps) {
       if (data.ok) {
         const results = (data.results ?? []) as StatementResult[]
         setResults(results)
-        const span = failedSpan(text, start, results)
+        const span = failedSpan(text, start, results, mysql)
         setFailed(span && { script, span })
       } else {
         setError((data.message as string) ?? 'request failed')

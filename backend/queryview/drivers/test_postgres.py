@@ -330,6 +330,21 @@ def test_run_sql_runs_as_written_in_a_read_only_transaction(monkeypatch):
     }
 
 
+def test_run_sql_refuses_copy_and_do_before_connecting(monkeypatch):
+    # COPY … TO a file or PROGRAM, and a DO block running one, work inside a read-only transaction.
+    async def fake_connect(*args, **kwargs):
+        raise AssertionError("connected")
+
+    monkeypatch.setattr("queryview.drivers.postgres._raw_connect", fake_connect)
+    for sql in (
+        "COPY (SELECT 1) TO '/tmp/out.csv'",
+        "  -- note\n copy t TO PROGRAM 'cat'",
+        "DO $$ BEGIN EXECUTE 'COPY t TO ''/tmp/x'''; END $$",
+    ):
+        r = asyncio.run(PostgresDriver().run_sql(PgConfig("h", 5432, "u", ""), sql, "mydb", 10))
+        assert isinstance(r, Err) and "refuses COPY and DO" in r.message
+
+
 def test_connects_within_the_query_timeout(monkeypatch):
     """Connecting and, unless a longer run asks otherwise, each statement take
     the session's query timeout."""
