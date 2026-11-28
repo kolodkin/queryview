@@ -112,8 +112,9 @@ same JSON shape as every other result
 <!-- req: mysql-script -->
 - **MySQL** — statements run in autocommit on the run's connection. Rows
   stream up to the cap, then a `KILL QUERY` from a second connection stops the
-  rest, so a `SELECT *` on a big table transfers only what is shown. A `CALL`
-  is read to its end: its procedure may have more to do. A
+  rest, so a `SELECT *` on a big table transfers only what is shown. Only a read
+  (`SELECT`, `SHOW`, …) is stopped: a `CALL`'s procedure, say, may have more
+  to do, so it is read to its end. A
   statement with no result reports `OK, N rows affected`. A `SELECT` past the
   10 minutes is ended on the server too (`max_execution_time`); other
   statements run on there.

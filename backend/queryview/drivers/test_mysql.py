@@ -144,7 +144,7 @@ def test_a_killed_select_is_not_an_error(monkeypatch):
 
 
 def test_a_capped_call_is_read_to_its_end(monkeypatch):
-    # The procedure may still write after its first result, so it is not killed.
+    # Only a read is killed: a procedure may still write after its first result.
     log = _fake(monkeypatch, lambda sql: (ID, [(1,)] * (SCRIPT_ROW_CAP + 1)))
     out = asyncio.run(MySqlDriver().execute_script(CFG, "call refresh_report()", "shop"))
     assert out[0].truncated and log["sql"] == ["call refresh_report()"] and log["drained"] == 1
@@ -201,17 +201,17 @@ def test_connections_turn_multi_statements_off(monkeypatch):
         async def _read_packet(self):
             pass
 
-    kwargs_seen = {}
+        async def query(self, sql):
+            sent.append(sql)
 
     async def fake_connect(**kwargs):
-        kwargs_seen.update(kwargs)
         return _Conn()
 
     monkeypatch.setattr("queryview.drivers.mysql.aiomysql.connect", fake_connect)
     asyncio.run(_raw_connect(CFG, "shop", 60))
-    assert sent == [(COMMAND.COM_SET_OPTION, b"\x01\x00")]  # MYSQL_OPTION_MULTI_STATEMENTS_OFF
+    assert sent[0] == (COMMAND.COM_SET_OPTION, b"\x01\x00")  # MYSQL_OPTION_MULTI_STATEMENTS_OFF
     # The server ends a SELECT at the same timeout the client gives up at.
-    assert kwargs_seen["init_command"] == "SET SESSION max_execution_time = 60000"
+    assert sent[1:] == ["SET SESSION max_execution_time = 60000"]
 
 
 def test_duplicate_column_names_run_unwrapped(monkeypatch):

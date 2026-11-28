@@ -126,13 +126,14 @@ async def _raw_connect(c: MySqlConfig, database: str | None, timeout: float | No
         autocommit=True,
         connect_timeout=query_timeout.get(),
         conv=_CONV,
-        init_command=f"SET SESSION max_execution_time = {int(timeout * 1000)}",
     )
     # aiomysql always negotiates multi-statements; one call must run one statement,
     # or `SET SESSION TRANSACTION READ WRITE; DELETE ...` escapes run_sql's read-only session.
     try:
         await conn._execute_command(COMMAND.COM_SET_OPTION, _MULTI_STATEMENTS_OFF)
         await conn._read_packet()
+        # Not init_command, which adds a COMMIT round trip.
+        await conn.query(f"SET SESSION max_execution_time = {int(timeout * 1000)}")
     except BaseException:
         conn.close()
         raise
@@ -151,8 +152,8 @@ async def _connect(c: MySqlConfig, database: str | None, timeout: float | None =
 
 
 _INTERRUPTED = 1317
-# A procedure may still have work to do after its first result: it is not killed.
-_CALL = re.compile(r"\s*CALL\b", re.IGNORECASE)
+# Only a read is cut short at the cap; a CALL's procedure, say, may still have work to do.
+_KILLABLE = re.compile(r"\s*(SELECT|WITH|TABLE|VALUES|SHOW|EXPLAIN|DESCRIBE|DESC)\b", re.IGNORECASE)
 
 
 async def _kill_query(c: MySqlConfig, thread_id: int) -> None:
@@ -357,7 +358,7 @@ class MySqlDriver:
                             SCRIPT_ROW_CAP + 1,
                             SCRIPT_TIMEOUT_SECONDS,
                             drain=True,
-                            stop=None if _CALL.match(mask_sql(stmt, mysql=True)) else config,
+                            stop=config if _KILLABLE.match(mask_sql(stmt, mysql=True)) else None,
                         )
                         if description is None:
                             return StatementResult(stmt, True, status=f"OK, {max(affected, 0)} rows affected")

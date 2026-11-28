@@ -240,11 +240,11 @@ test("mysql reads # comments and stops a capped select", async ({ page, seeds })
   await textarea.fill(script);
   // From the comment line, Run takes the comment and the statement below it.
   await textarea.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(3, 3));
+  const status = page.getByTestId("scripts-status");
   await page.getByTestId("scripts-run-current").click();
-  await expect(page.getByTestId("scripts-status")).toContainText("first 100 rows, more exist");
+  await expect(status).toContainText("first 100 rows, more exist");
 
   await page.getByTestId("scripts-run-all").click();
-  const status = page.getByTestId("scripts-status");
   await expect(status).toContainText("2 statements");
   await expect(status).toHaveAttribute("data-ok", "true");
   await expect(page.getByTestId("scripts-output")).toContainText("42");

@@ -309,7 +309,7 @@ def mask_sql(sql: str, mysql: bool = False) -> str:
             end = sql.find(tag.group(), tag.end())
             end = n if end < 0 else end + len(tag.group())
         elif (sql.startswith("--", i) and not (mysql and sql[i + 2 : i + 3].strip())) or (mysql and ch == "#"):
-            end = sql.find("\n", i)
+            end = sql.find("\n", i)  # the newline itself stays code
             end = n if end < 0 else end
         elif sql.startswith("/*", i) and not (mysql and sql.startswith("/*!", i)):
             end = sql.find("*/", i + 2)
@@ -325,10 +325,9 @@ def mask_sql(sql: str, mysql: bool = False) -> str:
 
 def split_statements(sql: str, mysql: bool = False) -> list[str]:
     """Split a script on the `;` that end statements, skipping those
-    `mask_sql` blanks. Blank statements are dropped. An unterminated quote
-    swallows the rest, so a broken statement reaches the database whole and
-    its own parser reports it."""
-    ends = [i for i, ch in enumerate(mask_sql(sql, mysql)) if ch == ";"]
+    `mask_sql` blanks, so a broken statement reaches the database whole and
+    its own parser reports it. Blank statements are dropped."""
+    ends = [m.start() for m in re.finditer(";", mask_sql(sql, mysql))]
     starts = [0] + [e + 1 for e in ends]
     return [s for s in (sql[a:b].strip() for a, b in zip(starts, ends + [len(sql)], strict=True)) if s]
 

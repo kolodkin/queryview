@@ -59,7 +59,7 @@ function maskSql(text: string, mysql: boolean): string {
       (text.startsWith('--', i) && !(mysql && /\S/.test(text.slice(i + 2, i + 3)))) ||
       (mysql && ch === '#')
     ) {
-      end = text.indexOf('\n', i)
+      end = text.indexOf('\n', i) // the newline itself stays code
       end = end < 0 ? n : end
     } else if (text.startsWith('/*', i) && !(mysql && text.startsWith('/*!', i))) {
       end = text.indexOf('*/', i + 2)
