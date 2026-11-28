@@ -181,3 +181,4 @@ without file privileges — no FILE on MySQL; no superuser,
 - [dashboard.md](./dashboard.md) — dashboards and **New query**.
 - [queryview.md](./queryview.md) — the Connect page and the app's pages.
 - [session.md](./session.md) — what a session remembers.
+- [scripts.md](../designs/scripts.md) — how this page and the server split a script alike.

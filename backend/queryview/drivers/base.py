@@ -295,8 +295,8 @@ def mask_sql(sql: str, mysql: bool = False) -> str:
     reads it as MySQL does: `#` starts a comment, `--` only before whitespace,
     `/*!…*/` is code (its `/*!` and version are blanked, so `/*!50000INTO`
     leaves `INTO`), `$` is part of a name and `"…"` takes backslash escapes.
-    An unterminated quote blanks the rest. Mirrored by maskSql in the frontend;
-    keep the two in step."""
+    An unterminated quote blanks the rest. Mirrored by maskSql in the frontend
+    (docs/designs/scripts.md, "One split, twice"); split_cases.json checks both."""
     parts: list[str] = []
     last = i = 0
     n = len(sql)

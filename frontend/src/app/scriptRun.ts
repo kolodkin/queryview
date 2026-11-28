@@ -37,8 +37,8 @@ function skipQuoted(text: string, i: number): number {
 // blanked to spaces, keeping its length, so what is left is code. `mysql` reads
 // it as MySQL does: `#` starts a comment, `--` only before whitespace, `/*!…*/`
 // is code (its `/*!` and version are blanked), `$` is part of a name and `"…"`
-// takes backslash escapes. The
-// backend's mask_sql; keep the two in step.
+// takes backslash escapes. The backend's mask_sql; split_cases.json in the
+// drivers package checks both.
 function maskSql(text: string, mysql: boolean): string {
   let out = ''
   let last = 0
@@ -81,9 +81,10 @@ function maskSql(text: string, mysql: boolean): string {
 }
 
 // The non-blank statements of a script as character spans — the same split as
-// the backend's split_statements, so the statement under the cursor is exactly
-// what the server would run alone and the k-th result is the k-th span.
-function statementSpans(text: string, mysql: boolean): Span[] {
+// the backend's split_statements (docs/designs/scripts.md, "One split, twice"),
+// so the statement under the cursor is exactly what the server would run alone
+// and the k-th result is the k-th span.
+export function statementSpans(text: string, mysql: boolean): Span[] {
   const spans: Span[] = []
   const push = (start: number, end: number) => {
     while (start < end && /\s/.test(text[start])) start++

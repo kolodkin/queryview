@@ -35,6 +35,7 @@ layers are described in [docs/AGENTS.md](docs/AGENTS.md).
 - [sessions.md](docs/designs/sessions.md) — how a session is stored and how a tab claims one.
 - [dashboards.md](docs/designs/dashboards.md) — running a dashboard's queries, and which connection each uses.
 - [mcp.md](docs/designs/mcp.md) — the channel an MCP push travels to the tab.
+- [scripts.md](docs/designs/scripts.md) — how the Scripts page and the server split a script alike.
 
 ### Other
 

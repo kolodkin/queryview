@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { failedSpan, runSummary, statementRangeAt, type StatementResult } from './scriptRun'
+import cases from '../../../backend/queryview/drivers/split_cases.json?raw'
+import {
+  failedSpan,
+  runSummary,
+  statementRangeAt,
+  statementSpans,
+  type StatementResult,
+} from './scriptRun'
 
 const base: StatementResult = {
   ok: true,
@@ -12,6 +19,17 @@ const base: StatementResult = {
   elapsed_ms: 0,
   sql: '',
 }
+
+// req: designs/scripts/same-split
+describe('statementSpans', () => {
+  type Case = { name: string; mysql: boolean; script: string; statements: string[] }
+  for (const c of JSON.parse(cases) as Case[]) {
+    it(`matches the server's split: ${c.name}`, () => {
+      const spans = statementSpans(c.script, c.mysql)
+      expect(spans.map((s) => c.script.slice(s.start, s.end))).toEqual(c.statements)
+    })
+  }
+})
 
 describe('statementRangeAt', () => {
   const text = "SELECT 1;\n\nSELECT 'a;b' -- c;\n  ;SELECT 3"
@@ -29,37 +47,6 @@ describe('statementRangeAt', () => {
   })
   it('moves to the next statement from a blank line between two', () => {
     expect(at(10)).toBe("SELECT 'a;b' -- c;")
-  })
-  it('skips semicolons in tagged dollar quotes and backslash-escaped quotes', () => {
-    const fn = 'CREATE FUNCTION f() AS $body$ BEGIN RETURN 1; END $body$ LANGUAGE plpgsql'
-    const script = `${fn}; SELECT E'it\\'s; here'; SELECT 2`
-    const first = statementRangeAt(script, 5)!
-    expect(script.slice(first.start, first.end)).toBe(fn)
-    const second = statementRangeAt(script, fn.length + 10)!
-    expect(script.slice(second.start, second.end)).toBe("SELECT E'it\\'s; here'")
-  })
-  it("reads MySQL's # comments only on MySQL", () => {
-    const script = "# don't; stop\nSELECT 1; SELECT 2"
-    const mine = statementRangeAt(script, 3, true)!
-    expect(script.slice(mine.start, mine.end)).toBe("# don't; stop\nSELECT 1")
-    // Elsewhere `#` is code, so the apostrophe opens a quote that keeps the rest.
-    const other = statementRangeAt(script, 3)!
-    expect(script.slice(other.start, other.end)).toBe(script)
-  })
-  it('reads MySQL names, strings and dashes as MySQL does', () => {
-    const script = 'SELECT a$b$c; SELECT "x\\";y"; SELECT 1--1; SELECT 2'
-    const text = (cursor: number) => {
-      const span = statementRangeAt(script, cursor, true)!
-      return script.slice(span.start, span.end)
-    }
-    expect(text(2)).toBe('SELECT a$b$c')
-    expect(text(16)).toBe('SELECT "x\\";y"')
-    expect(text(script.indexOf('1--1'))).toBe('SELECT 1--1')
-  })
-  it('splits inside a MySQL /*! */ comment, which MySQL runs as code', () => {
-    const script = 'SELECT 1 /*!50000 ; */; SELECT 2'
-    const span = statementRangeAt(script, 2, true)!
-    expect(script.slice(span.start, span.end)).toBe('SELECT 1 /*!50000')
   })
   it('falls back to the last statement after trailing whitespace', () => {
     expect(statementRangeAt('SELECT 1;\n\n', 11)).toEqual({ start: 0, end: 8 })

@@ -1,0 +1,79 @@
+[
+  {
+    "name": "plain and blank statements",
+    "mysql": false,
+    "script": "SELECT 1; SELECT 2;\n\n;  ",
+    "statements": [
+      "SELECT 1",
+      "SELECT 2"
+    ]
+  },
+  {
+    "name": "quotes and comments",
+    "mysql": false,
+    "script": "INSERT INTO t VALUES ('a;b', \"c;d\", `e;f`); -- trailing; comment\n/* block; comment */ SELECT 'it''s; here';\nSELECT $$dollar; quoted$$",
+    "statements": [
+      "INSERT INTO t VALUES ('a;b', \"c;d\", `e;f`)",
+      "-- trailing; comment\n/* block; comment */ SELECT 'it''s; here'",
+      "SELECT $$dollar; quoted$$"
+    ]
+  },
+  {
+    "name": "tagged dollar quotes and backslash escapes",
+    "mysql": false,
+    "script": "CREATE FUNCTION f() AS $body$ BEGIN RETURN 1; END $body$ LANGUAGE plpgsql; SELECT E'it\\'s; here'; SELECT 2",
+    "statements": [
+      "CREATE FUNCTION f() AS $body$ BEGIN RETURN 1; END $body$ LANGUAGE plpgsql",
+      "SELECT E'it\\'s; here'",
+      "SELECT 2"
+    ]
+  },
+  {
+    "name": "an unterminated quote keeps the rest",
+    "mysql": false,
+    "script": "SELECT 'open; SELECT 2",
+    "statements": [
+      "SELECT 'open; SELECT 2"
+    ]
+  },
+  {
+    "name": "hash is code off MySQL",
+    "mysql": false,
+    "script": "SELECT 1 # 2; SELECT '/*!'; SELECT 3",
+    "statements": [
+      "SELECT 1 # 2",
+      "SELECT '/*!'",
+      "SELECT 3"
+    ]
+  },
+  {
+    "name": "MySQL hash comments",
+    "mysql": true,
+    "script": "# don't; stop\nSELECT 1; SELECT 2",
+    "statements": [
+      "# don't; stop\nSELECT 1",
+      "SELECT 2"
+    ]
+  },
+  {
+    "name": "MySQL runs /*! */ as code",
+    "mysql": true,
+    "script": "SELECT 1 /*!50000 ; */; SELECT 2",
+    "statements": [
+      "SELECT 1 /*!50000",
+      "*/",
+      "SELECT 2"
+    ]
+  },
+  {
+    "name": "MySQL names, strings and dashes",
+    "mysql": true,
+    "script": "SELECT a$b$c FROM t; SELECT \"x\\\";y\"; SELECT 1--1; SELECT 2 -- c;\nFROM dual",
+    "statements": [
+      "SELECT a$b$c FROM t",
+      "SELECT \"x\\\";y\"",
+      "SELECT 1--1",
+      "SELECT 2 -- c;\nFROM dual"
+    ]
+  }
+]

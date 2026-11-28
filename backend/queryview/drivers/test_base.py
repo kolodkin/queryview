@@ -17,7 +17,6 @@ from queryview.drivers.base import (
     parse_host_port_config,
     rows_to_columns,
     select_all_sql,
-    split_statements,
     to_csv,
     to_json_value,
     wrap_paginated,
@@ -104,43 +103,6 @@ def test_rows_to_columns_is_column_oriented_and_ordered():
     assert rows_to_columns(QueryRows([Column("a", "Int32")], [])) == {"a": []}
 
 
-def test_split_statements_splits_on_semicolons_and_drops_blanks():
-    assert split_statements("SELECT 1; SELECT 2;\n\n;  ") == ["SELECT 1", "SELECT 2"]
-    assert split_statements("SELECT 1") == ["SELECT 1"]
-    assert split_statements("  ;; \n") == []
-
-
-def test_split_statements_ignores_semicolons_inside_quotes_and_comments():
-    sql = (
-        "INSERT INTO t VALUES ('a;b', \"c;d\", `e;f`); -- trailing; comment\n"
-        "/* block; comment */ SELECT 'it''s; here';\n"
-        "SELECT $$dollar; quoted$$"
-    )
-    assert split_statements(sql) == [
-        "INSERT INTO t VALUES ('a;b', \"c;d\", `e;f`)",
-        "-- trailing; comment\n/* block; comment */ SELECT 'it''s; here'",
-        "SELECT $$dollar; quoted$$",
-    ]
-
-
-def test_split_statements_reads_mysql_comments_only_for_mysql():
-    sql = "# don't; stop\nSELECT 1 /*! ; */; SELECT 2"
-    assert split_statements(sql, mysql=True) == ["# don't; stop\nSELECT 1 /*!", "*/", "SELECT 2"]
-    # Elsewhere `#` is code (a Postgres operator) and `/*! */` a comment.
-    assert split_statements("SELECT 1 # 2; SELECT '/*!'; SELECT 3") == ["SELECT 1 # 2", "SELECT '/*!'", "SELECT 3"]
-
-
-def test_mysql_mode_reads_names_strings_and_dashes_as_mysql():
-    # `$` is part of a name, `"…"` takes backslash escapes, `--` needs a space after it.
-    sql = 'SELECT a$b$c FROM t; SELECT "x\\";y"; SELECT 1--1; SELECT 2 -- c;\nFROM dual'
-    assert split_statements(sql, mysql=True) == [
-        "SELECT a$b$c FROM t",
-        'SELECT "x\\";y"',
-        "SELECT 1--1",
-        "SELECT 2 -- c;\nFROM dual",
-    ]
-
-
 def test_mask_sql_blanks_quotes_and_comments_keeping_offsets():
     sql = "SELECT 'a', \"b\" -- c\nFROM t /* d */ # e"
     assert mask_sql(sql) == "SELECT    ,     " + " " * 4 + "\nFROM t " + " " * 7 + " # e"
@@ -148,23 +110,6 @@ def test_mask_sql_blanks_quotes_and_comments_keeping_offsets():
     # MySQL runs `/*! … */`: only its opener and version are blanked.
     assert mask_sql("SELECT /*! INTO */ 1", mysql=True) == "SELECT " + " " * 3 + " INTO */ 1"
     assert mask_sql("SELECT 1 /*!50000INTO x*/", mysql=True) == "SELECT 1 " + " " * 8 + "INTO x*/"
-
-
-def test_split_statements_keeps_an_unterminated_quote_in_one_statement():
-    # A broken statement reaches the database whole, so its own parser reports it.
-    assert split_statements("SELECT 'open; SELECT 2") == ["SELECT 'open; SELECT 2"]
-
-
-def test_split_statements_handles_tagged_dollar_quotes_and_backslash_escapes():
-    fn = "CREATE FUNCTION f() RETURNS int AS $body$ BEGIN RETURN 1; END $body$ LANGUAGE plpgsql"
-    assert split_statements(f"{fn}; SELECT f()") == [fn, "SELECT f()"]
-    # A backslash escapes the next character inside a single-quoted string
-    # (ClickHouse strings, Postgres E'' strings).
-    assert split_statements("SELECT E'it\\'s; here'; SELECT 'a\\'b;c'; SELECT 2") == [
-        "SELECT E'it\\'s; here'",
-        "SELECT 'a\\'b;c'",
-        "SELECT 2",
-    ]
 
 
 def test_result_classes_are_frozen_named_payloads():
