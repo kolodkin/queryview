@@ -227,7 +227,7 @@ test("textarea sizes collapse and expand", async ({ page, seeds, shot }) => {
   await expect(textarea).toHaveValue("SELECT 1 AS a");
 });
 
-// req: user_guide/scripts/mysql-script
+// req: user_guide/scripts/mysql-script, user_guide/scripts/statements
 test("mysql reads # comments and stops a capped select", async ({ page, seeds }) => {
   await connect(page, caseById("mysql"), await seeds.myDb());
   await openScriptsPage(page);

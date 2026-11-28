@@ -60,6 +60,7 @@ first error.
 
 ## Statements
 
+<!-- req: statements -->
 Statements are separated by `;`. The split skips semicolons inside `'…'` (a
 backslash escapes the next character, as in ClickHouse and Postgres `E''`
 strings), `"…"`, `` `…` ``, `$$…$$` and `$tag$…$tag$` bodies, `-- …` line
@@ -116,9 +117,9 @@ same JSON shape as every other result
   (`SELECT`, `SHOW`, …) outside a transaction is stopped; anything else is
   read to its end: a `CALL`'s procedure may have more to do, and a
   `FOR UPDATE` in a `BEGIN` locks only the rows it reaches. A
-  statement with no result reports `OK, N rows affected`. A `SELECT` past the
-  10 minutes is ended on the server too (`max_execution_time`); other
-  statements run on there.
+  statement with no result reports `OK, N rows affected`. Past the 10 minutes,
+  only a `SELECT` is ended on the server too
+  ([Query timeout](./queryview.md#query-timeout)).
 - **DuckDB** — the file is opened **read-write** for the run, while every other
   page opens it read-only. DuckDB refuses a second open of one file with a
   different mode in the same process, so the explorer and dashboards error on

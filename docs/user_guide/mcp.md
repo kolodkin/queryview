@@ -21,10 +21,8 @@ claude mcp add --scope user --transport http queryview http://localhost:8000/mcp
 - **Keep the trailing slash:** `/mcp` works too, but costs a redirect per call.
 - **Localhost only:** `/mcp/` has no auth and can query every connection and
   rewrite workspace git state. Don't expose the port.
-- **A login without file privileges:** on MySQL and Postgres a query can read
-  or write files on the database server when the login may. `run_sql` refuses
-  the usual statements, but only the login stops all of them; see
-  [scripts.md](./scripts.md#file-writes).
+- **A login without file privileges:** give the connections an agent uses one;
+  see [scripts.md](./scripts.md#file-writes).
 
 ## Let an agent drive the tab
 
