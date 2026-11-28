@@ -185,8 +185,13 @@ async def _fetch(
             return None, [], cur.rowcount
         rows = await (cur.fetchall() if max_rows is None else cur.fetchmany(max_rows))
         if drain:
-            if stop is not None and len(rows) == max_rows:  # more may follow: stop sending them
-                await _kill_query(stop, conn.thread_id())
+            # More may follow: stop sending them, unless a transaction may rely on the
+            # rest (a `FOR UPDATE` locks only the rows it reaches).
+            if stop is not None and len(rows) == max_rows and not conn.get_transaction_status():
+                try:
+                    await _kill_query(stop, conn.thread_id())
+                except Exception:  # noqa: BLE001 - no second connection: read the rest instead
+                    pass
             try:
                 await cur.close()  # reads what is already on the way
             except MySQLError as e:

@@ -53,6 +53,9 @@ def _fake(monkeypatch, results):
         def thread_id(self):
             return 7
 
+        def get_transaction_status(self):
+            return log.get("in_transaction", False)
+
         async def cursor(self, cls):
             log.setdefault("cursors", []).append(cls.__name__)
             return _Cursor()
@@ -143,6 +146,25 @@ def test_a_killed_select_is_not_an_error(monkeypatch):
     assert not out[0].ok and "Lost connection" in out[0].message
 
 
+def test_a_capped_select_in_a_transaction_is_read_to_its_end(monkeypatch):
+    # A `FOR UPDATE` in the script's transaction locks only the rows it reaches.
+    log = _fake(monkeypatch, lambda sql: (ID, [(1,)] * (SCRIPT_ROW_CAP + 1)))
+    log["in_transaction"] = True
+    out = asyncio.run(MySqlDriver().execute_script(CFG, "SELECT id FROM t FOR UPDATE", "shop"))
+    assert out[0].truncated and log["sql"] == ["SELECT id FROM t FOR UPDATE"] and log["drained"] == 1
+
+
+def test_a_failed_kill_falls_back_to_reading_the_rest(monkeypatch):
+    def results(sql):
+        if sql.startswith("KILL"):
+            raise OperationalError(1040, "Too many connections")
+        return (ID, [(1,)] * (SCRIPT_ROW_CAP + 1))
+
+    log = _fake(monkeypatch, results)
+    out = asyncio.run(MySqlDriver().execute_script(CFG, "SELECT id FROM t", "shop"))
+    assert out[0].ok and out[0].truncated and log["drained"] == 1
+
+
 def test_a_capped_call_is_read_to_its_end(monkeypatch):
     # Only a read is killed: a procedure may still write after its first result.
     log = _fake(monkeypatch, lambda sql: (ID, [(1,)] * (SCRIPT_ROW_CAP + 1)))
@@ -162,6 +184,7 @@ def test_run_sql_refuses_file_writes_before_connecting(monkeypatch):
         "SELECT * FROM t INTO OUTFILE '/tmp/t.csv'",
         "select 1 into /* x */ dumpfile '/tmp/t.bin'",
         "SELECT 1 /*! INTO OUTFILE '/tmp/t.csv' */",
+        "SELECT 1 /*!50000INTO OUTFILE '/tmp/t.csv'*/",
     ):
         r = asyncio.run(MySqlDriver().run_sql(CFG, sql, "shop", 10))
         assert isinstance(r, Err) and "INTO OUTFILE" in r.message

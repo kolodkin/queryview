@@ -56,6 +56,11 @@ describe('statementRangeAt', () => {
     expect(text(16)).toBe('SELECT "x\\";y"')
     expect(text(script.indexOf('1--1'))).toBe('SELECT 1--1')
   })
+  it('splits inside a MySQL /*! */ comment, which MySQL runs as code', () => {
+    const script = 'SELECT 1 /*!50000 ; */; SELECT 2'
+    const span = statementRangeAt(script, 2, true)!
+    expect(script.slice(span.start, span.end)).toBe('SELECT 1 /*!50000')
+  })
   it('falls back to the last statement after trailing whitespace', () => {
     expect(statementRangeAt('SELECT 1;\n\n', 11)).toEqual({ start: 0, end: 8 })
     expect(statementRangeAt('   ', 1)).toBeNull()

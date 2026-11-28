@@ -20,6 +20,7 @@ export type StatementResult = {
 export type Span = { start: number; end: number } // the trimmed statement's [start, end)
 
 const DOLLAR_TAG = /\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$/y
+const MYSQL_CODE_COMMENT = /\/\*!\d*/y // `/*!` and its optional version, as in `/*!50000`
 
 // The index just past the string quoted by `text[i]` opening at `i` (a
 // backslash escapes the next character), or the end when it never closes.
@@ -35,7 +36,8 @@ function skipQuoted(text: string, i: number): number {
 // The script with every quote, `$$`/`$tag$` body and `--` or `/* */` comment
 // blanked to spaces, keeping its length, so what is left is code. `mysql` reads
 // it as MySQL does: `#` starts a comment, `--` only before whitespace, `/*!…*/`
-// is code, `$` is part of a name and `"…"` takes backslash escapes. The
+// is code (its `/*!` and version are blanked), `$` is part of a name and `"…"`
+// takes backslash escapes. The
 // backend's mask_sql; keep the two in step.
 function maskSql(text: string, mysql: boolean): string {
   let out = ''
@@ -45,7 +47,9 @@ function maskSql(text: string, mysql: boolean): string {
   while (i < n) {
     const ch = text[i]
     DOLLAR_TAG.lastIndex = i
+    MYSQL_CODE_COMMENT.lastIndex = i
     let tag: RegExpExecArray | null
+    let opener: RegExpExecArray | null
     let end: number
     if (ch === "'" || (mysql && ch === '"')) {
       end = skipQuoted(text, i)
@@ -61,7 +65,9 @@ function maskSql(text: string, mysql: boolean): string {
     ) {
       end = text.indexOf('\n', i) // the newline itself stays code
       end = end < 0 ? n : end
-    } else if (text.startsWith('/*', i) && !(mysql && text.startsWith('/*!', i))) {
+    } else if (mysql && (opener = MYSQL_CODE_COMMENT.exec(text)) !== null) {
+      end = i + opener[0].length
+    } else if (text.startsWith('/*', i)) {
       end = text.indexOf('*/', i + 2)
       end = end < 0 ? n : end + 2
     } else {

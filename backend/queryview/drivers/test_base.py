@@ -145,7 +145,9 @@ def test_mask_sql_blanks_quotes_and_comments_keeping_offsets():
     sql = "SELECT 'a', \"b\" -- c\nFROM t /* d */ # e"
     assert mask_sql(sql) == "SELECT    ,     " + " " * 4 + "\nFROM t " + " " * 7 + " # e"
     assert mask_sql(sql, mysql=True).endswith("FROM t " + " " * 7 + "    ")
-    assert mask_sql("SELECT /*! INTO */ 1", mysql=True) == "SELECT /*! INTO */ 1"
+    # MySQL runs `/*! … */`: only its opener and version are blanked.
+    assert mask_sql("SELECT /*! INTO */ 1", mysql=True) == "SELECT " + " " * 3 + " INTO */ 1"
+    assert mask_sql("SELECT 1 /*!50000INTO x*/", mysql=True) == "SELECT 1 " + " " * 8 + "INTO x*/"
 
 
 def test_split_statements_keeps_an_unterminated_quote_in_one_statement():

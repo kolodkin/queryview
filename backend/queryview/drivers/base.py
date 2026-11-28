@@ -284,6 +284,7 @@ def wrap_paginated(
 
 
 _DOLLAR_TAG = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$")
+_MYSQL_CODE_COMMENT = re.compile(r"/\*!\d*")  # `/*!` and its optional version, as in `/*!50000`
 
 
 def mask_sql(sql: str, mysql: bool = False) -> str:
@@ -292,7 +293,8 @@ def mask_sql(sql: str, mysql: bool = False) -> str:
     `E''` strings read it), `$$`/`$tag$` body and `--` or `/* */` comment
     blanked to spaces, keeping its length, so what is left is code. `mysql`
     reads it as MySQL does: `#` starts a comment, `--` only before whitespace,
-    `/*!…*/` is code, `$` is part of a name and `"…"` takes backslash escapes.
+    `/*!…*/` is code (its `/*!` and version are blanked, so `/*!50000INTO`
+    leaves `INTO`), `$` is part of a name and `"…"` takes backslash escapes.
     An unterminated quote blanks the rest. Mirrored by maskSql in the frontend;
     keep the two in step."""
     parts: list[str] = []
@@ -311,7 +313,9 @@ def mask_sql(sql: str, mysql: bool = False) -> str:
         elif (sql.startswith("--", i) and not (mysql and sql[i + 2 : i + 3].strip())) or (mysql and ch == "#"):
             end = sql.find("\n", i)  # the newline itself stays code
             end = n if end < 0 else end
-        elif sql.startswith("/*", i) and not (mysql and sql.startswith("/*!", i)):
+        elif mysql and (opener := _MYSQL_CODE_COMMENT.match(sql, i)) is not None:
+            end = opener.end()
+        elif sql.startswith("/*", i):
             end = sql.find("*/", i + 2)
             end = n if end < 0 else end + 2
         else:
