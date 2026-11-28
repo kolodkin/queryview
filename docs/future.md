@@ -50,8 +50,14 @@ no picker and lists only what `SHOW TABLES` returns.
 
 ## Deferred
 
-Out of scope by design, not planned yet. Git sync assumes a single user syncs
-each workspace; multi-user sync needs git pulling or a webhook first.
+Out of scope by design, not planned yet.
+
+- **Multi-user git sync.** Git sync assumes a single user syncs each
+  workspace; multi-user sync needs git pulling or a webhook first.
+- **MariaDB.** The MySQL driver targets MySQL only. MariaDB speaks the same
+  protocol but lacks `max_execution_time` (it has `max_statement_time`, in
+  seconds), so the MySQL driver's connect step fails there. Support would set
+  the timeout per server.
 
 ## Related docs
 
